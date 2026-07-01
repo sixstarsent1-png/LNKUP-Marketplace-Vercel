@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Greek picnic event scene">
+  <defs>
+    <linearGradient id="gp-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1f1a2e"/>
+      <stop offset="100%" stop-color="#100e18"/>
+    </linearGradient>
+    <radialGradient id="gp-glow" cx="40%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#gp-sky)"/>
+  <rect width="720" height="560" fill="url(#gp-glow)"/>
+  <!-- trees -->
+  <ellipse cx="80" cy="320" rx="50" ry="70" fill="#1a1628"/>
+  <ellipse cx="640" cy="310" rx="55" ry="75" fill="#1a1628"/>
+  <!-- lawn -->
+  <rect x="0" y="360" width="720" height="200" fill="#14121e"/>
+  <rect x="0" y="360" width="720" height="3" fill="#c8f542" opacity="0.12"/>
+  <!-- picnic tables / vendor rows -->
+  <rect x="180" y="380" width="100" height="12" rx="2" fill="#2a2638"/>
+  <rect x="200" y="392" width="8" height="30" fill="#1e1a2a"/>
+  <rect x="252" y="392" width="8" height="30" fill="#1e1a2a"/>
+  <rect x="420" y="375" width="110" height="12" rx="2" fill="#2a2638"/>
+  <rect x="440" y="387" width="8" height="35" fill="#1e1a2a"/>
+  <rect x="502" y="387" width="8" height="35" fill="#1e1a2a"/>
+  <!-- vendor tents -->
+  <path d="M280 400 L330 340 L380 400 Z" fill="#221e30" stroke="#c8f542" stroke-width="1.5" opacity="0.8"/>
+  <rect x="295" y="400" width="70" height="45" fill="#16141e"/>
+  <path d="M460 395 L510 335 L560 395 Z" fill="#221e30" stroke="#c8f542" stroke-width="1.5" opacity="0.75"/>
+  <rect x="475" y="395" width="70" height="50" fill="#16141e"/>
+  <!-- crowd -->
+  <ellipse cx="350" cy="420" rx="10" ry="15" fill="#0e0c14"/>
+  <ellipse cx="380" cy="425" rx="9" ry="14" fill="#0e0c14"/>
+  <ellipse cx="410" cy="418" rx="11" ry="16" fill="#0e0c14"/>
+  <ellipse cx="300" cy="422" rx="10" ry="15" fill="#0e0c14"/>
+  <!-- string lights -->
+  <path d="M120 180 Q360 210 600 175" fill="none" stroke="#3a3548" stroke-width="1.5"/>
+  <circle cx="200" cy="195" r="4" fill="#c8f542" opacity="0.7"/>
+  <circle cx="360" cy="200" r="4" fill="#c8f542" opacity="0.85"/>
+  <circle cx="520" cy="188" r="4" fill="#c8f542" opacity="0.65"/>
+</svg>

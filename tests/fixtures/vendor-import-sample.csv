@@ -1,0 +1,7 @@
+Business Name,Contact Name,Email,Phone,Category,City,State,Notes,Tags
+Sunrise Tacos,Maria Lopez,maria@sunrisetacos.example,5550101001,Food,Atlanta,GA,Great for festivals,local;food
+Blue Barn Crafts,James Reed,,5550101002,Crafts,Nashville,TN,No email on file,crafts
+Duplicate Test,First Person,dup@test-import.example,5550101003,Retail,Austin,TX,Row one,
+Duplicate Test,Second Person,dup@test-import.example,5550101004,Retail,Austin,TX,Duplicate email in file,
+Invalid Row,,,,,,,,
+Prospect Only LLC,Sam Vendor,prospect-only@test-import.example,5550101005,Beauty,Miami,FL,New prospect,

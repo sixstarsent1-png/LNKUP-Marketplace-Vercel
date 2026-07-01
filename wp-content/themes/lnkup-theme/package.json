@@ -1,0 +1,12 @@
+{
+  "name": "lnkup-theme",
+  "private": true,
+  "scripts": {
+    "build": "tailwindcss -i ./assets/src/main.css -o ./assets/dist/lnkup.css --minify",
+    "watch": "tailwindcss -i ./assets/src/main.css -o ./assets/dist/lnkup.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.2.0",
+    "tailwindcss": "^4.2.0"
+  }
+}

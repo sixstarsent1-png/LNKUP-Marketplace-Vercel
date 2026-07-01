@@ -1,0 +1,270 @@
+<?php
+/**
+ * LNKup marketplace UI copy registry.
+ *
+ * @package LNKup_Marketplace
+ */
+
+declare(strict_types=1);
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Centralized marketplace-facing labels (display only — not routes/CPT slugs).
+ */
+class LNKup_UI_Copy {
+
+	/**
+	 * Copy key map.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function registry(): array {
+		return array(
+			'applications'              => __( 'Vendor requests', 'lnkup-marketplace' ),
+			'vendor_requests'           => __( 'Vendor requests', 'lnkup-marketplace' ),
+			'review_applications'       => __( 'Review vendor requests', 'lnkup-marketplace' ),
+			'confirmed_vendors'         => __( 'Confirmed vendors', 'lnkup-marketplace' ),
+			'vendors_booked'            => __( 'Confirmed vendors', 'lnkup-marketplace' ),
+			'vendor_revenue'            => __( 'Vendor revenue', 'lnkup-marketplace' ),
+			'revenue'                   => __( 'Vendor revenue', 'lnkup-marketplace' ),
+			'event_readiness'           => __( 'Event readiness', 'lnkup-marketplace' ),
+			'vendor_roster'             => __( 'Vendor roster', 'lnkup-marketplace' ),
+			'launch_event'              => __( 'Launch event', 'lnkup-marketplace' ),
+			'create_event'              => __( 'Launch event', 'lnkup-marketplace' ),
+			'open_financial_center'     => __( 'Open financial center', 'lnkup-marketplace' ),
+			'open_financials'           => __( 'Open financial center', 'lnkup-marketplace' ),
+			'vendor_packet'             => __( 'Vendor packet', 'lnkup-marketplace' ),
+			'event_issues'              => __( 'Event issues', 'lnkup-marketplace' ),
+			'vendors_not_event_ready'   => __( 'Vendors not event-ready', 'lnkup-marketplace' ),
+			'missing_documents'         => __( 'Vendors not event-ready', 'lnkup-marketplace' ),
+			'command_center'            => __( 'Event command center', 'lnkup-marketplace' ),
+			'organizer_command_center'  => __( 'Organizer Command Center', 'lnkup-marketplace' ),
+			'invite_vendors'            => __( 'Invite vendors', 'lnkup-marketplace' ),
+			'expand_financials'         => __( 'Expand financials', 'lnkup-marketplace' ),
+			'expand_intelligence'       => __( 'Expand intelligence', 'lnkup-marketplace' ),
+			'expand_vendors'            => __( 'Expand vendors', 'lnkup-marketplace' ),
+			'view_insights'             => __( 'View insights', 'lnkup-marketplace' ),
+			'manage_lists'              => __( 'Manage lists', 'lnkup-marketplace' ),
+			'view_all_events'           => __( 'View all events', 'lnkup-marketplace' ),
+			'view_all_vendor_requests'  => __( 'Review all vendor requests', 'lnkup-marketplace' ),
+			'todays_priority'           => __( "Today's priority", 'lnkup-marketplace' ),
+			'launch_opportunity_title'  => __( 'Launch a vendor opportunity', 'lnkup-marketplace' ),
+			'launch_opportunity_copy'   => __( 'Create an event, define vendor slots, and publish your first opportunity to Find Events.', 'lnkup-marketplace' ),
+			'start_event_setup'         => __( 'Start event setup', 'lnkup-marketplace' ),
+			'open_vendor_applications'  => __( 'Open vendor applications', 'lnkup-marketplace' ),
+			'onboarding_vendor_apply_copy' => __( 'Let vendors apply to this event. Create your first vendor opportunity so vendors can apply.', 'lnkup-marketplace' ),
+			'onboarding_vendor_fee_copy' => __( 'Set the booth fee, vendor categories, and deadline. Vendors apply free and only pay when accepted. You can add more opportunities later.', 'lnkup-marketplace' ),
+			'accept_vendors'            => __( 'Accept vendors', 'lnkup-marketplace' ),
+			'skip_for_now'              => __( 'Skip for now', 'lnkup-marketplace' ),
+			'publish_vendor_opportunity' => __( 'Publish vendor opportunity', 'lnkup-marketplace' ),
+			'event_created_skip'        => __( 'Event created. You can add vendor opportunities anytime.', 'lnkup-marketplace' ),
+			'event_opp_published'       => __( 'Event created and vendor opportunity published.', 'lnkup-marketplace' ),
+			'live_events'               => __( 'Live events', 'lnkup-marketplace' ),
+			'financial_snapshot'        => __( 'Financial snapshot', 'lnkup-marketplace' ),
+			'quick_actions'             => __( 'Quick actions', 'lnkup-marketplace' ),
+			'recent_activity'           => __( 'Recent activity', 'lnkup-marketplace' ),
+			'vendor_requests_snapshot'  => __( 'Vendor requests', 'lnkup-marketplace' ),
+			'your_events_snapshot'      => __( 'Your events', 'lnkup-marketplace' ),
+			'payout_status_active'      => __( 'Payouts active', 'lnkup-marketplace' ),
+			'payout_status_setup'       => __( 'Finish payout setup', 'lnkup-marketplace' ),
+			'available_balance'         => __( 'Available balance', 'lnkup-marketplace' ),
+			'collected_to_date'         => __( 'Collected to date', 'lnkup-marketplace' ),
+			'payout_destination'        => __( 'Payout destination', 'lnkup-marketplace' ),
+			'funds_processing'          => __( 'Funds processing', 'lnkup-marketplace' ),
+			'ready_for_payout'          => __( 'Ready for payout', 'lnkup-marketplace' ),
+			'payment_activity'          => __( 'Payment activity', 'lnkup-marketplace' ),
+			'refunds'                   => __( 'Refunds', 'lnkup-marketplace' ),
+			'financial_center'          => __( 'Financial center', 'lnkup-marketplace' ),
+			'new_vendor_requests'       => __( 'New vendor requests', 'lnkup-marketplace' ),
+			'new_applications'          => __( 'New vendor requests', 'lnkup-marketplace' ),
+			'active_events'             => __( 'Active events', 'lnkup-marketplace' ),
+			'discover_vendors'          => __( 'Discover vendors', 'lnkup-marketplace' ),
+			'vendor_directory'          => __( 'Discover vendors', 'lnkup-marketplace' ),
+			'find_events'               => __( 'Find events', 'lnkup-marketplace' ),
+			'empty_vendor_requests'     => __( 'No new vendor requests yet. Invite vendors or share this opportunity to start filling your roster.', 'lnkup-marketplace' ),
+			'empty_confirmed_vendors'   => __( 'No vendors confirmed yet. Approve requests or invite vendors to start building your event roster.', 'lnkup-marketplace' ),
+			'empty_financial'           => __( 'No financial activity yet. Payments will appear here once vendors start booking.', 'lnkup-marketplace' ),
+			'empty_documents'           => __( 'No documents uploaded yet. Required vendor documents will appear here for review.', 'lnkup-marketplace' ),
+			'empty_applications'        => __( 'Vendor requests will appear here once vendors apply to your opportunities.', 'lnkup-marketplace' ),
+			'empty_organizer_financial' => __( 'No financial activity yet. Payments will appear here once vendors start booking.', 'lnkup-marketplace' ),
+			'empty_organizer_intel'     => __( 'No intelligence data yet. Launch an event to start seeing funnel and benchmark insights.', 'lnkup-marketplace' ),
+			'empty_discover_vendors'    => __( 'No vendors match your filters. Try adjusting search or invite vendors directly.', 'lnkup-marketplace' ),
+			'empty_vendor_lists'        => __( 'No lists yet. Create a list to organize vendors for future events.', 'lnkup-marketplace' ),
+			'empty_vendor_invites'      => __( 'No invites sent yet. Discover vendors and send your first invite.', 'lnkup-marketplace' ),
+			'empty_ledger'              => __( 'No ledger entries yet. Transactions appear here after vendor payments.', 'lnkup-marketplace' ),
+			'empty_activity'            => __( 'No recent activity yet. Applications, notes, and roster updates will show here.', 'lnkup-marketplace' ),
+			'panel_error'               => __( 'We couldn\'t load this section. Try refreshing or contact support.', 'lnkup-marketplace' ),
+			'retry'                     => __( 'Try again', 'lnkup-marketplace' ),
+			'launch_checklist_title'    => __( 'Launch checklist', 'lnkup-marketplace' ),
+			'launch_checklist_progress' => __( '%1$d of %2$d complete', 'lnkup-marketplace' ),
+			'launch_checklist_all_done' => __( 'You\'re live — checklist complete', 'lnkup-marketplace' ),
+			'launch_checklist_show'     => __( 'Show checklist', 'lnkup-marketplace' ),
+			'launch_checklist_hide'     => __( 'Hide checklist', 'lnkup-marketplace' ),
+			'launch_checklist_status_not_started' => __( 'Not started', 'lnkup-marketplace' ),
+			'launch_checklist_status_in_progress' => __( 'In progress', 'lnkup-marketplace' ),
+			'launch_checklist_status_complete'    => __( 'Complete', 'lnkup-marketplace' ),
+			'launch_checklist_view'       => __( 'View', 'lnkup-marketplace' ),
+			'launch_checklist_create_event' => __( 'Create your first event', 'lnkup-marketplace' ),
+			'launch_checklist_create_event_desc' => __( 'Set your event name, date, and location to get started.', 'lnkup-marketplace' ),
+			'launch_checklist_create_event_cta' => __( 'Create event', 'lnkup-marketplace' ),
+			'launch_checklist_vendor_categories' => __( 'Add vendor categories', 'lnkup-marketplace' ),
+			'launch_checklist_vendor_categories_desc' => __( 'Tell vendors what types of booths you\'re looking for.', 'lnkup-marketplace' ),
+			'launch_checklist_vendor_categories_cta' => __( 'Set categories', 'lnkup-marketplace' ),
+			'launch_checklist_booth_fee' => __( 'Set booth fee', 'lnkup-marketplace' ),
+			'launch_checklist_booth_fee_desc' => __( 'Define what vendors pay when accepted to your event.', 'lnkup-marketplace' ),
+			'launch_checklist_booth_fee_cta' => __( 'Set booth fee', 'lnkup-marketplace' ),
+			'launch_checklist_vendor_packet' => __( 'Upload vendor packet', 'lnkup-marketplace' ),
+			'launch_checklist_vendor_packet_desc' => __( 'Add load-in, parking, and day-of details vendors receive after payment.', 'lnkup-marketplace' ),
+			'launch_checklist_vendor_packet_cta' => __( 'Add packet details', 'lnkup-marketplace' ),
+			'launch_checklist_payout_account' => __( 'Add payout account', 'lnkup-marketplace' ),
+			'launch_checklist_payout_account_desc' => __( 'Connect payouts so vendor fees reach your bank account.', 'lnkup-marketplace' ),
+			'launch_checklist_payout_account_cta' => __( 'Add payout account', 'lnkup-marketplace' ),
+			'launch_checklist_invite_vendors' => __( 'Invite vendors', 'lnkup-marketplace' ),
+			'launch_checklist_invite_vendors_desc' => __( 'Reach out to vendors you want at your event.', 'lnkup-marketplace' ),
+			'launch_checklist_invite_vendors_cta' => __( 'Invite vendors', 'lnkup-marketplace' ),
+			'launch_checklist_review_applications' => __( 'Review applications', 'lnkup-marketplace' ),
+			'launch_checklist_review_applications_desc' => __( 'Review vendor requests as they come in.', 'lnkup-marketplace' ),
+			'launch_checklist_review_applications_cta' => __( 'Review requests', 'lnkup-marketplace' ),
+			'launch_checklist_approve_vendor' => __( 'Approve your first vendor', 'lnkup-marketplace' ),
+			'launch_checklist_approve_vendor_desc' => __( 'Accept a vendor to start building your roster.', 'lnkup-marketplace' ),
+			'launch_checklist_approve_vendor_cta' => __( 'Review requests', 'lnkup-marketplace' ),
+			'launch_checklist_collect_payment' => __( 'Collect your first payment', 'lnkup-marketplace' ),
+			'launch_checklist_collect_payment_desc' => __( 'Vendor booth fees appear here once paid.', 'lnkup-marketplace' ),
+			'launch_checklist_collect_payment_cta' => __( 'Open financial center', 'lnkup-marketplace' ),
+			'vendor_profile_title'        => __( 'Your vendor profile', 'lnkup-marketplace' ),
+			'vendor_profile_subtitle'     => __( 'Complete your business resume so organizers can approve you faster.', 'lnkup-marketplace' ),
+			'vendor_profile_tagline'      => __( 'One profile. More event opportunities.', 'lnkup-marketplace' ),
+			'vendor_profile_empty_title'  => __( 'Build your vendor profile', 'lnkup-marketplace' ),
+			'vendor_profile_empty_copy'   => __( 'Create one profile you can use to apply for events, upload documents, and get booked faster.', 'lnkup-marketplace' ),
+			'vendor_profile_start_cta'    => __( 'Start profile', 'lnkup-marketplace' ),
+			'vendor_profile_complete_cta' => __( 'Complete profile', 'lnkup-marketplace' ),
+			'vendor_profile_preview_cta'  => __( 'Preview public profile', 'lnkup-marketplace' ),
+			'vendor_profile_booking_ready_title' => __( 'Booking ready', 'lnkup-marketplace' ),
+			'vendor_profile_booking_ready_copy'  => __( 'Your profile is ready for organizers to review. Keep documents and photos updated to stay competitive.', 'lnkup-marketplace' ),
+			'vendor_profile_find_events'  => __( 'Find events', 'lnkup-marketplace' ),
+			'vendor_profile_progress'     => __( '%1$d%% complete · %2$s', 'lnkup-marketplace' ),
+			'profile_section_complete'    => __( 'Complete', 'lnkup-marketplace' ),
+			'profile_section_missing'     => __( 'Missing info', 'lnkup-marketplace' ),
+			'profile_section_in_progress' => __( 'In progress', 'lnkup-marketplace' ),
+			'profile_section_optional'    => __( 'Optional', 'lnkup-marketplace' ),
+			'profile_save_section'        => __( 'Save section', 'lnkup-marketplace' ),
+			'profile_section_saved'       => __( 'Section saved', 'lnkup-marketplace' ),
+			'apply_modal_title'           => __( 'Apply with your LNKup profile', 'lnkup-marketplace' ),
+			'apply_modal_description'     => __( 'Your profile does most of the work. Add a short note and submit your application for free.', 'lnkup-marketplace' ),
+			'apply_modal_helper'          => __( 'Review your business details, add a short note, and submit. Vendors apply free and only pay when accepted.', 'lnkup-marketplace' ),
+			'apply_profile_warning'       => __( 'Complete more of your profile to improve your chances of approval.', 'lnkup-marketplace' ),
+			'apply_documents_warning'     => __( 'This event requires documents you have not uploaded yet. You can still apply if allowed, but the organizer may ask for them before approval.', 'lnkup-marketplace' ),
+			'apply_submit'                => __( 'Submit application', 'lnkup-marketplace' ),
+			'apply_success'               => __( 'Application submitted. You\'ll be notified when the organizer reviews it.', 'lnkup-marketplace' ),
+			'apply_already_applied'       => __( 'You already applied to this opportunity.', 'lnkup-marketplace' ),
+			'apply_logged_out'            => __( 'Create a free vendor profile to apply for this opportunity.', 'lnkup-marketplace' ),
+			'apply_no_profile'            => __( 'Build your vendor profile first', 'lnkup-marketplace' ),
+			'apply_create_profile_cta'    => __( 'Create vendor profile', 'lnkup-marketplace' ),
+			'apply_terms_label'           => __( 'I understand payment is only required if I am accepted.', 'lnkup-marketplace' ),
+			'apply_category_label'        => __( 'Category you are applying under', 'lnkup-marketplace' ),
+			'apply_booth_type_label'      => __( 'Booth type', 'lnkup-marketplace' ),
+			'apply_power_needs_label'     => __( 'Power needs', 'lnkup-marketplace' ),
+			'apply_message_label'         => __( 'Application message', 'lnkup-marketplace' ),
+			'apply_setup_notes_label'     => __( 'Setup notes (optional)', 'lnkup-marketplace' ),
+			'apply_view_applications'     => __( 'View my applications', 'lnkup-marketplace' ),
+			'pass_locked_title'           => __( 'Your vendor pass unlocks after payment', 'lnkup-marketplace' ),
+			'pass_locked_message'         => __( 'Complete payment to unlock load-in details, booth assignment, maps, parking, and your check-in pass.', 'lnkup-marketplace' ),
+			'pass_locked_pay_cta'         => __( 'Pay to unlock pass', 'lnkup-marketplace' ),
+			'pass_unlocks_title'          => __( 'What unlocks after payment', 'lnkup-marketplace' ),
+			'pass_unlocked_headline'      => __( 'You\'re booked — your event pass is ready', 'lnkup-marketplace' ),
+			'pass_unlocked_badge'         => __( 'Booked · Pass unlocked', 'lnkup-marketplace' ),
+			'pass_unlocked_empty'         => __( 'Your pass is unlocked, but the organizer is still adding event-day details.', 'lnkup-marketplace' ),
+			'pass_download_cta'           => __( 'Download pass', 'lnkup-marketplace' ),
+			'pass_section_arrival'        => __( 'Arrival details', 'lnkup-marketplace' ),
+			'pass_section_booth'          => __( 'Booth & setup', 'lnkup-marketplace' ),
+			'pass_section_map'            => __( 'Event map', 'lnkup-marketplace' ),
+			'pass_section_rules'          => __( 'Rules & requirements', 'lnkup-marketplace' ),
+			'pass_section_weather'        => __( 'Weather plan', 'lnkup-marketplace' ),
+			'pass_section_readiness'      => __( 'Readiness checklist', 'lnkup-marketplace' ),
+			'pass_section_support'        => __( 'Support', 'lnkup-marketplace' ),
+			'pass_open_map'               => __( 'Open full map', 'lnkup-marketplace' ),
+			'pass_support_cta'            => __( 'Contact support', 'lnkup-marketplace' ),
+			'pass_builder_title'          => __( 'Build vendor pass', 'lnkup-marketplace' ),
+			'pass_builder_subtitle'       => __( 'Add the details vendors need after payment.', 'lnkup-marketplace' ),
+			'pass_builder_note'           => __( 'Paid vendors will unlock this pass automatically.', 'lnkup-marketplace' ),
+			'pass_builder_preview'        => __( 'Preview pass', 'lnkup-marketplace' ),
+			'pass_builder_save'           => __( 'Save pass details', 'lnkup-marketplace' ),
+			'pass_builder_saved'          => __( 'Pass details saved', 'lnkup-marketplace' ),
+			'account_balance'             => __( 'Account balance', 'lnkup-marketplace' ),
+			'empty_intelligence'          => __( 'No intelligence data yet. Insights will appear as your events gain activity.', 'lnkup-marketplace' ),
+			'empty_saved_searches'        => __( 'No saved searches yet. Save a search from Find Events to get alerts when new opportunities match.', 'lnkup-marketplace' ),
+			'checkout_error_generic'      => __( 'We could not complete this payment. Try again or use a different payment method.', 'lnkup-marketplace' ),
+			'error_load_section'          => __( 'We could not load this section. Try again in a moment.', 'lnkup-marketplace' ),
+			'external_event_badge'        => __( 'Unclaimed Event', 'lnkup-marketplace' ),
+			'external_event_unclaimed'    => __( 'Not managed by LNKup yet', 'lnkup-marketplace' ),
+			'external_event_disclaimer'   => __( 'This listing is from a public event source. LNKup does not manage bookings for this event until the organizer claims it.', 'lnkup-marketplace' ),
+			'external_event_legal_disclaimer' => __( 'Some listings are public event information from third-party sources and are not official LNKup vendor opportunities until claimed by the event organizer.', 'lnkup-marketplace' ),
+			'external_event_source_label' => __( 'Source: Eventbrite.', 'lnkup-marketplace' ),
+			'request_vendor_opportunity'  => __( 'Request vendor opportunity', 'lnkup-marketplace' ),
+			'request_interest_modal_title'=> __( 'Request a vendor opportunity', 'lnkup-marketplace' ),
+			'external_interest_modal_subtitle' => __( 'External event listing', 'lnkup-marketplace' ),
+			'external_interest_consent_label'    => __( 'I agree to notify the organizer via LNKup', 'lnkup-marketplace' ),
+			'request_interest_success'    => __( 'Thanks! We notified the organizer about your interest.', 'lnkup-marketplace' ),
+			'request_interest_existing'   => __( 'You already requested a vendor opportunity for this event.', 'lnkup-marketplace' ),
+			'request_interest_no_email'   => __( 'Thanks! We recorded your interest and will try to contact the organizer.', 'lnkup-marketplace' ),
+			'organizer_claim_event'       => __( 'Claim this event on LNKup', 'lnkup-marketplace' ),
+			'organizer_claim_success'     => __( 'Event claimed! Review pending vendor interest in your dashboard.', 'lnkup-marketplace' ),
+			'organizer_claim_pending_requests' => __( 'Pending vendor interest', 'lnkup-marketplace' ),
+			'external_event_interest_count' => __( '%d vendors interested', 'lnkup-marketplace' ),
+			'external_event_high_demand'    => __( 'High demand', 'lnkup-marketplace' ),
+			'external_event_trending'       => __( 'Trending', 'lnkup-marketplace' ),
+			'external_event_recently_requested' => __( 'Recently requested', 'lnkup-marketplace' ),
+			'external_event_claim_cta'      => __( 'Claim this event', 'lnkup-marketplace' ),
+			'organizer_claim_benefits'      => __( 'Publish vendor opportunities, collect applications, and get paid — all in one place.', 'lnkup-marketplace' ),
+			'claim_event_title'             => __( 'Organizers are missing vendor revenue', 'lnkup-marketplace' ),
+			'claim_event_subtitle'            => __( 'Vendors on LNKup already requested booth opportunities for this event.', 'lnkup-marketplace' ),
+			'claim_event_success'           => __( 'Event claimed successfully.', 'lnkup-marketplace' ),
+			'claim_event_pending'           => __( 'Sign in or create an organizer account to finish claiming.', 'lnkup-marketplace' ),
+			'demand_score'                  => __( 'Organizer opportunity score', 'lnkup-marketplace' ),
+			'demand_score_high'             => __( 'High organizer opportunity', 'lnkup-marketplace' ),
+			'vendor_interest_by_category'   => __( 'Vendor interest by category', 'lnkup-marketplace' ),
+			'vendor_interest_recent_activity' => __( 'New vendor requested today', 'lnkup-marketplace' ),
+			'external_followup_subject_1'   => __( 'A vendor wants to sell at your event', 'lnkup-marketplace' ),
+			'external_followup_subject_2'   => __( 'Multiple vendors are interested in your event', 'lnkup-marketplace' ),
+			'external_followup_subject_3'   => __( 'Verified vendors are waiting for your event', 'lnkup-marketplace' ),
+			'external_followup_subject_4'   => __( 'High vendor demand for your event', 'lnkup-marketplace' ),
+			'external_followup_body_1'      => __( 'A vendor on LNKup requested a booth opportunity for your event.', 'lnkup-marketplace' ),
+			'external_followup_body_2'      => __( 'Several vendors have already expressed interest in vending at your event.', 'lnkup-marketplace' ),
+			'external_followup_body_3'      => __( 'Verified LNKup vendors are ready to apply once you claim this listing.', 'lnkup-marketplace' ),
+			'external_followup_body_4'      => __( 'Vendor demand is rising — claim your event to unlock applications and payouts.', 'lnkup-marketplace' ),
+		);
+	}
+
+	/**
+	 * Get copy string by key.
+	 *
+	 * @param string $key     Registry key.
+	 * @param string $fallback Optional fallback if key missing.
+	 */
+	public static function get( string $key, string $fallback = '' ): string {
+		$registry = self::registry();
+		if ( isset( $registry[ $key ] ) ) {
+			return $registry[ $key ];
+		}
+		return $fallback ?: $key;
+	}
+
+	/**
+	 * Export copy for JS localization.
+	 *
+	 * @return array<string, string>
+	 */
+	public static function for_js(): array {
+		return self::registry();
+	}
+}
+
+/**
+ * Shorthand for UI copy.
+ *
+ * @param string $key Registry key.
+ */
+function lnkup_copy( string $key ): string {
+	return LNKup_UI_Copy::get( $key );
+}

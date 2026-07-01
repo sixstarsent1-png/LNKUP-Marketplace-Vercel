@@ -1,0 +1,109 @@
+.lnkup-trust-card,
+.lnkup-organizer-trust-strip {
+  margin-bottom: 1rem;
+}
+
+.lnkup-trust-card__status {
+  font-weight: 600;
+  margin: 0.5rem 0;
+}
+
+.lnkup-trust-card__bar {
+  height: 8px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0.75rem 0;
+}
+
+.lnkup-trust-card__fill {
+  display: block;
+  height: 100%;
+  background: var(--lnkup-lime, #c8f542);
+  border-radius: inherit;
+  transition: width 0.3s ease;
+}
+
+.lnkup-trust-card__badges,
+.lnkup-trust-badges-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+
+.lnkup-trust-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #111;
+  color: #fff;
+}
+
+.lnkup-trust-badge--accent {
+  background: var(--lnkup-lime, #c8f542);
+  color: #111;
+}
+
+.lnkup-trust-card__missing {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: rgba(0, 0, 0, 0.72);
+  font-size: 0.9rem;
+}
+
+.lnkup-trust-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.lnkup-organizer-trust-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.lnkup-organizer-trust-strip__label {
+  font-weight: 600;
+}
+
+.lnkup-organizer-trust-strip__meta {
+  color: rgba(0, 0, 0, 0.65);
+  font-size: 0.9rem;
+}
+
+.lnkup-crm-app-card__trust-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.lnkup-event-card__trust-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 640px) {
+  .lnkup-trust-card,
+  .lnkup-organizer-trust-strip {
+    overflow: hidden;
+  }
+
+  .lnkup-trust-card__actions .lnkup-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

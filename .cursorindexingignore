@@ -1,0 +1,11 @@
+node_modules/
+.next/
+dist/
+build/
+vendor/
+*.log
+*.zip
+*.sql
+*.tar
+*.gz
+.DS_Store

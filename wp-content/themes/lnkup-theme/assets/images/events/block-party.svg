@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Block party event scene">
+  <defs>
+    <linearGradient id="bp-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a1b22"/>
+      <stop offset="100%" stop-color="#0c0d10"/>
+    </linearGradient>
+    <linearGradient id="bp-lime" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4f542"/>
+      <stop offset="100%" stop-color="#8bc925"/>
+    </linearGradient>
+    <radialGradient id="bp-glow" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bp-stage" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2a2b32"/>
+      <stop offset="100%" stop-color="#14151a"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#bp-sky)"/>
+  <rect width="720" height="560" fill="url(#bp-glow)"/>
+  <ellipse cx="360" cy="520" rx="340" ry="40" fill="#0a0b0e" opacity="0.6"/>
+  <!-- skyline -->
+  <path fill="#1e1f26" d="M0 380h80v-60h40v60h50v-90h35v90h55v-45h30v45h60v-75h40v75h50v-55h45v55h55v-40h35v40h90v180H0z"/>
+  <!-- string lights -->
+  <path d="M40 120 Q180 150 360 130 T680 120" fill="none" stroke="#3a3b42" stroke-width="2"/>
+  <circle cx="80" cy="128" r="5" fill="url(#bp-lime)" opacity="0.9"/>
+  <circle cx="180" cy="142" r="5" fill="url(#bp-lime)" opacity="0.7"/>
+  <circle cx="280" cy="132" r="5" fill="url(#bp-lime)" opacity="0.85"/>
+  <circle cx="380" cy="138" r="5" fill="url(#bp-lime)" opacity="0.75"/>
+  <circle cx="480" cy="128" r="5" fill="url(#bp-lime)" opacity="0.9"/>
+  <circle cx="580" cy="135" r="5" fill="url(#bp-lime)" opacity="0.65"/>
+  <circle cx="660" cy="122" r="5" fill="url(#bp-lime)" opacity="0.8"/>
+  <!-- stage -->
+  <rect x="240" y="300" width="240" height="80" rx="4" fill="url(#bp-stage)"/>
+  <rect x="250" y="310" width="220" height="8" rx="2" fill="#c8f542" opacity="0.5"/>
+  <!-- vendor tents -->
+  <path d="M100 380 L160 300 L220 380 Z" fill="#25262e" stroke="#c8f542" stroke-width="2" opacity="0.9"/>
+  <rect x="115" y="380" width="90" height="50" fill="#1a1b22"/>
+  <path d="M480 380 L540 295 L600 380 Z" fill="#25262e" stroke="#c8f542" stroke-width="2" opacity="0.85"/>
+  <rect x="495" y="380" width="90" height="50" fill="#1a1b22"/>
+  <path d="M300 400 L350 340 L400 400 Z" fill="#2e2f38" stroke="#c8f542" stroke-width="1.5" opacity="0.7"/>
+  <rect x="310" y="400" width="80" height="40" fill="#1a1b22"/>
+  <!-- crowd silhouettes -->
+  <ellipse cx="200" cy="430" rx="12" ry="18" fill="#14151a"/>
+  <ellipse cx="230" cy="435" rx="10" ry="16" fill="#14151a"/>
+  <ellipse cx="260" cy="432" rx="11" ry="17" fill="#14151a"/>
+  <ellipse cx="420" cy="430" rx="12" ry="18" fill="#14151a"/>
+  <ellipse cx="450" cy="436" rx="10" ry="15" fill="#14151a"/>
+  <ellipse cx="480" cy="431" rx="11" ry="17" fill="#14151a"/>
+  <ellipse cx="360" cy="438" rx="14" ry="20" fill="#14151a"/>
+  <!-- ground -->
+  <rect x="0" y="430" width="720" height="130" fill="#12131a"/>
+  <rect x="0" y="430" width="720" height="4" fill="#c8f542" opacity="0.15"/>
+  <!-- ATL badge -->
+  <rect x="24" y="24" width="52" height="28" rx="14" fill="#1a1b22" stroke="#c8f542" stroke-width="1.5" opacity="0.9"/>
+  <text x="50" y="43" text-anchor="middle" fill="#c8f542" font-family="system-ui,sans-serif" font-size="12" font-weight="700">ATL</text>
+</svg>

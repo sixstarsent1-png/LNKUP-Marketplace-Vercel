@@ -1,0 +1,841 @@
+<?php
+
+/**
+
+ * Dashboard access control and shell helpers.
+
+ *
+
+ * @package LNKup_Theme
+
+ */
+
+
+
+defined( 'ABSPATH' ) || exit;
+
+
+
+/**
+
+ * Require login for dashboard pages.
+
+ */
+
+function lnkup_require_login() {
+
+	if ( ! is_user_logged_in() ) {
+
+		wp_safe_redirect( wp_login_url( get_permalink() ) );
+
+		exit;
+
+	}
+
+}
+
+
+
+/**
+
+ * Require one of the given roles.
+
+ *
+
+ * @param array $roles Role slugs.
+
+ */
+
+function lnkup_require_roles( array $roles ) {
+
+	lnkup_require_login();
+
+	$user = wp_get_current_user();
+
+	if ( ! array_intersect( $roles, (array) $user->roles ) && ! current_user_can( 'manage_options' ) ) {
+
+		wp_die( esc_html__( 'You do not have permission to access this page.', 'lnkup-theme' ), 403 );
+
+	}
+
+}
+
+
+
+/**
+
+ * Vendor dashboard page title from current route.
+
+ */
+
+function lnkup_dashboard_vendor_title() {
+
+	$slug = get_post_field( 'post_name', get_queried_object_id() );
+
+	$view = isset( $_GET['view'] ) ? sanitize_key( wp_unslash( $_GET['view'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+
+
+	if ( 'opportunities' === $slug ) {
+
+		return __( 'Find Events', 'lnkup-theme' );
+
+	}
+
+	if ( 'vendor-profile' === $slug ) {
+
+		return __( 'Business Profile', 'lnkup-theme' );
+
+	}
+
+	if ( 'favorites' === $slug ) {
+
+		return __( 'Favorites', 'lnkup-theme' );
+
+	}
+
+
+
+	$titles = array(
+
+		'home'         => __( 'Home', 'lnkup-theme' ),
+
+		'applications' => __( 'Applications', 'lnkup-theme' ),
+
+		'documents'    => __( 'Documents', 'lnkup-theme' ),
+
+		'payments'     => __( 'Payments', 'lnkup-theme' ),
+
+		'growth'       => __( 'Growth', 'lnkup-theme' ),
+
+		'reviews'      => __( 'Reviews', 'lnkup-theme' ),
+
+		'operations'   => __( 'Event Operations', 'lnkup-theme' ),
+
+	);
+
+
+
+	if ( $view && isset( $titles[ $view ] ) ) {
+
+		return $titles[ $view ];
+
+	}
+
+
+
+	return __( 'Vendor Dashboard', 'lnkup-theme' );
+
+}
+
+
+
+/**
+
+ * Nav icon SVG by key.
+
+ *
+
+ * @param string $icon Icon key.
+
+ */
+
+function lnkup_dashboard_nav_icon( $icon ) {
+
+	$icons = array(
+
+		'home'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>',
+
+		'search'  => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+
+		'apps'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>',
+
+		'store'   => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9 12 2l9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>',
+
+		'folder'  => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+
+		'payment' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg>',
+
+		'star'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
+
+		'calendar' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+
+		'users'   => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+
+		'inbox'   => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3H10l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+
+		'download' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>',
+
+		'list'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
+
+		'mail'    => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>',
+
+		'operations' => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
+
+		'heart'   => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>',
+
+		'chart'   => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>',
+
+	);
+
+	$svg = $icons[ $icon ] ?? $icons['home'];
+
+	if ( function_exists( 'lnkup_inline_icon' ) ) {
+		return lnkup_inline_icon( $svg, 18 );
+	}
+
+	return preg_replace( '/<svg\s/', '<svg width="18" height="18" ', $svg, 1 );
+
+}
+
+
+
+/**
+
+ * Get dashboard nav items for a role.
+
+ *
+
+ * @param string $role vendor|organizer.
+
+ */
+
+function lnkup_get_dashboard_nav( $role ) {
+
+	if ( 'connector' === $role ) {
+		$dashboard = lnkup_page_url( 'connector-dashboard' );
+		return array(
+			array( 'label' => __( 'Overview', 'lnkup-theme' ), 'href' => $dashboard, 'slug' => 'connector-dashboard', 'icon' => 'home', 'view' => 'home' ),
+			array( 'label' => __( 'Referral links', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'links', $dashboard ), 'slug' => 'connector-dashboard', 'icon' => 'mail', 'view' => 'links' ),
+			array( 'label' => __( 'Vendors', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'vendors', $dashboard ), 'slug' => 'connector-dashboard', 'icon' => 'users', 'view' => 'vendors' ),
+			array( 'label' => __( 'Organizers', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'organizers', $dashboard ), 'slug' => 'connector-dashboard', 'icon' => 'calendar', 'view' => 'organizers' ),
+			array( 'label' => __( 'Activity', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'activity', $dashboard ), 'slug' => 'connector-dashboard', 'icon' => 'chart', 'view' => 'activity' ),
+			array( 'label' => __( 'Rewards', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'rewards', $dashboard ), 'slug' => 'connector-dashboard', 'icon' => 'payment', 'view' => 'rewards' ),
+		);
+	}
+
+	if ( 'vendor' === $role ) {
+
+		$dashboard = lnkup_page_url( 'vendor-dashboard' );
+
+		$badges    = class_exists( 'LNKup_Vendor_Dashboard_Data' ) ? LNKup_Vendor_Dashboard_Data::nav_badges() : array();
+
+		$marketplace_open = function_exists( 'lnkup_is_marketplace_open' ) && lnkup_is_marketplace_open();
+
+		$profile_url = lnkup_page_url( 'vendor-profile' );
+
+
+
+		return array(
+
+			array( 'label' => __( 'Home', 'lnkup-theme' ), 'href' => $dashboard, 'slug' => 'vendor-dashboard', 'icon' => 'home', 'view' => '' ),
+
+			array( 'section' => __( 'Discover', 'lnkup-theme' ) ),
+
+			array( 'label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'find_events' ) : __( 'Find Events', 'lnkup-theme' ), 'href' => lnkup_page_url( 'opportunities' ), 'slug' => 'opportunities', 'icon' => 'search', 'view' => '', 'locked' => ! $marketplace_open, 'locked_hint' => __( 'Opens on launch day', 'lnkup-theme' ) ),
+
+			array( 'label' => __( 'Favorites', 'lnkup-theme' ), 'href' => $marketplace_open ? lnkup_page_url( 'favorites' ) : $profile_url, 'slug' => 'favorites', 'icon' => 'heart', 'view' => '', 'locked' => ! $marketplace_open, 'locked_hint' => __( 'Opens on launch day', 'lnkup-theme' ) ),
+
+			array( 'section' => __( 'Work', 'lnkup-theme' ) ),
+
+			array( 'label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'vendor_requests' ) : __( 'Vendor requests', 'lnkup-theme' ), 'href' => $marketplace_open ? add_query_arg( 'view', 'applications', $dashboard ) : $profile_url, 'slug' => 'vendor-dashboard', 'icon' => 'apps', 'view' => 'applications', 'badge' => $marketplace_open ? ( $badges['applications'] ?? 0 ) : 0, 'locked' => ! $marketplace_open, 'locked_hint' => __( 'Opens on launch day', 'lnkup-theme' ) ),
+
+			array( 'label' => __( 'Documents', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'documents', $dashboard ), 'slug' => 'vendor-dashboard', 'icon' => 'folder', 'view' => 'documents', 'badge' => $badges['documents'] ?? 0 ),
+
+			array( 'label' => __( 'Event Operations', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'operations', $dashboard ), 'slug' => 'vendor-dashboard', 'icon' => 'operations', 'view' => 'operations' ),
+
+			array( 'section' => __( 'Business', 'lnkup-theme' ) ),
+
+			array( 'label' => __( 'Growth', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'growth', $dashboard ), 'slug' => 'vendor-dashboard', 'icon' => 'chart', 'view' => 'growth' ),
+
+			array( 'label' => __( 'Payments', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'payments', $dashboard ), 'slug' => 'vendor-dashboard', 'icon' => 'payment', 'view' => 'payments' ),
+
+			array( 'label' => __( 'Reviews', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'reviews', $dashboard ), 'slug' => 'vendor-dashboard', 'icon' => 'star', 'view' => 'reviews' ),
+
+			array( 'label' => __( 'Business Profile', 'lnkup-theme' ), 'href' => lnkup_page_url( 'vendor-profile' ), 'slug' => 'vendor-profile', 'icon' => 'store', 'view' => '' ),
+
+		);
+
+	}
+
+
+
+	return array(
+
+		array( 'label' => __( 'Overview', 'lnkup-theme' ), 'href' => lnkup_page_url( 'organizer-dashboard' ) . '#overview', 'slug' => 'organizer-dashboard', 'icon' => 'home' ),
+
+		array( 'section' => __( 'Command', 'lnkup-theme' ) ),
+
+		array( 'label' => __( 'Events', 'lnkup-theme' ), 'href' => lnkup_page_url( 'organizer-dashboard' ) . '#events', 'slug' => 'events', 'icon' => 'calendar' ),
+
+		array( 'label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'vendor_requests' ) : __( 'Vendor requests', 'lnkup-theme' ), 'href' => lnkup_page_url( 'organizer-dashboard' ) . '#applications', 'slug' => 'applications', 'icon' => 'inbox' ),
+
+		array( 'label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'discover_vendors' ) : __( 'Discover vendors', 'lnkup-theme' ), 'href' => lnkup_page_url( 'organizer-dashboard' ) . '#vendors', 'slug' => 'vendors', 'icon' => 'users' ),
+
+		array( 'label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'launch_event' ) : __( 'Launch event', 'lnkup-theme' ), 'href' => lnkup_page_url( 'organizer-dashboard' ) . '#create', 'slug' => 'create', 'icon' => 'calendar' ),
+
+		array( 'section' => __( 'Revenue', 'lnkup-theme' ) ),
+
+		array( 'label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'financial_center' ) : __( 'Financial center', 'lnkup-theme' ), 'href' => lnkup_page_url( 'organizer-dashboard' ) . '#financial', 'slug' => 'financial', 'icon' => 'payment' ),
+
+		array( 'section' => __( 'Network', 'lnkup-theme' ) ),
+
+		array( 'label' => __( 'Vendor Lists', 'lnkup-theme' ), 'href' => lnkup_page_url( 'organizer-dashboard' ) . '#lists', 'slug' => 'lists', 'icon' => 'list' ),
+
+		array( 'label' => __( 'Invites', 'lnkup-theme' ), 'href' => lnkup_page_url( 'organizer-dashboard' ) . '#invites', 'slug' => 'invites', 'icon' => 'mail' ),
+
+		array( 'label' => __( 'Operations', 'lnkup-theme' ), 'href' => lnkup_page_url( 'organizer-dashboard' ) . '#operations', 'slug' => 'operations', 'icon' => 'operations' ),
+
+		array( 'label' => __( 'Intelligence', 'lnkup-theme' ), 'href' => lnkup_page_url( 'organizer-dashboard' ) . '#intelligence', 'slug' => 'intelligence', 'icon' => 'chart' ),
+
+	);
+
+}
+
+
+
+/**
+
+ * Vendor shell user card data.
+
+ */
+
+function lnkup_dashboard_vendor_user_card() {
+
+	$user       = wp_get_current_user();
+
+	$profile_id = function_exists( 'lnkup_get_vendor_profile_id' ) ? lnkup_get_vendor_profile_id( $user->ID ) : 0;
+
+	$business   = $profile_id ? (string) get_post_meta( $profile_id, '_lnkup_business_name', true ) : $user->display_name;
+
+	$city       = $profile_id ? (string) get_post_meta( $profile_id, '_lnkup_city', true ) : '';
+
+	$state      = $profile_id ? (string) get_post_meta( $profile_id, '_lnkup_state', true ) : '';
+
+	$initials   = '';
+
+	foreach ( preg_split( '/\s+/', trim( $business ) ) as $part ) {
+
+		$initials .= strtoupper( substr( $part, 0, 1 ) );
+
+		if ( strlen( $initials ) >= 2 ) {
+
+			break;
+
+		}
+
+	}
+
+	if ( ! $initials ) {
+
+		$initials = strtoupper( substr( $user->display_name, 0, 2 ) );
+
+	}
+
+
+
+	return array(
+
+		'business' => $business,
+
+		'location' => trim( $city . ( $state ? ', ' . $state : '' ) ),
+
+		'initials' => $initials,
+
+		'role'     => __( 'Vendor', 'lnkup-theme' ),
+
+	);
+
+}
+
+
+
+/**
+
+ * Organizer shell user card data.
+
+ */
+
+function lnkup_dashboard_organizer_user_card() {
+
+	$user     = wp_get_current_user();
+
+	$business = (string) get_user_meta( $user->ID, '_lnkup_organization_name', true );
+
+	if ( ! $business ) {
+
+		$business = $user->display_name;
+
+	}
+
+	$initials = '';
+
+	foreach ( preg_split( '/\s+/', trim( $business ) ) as $part ) {
+
+		$initials .= strtoupper( substr( $part, 0, 1 ) );
+
+		if ( strlen( $initials ) >= 2 ) {
+
+			break;
+
+		}
+
+	}
+
+	if ( ! $initials ) {
+
+		$initials = strtoupper( substr( $user->display_name, 0, 2 ) );
+
+	}
+
+
+
+	return array(
+
+		'business' => $business,
+
+		'location' => '',
+
+		'initials' => $initials,
+
+		'role'     => __( 'Organizer', 'lnkup-theme' ),
+
+	);
+
+}
+
+
+
+/**
+
+ * Connector shell user card data.
+
+ */
+
+function lnkup_dashboard_connector_user_card() {
+
+	$user = wp_get_current_user();
+
+	$connector = class_exists( 'LNKup_Connector' ) ? LNKup_Connector::get_by_user_id( $user->ID ) : null;
+
+	$business = $connector['display_name'] ?? $user->display_name;
+
+	$location = '';
+
+	if ( ! empty( $connector['city'] ) ) {
+
+		$location = $connector['city'];
+
+		if ( ! empty( $connector['state'] ) ) {
+
+			$location .= ', ' . $connector['state'];
+
+		}
+
+	}
+
+	$initials = strtoupper( substr( $business, 0, 1 ) );
+
+	return array(
+
+		'business' => $business,
+
+		'location' => $location,
+
+		'initials' => $initials,
+
+		'role'     => __( 'City Connector', 'lnkup-theme' ),
+
+	);
+
+}
+
+
+
+/**
+
+ * Workspace chevron icon for sidebar selector.
+
+ */
+
+function lnkup_dashboard_chevron_icon() {
+
+	$svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg>';
+
+	return function_exists( 'lnkup_inline_icon' ) ? lnkup_inline_icon( $svg, 16 ) : $svg;
+
+}
+
+
+
+/**
+
+ * Render dashboard shell opening markup.
+
+ *
+
+ * @param string $role    vendor|organizer|connector.
+
+ * @param string $title   Page title.
+
+ */
+
+function lnkup_dashboard_shell_open( $role, $title ) {
+
+	$GLOBALS['lnkup_dashboard_shell_role'] = $role;
+
+	$nav         = lnkup_get_dashboard_nav( $role );
+
+	$user        = wp_get_current_user();
+
+	$active_slug = get_post_field( 'post_name', get_queried_object_id() );
+
+	$active_view = isset( $_GET['view'] ) ? sanitize_key( wp_unslash( $_GET['view'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+	$opp_url     = lnkup_page_url( 'opportunities' );
+
+	$card        = 'vendor' === $role ? lnkup_dashboard_vendor_user_card() : ( 'organizer' === $role ? lnkup_dashboard_organizer_user_card() : ( 'connector' === $role ? lnkup_dashboard_connector_user_card() : null ) );
+
+	$workspace_label = 'vendor' === $role ? __( 'Vendor', 'lnkup-theme' ) : ( 'organizer' === $role ? __( 'Organizer', 'lnkup-theme' ) : ( 'connector' === $role ? __( 'Connector', 'lnkup-theme' ) : '' ) );
+
+	$switch_url      = '';
+
+	if ( 'vendor' === $role && ( in_array( 'lnkup_organizer', (array) $user->roles, true ) || current_user_can( 'manage_options' ) ) ) {
+
+		$switch_url = lnkup_page_url( 'organizer-dashboard' );
+
+	} elseif ( 'organizer' === $role && ( in_array( 'lnkup_vendor', (array) $user->roles, true ) || current_user_can( 'manage_options' ) ) ) {
+
+		$switch_url = lnkup_page_url( 'vendor-dashboard' );
+
+	} elseif ( 'connector' === $role && ( array_intersect( array( 'lnkup_vendor', 'lnkup_organizer' ), (array) $user->roles ) || current_user_can( 'manage_options' ) ) ) {
+
+		$switch_url = in_array( 'lnkup_organizer', (array) $user->roles, true ) ? lnkup_page_url( 'organizer-dashboard' ) : lnkup_page_url( 'vendor-dashboard' );
+
+	}
+
+	$profile_url = 'vendor' === $role ? lnkup_page_url( 'vendor-profile' ) : ( 'connector' === $role ? lnkup_page_url( 'connector-dashboard' ) : lnkup_page_url( 'organizer-dashboard' ) );
+
+	?>
+
+	<div class="lnkup-dashboard">
+
+		<div class="lnkup-dashboard__overlay" id="lnkup-sidebar-overlay" hidden></div>
+
+		<aside class="lnkup-dashboard__sidebar" id="lnkup-sidebar">
+
+			<div class="lnkup-dashboard__brand">
+
+				<a href="<?php echo esc_url( home_url( '/' ) ); ?>"><?php lnkup_logo(); ?></a>
+
+			</div>
+
+
+
+			<div class="lnkup-dashboard__sidebar-body">
+
+				<?php if ( $workspace_label ) : ?>
+
+					<?php if ( $switch_url ) : ?>
+
+						<details class="lnkup-dashboard__workspace">
+
+							<summary class="lnkup-dashboard__workspace-trigger">
+
+								<span class="lnkup-dashboard__workspace-meta">
+
+									<span class="lnkup-dashboard__workspace-label"><?php esc_html_e( 'Workspace', 'lnkup-theme' ); ?></span>
+
+									<span class="lnkup-dashboard__workspace-current"><?php echo esc_html( $workspace_label ); ?></span>
+
+								</span>
+
+								<span class="lnkup-dashboard__workspace-chevron" aria-hidden="true"><?php echo lnkup_dashboard_chevron_icon(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+
+							</summary>
+
+							<a class="lnkup-dashboard__workspace-link" href="<?php echo esc_url( $switch_url ); ?>">
+
+								<?php echo 'vendor' === $role ? esc_html__( 'Switch to Organizer', 'lnkup-theme' ) : esc_html__( 'Switch to Vendor', 'lnkup-theme' ); ?>
+
+							</a>
+
+						</details>
+
+					<?php else : ?>
+
+						<div class="lnkup-dashboard__workspace lnkup-dashboard__workspace--static">
+
+							<span class="lnkup-dashboard__workspace-meta">
+
+								<span class="lnkup-dashboard__workspace-label"><?php esc_html_e( 'Workspace', 'lnkup-theme' ); ?></span>
+
+								<span class="lnkup-dashboard__workspace-current"><?php echo esc_html( $workspace_label ); ?></span>
+
+							</span>
+
+							<span class="lnkup-dashboard__workspace-chevron" aria-hidden="true"><?php echo lnkup_dashboard_chevron_icon(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+
+						</div>
+
+					<?php endif; ?>
+
+				<?php endif; ?>
+
+
+
+				<nav class="lnkup-dashboard__nav">
+
+				<?php foreach ( $nav as $item ) : ?>
+
+					<?php
+
+					if ( ! empty( $item['section'] ) ) :
+
+						?>
+
+						<p class="lnkup-dashboard__nav-section"><?php echo esc_html( $item['section'] ); ?></p>
+
+						<?php
+
+						continue;
+
+					endif;
+
+					$hash_slug = '';
+
+					if ( ! empty( $item['href'] ) && false !== strpos( $item['href'], '#' ) ) {
+
+						$parts     = wp_parse_url( $item['href'] );
+
+						$hash_slug = isset( $parts['fragment'] ) ? $parts['fragment'] : '';
+
+					}
+
+					$item_view = $item['view'] ?? '';
+
+					$active    = false;
+
+					if ( 'vendor' === $role && $item_view ) {
+
+						$active = ( 'vendor-dashboard' === $active_slug && $active_view === $item_view );
+
+					} elseif ( 'vendor' === $role && '' === $item_view && 'vendor-dashboard' === $item['slug'] ) {
+
+						$active = ( 'vendor-dashboard' === $active_slug && ! $active_view );
+
+					} elseif ( 'vendor' === $role && '' === $item_view ) {
+
+						$active = ( $active_slug === $item['slug'] );
+
+					} else {
+
+						$active = ( $active_slug === $item['slug'] );
+
+					}
+
+					?>
+
+					<a href="<?php echo esc_url( $item['href'] ); ?>" class="lnkup-dashboard__nav-link<?php echo $active ? ' is-active' : ''; ?><?php echo ! empty( $item['locked'] ) ? ' is-locked' : ''; ?>"<?php echo $hash_slug ? ' data-hash="' . esc_attr( $hash_slug ) . '"' : ''; ?><?php echo $item_view ? ' data-view="' . esc_attr( $item_view ) . '"' : ''; ?><?php echo ! empty( $item['locked_hint'] ) ? ' title="' . esc_attr( $item['locked_hint'] ) . '"' : ''; ?>>
+
+						<?php if ( ! empty( $item['icon'] ) ) : ?>
+
+							<span class="lnkup-dashboard__nav-icon" aria-hidden="true"><?php echo lnkup_dashboard_nav_icon( $item['icon'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+
+						<?php endif; ?>
+
+						<span class="lnkup-dashboard__nav-text-wrap">
+							<span class="lnkup-dashboard__nav-text"><?php echo esc_html( $item['label'] ); ?></span>
+							<?php if ( ! empty( $item['locked'] ) && ! empty( $item['locked_hint'] ) ) : ?>
+								<span class="lnkup-dashboard__nav-hint"><?php echo esc_html( $item['locked_hint'] ); ?></span>
+							<?php endif; ?>
+						</span>
+
+						<?php if ( ! empty( $item['locked'] ) ) : ?>
+
+							<span class="lnkup-dashboard__nav-lock" aria-hidden="true"><?php esc_html_e( 'Soon', 'lnkup-theme' ); ?></span>
+
+						<?php endif; ?>
+
+						<?php if ( ! empty( $item['badge'] ) ) : ?>
+
+							<span class="lnkup-dashboard__nav-badge"><?php echo esc_html( (string) $item['badge'] ); ?></span>
+
+						<?php endif; ?>
+
+					</a>
+
+				<?php endforeach; ?>
+
+				</nav>
+
+			</div>
+
+
+
+			<?php if ( $card ) : ?>
+
+				<div class="lnkup-dashboard__sidebar-footer">
+
+					<a href="<?php echo esc_url( $profile_url ); ?>" class="lnkup-dashboard__profile">
+
+						<span class="lnkup-dashboard__user-avatar"><?php echo esc_html( $card['initials'] ); ?></span>
+
+						<span class="lnkup-dashboard__user-info">
+
+							<span class="lnkup-dashboard__user-name"><?php echo esc_html( $card['business'] ); ?></span>
+
+							<?php if ( $card['location'] ) : ?>
+
+								<span class="lnkup-dashboard__user-role"><?php echo esc_html( $card['location'] ); ?></span>
+
+							<?php else : ?>
+
+								<span class="lnkup-dashboard__user-role"><?php echo esc_html( $card['role'] ); ?></span>
+
+							<?php endif; ?>
+
+						</span>
+
+					</a>
+
+				</div>
+
+			<?php endif; ?>
+
+		</aside>
+
+		<div class="lnkup-dashboard__main">
+
+			<header class="lnkup-dashboard__header">
+
+				<button type="button" class="lnkup-dashboard__menu-toggle" id="lnkup-menu-toggle" aria-label="<?php esc_attr_e( 'Toggle menu', 'lnkup-theme' ); ?>">
+
+					<span></span><span></span><span></span>
+
+				</button>
+
+				<?php if ( 'vendor' === $role ) : ?>
+
+					<form class="lnkup-dashboard__search-form" id="lnkup-dashboard-search-form" action="<?php echo esc_url( $opp_url ); ?>" method="get" role="search">
+
+						<input type="search" name="q" class="lnkup-dashboard__search" placeholder="<?php esc_attr_e( 'Search events…', 'lnkup-theme' ); ?>" aria-label="<?php esc_attr_e( 'Search events', 'lnkup-theme' ); ?>" />
+
+					</form>
+
+				<?php elseif ( 'organizer' === $role ) : ?>
+
+					<form class="lnkup-dashboard__search-form" id="lnkup-dashboard-search-form" action="<?php echo esc_url( lnkup_page_url( 'organizer-dashboard' ) ); ?>" method="get" role="search">
+
+						<input type="search" name="crm_q" id="lnkup-dashboard-crm-search" class="lnkup-dashboard__search" placeholder="<?php esc_attr_e( 'Search vendors, events…', 'lnkup-theme' ); ?>" aria-label="<?php esc_attr_e( 'Search dashboard', 'lnkup-theme' ); ?>" />
+
+					</form>
+
+				<?php endif; ?>
+
+				<h1 class="lnkup-dashboard__title"><?php echo esc_html( $title ); ?></h1>
+
+				<a href="<?php echo esc_url( wp_logout_url( home_url( '/' ) ) ); ?>" class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm"><?php esc_html_e( 'Log out', 'lnkup-theme' ); ?></a>
+
+			</header>
+
+			<div class="lnkup-dashboard__content">
+
+				<div class="lnkup-dashboard__content-inner">
+
+	<?php
+
+}
+
+
+
+/**
+
+ * Render dashboard shell closing markup.
+
+ */
+
+function lnkup_dashboard_shell_close() {
+
+	$role = $GLOBALS['lnkup_dashboard_shell_role'] ?? '';
+
+	?>
+
+				</div>
+
+			</div>
+
+		</div>
+
+		<?php if ( 'vendor' === $role || 'organizer' === $role ) : ?>
+
+			<nav class="lnkup-dashboard__bottom-nav" id="lnkup-bottom-nav" aria-label="<?php esc_attr_e( 'Quick navigation', 'lnkup-theme' ); ?>">
+
+				<?php
+
+				if ( 'vendor' === $role ) {
+
+					$dashboard = lnkup_page_url( 'vendor-dashboard' );
+
+					$bottom    = array(
+
+						array( 'label' => __( 'Home', 'lnkup-theme' ), 'href' => $dashboard, 'icon' => 'home', 'view' => '' ),
+
+						array( 'label' => __( 'Find', 'lnkup-theme' ), 'href' => lnkup_page_url( 'opportunities' ), 'icon' => 'search', 'slug' => 'opportunities' ),
+
+						array( 'label' => __( 'Apps', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'applications', $dashboard ), 'icon' => 'apps', 'view' => 'applications' ),
+
+						array( 'label' => __( 'Pay', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'payments', $dashboard ), 'icon' => 'payment', 'view' => 'payments' ),
+
+					);
+
+				} else {
+
+					$dashboard = lnkup_page_url( 'organizer-dashboard' );
+
+					$bottom    = array(
+
+						array( 'label' => __( 'Overview', 'lnkup-theme' ), 'href' => $dashboard . '#overview', 'icon' => 'home', 'hash' => 'overview' ),
+
+						array( 'label' => __( 'Events', 'lnkup-theme' ), 'href' => $dashboard . '#events', 'icon' => 'calendar', 'hash' => 'events' ),
+
+						array( 'label' => __( 'Create', 'lnkup-theme' ), 'href' => $dashboard . '#create', 'icon' => 'calendar', 'hash' => 'create' ),
+
+						array( 'label' => __( 'Apps', 'lnkup-theme' ), 'href' => $dashboard . '#applications', 'icon' => 'inbox', 'hash' => 'applications' ),
+
+					);
+
+				}
+
+				foreach ( $bottom as $item ) :
+
+					?>
+
+					<a href="<?php echo esc_url( $item['href'] ); ?>" class="lnkup-dashboard__bottom-link"<?php echo ! empty( $item['view'] ) ? ' data-view="' . esc_attr( $item['view'] ) . '"' : ''; ?><?php echo ! empty( $item['slug'] ) ? ' data-slug="' . esc_attr( $item['slug'] ) . '"' : ''; ?><?php echo ! empty( $item['hash'] ) ? ' data-hash="' . esc_attr( $item['hash'] ) . '"' : ''; ?>>
+
+						<span class="lnkup-dashboard__bottom-icon" aria-hidden="true"><?php echo lnkup_dashboard_nav_icon( $item['icon'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+
+						<span class="lnkup-dashboard__bottom-text"><?php echo esc_html( $item['label'] ); ?></span>
+
+					</a>
+
+				<?php endforeach; ?>
+
+				<button type="button" class="lnkup-dashboard__bottom-link" id="lnkup-bottom-more" aria-label="<?php esc_attr_e( 'More menu', 'lnkup-theme' ); ?>">
+
+					<span class="lnkup-dashboard__bottom-icon" aria-hidden="true"><?php echo lnkup_dashboard_nav_icon( 'list' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+
+					<span class="lnkup-dashboard__bottom-text"><?php esc_html_e( 'More', 'lnkup-theme' ); ?></span>
+
+				</button>
+
+			</nav>
+
+		<?php endif; ?>
+
+	</div>
+
+	<?php
+
+}
+

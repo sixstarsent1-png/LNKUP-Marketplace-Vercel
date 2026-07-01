@@ -1,0 +1,109 @@
+/* Event Weather Intelligence */
+.lnkup-weather-card {
+  background: var(--lnkup-surface, #fff);
+  border: 1px solid var(--lnkup-border, #e8e8e8);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin: 1rem 0;
+}
+
+.lnkup-weather-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.lnkup-weather-card__title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.lnkup-weather-card__status {
+  font-size: 0.875rem;
+  color: var(--lnkup-muted, #666);
+  margin: 0 0 0.5rem;
+}
+
+.lnkup-weather-card__summary {
+  margin: 0 0 0.75rem;
+  font-size: 0.9375rem;
+}
+
+.lnkup-weather-card__risks,
+.lnkup-weather-risk-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.lnkup-weather-risk {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: #f4f4f5;
+  border: 1px solid #e4e4e7;
+}
+
+.lnkup-weather-risk--low { background: #ecfdf5; border-color: #a7f3d0; }
+.lnkup-weather-risk--medium { background: #fffbeb; border-color: #fcd34d; }
+.lnkup-weather-risk--high { background: #fef2f2; border-color: #fca5a5; }
+.lnkup-weather-risk--unavailable { opacity: 0.7; }
+
+.lnkup-weather-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.lnkup-weather-recs {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+}
+
+.lnkup-weather-contingency {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--lnkup-border, #e8e8e8);
+  font-size: 0.875rem;
+}
+
+.lnkup-weather-vendor-note {
+  font-size: 0.875rem;
+}
+
+.lnkup-weather-vendor-note__status {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.lnkup-weather-card.is-stale {
+  border-color: #fcd34d;
+}
+
+.lnkup-weather-hourly ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+}
+
+.lnkup-weather-hourly li {
+  display: flex;
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .lnkup-weather-card__head {
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Sunset festival event scene">
+  <defs>
+    <linearGradient id="sm-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a2838"/>
+      <stop offset="60%" stop-color="#2a1a28"/>
+      <stop offset="100%" stop-color="#14101a"/>
+    </linearGradient>
+    <radialGradient id="sm-sun" cx="75%" cy="25%" r="35%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#sm-sky)"/>
+  <rect width="720" height="560" fill="url(#sm-sun)"/>
+  <!-- palm silhouettes -->
+  <path fill="#0e1418" d="M100 400 L110 280 L95 300 L110 250 L100 270 L115 220 L105 260 L125 200 L115 270 L130 240 L120 300 L135 280 L125 400z"/>
+  <path fill="#0e1418" d="M600 400 L590 290 L605 310 L595 260 L610 240 L600 280 L615 210 L605 250 L620 230 L610 300 L625 275 L615 400z"/>
+  <!-- boardwalk / beach -->
+  <rect x="0" y="420" width="720" height="140" fill="#12101a"/>
+  <rect x="0" y="418" width="720" height="4" fill="#c8f542" opacity="0.2"/>
+  <!-- vendor booths -->
+  <rect x="220" y="350" width="80" height="70" rx="4" fill="#1a1828" stroke="#c8f542" stroke-width="1.5" opacity="0.7"/>
+  <path d="M220 350 L260 310 L300 350" fill="#221e30" stroke="#c8f542" stroke-width="1" opacity="0.5"/>
+  <rect x="400" y="345" width="85" height="75" rx="4" fill="#1a1828" stroke="#c8f542" stroke-width="1.5" opacity="0.75"/>
+  <path d="M400 345 L442 300 L485 345" fill="#221e30" stroke="#c8f542" stroke-width="1" opacity="0.55"/>
+  <!-- DJ stage -->
+  <rect x="310" y="300" width="100" height="50" rx="4" fill="#14121e"/>
+  <rect x="320" y="308" width="80" height="6" rx="2" fill="#c8f542" opacity="0.4"/>
+  <!-- crowd -->
+  <ellipse cx="280" cy="410" rx="9" ry="13" fill="#0a0810"/>
+  <ellipse cx="360" cy="415" rx="11" ry="15" fill="#0a0810"/>
+  <ellipse cx="440" cy="408" rx="10" ry="14" fill="#0a0810"/>
+  <!-- MIA badge -->
+  <rect x="24" y="24" width="52" height="28" rx="14" fill="#14121e" stroke="#c8f542" stroke-width="1.5" opacity="0.85"/>
+  <text x="50" y="43" text-anchor="middle" fill="#c8f542" font-family="system-ui,sans-serif" font-size="11" font-weight="700">MIA</text>
+</svg>

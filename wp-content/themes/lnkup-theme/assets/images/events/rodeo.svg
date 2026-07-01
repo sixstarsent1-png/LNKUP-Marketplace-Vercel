@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Rodeo event scene">
+  <defs>
+    <linearGradient id="rd-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2a2418"/>
+      <stop offset="100%" stop-color="#14120e"/>
+    </linearGradient>
+    <linearGradient id="rd-lime" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4f542"/>
+      <stop offset="100%" stop-color="#a8c430"/>
+    </linearGradient>
+    <radialGradient id="rd-glow" cx="60%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#rd-sky)"/>
+  <rect width="720" height="560" fill="url(#rd-glow)"/>
+  <ellipse cx="360" cy="500" rx="320" ry="50" fill="#0e0c0a" opacity="0.5"/>
+  <!-- arena fence -->
+  <rect x="80" y="280" width="560" height="8" rx="2" fill="#3a3428"/>
+  <rect x="100" y="200" width="8" height="88" fill="#3a3428"/>
+  <rect x="612" y="200" width="8" height="88" fill="#3a3428"/>
+  <!-- dirt ring -->
+  <ellipse cx="360" cy="360" rx="220" ry="80" fill="#3d3220" opacity="0.8"/>
+  <ellipse cx="360" cy="360" rx="200" ry="70" fill="#4a3d28" opacity="0.6"/>
+  <!-- chute -->
+  <rect x="120" y="320" width="60" height="60" rx="4" fill="#252018" stroke="#c8f542" stroke-width="1.5" opacity="0.7"/>
+  <!-- grandstand -->
+  <path fill="#1e1a14" d="M0 200h100v80H0zm620 0h100v80h-100z"/>
+  <path fill="#2a2418" d="M0 180h720v20H0z"/>
+  <!-- crowd dots -->
+  <circle cx="50" cy="220" r="4" fill="#c8f542" opacity="0.5"/>
+  <circle cx="70" cy="215" r="4" fill="#c8f542" opacity="0.4"/>
+  <circle cx="650" cy="218" r="4" fill="#c8f542" opacity="0.5"/>
+  <circle cx="670" cy="222" r="4" fill="#c8f542" opacity="0.35"/>
+  <!-- vendor stalls -->
+  <rect x="520" y="380" width="80" height="50" rx="4" fill="#1a1610" stroke="#c8f542" stroke-width="1" opacity="0.6"/>
+  <path d="M520 380 L560 350 L600 380" fill="#252018" stroke="#c8f542" stroke-width="1" opacity="0.5"/>
+  <rect x="100" y="390" width="70" height="45" rx="4" fill="#1a1610" stroke="#c8f542" stroke-width="1" opacity="0.6"/>
+  <rect x="0" y="430" width="720" height="130" fill="#12100c"/>
+</svg>

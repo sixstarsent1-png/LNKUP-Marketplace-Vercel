@@ -1,0 +1,162 @@
+---
+description: LNK Marketplace architecture and coding rules
+alwaysApply: true
+---
+
+# LNK Marketplace — Architecture & Coding Rules
+
+You are in the **LNK Marketplace** monorepo (`lnk-up-marketplace-platform`). Production is **WordPress**, not Next.js.
+
+## Production Stack
+
+| Layer | Path | Role |
+|-------|------|------|
+| Plugin | `wp-content/plugins/lnkup-marketplace/` | All business logic, REST, AJAX, CPTs, SQL, financial OS |
+| Theme | `wp-content/themes/lnkup-theme/` | Dashboard shell, landing page, layout, CSS — **no business logic** |
+| Reference UI | `app/`, `components/`, `lib/` | Next.js 16 design mock — **not wired to WordPress** |
+
+**Out of scope unless explicitly requested:** WooCommerce, attendee ticketing (Posh/Eventbrite/Universe), headless Next.js production.
+
+**Platform:** WordPress 6.0+, PHP 7.4+ (plugin), PHP 8.0+ (theme). Plugin v12.1.0. ~200 REST routes under `lnkup/v1`.
+
+## What LNK Marketplace Is
+
+Two-sided **vendor opportunity marketplace** for the event economy:
+
+- **Vendors** discover events, apply, pay fees, upload documents, unlock packets, track growth/reputation.
+- **Organizers** create events/opportunities, review applications, manage vendors, payments, operations, CRM, intelligence, maps.
+- **LNKup** captures marketplace value via fees, subscriptions, referrals, financial services.
+
+## Main Source Paths
+
+```
+wp-content/plugins/lnkup-marketplace/
+  lnkup-marketplace.php          # Bootstrap, version, file loader
+  includes/                      # Domain services, REST, migrations
+  includes/financial/            # Financial OS + Stripe Connect treasury
+  public/class-shortcodes.php    # Dashboard shortcode shells
+  public/class-vendor-dashboard-views.php
+  public/js/                     # financial.js, growth.js, operations.js, intelligence.js, marketplace-v2.js, organizer-crm.js
+  public/css/                    # Per-feature styles
+  admin/                         # wp-admin pages
+
+wp-content/themes/lnkup-theme/
+  inc/dashboard.php              # Role gates, sidebar nav
+  page-templates/                # vendor-dashboard, organizer-dashboard
+  assets/dist/                   # Compiled CSS (enqueued)
+
+docs/SYSTEM_OVERVIEW.md          # Full architecture reference
+docs/CURRENT_STATE.md            # Inventory + changelog
+docs/CURSOR_CONTEXT.md           # Human-readable AI context
+```
+
+## Data Model
+
+**Canonical:** CPTs + post meta for business records.
+
+**SQL tables (70+):** indexes, ledgers, analytics snapshots, audit logs, relational data — not a second source of truth for core entities.
+
+**13 CPTs:** `lnkup_vendor_profile`, `lnkup_event`, `lnkup_opportunity`, `lnkup_application`, `lnkup_document`, `lnkup_payment`, `lnkup_packet`, `lnkup_vendor_note`, `lnkup_vendor_list`, `lnkup_vendor_invite`, `lnkup_vendor_flag`, `lnkup_review`, `lnkup_dispute`.
+
+**Key meta links:** `_lnkup_event_id`, `_lnkup_opportunity_id`, `_lnkup_application_id`, `_lnkup_vendor_profile_id`.
+
+**Event vs opportunity:** `lnkup_event` = organizer event; `lnkup_opportunity` = vendor booth/slot. Create Event UX should create **both** and set `_lnkup_event_id` on the opportunity.
+
+## Financial OS Rule (Critical)
+
+All payment/financial operations route through **`LNKup_Financial_Service`**.
+
+Do **not** call Stripe from dashboard JS, shortcodes, templates, AJAX handlers, or random classes. Use:
+
+- `LNKup_Fee_Engine` — fee calculation
+- `LNKup_Stripe_Client` / `LNKup_Stripe_Provider` — SDK (service layer only)
+- `LNKup_Stripe_Connect` — Connect Express, destination charges
+- `LNKup_Financial_REST` — `lnkup/v1/financial/*`
+
+**Organizer UI:** `Financial` (`#financial`). **Vendor UI:** `Payments` (`?view=payments`). Never cross-call Connect/cashout endpoints between roles.
+
+**Stripe Connect UI copy:** user-friendly ("Payouts Active", "Finish payout setup") — never expose "Stripe Connect active · Settlement: destination". Connect-disabled routes must return safe JSON, never 500.
+
+## REST & AJAX Conventions
+
+**Namespace:** `lnkup/v1`
+
+Every `register_rest_route()` **must** include `permission_callback`. Financial routes are never public.
+
+```php
+if ( is_wp_error( $result ) ) {
+    return new WP_Error( 'lnkup_error_code', $result->get_error_message(), array( 'status' => 400 ) );
+}
+```
+
+Never treat `WP_Error` as an array. Never echo HTML or PHP notices into JSON responses.
+
+**Legacy AJAX:** `includes/class-ajax.php` — `lnkup_apply`, `lnkup_review_application`, `lnkup_create_checkout`, etc.
+
+**Dashboard JS fetch pattern:** check `response.ok`, verify `content-type` is JSON, catch errors, remove skeletons, show friendly error cards. Never infinite spinners.
+
+## Security & Capabilities
+
+**Roles:** `lnkup_vendor`, `lnkup_organizer`, `lnkup_admin`, `administrator`.
+
+**Ownership helpers** (`LNKup_Capabilities`):
+
+- `user_has_manage_all()` — checks `$user->allcaps` directly (never recurse via `map_meta_cap`)
+- `organizer_owns_event()`, `vendor_owns_application()`, `vendor_owns_profile()`
+
+Sanitize inputs, escape outputs, validate nonces, verify webhook signatures, idempotent Stripe webhooks.
+
+## UI/UX Conventions
+
+Design: black, white, lime accent, premium SaaS marketplace. Rounded cards, clean shadows, mobile-first.
+
+Every dashboard panel: **loading**, **empty**, and **error** states. Hide empty Explore More sections. Mobile sidebar icons 18–22px.
+
+## Module Map
+
+| Module | Key Classes | Frontend |
+|--------|-------------|----------|
+| Find Events / Discovery | `LNKup_Marketplace_Index`, `LNKup_Discovery`, `LNKup_Marketplace_REST` | `marketplace-v2.js`, `[lnkup_opportunities_feed]` |
+| Application → Payment → Packet | `LNKup_Applications`, `LNKup_Payments`, `LNKup_Packets` | shortcodes + `checkout.js` |
+| Financial OS | `LNKup_Financial_Service`, `LNKup_Fee_Engine`, `LNKup_Financial_REST` | `financial.js` |
+| Organizer CRM | `LNKup_Organizer_CRM`, `LNKup_Vendor_Directory`, `LNKup_Organizer_CRM_REST` | `organizer-crm.js` |
+| Vendor Reputation | `LNKup_Vendor_Reputation`, `LNKup_Reputation_REST` | reputation views |
+| Event Operations | `LNKup_Event_Operations`, `LNKup_Operations_REST` | `operations.js` |
+| Organizer Intelligence | `LNKup_Organizer_Intelligence`, `LNKup_Intelligence_REST` | `intelligence.js` |
+| Interactive Maps | `LNKup_Maps`, `LNKup_Map_REST` | map render |
+| Vendor Growth | `LNKup_Growth`, `LNKup_Growth_REST` | `growth.js` |
+| Admin / Shortcodes | `LNKup_Admin`, `LNKup_Shortcodes`, `LNKup_Ajax` | wp-admin + dashboard shells |
+
+## Bug-Fix Workflow
+
+1. **Trace the path:** JS → REST/AJAX → PHP service → CPT/SQL storage.
+2. **Inspect existing classes** — extend/fix, do not rebuild.
+3. **Fix root cause** — add `is_wp_error()` guards before array access.
+4. **Preserve** response shapes, capabilities, ownership, dashboard routing.
+5. **Add states** — loading/empty/error in UI; zero-state for new users.
+6. **Summarize** — files changed, routes touched, assumptions, what was verified.
+
+## What NOT To Do
+
+- Treat `app/` or `components/` as production
+- Add WooCommerce or attendee ticketing
+- Create duplicate CPTs for existing domains
+- Call Stripe from UI/AJAX/REST controllers directly
+- Omit `permission_callback` on REST routes
+- Use `user_can('lnkup_manage_all')` in `map_meta_cap` (causes recursion)
+- Hardcode fees in UI — use `LNKup_Fee_Engine` / settings
+- Move business logic into the theme
+- Leave skeleton loaders spinning forever
+- Show raw errors or technical Stripe jargon to users
+- Break vendor vs organizer dashboard role separation
+
+## Testing
+
+Playwright E2E targets WordPress at `http://localhost:8888` (`playwright.config.ts`). Specs in `tests/e2e/`. Run: `pnpm test:e2e` or `npx playwright test`.
+
+## Deeper Reference
+
+- Architecture: `docs/SYSTEM_OVERVIEW.md`
+- Current inventory: `docs/CURRENT_STATE.md`
+- AI context + prompt templates: `docs/CURSOR_CONTEXT.md`
+- Financial subsystem: `wp-content/plugins/lnkup-marketplace/FINANCIAL.md`

@@ -1,0 +1,1004 @@
+---
+description: LNKup Marketplace detailed operational rules (supplement to lnkup-architecture)
+globs: wp-content/**
+alwaysApply: false
+---
+
+# LNKup Marketplace Cursor Rule
+
+You are working inside the **LNKup Marketplace** monorepo.
+
+LNKup Marketplace is a WordPress-based two-sided marketplace where:
+
+* Vendors discover events and apply for opportunities.
+* Event organizers discover, invite, manage, and pay vendors.
+* LNKup handles vendor applications, payments, financial routing, communications, operations, CRM, reputation, growth analytics, and organizer intelligence.
+
+The system is not attendee ticketing. Attendee ticketing remains outside the platform through tools like Posh, Eventbrite, Universe, etc.
+
+---
+
+# Core Project Structure
+
+Primary production code lives inside:
+
+```txt
+wp-content/
+  themes/
+    lnkup-theme/
+  plugins/
+    lnkup-marketplace/
+```
+
+Reference/mock UI may exist in:
+
+```txt
+app/
+components/
+lib/
+```
+
+The Next.js side is reference/design only unless explicitly requested. Do not treat it as production unless the user says so.
+
+The WordPress plugin is the main production system.
+
+---
+
+# Main Plugin
+
+Primary plugin:
+
+```txt
+wp-content/plugins/lnkup-marketplace/
+```
+
+This plugin owns:
+
+* roles/capabilities
+* CPTs
+* taxonomies
+* vendor profiles
+* organizer events
+* opportunities
+* applications
+* payments
+* packets
+* documents
+* financial system
+* marketplace discovery
+* CRM
+* reputation
+* operations
+* intelligence
+* maps
+* growth
+* admin pages
+* REST routes
+* dashboard shortcodes
+* database migrations
+
+Do not rebuild systems from scratch if they already exist. Inspect current classes first, then extend or fix.
+
+---
+
+# Main Theme
+
+Primary production theme:
+
+```txt
+wp-content/themes/lnkup-theme/
+```
+
+The theme owns:
+
+* dashboard shell
+* sidebar/mobile nav
+* page templates
+* layout wrappers
+* landing page
+* shared dashboard styling
+* theme CSS/build assets
+
+Do not move core business logic into the theme. Business logic belongs in the plugin.
+
+---
+
+# Development Principles
+
+Always follow these principles:
+
+1. Fix before rebuilding.
+2. Extend existing classes when possible.
+3. Keep CPTs/post meta as canonical business records.
+4. Use custom SQL tables for optimized indexes, ledgers, analytics, audit logs, and relational data.
+5. Do not bypass existing service classes.
+6. Do not call Stripe directly from UI.
+7. All financial operations must route through `LNKup_Financial_Service`.
+8. All REST routes must have `permission_callback`.
+9. No raw PHP warnings or HTML should leak into JSON responses.
+10. Every dashboard panel should have a loading state, error state, and empty state.
+11. Mobile UI must be clean and intentional.
+12. Never break existing vendor/organizer dashboard routing.
+13. Keep the LNKup design language consistent: black, white, lime, premium marketplace/SaaS feel.
+
+---
+
+# Coding Style
+
+Use WordPress/PHP conventions:
+
+* Prefix functions/classes/hooks with `LNKup_` or `lnkup_`.
+* Sanitize all inputs.
+* Escape all outputs.
+* Use nonces for AJAX and REST mutations.
+* Use capability checks.
+* Use ownership checks.
+* Use `WP_Error` correctly.
+* Do not treat `WP_Error` like an array.
+* Do not output raw debug text.
+* Avoid fatal errors on missing data.
+* Provide zero-state fallback data for new users.
+
+When writing PHP:
+
+```php
+if ( is_wp_error( $result ) ) {
+    return new WP_Error(
+        'lnkup_error_code',
+        $result->get_error_message(),
+        array( 'status' => 400 )
+    );
+}
+```
+
+Do not do:
+
+```php
+$value = $result['key'];
+```
+
+until you confirm `$result` is an array.
+
+---
+
+# REST API Rules
+
+Namespace:
+
+```txt
+lnkup/v1
+```
+
+Every `register_rest_route()` must include:
+
+```php
+'permission_callback' => ...
+```
+
+Do not omit `permission_callback`.
+
+Public read routes may use:
+
+```php
+'permission_callback' => '__return_true'
+```
+
+Private routes must use real permission logic.
+
+Financial routes should never be public.
+
+All REST responses must be valid JSON.
+
+If something fails, return:
+
+```php
+return new WP_Error(
+    'lnkup_error_code',
+    'Friendly error message.',
+    array( 'status' => 400 )
+);
+```
+
+Do not echo HTML.
+Do not print PHP notices.
+Do not allow debug output in API responses.
+
+---
+
+# Dashboard JavaScript Rules
+
+For dashboard JS files:
+
+```txt
+public/js/financial.js
+public/js/growth.js
+public/js/operations.js
+public/js/intelligence.js
+public/js/marketplace-v2.js
+public/js/organizer-crm.js
+```
+
+Every fetch must:
+
+* check `response.ok`
+* verify JSON response
+* catch errors
+* avoid unhandled promise rejections
+* remove skeleton loaders on failure
+* render friendly error cards
+* log technical errors only to console
+
+Use a safe fetch helper pattern:
+
+```js
+async function fetchLNKupJson(url, options = {}) {
+  try {
+    const response = await fetch(url, {
+      credentials: 'same-origin',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-WP-Nonce': window.lnkupRest?.nonce || '',
+        ...(options.headers || {})
+      }
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+
+    if (!contentType.includes('application/json')) {
+      const text = await response.text();
+      console.error('Expected JSON but received:', text);
+      throw new Error('Invalid server response.');
+    }
+
+    const json = await response.json();
+
+    if (!response.ok) {
+      throw new Error(json.message || json.code || 'Request failed.');
+    }
+
+    return json;
+  } catch (error) {
+    console.error('LNKup API error:', error);
+    return {
+      success: false,
+      error: error.message || 'Unable to load data.'
+    };
+  }
+}
+```
+
+Never leave infinite skeleton loading.
+
+---
+
+# User Roles
+
+Primary roles:
+
+* Vendor: `lnkup_vendor`
+* Organizer: `lnkup_organizer`
+* Platform admin: `lnkup_admin`
+* WordPress admin: `administrator`
+
+Vendor dashboard must not show organizer-only functionality.
+
+Organizer dashboard must not show vendor-only functionality.
+
+Admin can bypass ownership checks only through approved capability helpers.
+
+---
+
+# Ownership and Capability Rules
+
+Use existing helpers if available:
+
+```php
+LNKup_Capabilities::user_has_manage_all()
+LNKup_Capabilities::organizer_owns_event()
+LNKup_Capabilities::vendor_owns_application()
+LNKup_Capabilities::vendor_owns_profile()
+```
+
+Never expose another organizer's financials, vendors, events, applications, or payouts.
+
+Never expose another vendor's applications, documents, packets, wallet, credits, or payments.
+
+---
+
+# Custom Post Types
+
+Core CPTs include:
+
+```txt
+lnkup_vendor_profile
+lnkup_event
+lnkup_opportunity
+lnkup_application
+lnkup_document
+lnkup_payment
+lnkup_packet
+lnkup_vendor_note
+lnkup_vendor_list
+lnkup_vendor_invite
+lnkup_vendor_flag
+lnkup_review
+lnkup_dispute
+```
+
+Use existing CPTs. Do not create duplicate CPTs for the same domain.
+
+Events and opportunities are different:
+
+* `lnkup_event` = the actual organizer event.
+* `lnkup_opportunity` = the vendor booth/slot/listing tied to an event.
+
+When creating an event from organizer dashboard, the default UX should create both:
+
+1. Event
+2. First opportunity
+
+Store the relationship:
+
+```txt
+_lnkup_event_id
+```
+
+on the opportunity.
+
+---
+
+# Financial System Rules
+
+The financial system is a major core subsystem.
+
+All payment logic must route through:
+
+```php
+LNKup_Financial_Service
+```
+
+Do not call Stripe directly from dashboard JS, shortcodes, templates, or random classes.
+
+Financial system should support:
+
+* vendor invoices
+* booth payments
+* application fees
+* platform fees
+* organizer wallets
+* Stripe Connect
+* destination charges
+* payouts/cashouts
+* refunds
+* credits
+* referral credits
+* deposits
+* installments
+* tax summaries
+* sponsor payments
+* reports
+* audit logs
+
+---
+
+# Stripe Connect Rules
+
+LNKup is a marketplace.
+
+Preferred Stripe Connect model:
+
+* Express connected accounts
+* Destination charges when organizer account is active
+* LNKup retains platform fee
+* Organizer receives net revenue
+* Manual/internal fallback when organizer Connect onboarding is incomplete
+
+Do not expose technical Stripe terms to users.
+
+Avoid UI copy like:
+
+```txt
+Stripe Connect active · Settlement: destination
+```
+
+Use user-friendly copy:
+
+```txt
+Payouts Active
+Your payout account is active. Vendor payments can be routed to your organizer balance.
+```
+
+If onboarding is incomplete:
+
+```txt
+Finish payout setup to cash out vendor revenue.
+```
+
+If Stripe is reviewing:
+
+```txt
+Stripe is reviewing your payout setup.
+```
+
+If restricted:
+
+```txt
+Stripe needs more information before payouts can be enabled.
+```
+
+Connect routes must never 500 because Connect is disabled. Return safe JSON:
+
+```json
+{
+  "success": false,
+  "code": "connect_not_configured",
+  "message": "Stripe Connect is not configured yet.",
+  "status": "not_started"
+}
+```
+
+---
+
+# Organizer Financial UI
+
+Organizer dashboard should use:
+
+```txt
+Financial
+```
+
+Vendor dashboard should use:
+
+```txt
+Payments
+```
+
+Do not show both Financial and Payments for organizers.
+
+Organizer Financial tabs:
+
+* Overview
+* Wallet
+* Cash Out
+* Revenue
+* Sponsor Revenue
+* Payouts
+* Reserves
+* Budget
+* Forecast
+* Refunds
+* Tax
+* Reports
+* Settings
+
+Vendor Payments tabs:
+
+* Overview
+* Invoices
+* Payment Methods
+* Wallet & Credits
+* Referral Credits
+* Subscriptions
+* Premium Listings
+* Tax Center
+* Receipts
+* Refunds
+* Reports
+
+Vendor Payments should never call organizer Connect or cashout endpoints.
+
+Organizer Financial should never call vendor-only endpoints.
+
+---
+
+# Marketplace Fee Rules
+
+Launch pricing assumptions unless user says otherwise:
+
+* Organizer platform fee: 4–5%
+* Vendor marketplace fee: $5.99 on successful paid booking
+* Free booths: $0 vendor marketplace fee
+
+Build fee system to support later:
+
+* flat fee
+* percentage fee
+* hybrid fee
+* vendor-paid fee
+* organizer-paid fee
+* split fee
+* brackets
+* waivers
+* promo codes
+* referral credits
+
+Do not hardcode fees in random UI files. Use financial settings or fee engine.
+
+---
+
+# Growth System Rules
+
+Growth dashboard must never fail completely because one module errors.
+
+If any growth module returns `WP_Error`, convert to safe fallback data.
+
+`/wp-json/lnkup/v1/growth/dashboard` should always return JSON.
+
+For new vendors, return zero-state data:
+
+```json
+{
+  "success": true,
+  "data": {
+    "kpis": {
+      "events_completed": 0,
+      "applications_submitted": 0,
+      "acceptance_rate": 0,
+      "estimated_roi": 0,
+      "profile_strength": 0
+    },
+    "recommendations": [],
+    "goals": [],
+    "roi": {
+      "total_spend": 0,
+      "estimated_revenue": 0,
+      "profit_estimate": 0
+    },
+    "benchmarks": [],
+    "profile_strength": {
+      "score": 0,
+      "missing_items": []
+    },
+    "calendar": [],
+    "achievements": [],
+    "empty_state": true
+  }
+}
+```
+
+Never let:
+
+```txt
+Cannot use object of type WP_Error as array
+```
+
+happen.
+
+---
+
+# Event Operations Rules
+
+Vendor Operations should show useful packet/event-day information.
+
+Do not let QR code replace the whole panel.
+
+Vendor operations should include:
+
+* event name
+* date/time
+* venue
+* packet status
+* payment status
+* document status
+* load-in window
+* booth assignment
+* parking info
+* QR check-in card
+* map link
+* organizer contact
+* support/help button
+* packet download if available
+
+If no data exists, show:
+
+```txt
+Your event operations details will appear here once you're approved and paid for an event.
+```
+
+---
+
+# Organizer Dashboard Rules
+
+Organizer dashboard should feel like a command center.
+
+Views to keep polished:
+
+* Overview
+* Events
+* Applications
+* Vendors
+* Vendor Lists
+* Invites
+* Operations
+* Intelligence
+* Create Event
+* Financial
+
+Use "Create Event," not "Import Event," unless import functionality is explicitly needed.
+
+Create Event should be simple and should create both event and first opportunity.
+
+Organizer Overview should include:
+
+* active events
+* pending applications
+* approved vendors
+* revenue/vendor fees
+* missing documents
+* upcoming load-ins
+* quick actions
+* recent activity
+* event readiness cards
+
+Applications should include:
+
+* pending
+* approved
+* waitlisted
+* rejected
+* unpaid
+* missing docs
+* applicant intel
+* payment badges
+* document badges
+* approve/waitlist/reject actions
+
+Vendor Directory should include:
+
+* search
+* categories
+* cities/markets
+* ratings
+* verified badges
+* invite button
+* clean vendor cards
+
+Intelligence should include:
+
+* event health
+* risk alerts
+* recommended actions
+* funnels
+* revenue insights
+* clean empty states
+
+---
+
+# Find Events Marketplace Rules
+
+Find Events is the core marketplace.
+
+It should prioritize discovery and search.
+
+The main results grid should be the focus.
+
+Search ranking should prioritize:
+
+1. exact title match
+2. title starts with query
+3. city/market match
+4. event type/category match
+5. description/body match
+6. trending/recommended score
+
+Event cards should show:
+
+* title
+* date
+* city/state
+* venue if available
+* category/type badges
+* booth fee
+* attendance estimate
+* spots remaining
+* application deadline
+* organizer verified badge
+* Apply button
+* Save/Favorite button
+
+Apply button behavior:
+
+* logged out: show login/register prompt
+* vendor: open application form/modal
+* organizer/admin: show "Only vendors can apply"
+* already applied: show application status
+* closed/full: show closed/full status
+* success: show confirmation
+
+Do not let Apply silently do nothing.
+
+Explore More sections:
+
+* Recommended
+* Trending
+* Closing Soon
+* Most Applied
+* Collections
+
+Hide empty sections.
+
+Do not show floating empty headings.
+
+Collections should look like chips/cards, not broken text.
+
+---
+
+# Communications Plugin Strategy
+
+For communications, use separate plugin:
+
+```txt
+wp-content/plugins/lnkup-communications/
+```
+
+This should own:
+
+* email
+* SMS-ready architecture
+* push-ready architecture
+* broadcasts
+* announcements
+* message center
+
+It should depend on `lnkup-marketplace`.
+
+Do not force communications into the core plugin unless it is a small integration hook.
+
+---
+
+# Public Profiles Plugin Strategy
+
+For public vendor profiles, use separate plugin:
+
+```txt
+wp-content/plugins/lnkup-public-profiles/
+```
+
+This should own:
+
+* vendor public pages
+* booking links
+* SEO profiles
+* public vendor directory enhancements
+* public profile analytics
+
+It should depend on `lnkup-marketplace`.
+
+---
+
+# UI/UX Rules
+
+Design language:
+
+* black
+* white
+* lime accent
+* premium SaaS
+* modern marketplace
+* rounded cards
+* clean shadows
+* clear hierarchy
+* minimal clutter
+* good spacing
+* strong mobile responsiveness
+
+Avoid:
+
+* giant emojis
+* oversized icons
+* raw default browser buttons
+* cramped text
+* empty headings
+* infinite spinners
+* dashboard sections with no explanation
+* technical Stripe jargon
+* duplicated sections
+* mismatched colors
+
+Mobile rules:
+
+* sidebar icons max 18–22px
+* horizontal tab navs should scroll
+* no icons floating top-right
+* cards should be one column
+* action buttons should be tappable
+* content should not sit under nav
+
+---
+
+# Dashboard Empty State Rules
+
+Every dashboard panel must handle new users.
+
+Examples:
+
+Vendor Growth:
+
+```txt
+Your growth insights will appear once you start applying to and completing events.
+```
+
+Organizer Financial:
+
+```txt
+Financial activity will appear once vendors start paying invoices.
+```
+
+Vendor Operations:
+
+```txt
+Your event operations details will appear here once you're approved and paid for an event.
+```
+
+Find Events:
+
+```txt
+No matching opportunities found. Try clearing filters or searching another city.
+```
+
+Applications:
+
+```txt
+Applications will appear here once vendors apply to your opportunities.
+```
+
+---
+
+# Error Handling Rules
+
+Never show raw errors to users.
+
+Good user-facing error:
+
+```txt
+We couldn't load this section. Try refreshing or contact support.
+```
+
+Console can show technical details.
+
+Do not leave skeleton loaders forever.
+
+Do not let one failed widget break the whole page.
+
+---
+
+# Database/Migration Rules
+
+Use `dbDelta()` for new tables.
+
+Use versioned migrations.
+
+Do not drop data.
+
+Do not rename existing tables without migration.
+
+Use WordPress prefix:
+
+```php
+$wpdb->prefix . 'lnkup_table_name'
+```
+
+For analytics/logging tables, avoid storing raw IP addresses. Store hashed IPs if needed.
+
+---
+
+# Security Rules
+
+Always implement:
+
+* capability checks
+* ownership checks
+* nonce validation
+* input sanitization
+* output escaping
+* webhook signature verification
+* idempotency on Stripe webhooks
+* audit logs for sensitive financial actions
+
+Do not store:
+
+* raw credit card numbers
+* raw bank details
+* full SSNs
+* Stripe secret keys in frontend
+* sensitive documents in public URLs
+
+---
+
+# Testing Expectations
+
+After changes, verify:
+
+Vendor dashboard:
+
+* Overview loads
+* Find Events loads
+* Applications loads
+* Documents loads
+* Payments loads
+* Growth loads
+* Reputation loads
+* Operations loads
+
+Organizer dashboard:
+
+* Overview loads
+* Events loads
+* Applications loads
+* Vendor Directory loads
+* Vendor Lists loads
+* Invites loads
+* Operations loads
+* Intelligence loads
+* Create Event works
+* Financial loads
+
+Find Events:
+
+* search works
+* searched event ranks high
+* filters work
+* apply button works
+* empty Explore More hidden
+* cards look clean on mobile
+
+Financial:
+
+* no invalid JSON
+* no 500 errors
+* Stripe Connect disabled state works
+* Stripe Connect active state works
+* organizer wallet zero-state works
+* vendor payments do not call organizer routes
+
+Growth:
+
+* `/growth/dashboard` returns 200 JSON
+* no `WP_Error as array` fatal
+* new vendor zero-state works
+
+REST:
+
+* no `register_rest_route` permission warnings
+* all routes have `permission_callback`
+
+Mobile:
+
+* nav icons normal size
+* no floating top-right icons
+* dashboard cards responsive
+
+---
+
+# Response Format After Coding
+
+When completing a task, summarize:
+
+1. Files changed
+2. Bugs fixed
+3. Routes added/updated
+4. UI/UX changes
+5. Database changes
+6. Test checklist
+7. Remaining issues or assumptions
+
+Be specific. Do not claim something is tested unless actually verified.
+
+---
+
+# Most Important Rule
+
+LNKup is not just event management software.
+
+LNKup is a two-sided marketplace and operating system for the event vendor economy.
+
+Every feature should support at least one of these outcomes:
+
+* vendors discover better events
+* organizers discover better vendors
+* payments are easier and safer
+* event operations are smoother
+* vendors grow their business
+* organizers manage events with less chaos
+* LNKup captures marketplace value through fees, subscriptions, referrals, and financial services

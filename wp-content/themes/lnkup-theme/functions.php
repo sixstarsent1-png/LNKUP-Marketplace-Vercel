@@ -1,0 +1,18 @@
+<?php
+/**
+ * LNKup Theme functions and definitions.
+ *
+ * @package LNKup_Theme
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+define( 'LNKUP_THEME_VERSION', '1.4.5' );
+define( 'LNKUP_THEME_DIR', get_template_directory() );
+define( 'LNKUP_THEME_URI', get_template_directory_uri() );
+
+require_once LNKUP_THEME_DIR . '/inc/setup.php';
+require_once LNKUP_THEME_DIR . '/inc/enqueue.php';
+require_once LNKUP_THEME_DIR . '/inc/template-tags.php';
+require_once LNKUP_THEME_DIR . '/inc/landing-icons.php';
+require_once LNKUP_THEME_DIR . '/inc/dashboard.php';

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Vendor market event scene">
+  <defs>
+    <linearGradient id="gm-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a2e1a"/>
+      <stop offset="100%" stop-color="#0e180e"/>
+    </linearGradient>
+    <radialGradient id="gm-glow" cx="55%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#gm-sky)"/>
+  <rect width="720" height="560" fill="url(#gm-glow)"/>
+  <!-- market stalls row -->
+  <rect x="60" y="300" width="90" height="100" rx="4" fill="#142014" stroke="#c8f542" stroke-width="1.5" opacity="0.7"/>
+  <path d="M60 300 L105 260 L150 300" fill="#1a2818" stroke="#c8f542" stroke-width="1" opacity="0.6"/>
+  <rect x="180" y="290" width="90" height="110" rx="4" fill="#142014" stroke="#c8f542" stroke-width="1.5" opacity="0.75"/>
+  <path d="M180 290 L225 248 L270 290" fill="#1a2818" stroke="#c8f542" stroke-width="1" opacity="0.65"/>
+  <rect x="300" y="295" width="90" height="105" rx="4" fill="#142014" stroke="#c8f542" stroke-width="1.5" opacity="0.8"/>
+  <path d="M300 295 L345 255 L390 295" fill="#1a2818" stroke="#c8f542" stroke-width="1" opacity="0.7"/>
+  <rect x="420" y="288" width="90" height="112" rx="4" fill="#142014" stroke="#c8f542" stroke-width="1.5" opacity="0.7"/>
+  <path d="M420 288 L465 245 L510 288" fill="#1a2818" stroke="#c8f542" stroke-width="1" opacity="0.6"/>
+  <rect x="540" y="302" width="90" height="98" rx="4" fill="#142014" stroke="#c8f542" stroke-width="1.5" opacity="0.65"/>
+  <path d="M540 302 L585 265 L630 302" fill="#1a2818" stroke="#c8f542" stroke-width="1" opacity="0.55"/>
+  <!-- awning stripes hint -->
+  <line x1="70" y1="310" x2="140" y2="310" stroke="#c8f542" stroke-width="2" opacity="0.3"/>
+  <line x1="310" y1="305" x2="380" y2="305" stroke="#c8f542" stroke-width="2" opacity="0.35"/>
+  <!-- crowd walkway -->
+  <rect x="0" y="410" width="720" height="150" fill="#0c140c"/>
+  <ellipse cx="200" cy="430" rx="10" ry="14" fill="#081008"/>
+  <ellipse cx="360" cy="435" rx="12" ry="16" fill="#081008"/>
+  <ellipse cx="520" cy="428" rx="10" ry="15" fill="#081008"/>
+  <!-- banner poles -->
+  <rect x="340" y="160" width="4" height="100" fill="#2a3828"/>
+  <rect x="376" y="160" width="4" height="100" fill="#2a3828"/>
+  <rect x="342" y="175" width="36" height="24" rx="2" fill="#c8f542" opacity="0.2" stroke="#c8f542" stroke-width="1"/>
+</svg>

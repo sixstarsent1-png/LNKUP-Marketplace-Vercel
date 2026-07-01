@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@source "../../*.php";
+@source "../../**/*.php";
+
+@theme inline {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Sora', 'Inter', system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+:root {
+  --radius: 0.9rem;
+  /* Bridge tokens for plugin CSS live in assets/dist/components.css (--lnkup-*). */
+  --background: oklch(0.985 0.005 120);
+  --foreground: oklch(0.18 0.012 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.012 260);
+  --primary: oklch(0.2 0.012 260);
+  --primary-foreground: oklch(0.985 0.01 120);
+  --secondary: oklch(0.96 0.008 120);
+  --secondary-foreground: oklch(0.22 0.012 260);
+  --muted: oklch(0.965 0.006 120);
+  --muted-foreground: oklch(0.52 0.012 260);
+  --accent: oklch(0.88 0.19 128);
+  --accent-foreground: oklch(0.22 0.04 140);
+  --destructive: oklch(0.62 0.21 25);
+  --border: oklch(0.91 0.006 120);
+  --input: oklch(0.91 0.006 120);
+  --ring: oklch(0.78 0.16 128);
+}
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+  html { font-family: var(--font-sans); scroll-behavior: smooth; }
+  body { margin: 0; background: var(--background); color: var(--foreground); line-height: 1.5; }
+  img { max-width: 100%; height: auto; display: block; }
+  a { color: inherit; text-decoration: none; }
+}

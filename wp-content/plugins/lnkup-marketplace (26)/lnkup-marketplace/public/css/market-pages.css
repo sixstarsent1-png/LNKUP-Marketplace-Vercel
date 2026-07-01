@@ -1,0 +1,141 @@
+/* City market landing pages */
+.lnkup-site--market .lnkup-market-hero__image {
+  width: min(100%, 420px);
+  height: auto;
+  margin-inline: auto;
+  display: block;
+}
+
+.lnkup-market-status__card,
+.lnkup-market-cta__card {
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  border-radius: var(--lnkup-radius-xl, 1.25rem);
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--lnkup-shadow-sm, 0 8px 24px rgba(0, 0, 0, 0.06));
+}
+
+.lnkup-market-status__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--primary) 15%, transparent);
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.lnkup-market-status__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.lnkup-market-stat {
+  padding: 1rem;
+  border-radius: var(--lnkup-radius-lg, 1rem);
+  border: 1px solid var(--border);
+  background: var(--background);
+}
+
+.lnkup-market-stat__value {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.lnkup-market-stat__label {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
+.lnkup-market-status__disclaimer {
+  margin-top: 1rem;
+  font-size: 0.8125rem;
+}
+
+.lnkup-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.lnkup-chip {
+  display: inline-flex;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.lnkup-chip--outline {
+  background: transparent;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+
+.lnkup-market-cta__card--connector {
+  border-style: dashed;
+}
+
+.lnkup-market-faq__list {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 48rem;
+}
+
+.lnkup-market-faq__item {
+  border: 1px solid var(--border);
+  border-radius: var(--lnkup-radius-lg, 1rem);
+  padding: 0.75rem 1rem;
+  background: var(--card);
+}
+
+.lnkup-market-faq__item summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+
+.lnkup-market-faq__item summary::-webkit-details-marker {
+  display: none;
+}
+
+.lnkup-market-faq__item p {
+  margin: 0.75rem 0 0;
+  color: var(--muted-foreground);
+}
+
+.lnkup-empty--market {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.lnkup-mp-v2__market-chip {
+  margin: 0 0 1rem;
+}
+
+.lnkup-mp-v2__market-chip a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.lnkup-mp-v2__market-chip a:hover {
+  border-color: var(--primary);
+}
