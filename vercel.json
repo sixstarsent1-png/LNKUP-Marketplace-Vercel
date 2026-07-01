@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd lnk-up-marketplace-ui && npm install && npm run build",
+  "outputDirectory": "lnk-up-marketplace-ui/.next",
+  "installCommand": "npm install --prefix lnk-up-marketplace-ui",
+  "framework": "nextjs"
+}
