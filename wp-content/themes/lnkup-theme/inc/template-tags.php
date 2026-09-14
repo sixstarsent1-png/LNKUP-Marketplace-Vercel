@@ -79,12 +79,194 @@ function lnkup_theme_launch_iso() {
 }
 
 /**
- * Launch community goals from plugin settings.
+ * Whether the mobile app public release moment has passed.
+ */
+function lnkup_theme_app_released() {
+	return function_exists( 'lnkup_is_app_released' ) && lnkup_is_app_released();
+}
+
+/**
+ * Human-readable app release label.
+ *
+ * @return string
+ */
+function lnkup_theme_app_release_label() {
+	return function_exists( 'lnkup_get_app_release_label' ) ? lnkup_get_app_release_label() : '';
+}
+
+/**
+ * Launch community goals from plugin settings (synced from Landing Page).
  *
  * @return array{vendors:int,organizers:int}
  */
 function lnkup_theme_launch_goals() {
+	if ( class_exists( 'LNKup_Theme_Landing_Settings' ) ) {
+		$landing = LNKup_Theme_Landing_Settings::get_all();
+		return array(
+			'vendors'    => max( 0, (int) ( $landing['launch_goal_vendors'] ?? 4000 ) ),
+			'organizers' => max( 0, (int) ( $landing['launch_goal_organizers'] ?? 500 ) ),
+		);
+	}
 	return function_exists( 'lnkup_get_launch_goals' ) ? lnkup_get_launch_goals() : array( 'vendors' => 4000, 'organizers' => 500 );
+}
+
+/**
+ * Get a landing page setting.
+ *
+ * @param string $key     Setting key.
+ * @param mixed  $default Default.
+ * @return mixed
+ */
+function lnkup_landing_get( $key, $default = '' ) {
+	if ( class_exists( 'LNKup_Theme_Landing_Settings' ) ) {
+		return LNKup_Theme_Landing_Settings::get( $key, $default );
+	}
+	return $default;
+}
+
+/**
+ * Attachment URL with theme asset fallback.
+ *
+ * @param int    $attachment_id  Media library ID.
+ * @param string $fallback_asset Relative path under assets/.
+ * @return string
+ */
+function lnkup_landing_attachment_url( $attachment_id, $fallback_asset = '' ) {
+	$id = absint( $attachment_id );
+	if ( $id > 0 ) {
+		$url = wp_get_attachment_image_url( $id, 'large' );
+		if ( $url ) {
+			return $url;
+		}
+	}
+	return $fallback_asset ? lnkup_theme_asset( $fallback_asset ) : '';
+}
+
+/**
+ * Landing image URL from setting key or theme asset fallback.
+ *
+ * @param string $setting_key    Landing setting key for attachment ID.
+ * @param string $fallback_asset Relative path under assets/ (e.g. images/events/block-party.svg).
+ * @return string
+ */
+function lnkup_landing_image_url( $setting_key, $fallback_asset = '' ) {
+	return lnkup_landing_attachment_url( lnkup_landing_get( $setting_key, 0 ), $fallback_asset );
+}
+
+/**
+ * Split multiline landing bullets into a clean array.
+ *
+ * @param string $text Raw bullets.
+ * @return string[]
+ */
+function lnkup_landing_lines( $text ) {
+	$lines = preg_split( '/\r\n|\r|\n/', (string) $text );
+	$out   = array();
+	foreach ( (array) $lines as $line ) {
+		$line = trim( (string) $line );
+		if ( '' !== $line ) {
+			$out[] = $line;
+		}
+	}
+	return $out;
+}
+
+/**
+ * Resolve homepage trust stats (custom or default/live).
+ *
+ * @return array<int,array{value:string,label:string,sub:string,badge?:string}>
+ */
+function lnkup_landing_trust_stats() {
+	$marketplace_open = lnkup_theme_marketplace_open();
+	$launch_label     = lnkup_theme_launch_label();
+	$goals            = lnkup_theme_launch_goals();
+	$use_custom       = (bool) lnkup_landing_get( 'use_custom_stats', 0 );
+	$custom           = lnkup_landing_get( 'stats', array() );
+
+	if ( $use_custom && is_array( $custom ) ) {
+		$out = array();
+		foreach ( array_slice( $custom, 0, 4 ) as $i => $row ) {
+			$value      = trim( (string) ( $row['value'] ?? '' ) );
+			$sub        = trim( (string) ( $row['sub'] ?? '' ) );
+			$from_goal  = false;
+			if ( '' === $value ) {
+				if ( 0 === $i ) {
+					$value     = lnkup_theme_format_goal_number( $goals['vendors'] );
+					$from_goal = true;
+				} elseif ( 1 === $i ) {
+					$value     = lnkup_theme_format_goal_number( $goals['organizers'] );
+					$from_goal = true;
+				}
+			}
+			if ( $from_goal && '' === $sub && $launch_label ) {
+				$sub = sprintf( __( 'By %s', 'lnkup-theme' ), $launch_label );
+			}
+			$out[] = array(
+				'value' => $value,
+				'label' => (string) ( $row['label'] ?? '' ),
+				'sub'   => $sub,
+				'badge' => $from_goal ? __( 'Goal', 'lnkup-theme' ) : '',
+			);
+		}
+		return $out;
+	}
+
+	if ( ! $marketplace_open ) {
+		return array(
+			array(
+				'value' => lnkup_theme_format_goal_number( $goals['vendors'] ),
+				'label' => __( 'Vendor community goal', 'lnkup-theme' ),
+				'sub'   => $launch_label ? sprintf( __( 'By %s', 'lnkup-theme' ), $launch_label ) : '',
+				'badge' => __( 'Goal', 'lnkup-theme' ),
+			),
+			array(
+				'value' => lnkup_theme_format_goal_number( $goals['organizers'] ),
+				'label' => __( 'Organizer community goal', 'lnkup-theme' ),
+				'sub'   => $launch_label ? sprintf( __( 'By %s', 'lnkup-theme' ), $launch_label ) : '',
+				'badge' => __( 'Goal', 'lnkup-theme' ),
+			),
+			array(
+				'value' => __( 'Free', 'lnkup-theme' ),
+				'label' => __( 'To join & apply', 'lnkup-theme' ),
+				'sub'   => __( 'No upfront fees', 'lnkup-theme' ),
+				'badge' => '',
+			),
+			array(
+				'value' => '$0',
+				'label' => __( 'Due until accepted', 'lnkup-theme' ),
+				'sub'   => __( 'Pay only when approved', 'lnkup-theme' ),
+				'badge' => '',
+			),
+		);
+	}
+
+	$stats = lnkup_theme_public_stats();
+	return array(
+		array(
+			'value' => number_format_i18n( $stats['vendors'] ) . ( $stats['vendors'] > 0 ? '+' : '' ),
+			'label' => __( 'Active vendors', 'lnkup-theme' ),
+			'sub'   => '',
+			'badge' => '',
+		),
+		array(
+			'value' => number_format_i18n( $stats['organizers'] ) . ( $stats['organizers'] > 0 ? '+' : '' ),
+			'label' => __( 'Organizers', 'lnkup-theme' ),
+			'sub'   => '',
+			'badge' => '',
+		),
+		array(
+			'value' => number_format_i18n( $stats['cities'] ) . ( $stats['cities'] > 0 ? '+' : '' ),
+			'label' => __( 'Cities', 'lnkup-theme' ),
+			'sub'   => '',
+			'badge' => '',
+		),
+		array(
+			'value' => lnkup_theme_format_public_gmv( $stats['gmv'] ),
+			'label' => __( 'Vendor bookings', 'lnkup-theme' ),
+			'sub'   => '',
+			'badge' => '',
+		),
+	);
 }
 
 /**
@@ -132,7 +314,7 @@ function lnkup_theme_is_dashboard_page() {
 	$slug = get_post_field( 'post_name', get_queried_object_id() );
 	if ( in_array(
 		$slug,
-		array( 'vendor-dashboard', 'organizer-dashboard', 'connector-dashboard', 'opportunities', 'vendor-profile' ),
+		array( 'vendor-dashboard', 'organizer-dashboard', 'connector-dashboard', 'opportunities', 'vendor-profile', 'favorites' ),
 		true
 	) ) {
 		return true;
@@ -230,4 +412,50 @@ function lnkup_theme_market_signup_url( $role = 'vendor' ) {
 	}
 	$url = lnkup_theme_registration_url();
 	return add_query_arg( 'role', 'organizer' === $role ? 'organizer' : 'vendor', $url );
+}
+
+/**
+ * Marketing-page hash href (local on home/markets, otherwise home).
+ *
+ * @param string $hash Section id without #.
+ */
+function lnkup_theme_nav_href( $hash ) {
+	$hash = ltrim( (string) $hash, '#' );
+	if ( is_front_page() || get_query_var( 'lnkup_market_slug' ) ) {
+		return '#' . $hash;
+	}
+	return home_url( '/#' . $hash );
+}
+
+/**
+ * Editorial section kicker: lime rule, eyebrow, mono index.
+ *
+ * @param string $index Index label such as "01 / VENDORS".
+ * @param string $label Eyebrow text.
+ */
+function lnkup_theme_section_kicker( $index, $label ) {
+	?>
+	<div class="lnkup-section__kicker">
+		<span class="lnkup-section__kicker-bar" aria-hidden="true"></span>
+		<p class="lnkup-eyebrow"><?php echo esc_html( $label ); ?></p>
+		<span class="lnkup-section__index"><?php echo esc_html( $index ); ?></span>
+	</div>
+	<?php
+}
+
+/**
+ * Market record from connector interest ?market= slug.
+ *
+ * @return array<string, mixed>|null
+ */
+function lnkup_theme_connector_market() {
+	$slug = '';
+	if ( ! empty( $_GET['market'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$slug = sanitize_title( wp_unslash( (string) $_GET['market'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	}
+	if ( $slug && class_exists( 'LNKup_Market_Pages' ) ) {
+		$market = LNKup_Market_Pages::get_market_by_slug( $slug, false );
+		return is_array( $market ) ? $market : null;
+	}
+	return null;
 }

@@ -64,25 +64,34 @@
   }
 
   function syncHashNav() {
+    // Theme dashboard.js owns shell sidebar/bottom active state.
+    // Only normalize legacy hashes for in-page CRM behavior.
     var hash = (window.location.hash || '').replace(/^#/, '');
-    if (window.location.pathname.indexOf('organizer-dashboard') > -1) {
-      if (hash === 'payments') {
-        hash = 'financial';
-      } else if (hash === 'import' || hash === 'create-event' || hash === 'create-opportunity') {
-        if (hash === 'create-opportunity') {
-          document.documentElement.setAttribute('data-lnkup-create-mode', 'existing');
-        }
-        hash = 'create';
-      }
-    }
-    if (!hash) {
+    if (window.location.pathname.indexOf('organizer-dashboard') === -1) {
       return;
     }
-    document.querySelectorAll('.lnkup-dashboard__nav-link[data-hash]').forEach(function (link) {
-      link.classList.toggle('is-active', link.getAttribute('data-hash') === hash);
+    var section = hash.split('&')[0].split('?')[0];
+    var pricingMatch = section.match(/^pricing-(\d+)$/);
+    if (pricingMatch) {
+      document.documentElement.setAttribute('data-lnkup-pricing-event', pricingMatch[1]);
+      section = 'events';
+    } else if (section === 'payments') {
+      section = 'financial';
+    } else if (section === 'create-opportunity') {
+      document.documentElement.removeAttribute('data-lnkup-create-mode');
+      section = 'events';
+    } else if (section === 'import' || section === 'create-event') {
+      section = 'create';
+    }
+    if (!section) {
+      return;
+    }
+    document.querySelectorAll('.lnkup-organizer-section-nav [data-section]').forEach(function (link) {
+      link.classList.toggle('is-active', link.getAttribute('data-section') === section);
     });
-    document.querySelectorAll('.lnkup-dashboard__bottom-link[data-hash]').forEach(function (link) {
-      link.classList.toggle('is-active', link.getAttribute('data-hash') === hash);
+    document.querySelectorAll('.lnkup-organizer-section-nav a[href^="#"]').forEach(function (link) {
+      var href = (link.getAttribute('href') || '').replace(/^#/, '').split('&')[0];
+      link.classList.toggle('is-active', href === section);
     });
   }
 
@@ -153,46 +162,43 @@
       if (activity) {
         var actBody = activity.querySelector('.lnkup-organizer-activity__body') || activity;
         var actHtml = '';
-        if (data.activity_feed && data.activity_feed.length) {
+        var appliedRows = (data.activity_feed || []).filter(function (row) {
+          return (row.activity_type || '') === 'applied';
+        });
+        if (appliedRows.length) {
           actHtml += '<ul class="lnkup-organizer-activity-feed" data-testid="lnkup-organizer-activity-feed">';
-          data.activity_feed.forEach(function (row) {
+          appliedRows.forEach(function (row) {
             var when = row.created_at ? new Date(row.created_at).toLocaleString() : '';
-            var label = (row.activity_type || 'activity').replace(/_/g, ' ');
-            actHtml += '<li class="lnkup-organizer-activity-feed__item"><span>' + escapeHtml(label) + '</span><span class="lnkup-muted">' + escapeHtml(when) + '</span></li>';
+            actHtml += '<li class="lnkup-organizer-activity-feed__item"><span>Applied</span><span class="lnkup-muted">' + escapeHtml(when) + '</span></li>';
           });
           actHtml += '</ul>';
         }
-        if (data.recent_notes && data.recent_notes.length) {
-          actHtml += '<div class="lnkup-crm-widget lnkup-crm-widget--wide"><h3>Recent Notes</h3><ul class="lnkup-crm-widget-list">';
-          data.recent_notes.forEach(function (n) {
-            actHtml += '<li>' + escapeHtml(n.content) + ' <span class="lnkup-muted">' + escapeHtml(n.date) + '</span></li>';
-          });
-          actHtml += '</ul></div>';
-        }
-        if (data.upcoming_rosters && data.upcoming_rosters.length) {
-          actHtml += '<div class="lnkup-crm-widget lnkup-crm-widget--wide"><h3>Upcoming Rosters</h3>';
-          data.upcoming_rosters.forEach(function (r) {
-            var url = (ajax.organizerDashboardUrl || '') + '?event=' + r.event_id + '&roster=1';
-            actHtml += '<div class="lnkup-crm-roster-row"><a href="' + escapeHtml(url) + '">' + escapeHtml(r.title) + '</a><span class="lnkup-crm-roster-row__chip">' + r.total + ' vendors</span></div>';
-          });
-          actHtml += '</div>';
-        }
-        if (data.rebook_recommendations && data.rebook_recommendations.length) {
-          actHtml += '<div class="lnkup-crm-widget lnkup-crm-widget--wide"><h3>Rebook Recommendations</h3><ul class="lnkup-crm-widget-list">';
-          data.rebook_recommendations.forEach(function (v) {
-            var url = (ajax.organizerDashboardUrl || '') + '?vendor=' + v.profile_id;
-            actHtml += '<li><a href="' + escapeHtml(url) + '">' + escapeHtml(v.business_name) + '</a></li>';
-          });
-          actHtml += '</ul></div>';
-        }
         if (actHtml) {
           actBody.innerHTML = actHtml;
+        } else if (window.LNKupUI && LNKupUI.panelEmpty) {
+          LNKupUI.panelEmpty(actBody, {
+            title: 'No recent applications yet',
+            desc: 'When a vendor applies, it will show here as Applied.',
+            compact: true
+          });
         } else {
           actBody.innerHTML = '<p class="lnkup-muted">' + escapeHtml(copy.empty_activity || 'No recent activity yet.') + '</p>';
         }
       }
     }).catch(function () {
       panelMessage(grid, 'error', 'Could not load activity', 'CRM data is temporarily unavailable.');
+      if (activity) {
+        var errBody = activity.querySelector('.lnkup-organizer-activity__body') || activity;
+        if (window.LNKupUI && LNKupUI.panelError) {
+          LNKupUI.panelError(errBody, {
+            title: 'Could not load activity',
+            desc: 'CRM data is temporarily unavailable. Please refresh and try again.',
+            compact: true
+          });
+        } else {
+          panelMessage(errBody, 'error', 'Could not load activity', 'CRM data is temporarily unavailable.');
+        }
+      }
     });
   }
 
@@ -433,23 +439,57 @@
     countEl.textContent = n + (n === 1 ? ' selected' : ' selected');
   }
 
-  function filterApplications(filter) {
+  var appFilterState = { status: 'all', event: 'all' };
+
+  function parseAppsHash(hash) {
+    hash = (hash || '').replace(/^#/, '');
+    var parts = hash.split('&');
+    var section = parts[0] || '';
+    var params = { section: section, filter: '', event: '' };
+    for (var i = 1; i < parts.length; i++) {
+      var kv = parts[i].split('=');
+      if (kv[0] === 'filter') {
+        params.filter = decodeURIComponent(kv[1] || '');
+      } else if (kv[0] === 'event') {
+        params.event = decodeURIComponent(kv[1] || '');
+      }
+    }
+    return params;
+  }
+
+  function filterApplications(filter, eventId) {
+    if (typeof filter === 'string' && filter) {
+      appFilterState.status = filter;
+    }
+    if (typeof eventId === 'string' && eventId) {
+      appFilterState.event = eventId;
+    } else if (eventId === 'all') {
+      appFilterState.event = 'all';
+    }
+    var statusFilter = appFilterState.status || 'all';
+    var eventFilter = appFilterState.event || 'all';
     var cards = document.querySelectorAll('.lnkup-crm-app-card');
     var visible = 0;
     cards.forEach(function (card) {
-      var show = filter === 'all';
-      if (!show && filter === 'pending') {
+      var status = card.getAttribute('data-org-app-status') || '';
+      var show = statusFilter === 'all';
+      if (!show && statusFilter === 'pending') {
         show = card.getAttribute('data-org-app-filter') === 'pending';
-      } else if (!show && filter === 'approved') {
-        show = card.getAttribute('data-org-app-filter') === 'approved' || card.getAttribute('data-org-app-status') === 'paid' || card.getAttribute('data-org-app-status') === 'completed';
-      } else if (!show && filter === 'waitlisted') {
-        show = card.getAttribute('data-org-app-status') === 'waitlisted';
-      } else if (!show && filter === 'rejected') {
-        show = card.getAttribute('data-org-app-status') === 'rejected';
-      } else if (!show && filter === 'unpaid') {
-        show = card.getAttribute('data-org-app-paid') === 'no' && (card.getAttribute('data-org-app-status') === 'approved' || card.getAttribute('data-org-app-status') === 'payment_required');
-      } else if (!show && filter === 'missing_docs') {
+      } else if (!show && statusFilter === 'approved') {
+        show = status === 'approved' || status === 'payment_required';
+      } else if (!show && statusFilter === 'paid') {
+        show = status === 'paid' || status === 'completed';
+      } else if (!show && statusFilter === 'waitlisted') {
+        show = status === 'waitlisted';
+      } else if (!show && statusFilter === 'rejected') {
+        show = status === 'rejected';
+      } else if (!show && statusFilter === 'unpaid') {
+        show = card.getAttribute('data-org-app-paid') === 'no' && (status === 'approved' || status === 'payment_required');
+      } else if (!show && statusFilter === 'missing_docs') {
         show = card.getAttribute('data-org-app-docs') === 'missing';
+      }
+      if (show && eventFilter && eventFilter !== 'all') {
+        show = String(card.getAttribute('data-event-id') || '') === String(eventFilter);
       }
       card.hidden = !show;
       if (show) {
@@ -458,7 +498,7 @@
     });
     var grid = document.getElementById('lnkup-app-intel-grid');
     var empty = document.getElementById('lnkup-app-filter-empty');
-    if (grid && filter !== 'all' && visible === 0) {
+    if (grid && (statusFilter !== 'all' || (eventFilter && eventFilter !== 'all')) && visible === 0) {
       if (!empty) {
         empty = document.createElement('p');
         empty.id = 'lnkup-app-filter-empty';
@@ -470,6 +510,62 @@
     } else if (empty) {
       empty.hidden = true;
     }
+    syncExternalInterestVisibility(statusFilter);
+  }
+
+  function syncExternalInterestVisibility(statusFilter) {
+    var mod = document.querySelector('[data-testid="lnkup-external-pending-interests-module"]');
+    if (!mod) {
+      return;
+    }
+    var status = statusFilter || appFilterState.status || 'all';
+    mod.hidden = status !== 'all' && status !== 'pending';
+  }
+
+  function setAppsHash(statusFilter, eventFilter) {
+    var parts = ['applications'];
+    if (statusFilter && statusFilter !== 'all') {
+      parts.push('filter=' + encodeURIComponent(statusFilter));
+    }
+    if (eventFilter && eventFilter !== 'all') {
+      parts.push('event=' + encodeURIComponent(eventFilter));
+    }
+    var next = parts.join('&');
+    var current = (window.location.hash || '').replace(/^#/, '');
+    if (current === next) {
+      return;
+    }
+    if (window.history.replaceState) {
+      window.history.replaceState(null, '', '#' + next);
+    } else {
+      window.location.hash = next;
+    }
+  }
+
+  function applyAppsDeepLink() {
+    var params = parseAppsHash(window.location.hash || '');
+    if (params.section !== 'applications' && params.section.indexOf('applications') !== 0) {
+      return;
+    }
+    var filter = params.filter || 'all';
+    var eventId = params.event || 'all';
+    if (filter === 'paid' || filter === 'waitlisted' || filter === 'rejected' || filter === 'missing_docs') {
+      var extra = document.getElementById('lnkup-org-app-filters-extra');
+      var moreBtn = document.querySelector('[data-org-app-filter-toggle]');
+      if (extra) {
+        extra.hidden = false;
+      }
+      if (moreBtn) {
+        moreBtn.setAttribute('aria-expanded', 'true');
+      }
+    }
+    document.querySelectorAll('.lnkup-organizer-app-filters .lnkup-dash-tabs__btn[data-org-app-filter]').forEach(function (b) {
+      b.classList.toggle('is-active', b.getAttribute('data-org-app-filter') === filter);
+    });
+    document.querySelectorAll('[data-org-app-event]').forEach(function (b) {
+      b.classList.toggle('is-active', b.getAttribute('data-org-app-event') === eventId);
+    });
+    filterApplications(filter, eventId);
   }
 
   function escapeHtml(str) {
@@ -1053,25 +1149,250 @@
     });
   }
 
+  function postOrganizerAjax(action) {
+    var body = new FormData();
+    body.append('action', action);
+    body.append('lnkup_nonce', ajax.nonce || '');
+    return fetch(ajax.url || '/wp-admin/admin-ajax.php', {
+      method: 'POST',
+      credentials: 'same-origin',
+      body: body
+    }).then(function (r) { return r.json(); });
+  }
+
+  function closeOrganizerWelcome(markSeen) {
+    var modal = document.getElementById('lnkup-organizer-welcome-modal');
+    if (modal) {
+      modal.hidden = true;
+    }
+    document.body.classList.remove('lnkup-modal-open');
+    if (markSeen) {
+      postOrganizerAjax('lnkup_organizer_welcome_seen').catch(function () { /* ignore */ });
+    }
+    maybeStartOrganizerTourAfterWelcome();
+  }
+
+  function openOrganizerWelcome() {
+    var modal = document.getElementById('lnkup-organizer-welcome-modal');
+    if (!modal) {
+      return;
+    }
+    modal.hidden = false;
+    document.body.classList.add('lnkup-modal-open');
+  }
+
+  function initOrganizerWelcome() {
+    var modal = document.getElementById('lnkup-organizer-welcome-modal');
+    if (!modal) {
+      return;
+    }
+    openOrganizerWelcome();
+    modal.addEventListener('click', function (e) {
+      if (e.target.closest('[data-organizer-welcome-start]')) {
+        e.preventDefault();
+        closeOrganizerWelcome(true);
+        var checklist = document.getElementById('lnkup-launch-checklist');
+        if (checklist && checklist.scrollIntoView) {
+          checklist.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        return;
+      }
+      if (e.target.closest('[data-organizer-welcome-skip]') || e.target.closest('[data-organizer-welcome-close]')) {
+        e.preventDefault();
+        closeOrganizerWelcome(true);
+      }
+    });
+  }
+
+  function initOrganizerTutorialDismiss() {
+    document.addEventListener('click', function (e) {
+      var dismissBtn = e.target.closest('[data-organizer-tutorial-dismiss]');
+      if (!dismissBtn) {
+        return;
+      }
+      e.preventDefault();
+      postOrganizerAjax('lnkup_dismiss_organizer_tutorial').then(function () {
+        var checklist = document.getElementById('lnkup-launch-checklist');
+        if (checklist) {
+          checklist.hidden = true;
+        }
+        closeOrganizerWelcome(false);
+      }).catch(function () { /* ignore */ });
+    });
+  }
+
+  function initKnowledgeBaseReset() {
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-kb-show-checklist]');
+      if (!btn || btn.getAttribute('data-kb-role') !== 'organizer') {
+        return;
+      }
+      e.preventDefault();
+      var target = btn.getAttribute('data-kb-checklist-url') || (window.location.pathname + '#overview');
+      postOrganizerAjax('lnkup_reset_organizer_tutorial').then(function () {
+        window.location.href = target;
+      }).catch(function () {
+        window.location.href = target;
+      });
+    });
+  }
+
+  function postTourAjax(action, role) {
+    var body = new FormData();
+    body.append('action', action);
+    body.append('lnkup_nonce', ajax.nonce || '');
+    body.append('role', role || 'organizer');
+    return fetch(ajax.url || '/wp-admin/admin-ajax.php', {
+      method: 'POST',
+      credentials: 'same-origin',
+      body: body
+    }).then(function (r) { return r.json(); });
+  }
+
+  function initOrganizerDashboardTour() {
+    var modal = document.getElementById('lnkup-organizer-tour-modal');
+    if (!modal) {
+      return;
+    }
+    var role = 'organizer';
+    var slides = modal.querySelectorAll('[data-tour-slide]');
+    var index = 0;
+    var progress = modal.querySelector('[data-tour-progress]');
+    var backBtn = modal.querySelector('[data-tour-back]');
+    var nextBtn = modal.querySelector('[data-tour-next]');
+    var doneBtn = modal.querySelector('[data-tour-done]');
+
+    function renderProgress() {
+      if (!progress) return;
+      var dots = '';
+      for (var i = 0; i < slides.length; i++) {
+        dots += '<span class="lnkup-tour__dot' + (i === index ? ' is-active' : '') + '"></span>';
+      }
+      progress.innerHTML = dots;
+    }
+
+    function showSlide(i) {
+      index = Math.max(0, Math.min(i, slides.length - 1));
+      slides.forEach(function (slide, si) {
+        slide.hidden = si !== index;
+      });
+      if (backBtn) backBtn.hidden = index === 0;
+      var last = index >= slides.length - 1;
+      if (nextBtn) nextBtn.hidden = last;
+      if (doneBtn) doneBtn.hidden = !last;
+      renderProgress();
+    }
+
+    function openTour() {
+      modal.hidden = false;
+      document.body.classList.add('lnkup-modal-open');
+      showSlide(0);
+    }
+
+    function closeTour(markSeen) {
+      modal.hidden = true;
+      document.body.classList.remove('lnkup-modal-open');
+      if (markSeen) {
+        postTourAjax('lnkup_dashboard_tour_seen', role).catch(function () { /* ignore */ });
+        modal.setAttribute('data-tour-auto-open', '0');
+      }
+    }
+
+    modal.addEventListener('click', function (e) {
+      if (e.target.closest('[data-tour-skip]')) {
+        e.preventDefault();
+        closeTour(true);
+        return;
+      }
+      if (e.target.closest('[data-tour-back]')) {
+        e.preventDefault();
+        showSlide(index - 1);
+        return;
+      }
+      if (e.target.closest('[data-tour-next]')) {
+        e.preventDefault();
+        showSlide(index + 1);
+        return;
+      }
+      if (e.target.closest('[data-tour-done]')) {
+        e.preventDefault();
+        closeTour(true);
+      }
+    });
+
+    document.addEventListener('click', function (e) {
+      var replay = e.target.closest('[data-kb-replay-tour]');
+      if (!replay || replay.getAttribute('data-kb-role') !== 'organizer') {
+        return;
+      }
+      e.preventDefault();
+      postTourAjax('lnkup_reset_dashboard_tour', 'organizer').then(function () {
+        modal.setAttribute('data-tour-auto-open', '1');
+        openTour();
+      }).catch(function () {
+        openTour();
+      });
+    });
+
+    window.lnkupOpenOrganizerTour = openTour;
+
+    var welcome = document.getElementById('lnkup-organizer-welcome-modal');
+    var shouldAuto = modal.getAttribute('data-tour-auto-open') === '1';
+    if (shouldAuto && (!welcome || welcome.hidden)) {
+      openTour();
+    }
+  }
+
+  function maybeStartOrganizerTourAfterWelcome() {
+    var tour = document.getElementById('lnkup-organizer-tour-modal');
+    if (tour && tour.getAttribute('data-tour-auto-open') === '1' && window.lnkupOpenOrganizerTour) {
+      window.lnkupOpenOrganizerTour();
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     syncHashNav();
-    window.addEventListener('hashchange', syncHashNav);
+    window.addEventListener('hashchange', function () {
+      syncHashNav();
+      if (!document.getElementById('lnkup-organizer-crm')) {
+        return;
+      }
+      var section = (window.location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
+      if (section === 'vendors') {
+        loadDirectory();
+      }
+      if (section === 'lists') {
+        loadLists();
+      }
+      if (section === 'invites') {
+        loadInvites();
+      }
+    });
 
     if (document.getElementById('lnkup-organizer-crm')) {
       loadWidgets();
       initLaunchChecklistToggle();
+      initOrganizerWelcome();
+      initOrganizerTutorialDismiss();
+      initKnowledgeBaseReset();
+      initOrganizerDashboardTour();
       if (window.LNKupUI && typeof LNKupUI.animateKpiCards === 'function') {
         LNKupUI.animateKpiCards(document.getElementById('lnkup-crm-stats'));
       }
-      var hash = (window.location.hash || '').replace(/^#/, '');
-      if (hash === 'vendors' || hash === 'lists' || hash === 'invites') {
+      var hash = (window.location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
+      if (hash === 'vendors') {
         loadDirectory();
       }
-      loadLists();
-      loadInvites();
+      if (hash === 'lists') {
+        loadLists();
+      }
+      if (hash === 'invites') {
+        loadInvites();
+      }
       loadOutreachCampaigns();
       initBulkOutreachForm();
       handleInviteDeepLink();
+      applyAppsDeepLink();
     }
 
     var directoryMore = document.getElementById('lnkup-crm-directory-more');
@@ -1115,11 +1436,8 @@
       var priorityTrigger = e.target.closest('[data-org-app-filter-trigger]');
       if (priorityTrigger) {
         e.preventDefault();
-        window.location.hash = 'applications';
-        document.querySelectorAll('.lnkup-organizer-app-filters .lnkup-dash-tabs__btn').forEach(function (b) {
-          b.classList.toggle('is-active', b.getAttribute('data-org-app-filter') === 'missing_docs');
-        });
-        filterApplications('missing_docs');
+        window.location.hash = 'applications&filter=missing_docs';
+        applyAppsDeepLink();
       }
     });
 
@@ -1134,8 +1452,26 @@
           b.classList.remove('is-active');
         });
         btn.classList.add('is-active');
-        filterApplications(btn.getAttribute('data-org-app-filter') || 'all');
+        var status = btn.getAttribute('data-org-app-filter') || 'all';
+        filterApplications(status);
+        setAppsHash(appFilterState.status || 'all', appFilterState.event || 'all');
       });
+    });
+
+    document.querySelectorAll('[data-org-app-event]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('[data-org-app-event]').forEach(function (b) {
+          b.classList.remove('is-active');
+        });
+        btn.classList.add('is-active');
+        var eventId = btn.getAttribute('data-org-app-event') || 'all';
+        filterApplications(appFilterState.status || 'all', eventId);
+        setAppsHash(appFilterState.status || 'all', appFilterState.event || 'all');
+      });
+    });
+
+    window.addEventListener('hashchange', function () {
+      applyAppsDeepLink();
     });
 
     var moreFiltersBtn = document.querySelector('[data-org-app-filter-toggle]');
@@ -1224,11 +1560,8 @@
       if (smartBtn) {
         var appFilter = smartBtn.getAttribute('data-org-app-filter');
         if (appFilter) {
-          window.location.hash = 'applications';
-          document.querySelectorAll('.lnkup-organizer-app-filters .lnkup-dash-tabs__btn').forEach(function (b) {
-            b.classList.toggle('is-active', b.getAttribute('data-org-app-filter') === appFilter);
-          });
-          filterApplications(appFilter);
+          window.location.hash = 'applications&filter=' + encodeURIComponent(appFilter);
+          applyAppsDeepLink();
           return;
         }
         var scope = smartBtn.getAttribute('data-crm-scope');
@@ -1470,6 +1803,7 @@
 
   window.lnkupCrmLoadDirectory = loadDirectory;
   window.lnkupCrmLoadLists = loadLists;
+  window.lnkupCrmLoadInvites = loadInvites;
   window.lnkupCrmSetScope = function (scope) {
     crmState.scope = scope || 'discover';
   };

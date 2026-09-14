@@ -196,7 +196,7 @@ function lnkup_seo_get_context_copy() {
 	if ( is_page( 'sign-up' ) ) {
 		return array(
 			'title'       => __( 'Sign Up Free | LNKup', 'lnkup-marketplace' ),
-			'description' => __( 'Create your free LNKup account as a vendor or event organizer. Build your profile today — browse and apply when the marketplace opens.', 'lnkup-marketplace' ),
+			'description' => __( 'Create your free LNKup account as a vendor or event organizer. Build your profile, browse events, and apply today.', 'lnkup-marketplace' ),
 		);
 	}
 

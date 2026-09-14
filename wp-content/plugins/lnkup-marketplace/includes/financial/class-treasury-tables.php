@@ -225,7 +225,7 @@ class LNKup_Treasury_Tables {
 				provider_ref varchar(128) NOT NULL DEFAULT '',
 				scheduled_at datetime DEFAULT NULL,
 				paid_at datetime DEFAULT NULL,
-				failure_reason varchar(255) NOT NULL DEFAULT '',
+				failure_reason text,
 				metadata longtext,
 				created_at datetime NOT NULL,
 				updated_at datetime NOT NULL,
@@ -367,10 +367,15 @@ class LNKup_Treasury_Tables {
 				paid_at datetime DEFAULT NULL,
 				created_at datetime NOT NULL,
 				available_at datetime DEFAULT NULL,
+				payment_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				event_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				program varchar(32) NOT NULL DEFAULT '',
 				PRIMARY KEY (id),
 				KEY user_id (user_id),
 				KEY connector_id (connector_id),
-				KEY status (status)
+				KEY status (status),
+				KEY payment_referral (payment_id, referral_id),
+				KEY program (program)
 			) {$charset};"
 		);
 

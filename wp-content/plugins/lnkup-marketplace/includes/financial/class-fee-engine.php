@@ -11,11 +11,13 @@ class LNKup_Fee_Engine {
 
 	const PROCESSING_RATE = 0.029;
 	const PROCESSING_FLAT = 0.30;
+	const ACH_PROCESSING_RATE = 0.008;
+	const ACH_PROCESSING_CAP  = 5.00;
 
 	/**
 	 * Calculate fee breakdown for a booking.
 	 *
-	 * @param array $context vendor_fee, organizer_id, event_id, category, opportunity_id.
+	 * @param array $context vendor_fee, organizer_id, event_id, category, opportunity_id, payment_method.
 	 * @return array
 	 */
 	public static function calculate( $context ) {
@@ -25,12 +27,17 @@ class LNKup_Fee_Engine {
 		$category     = sanitize_key( $context['category'] ?? '' );
 		$discount     = max( 0, (float) ( $context['discount'] ?? 0 ) );
 		$credit       = max( 0, (float) ( $context['credit'] ?? 0 ) );
+		$method       = sanitize_key( $context['payment_method'] ?? 'card' );
 
 		$vendor_checkout_fee  = self::resolve_vendor_checkout_fee( $organizer_id, $event_id, $category );
+		// Free booths: no marketplace checkout fee (docs / product rule).
+		if ( $vendor_fee <= 0 ) {
+			$vendor_checkout_fee = 0.0;
+		}
 		$organizer_commission = self::resolve_organizer_commission( $vendor_fee, $organizer_id, $event_id, $category );
 		$platform_fee         = round( $vendor_checkout_fee + $organizer_commission, 2 );
 		$subtotal             = round( $vendor_fee + $vendor_checkout_fee, 2 );
-		$processing           = round( $subtotal * self::PROCESSING_RATE + self::PROCESSING_FLAT, 2 );
+		$processing           = self::resolve_processing_fee( $subtotal, $method );
 		$tax_rate             = self::resolve_tax_rate( $organizer_id, $event_id );
 		$taxable              = max( 0, $subtotal - $discount );
 		$tax_amount           = round( $taxable * $tax_rate, 2 );
@@ -51,7 +58,27 @@ class LNKup_Fee_Engine {
 			'credit'                  => round( $credit, 2 ),
 			'subtotal'                => $subtotal,
 			'total'                   => $total,
+			'payment_method'          => $method,
 		);
+	}
+
+	/**
+	 * Card vs ACH processing estimate when ACH flag is on.
+	 *
+	 * @param float  $subtotal Subtotal.
+	 * @param string $method   card|ach|us_bank_account.
+	 */
+	public static function resolve_processing_fee( $subtotal, $method = 'card' ) {
+		$subtotal = (float) $subtotal;
+		if ( $subtotal <= 0 ) {
+			return 0.0;
+		}
+		$settings = function_exists( 'lnkup_get_settings' ) ? lnkup_get_settings() : array();
+		$is_ach   = in_array( $method, array( 'ach', 'us_bank_account' ), true );
+		if ( $is_ach && ! empty( $settings['ach_enabled'] ) ) {
+			return min( round( $subtotal * self::ACH_PROCESSING_RATE, 2 ), self::ACH_PROCESSING_CAP );
+		}
+		return round( $subtotal * self::PROCESSING_RATE + self::PROCESSING_FLAT, 2 );
 	}
 
 	/**

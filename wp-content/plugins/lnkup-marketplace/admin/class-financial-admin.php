@@ -14,6 +14,9 @@ class LNKup_Financial_Admin {
 		add_action( 'admin_post_lnkup_payout_complete', array( __CLASS__, 'handle_payout_complete' ) );
 		add_action( 'admin_post_lnkup_org_payout_complete', array( __CLASS__, 'handle_org_payout_complete' ) );
 		add_action( 'admin_post_lnkup_fraud_resolve', array( __CLASS__, 'handle_fraud_resolve' ) );
+		add_action( 'admin_post_lnkup_recover_stranded', array( __CLASS__, 'handle_recover_stranded' ) );
+		add_action( 'admin_post_lnkup_platform_payout', array( __CLASS__, 'handle_platform_payout' ) );
+		add_action( 'admin_notices', array( __CLASS__, 'admin_notices' ) );
 	}
 
 	public static function add_menu() {
@@ -27,6 +30,27 @@ class LNKup_Financial_Admin {
 		);
 	}
 
+	/**
+	 * Flash notices after admin_post redirects.
+	 */
+	public static function admin_notices() {
+		if ( ! isset( $_GET['page'] ) || 'lnkup-financial' !== $_GET['page'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		if ( empty( $_GET['lnkup_notice'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		$code = sanitize_key( wp_unslash( $_GET['lnkup_notice'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$msg  = isset( $_GET['lnkup_msg'] ) ? sanitize_text_field( wp_unslash( $_GET['lnkup_msg'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$class = ( 'error' === $code ) ? 'notice notice-error' : 'notice notice-success';
+		if ( ! $msg ) {
+			$msg = ( 'error' === $code )
+				? __( 'Action failed.', 'lnkup-marketplace' )
+				: __( 'Action completed.', 'lnkup-marketplace' );
+		}
+		printf( '<div class="%1$s is-dismissible"><p>%2$s</p></div>', esc_attr( $class ), esc_html( $msg ) );
+	}
+
 	public static function render_page() {
 		if ( ! LNKup_Capabilities::can_manage_marketplace_financials() ) {
 			wp_die( esc_html__( 'Permission denied.', 'lnkup-marketplace' ), 403 );
@@ -34,6 +58,7 @@ class LNKup_Financial_Admin {
 		$tab     = sanitize_key( $_GET['tab'] ?? 'overview' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$summary = LNKup_Financial::admin_dashboard();
 		$fraud   = LNKup_Fraud_Flags::list_open();
+		$split   = class_exists( 'LNKup_Stripe_Connect' ) ? LNKup_Stripe_Connect::platform_balance_split() : array( 'synced' => false );
 		global $wpdb;
 		$pending_payouts = $wpdb->get_results(
 			"SELECT * FROM " . LNKup_Financial_Tables::payouts_table() . " WHERE status IN ('pending','scheduled') ORDER BY scheduled_date ASC LIMIT 20",
@@ -68,6 +93,7 @@ class LNKup_Financial_Admin {
 				<?php endforeach; ?>
 			</nav>
 			<?php if ( 'overview' === $tab ) : ?>
+			<?php self::render_platform_stripe_panel( $split ); ?>
 			<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;margin:1.5rem 0;">
 				<div class="card" style="padding:1rem;"><strong><?php echo esc_html( lnkup_currency( $summary['gmv'] ?? 0 ) ); ?></strong><br><?php esc_html_e( 'GMV', 'lnkup-marketplace' ); ?></div>
 				<div class="card" style="padding:1rem;"><strong><?php echo esc_html( lnkup_currency( $summary['platform_revenue'] ?? 0 ) ); ?></strong><br><?php esc_html_e( 'Platform Revenue', 'lnkup-marketplace' ); ?></div>
@@ -194,6 +220,125 @@ class LNKup_Financial_Admin {
 		<?php
 	}
 
+	/**
+	 * Live main Stripe balance + organizer-owed vs fee remainder + actions.
+	 *
+	 * @param array $split From LNKup_Stripe_Connect::platform_balance_split().
+	 */
+	private static function render_platform_stripe_panel( $split ) {
+		$split = is_array( $split ) ? $split : array();
+		?>
+		<h2><?php esc_html_e( 'Main Stripe balance (mixed)', 'lnkup-marketplace' ); ?></h2>
+		<p class="description">
+			<?php esc_html_e( 'Stripe main-account Available mixes organizer/vendor net (stranded) and LNKup platform fees. Recover organizer share to Connect before paying out LNKup fees. Organizer Money → Cash Out never shows this mixed total.', 'lnkup-marketplace' ); ?>
+		</p>
+		<?php if ( empty( $split['synced'] ) ) : ?>
+			<div class="notice notice-warning inline"><p><?php echo esc_html( ! empty( $split['error'] ) ? (string) $split['error'] : __( 'Could not load platform Stripe balance.', 'lnkup-marketplace' ) ); ?></p></div>
+			<?php
+			return;
+		endif;
+		$source_label = class_exists( 'LNKup_Stripe_Connect' )
+			? LNKup_Stripe_Connect::format_source_types_breakdown( $split['source_types'] ?? array() )
+			: '';
+		?>
+		<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;margin:1rem 0 1.5rem;">
+			<div class="card" style="padding:1rem;"><strong><?php echo esc_html( lnkup_currency( $split['platform_available'] ?? 0 ) ); ?></strong><br><?php esc_html_e( 'Stripe Available', 'lnkup-marketplace' ); ?></div>
+			<div class="card" style="padding:1rem;"><strong><?php echo esc_html( lnkup_currency( $split['platform_pending'] ?? 0 ) ); ?></strong><br><?php esc_html_e( 'Stripe Pending', 'lnkup-marketplace' ); ?></div>
+			<div class="card" style="padding:1rem;"><strong><?php echo esc_html( lnkup_currency( $split['organizer_owed'] ?? 0 ) ); ?></strong><br><?php esc_html_e( 'Organizer-owed (recoverable)', 'lnkup-marketplace' ); ?></div>
+			<div class="card" style="padding:1rem;"><strong><?php echo esc_html( lnkup_currency( $split['fee_remainder'] ?? 0 ) ); ?></strong><br><?php esc_html_e( 'LNKup fee remainder', 'lnkup-marketplace' ); ?></div>
+		</div>
+		<?php if ( $source_label ) : ?>
+			<p class="description"><?php echo esc_html( $source_label ); ?></p>
+		<?php endif; ?>
+
+		<h3><?php esc_html_e( 'Recover stranded → Connect', 'lnkup-marketplace' ); ?></h3>
+		<?php
+		$recoverable_rows = array_filter(
+			(array) ( $split['organizers'] ?? array() ),
+			static function ( $row ) {
+				return ! empty( $row['can_recover'] ) && (float) ( $row['recoverable'] ?? 0 ) > 0;
+			}
+		);
+		if ( empty( $recoverable_rows ) ) :
+			?>
+			<p class="description"><?php esc_html_e( 'No destination organizers with ledger-owed funds stranded on the platform.', 'lnkup-marketplace' ); ?></p>
+		<?php else : ?>
+			<table class="widefat striped">
+				<thead>
+					<tr>
+						<th><?php esc_html_e( 'Organizer', 'lnkup-marketplace' ); ?></th>
+						<th><?php esc_html_e( 'Owed on platform', 'lnkup-marketplace' ); ?></th>
+						<th><?php esc_html_e( 'Mode', 'lnkup-marketplace' ); ?></th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+				<?php foreach ( $recoverable_rows as $row ) : ?>
+					<tr>
+						<td><?php echo esc_html( (string) ( $row['name'] ?? '' ) . ' (#' . (int) ( $row['user_id'] ?? 0 ) . ')' ); ?></td>
+						<td><?php echo esc_html( lnkup_currency( $row['recoverable'] ?? 0 ) ); ?></td>
+						<td><?php echo esc_html( (string) ( $row['settlement_mode'] ?? '' ) ); ?></td>
+						<td>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
+								<input type="hidden" name="action" value="lnkup_recover_stranded" />
+								<input type="hidden" name="organizer_id" value="<?php echo esc_attr( (string) (int) ( $row['user_id'] ?? 0 ) ); ?>" />
+								<?php wp_nonce_field( 'lnkup_recover_stranded' ); ?>
+								<button type="submit" class="button button-primary"><?php esc_html_e( 'Move to Connect', 'lnkup-marketplace' ); ?></button>
+							</form>
+						</td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		<?php endif; ?>
+
+		<?php
+		$treasury_rows = array_filter(
+			(array) ( $split['organizers'] ?? array() ),
+			static function ( $row ) {
+				return empty( $row['can_recover'] ) && (float) ( $row['recoverable'] ?? 0 ) > 0;
+			}
+		);
+		if ( ! empty( $treasury_rows ) ) :
+			?>
+			<p class="description" style="margin-top:0.75rem;">
+				<?php esc_html_e( 'Platform-treasury organizers below also have ledger available counted in organizer-owed (fee remainder is reduced). Recover those via organizer Cash Out / Transfer, not Move to Connect.', 'lnkup-marketplace' ); ?>
+			</p>
+			<ul>
+				<?php foreach ( $treasury_rows as $row ) : ?>
+					<li><?php echo esc_html( (string) ( $row['name'] ?? '' ) . ' — ' . lnkup_currency( $row['recoverable'] ?? 0 ) ); ?></li>
+				<?php endforeach; ?>
+			</ul>
+		<?php endif; ?>
+
+		<h3><?php esc_html_e( 'Pay out LNKup fee remainder', 'lnkup-marketplace' ); ?></h3>
+		<?php $fee_max = (float) ( $split['fee_remainder'] ?? 0 ); ?>
+		<?php if ( $fee_max <= 0 ) : ?>
+			<p class="description"><?php esc_html_e( 'No fee remainder available to pay out (all Available is organizer-owed, or balance is $0).', 'lnkup-marketplace' ); ?></p>
+		<?php else : ?>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="max-width:420px;">
+				<input type="hidden" name="action" value="lnkup_platform_payout" />
+				<?php wp_nonce_field( 'lnkup_platform_payout' ); ?>
+				<p>
+					<label for="lnkup_platform_payout_amount"><?php esc_html_e( 'Amount (USD)', 'lnkup-marketplace' ); ?></label><br />
+					<input type="number" step="0.01" min="0.01" max="<?php echo esc_attr( (string) $fee_max ); ?>" name="amount" id="lnkup_platform_payout_amount" value="<?php echo esc_attr( number_format( $fee_max, 2, '.', '' ) ); ?>" required />
+				</p>
+				<p class="description">
+					<?php
+					printf(
+						/* translators: %s: max fee remainder */
+						esc_html__( 'Standard payout to the bank on the main Stripe account. Max %s (fee remainder only).', 'lnkup-marketplace' ),
+						esc_html( lnkup_currency( $fee_max ) )
+					);
+					?>
+				</p>
+				<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Pay out fees', 'lnkup-marketplace' ); ?></button></p>
+			</form>
+		<?php endif; ?>
+		<hr style="margin:2rem 0;" />
+		<?php
+	}
+
 	public static function handle_payout_complete() {
 		check_admin_referer( 'lnkup_payout_complete' );
 		if ( ! LNKup_Capabilities::can_manage_marketplace_financials() ) {
@@ -225,6 +370,123 @@ class LNKup_Financial_Admin {
 		}
 		LNKup_Fraud_Flags::resolve( absint( $_POST['flag_id'] ?? 0 ) );
 		wp_safe_redirect( admin_url( 'admin.php?page=lnkup-financial&updated=1' ) );
+		exit;
+	}
+
+	/**
+	 * Transfer ledger-owed stranded funds from platform → organizer Connect.
+	 */
+	public static function handle_recover_stranded() {
+		check_admin_referer( 'lnkup_recover_stranded' );
+		if ( ! LNKup_Capabilities::can_manage_marketplace_financials() ) {
+			wp_die( esc_html__( 'Permission denied.', 'lnkup-marketplace' ), 403 );
+		}
+		$organizer_id = absint( $_POST['organizer_id'] ?? 0 );
+		$redirect     = admin_url( 'admin.php?page=lnkup-financial&tab=overview' );
+
+		if ( ! $organizer_id || ! class_exists( 'LNKup_Stripe_Connect' ) ) {
+			wp_safe_redirect( add_query_arg( array( 'lnkup_notice' => 'error', 'lnkup_msg' => rawurlencode( __( 'Invalid organizer.', 'lnkup-marketplace' ) ) ), $redirect ) );
+			exit;
+		}
+
+		$cents = LNKup_Stripe_Connect::organizer_recoverable_platform_cents( $organizer_id );
+		if ( $cents < 1 ) {
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'lnkup_notice' => 'error',
+						'lnkup_msg'    => rawurlencode( __( 'Nothing recoverable for this organizer right now.', 'lnkup-marketplace' ) ),
+					),
+					$redirect
+				)
+			);
+			exit;
+		}
+
+		$result = LNKup_Stripe_Connect::transfer_platform_to_connect(
+			$organizer_id,
+			$cents / 100,
+			array( 'admin_recover' => '1' )
+		);
+
+		if ( is_wp_error( $result ) ) {
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'lnkup_notice' => 'error',
+						'lnkup_msg'    => rawurlencode( $result->get_error_message() ),
+					),
+					$redirect
+				)
+			);
+			exit;
+		}
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'lnkup_notice' => 'success',
+					'lnkup_msg'    => rawurlencode(
+						sprintf(
+							/* translators: 1: amount 2: transfer id */
+							__( 'Moved %1$s to Connect (transfer %2$s).', 'lnkup-marketplace' ),
+							lnkup_currency( $cents / 100 ),
+							(string) ( $result['transfer_id'] ?? '' )
+						)
+					),
+				),
+				$redirect
+			)
+		);
+		exit;
+	}
+
+	/**
+	 * Standard payout of LNKup fee remainder from main Stripe account.
+	 */
+	public static function handle_platform_payout() {
+		check_admin_referer( 'lnkup_platform_payout' );
+		if ( ! LNKup_Capabilities::can_manage_marketplace_financials() ) {
+			wp_die( esc_html__( 'Permission denied.', 'lnkup-marketplace' ), 403 );
+		}
+		$amount   = isset( $_POST['amount'] ) ? (float) wp_unslash( $_POST['amount'] ) : 0;
+		$redirect = admin_url( 'admin.php?page=lnkup-financial&tab=overview' );
+
+		if ( ! class_exists( 'LNKup_Stripe_Connect' ) ) {
+			wp_safe_redirect( add_query_arg( array( 'lnkup_notice' => 'error', 'lnkup_msg' => rawurlencode( __( 'Connect unavailable.', 'lnkup-marketplace' ) ) ), $redirect ) );
+			exit;
+		}
+
+		$result = LNKup_Stripe_Connect::create_platform_payout( $amount );
+		if ( is_wp_error( $result ) ) {
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'lnkup_notice' => 'error',
+						'lnkup_msg'    => rawurlencode( $result->get_error_message() ),
+					),
+					$redirect
+				)
+			);
+			exit;
+		}
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'lnkup_notice' => 'success',
+					'lnkup_msg'    => rawurlencode(
+						sprintf(
+							/* translators: 1: amount 2: payout id */
+							__( 'Platform payout %1$s created (%2$s).', 'lnkup-marketplace' ),
+							lnkup_currency( (float) ( $result['amount'] ?? $amount ) ),
+							(string) ( $result['payout_id'] ?? '' )
+						)
+					),
+				),
+				$redirect
+			)
+		);
 		exit;
 	}
 }

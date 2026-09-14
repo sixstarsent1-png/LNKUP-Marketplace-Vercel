@@ -83,6 +83,11 @@ class LNKup_Financial_REST {
 			'callback' => array( __CLASS__, 'disputes_respond' ),
 		) ) );
 
+		register_rest_route( self::NS, '/financial/disputes/(?P<id>\d+)/resolve', array_merge( $org, array(
+			'methods'  => 'POST',
+			'callback' => array( __CLASS__, 'disputes_resolve' ),
+		) ) );
+
 		register_rest_route( self::NS, '/financial/installments', array_merge( $vendor, array(
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'installments' ),
@@ -133,6 +138,10 @@ class LNKup_Financial_REST {
 		register_rest_route( self::NS, '/financial/checkout/(?P<payment_id>\d+)/apply-credits', array_merge( $vendor, array(
 			'methods'  => 'POST',
 			'callback' => array( __CLASS__, 'checkout_apply_credits' ),
+		) ) );
+		register_rest_route( self::NS, '/financial/checkout/(?P<payment_id>\d+)/redirect-url', array_merge( $vendor, array(
+			'methods'  => 'POST',
+			'callback' => array( __CLASS__, 'checkout_redirect_url' ),
 		) ) );
 
 		register_rest_route( self::NS, '/financial/activity', array_merge( $fin, array(
@@ -227,6 +236,10 @@ class LNKup_Financial_REST {
 			'methods'  => 'POST',
 			'callback' => array( __CLASS__, 'connect_onboarding' ),
 		) ) );
+		register_rest_route( self::NS, '/financial/connect/login-link', array_merge( $org, array(
+			'methods'  => 'POST',
+			'callback' => array( __CLASS__, 'connect_login_link' ),
+		) ) );
 		register_rest_route( self::NS, '/financial/connect/status', array_merge( $org, array(
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'connect_status' ),
@@ -291,6 +304,14 @@ class LNKup_Financial_REST {
 		register_rest_route( self::NS, '/financial/tax-center/export', array_merge( $fin, array(
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'tax_center_export' ),
+		) ) );
+		register_rest_route( self::NS, '/financial/tax-center/w9/pdf', array_merge( $fin, array(
+			'methods'  => 'GET',
+			'callback' => array( __CLASS__, 'tax_center_w9_pdf' ),
+		) ) );
+		register_rest_route( self::NS, '/financial/tax-center/1099/pdf', array_merge( $fin, array(
+			'methods'  => 'GET',
+			'callback' => array( __CLASS__, 'tax_center_1099_pdf' ),
 		) ) );
 
 		register_rest_route( self::NS, '/financial/refunds/calculate', array_merge( $fin, array(
@@ -623,22 +644,70 @@ class LNKup_Financial_REST {
 	public static function disputes_list( $request = null ) {
 		$role = self::resolve_financial_role( $request );
 		$rows = LNKup_Financial_Disputes::list_for_user( get_current_user_id(), $role );
-		return rest_ensure_response( array_map( array( 'LNKup_Financial_Disputes', 'format' ), $rows ) );
+		$rows = is_array( $rows ) ? $rows : array();
+		return rest_ensure_response( array_values( array_filter( array_map( array( 'LNKup_Financial_Disputes', 'format' ), $rows ) ) ) );
 	}
 
 	public static function disputes_create( $request ) {
-		$params = $request->get_json_params();
-		$id = LNKup_Financial_Disputes::open( absint( $params['payment_id'] ?? 0 ), $params['reason'] ?? '' );
-		return rest_ensure_response( array( 'id' => $id ) );
+		$params     = $request->get_json_params();
+		$payment_id = absint( $params['payment_id'] ?? $params['payment_post_id'] ?? 0 );
+		$reason     = (string) ( $params['reason'] ?? '' );
+
+		if ( ! self::can_vendor_open_dispute( $payment_id ) ) {
+			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+
+		$id = LNKup_Financial_Disputes::open( $payment_id, $reason, get_current_user_id() );
+		if ( is_wp_error( $id ) ) {
+			return $id;
+		}
+		$row = LNKup_Financial_Disputes::get( (int) $id );
+		return rest_ensure_response(
+			array(
+				'id'      => (int) $id,
+				'dispute' => LNKup_Financial_Disputes::format( $row ),
+			)
+		);
 	}
 
 	public static function disputes_respond( $request ) {
+		$dispute_id = absint( $request['id'] );
+		if ( ! self::can_access_dispute( $dispute_id ) ) {
+			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
 		$params = $request->get_json_params();
-		$result = LNKup_Financial_Disputes::respond( absint( $request['id'] ), $params['evidence'] ?? '' );
+		$result = LNKup_Financial_Disputes::respond( $dispute_id, $params['evidence'] ?? '', get_current_user_id() );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
-		return rest_ensure_response( array( 'success' => true ) );
+		$row = LNKup_Financial_Disputes::get( $dispute_id );
+		return rest_ensure_response(
+			array(
+				'success' => true,
+				'dispute' => LNKup_Financial_Disputes::format( $row ),
+			)
+		);
+	}
+
+	public static function disputes_resolve( $request ) {
+		$dispute_id = absint( $request['id'] );
+		if ( ! self::can_organizer_access_dispute( $dispute_id ) ) {
+			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+		$params  = $request->get_json_params();
+		$outcome = sanitize_key( (string) ( $params['outcome'] ?? '' ) );
+		$note    = (string) ( $params['note'] ?? '' );
+		$result  = LNKup_Financial_Disputes::resolve( $dispute_id, $outcome, $note, get_current_user_id() );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$row = LNKup_Financial_Disputes::get( $dispute_id );
+		return rest_ensure_response(
+			array(
+				'success' => true,
+				'dispute' => LNKup_Financial_Disputes::format( $row ),
+			)
+		);
 	}
 
 	public static function installments() {
@@ -728,6 +797,65 @@ class LNKup_Financial_REST {
 		$params = $request->get_json_params() ?: array();
 		$result = LNKup_Financial_Service::apply_wallet_credits( $payment_id, (float) ( $params['amount'] ?? 0 ) );
 		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * Safe redirect checkout URL for headless vendor app (no client_secret).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function checkout_redirect_url( $request ) {
+		$payment_id = absint( $request['payment_id'] );
+		if ( ! self::can_access_payment( $payment_id ) ) {
+			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+
+		$pay_status = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
+		if ( 'paid' === $pay_status ) {
+			return rest_ensure_response(
+				array(
+					'status'     => 'already_paid',
+					'payment_id' => $payment_id,
+				)
+			);
+		}
+
+		$params = $request->get_json_params() ?: array();
+		$checkout_args = array( 'mode' => 'redirect' );
+		if ( ! empty( $params['return_to'] ) && 'app' === $params['return_to'] ) {
+			$checkout_args['return_to']      = 'app';
+			$checkout_args['app_base_url']   = isset( $params['app_base_url'] ) ? (string) $params['app_base_url'] : '';
+			$checkout_args['application_id'] = isset( $params['application_id'] ) ? absint( $params['application_id'] ) : 0;
+		}
+
+		$result = LNKup_Financial_Service::create_checkout( $payment_id, $checkout_args );
+		if ( is_wp_error( $result ) ) {
+			return rest_ensure_response(
+				array(
+					'status'     => 'unavailable',
+					'payment_id' => $payment_id,
+					'message'    => $result->get_error_message(),
+				)
+			);
+		}
+
+		$url = is_array( $result ) ? (string) ( $result['url'] ?? '' ) : '';
+		if ( ! $url ) {
+			return rest_ensure_response(
+				array(
+					'status'     => 'unavailable',
+					'payment_id' => $payment_id,
+				)
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'status'       => 'ready',
+				'checkout_url' => $url,
+				'payment_id'   => $payment_id,
+			)
+		);
 	}
 
 	public static function activity( $request ) {
@@ -884,6 +1012,57 @@ class LNKup_Financial_REST {
 	}
 
 	/**
+	 * Vendor (or admin) may open a mediation dispute on their paid payment.
+	 *
+	 * @param int $payment_id Payment CPT ID.
+	 */
+	private static function can_vendor_open_dispute( $payment_id ) {
+		$payment_id = absint( $payment_id );
+		if ( $payment_id <= 0 ) {
+			return false;
+		}
+		if ( LNKup_Capabilities::user_has_manage_all() ) {
+			return true;
+		}
+		$uid       = get_current_user_id();
+		$vendor_id = (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true );
+		return $uid > 0 && $uid === $vendor_id;
+	}
+
+	/**
+	 * Vendor or organizer party on the dispute row.
+	 *
+	 * @param int $dispute_id Dispute row ID.
+	 */
+	private static function can_access_dispute( $dispute_id ) {
+		if ( LNKup_Capabilities::user_has_manage_all() ) {
+			return true;
+		}
+		$row = LNKup_Financial_Disputes::get( absint( $dispute_id ) );
+		if ( ! $row ) {
+			return false;
+		}
+		$uid = get_current_user_id();
+		return $uid === (int) $row['vendor_user_id'] || $uid === (int) $row['organizer_user_id'];
+	}
+
+	/**
+	 * Organizer (or admin) may resolve a dispute.
+	 *
+	 * @param int $dispute_id Dispute row ID.
+	 */
+	private static function can_organizer_access_dispute( $dispute_id ) {
+		if ( LNKup_Capabilities::user_has_manage_all() ) {
+			return true;
+		}
+		$row = LNKup_Financial_Disputes::get( absint( $dispute_id ) );
+		if ( ! $row ) {
+			return false;
+		}
+		return get_current_user_id() === (int) $row['organizer_user_id'];
+	}
+
+	/**
 	 * @param array $invoice Invoice row.
 	 */
 	private static function can_access_invoice( $invoice ) {
@@ -917,13 +1096,52 @@ class LNKup_Financial_REST {
 	}
 
 	public static function organizer_cashout( $request ) {
-		$params = $request->get_json_params() ?: array();
-		$result = LNKup_Financial_Service::request_organizer_cashout(
-			get_current_user_id(),
-			(float) ( $params['amount'] ?? 0 ),
+		$params  = $request->get_json_params() ?: array();
+		$user_id = get_current_user_id();
+		$amount  = (float) ( $params['amount'] ?? 0 );
+		$result  = LNKup_Financial_Service::request_organizer_cashout(
+			$user_id,
+			$amount,
 			$params['type'] ?? 'standard'
 		);
 		if ( is_wp_error( $result ) ) {
+			$code    = $result->get_error_code() ? $result->get_error_code() : 'cashout_failed';
+			$message = trim( (string) $result->get_error_message() );
+			if ( '' === $message ) {
+				$message = __( 'Cashout could not be completed. Please try again or contact support.', 'lnkup-marketplace' );
+			}
+			$data = $result->get_error_data();
+			if ( ! is_array( $data ) ) {
+				$data = array();
+			}
+			if ( empty( $data['status'] ) ) {
+				$data['status'] = 400;
+			}
+			$result = new WP_Error( $code, $message, $data );
+
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log(
+				sprintf(
+					'[LNKup] organizer_cashout_failed user=%d code=%s message=%s amount=%s',
+					$user_id,
+					$code,
+					$message,
+					(string) $amount
+				)
+			);
+			LNKup_Financial_Audit::log(
+				'organizer_cashout_failed',
+				'user',
+				$user_id,
+				array(
+					'amount'   => $amount,
+					'metadata' => array(
+						'code'    => $code,
+						'message' => $message,
+						'type'    => sanitize_key( (string) ( $params['type'] ?? 'standard' ) ),
+					),
+				)
+			);
 			return $result;
 		}
 		return rest_ensure_response( array( 'payout_id' => $result ) );
@@ -942,9 +1160,25 @@ class LNKup_Financial_REST {
 		return is_wp_error( $result ) ? $result : rest_ensure_response( array( 'success' => true ) );
 	}
 
-	public static function connect_onboarding() {
+	public static function connect_onboarding( $request ) {
+		return self::respond( function () use ( $request ) {
+			$params = $request instanceof WP_REST_Request ? $request->get_json_params() : array();
+			if ( ! is_array( $params ) ) {
+				$params = array();
+			}
+			return LNKup_Stripe_Connect::create_onboarding_link(
+				get_current_user_id(),
+				array(
+					'return_url'  => isset( $params['return_url'] ) ? (string) $params['return_url'] : '',
+					'refresh_url' => isset( $params['refresh_url'] ) ? (string) $params['refresh_url'] : '',
+				)
+			);
+		} );
+	}
+
+	public static function connect_login_link() {
 		return self::respond( function () {
-			return LNKup_Stripe_Connect::create_onboarding_link( get_current_user_id() );
+			return LNKup_Stripe_Connect::create_login_link( get_current_user_id() );
 		} );
 	}
 
@@ -1012,8 +1246,14 @@ class LNKup_Financial_REST {
 
 	public static function subscriptions_create( $request ) {
 		$params = $request->get_json_params() ?: array();
-		$id = LNKup_Subscriptions::subscribe( get_current_user_id(), absint( $params['plan_id'] ?? 0 ) );
-		return is_wp_error( $id ) ? $id : rest_ensure_response( array( 'id' => $id ) );
+		$result = LNKup_Subscriptions::subscribe( get_current_user_id(), absint( $params['plan_id'] ?? 0 ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( is_array( $result ) ) {
+			return rest_ensure_response( $result );
+		}
+		return rest_ensure_response( array( 'id' => $result ) );
 	}
 
 	public static function premium_listings() {
@@ -1066,6 +1306,39 @@ class LNKup_Financial_REST {
 	public static function tax_center_export( $request ) {
 		$year = absint( $request->get_param( 'year' ) ?: gmdate( 'Y' ) );
 		return rest_ensure_response( array( 'csv' => LNKup_Tax_Center::export_csv( get_current_user_id(), $year ) ) );
+	}
+
+	public static function tax_center_w9_pdf() {
+		$result = LNKup_Tax_Center::generate_w9_pdf( get_current_user_id() );
+		return is_wp_error( $result ) ? $result : self::serve_pdf( $result );
+	}
+
+	public static function tax_center_1099_pdf( $request ) {
+		$year   = absint( $request->get_param( 'year' ) ?: gmdate( 'Y' ) );
+		$result = LNKup_Tax_Center::generate_1099_pdf( get_current_user_id(), $year );
+		return is_wp_error( $result ) ? $result : self::serve_pdf( $result );
+	}
+
+	/**
+	 * Stream a generated PDF through REST.
+	 *
+	 * @param array $result { binary, filename }.
+	 * @return WP_REST_Response
+	 */
+	private static function serve_pdf( $result ) {
+		$binary   = (string) ( $result['binary'] ?? '' );
+		$filename = sanitize_file_name( $result['filename'] ?? 'lnkup-tax.pdf' );
+		add_filter(
+			'rest_pre_serve_request',
+			static function ( $served ) use ( $binary, $filename ) {
+				header( 'Content-Type: application/pdf' );
+				header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+				header( 'Content-Length: ' . strlen( $binary ) );
+				echo $binary; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				return true;
+			}
+		);
+		return new WP_REST_Response( null, 200 );
 	}
 
 	public static function refunds_calculate( $request ) {

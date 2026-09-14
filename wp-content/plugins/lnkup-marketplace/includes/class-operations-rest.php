@@ -148,6 +148,11 @@ class LNKup_Operations_REST {
 			'callback' => array( __CLASS__, 'vendor_home' ),
 		) ) );
 
+		register_rest_route( self::NS, '/operations/vendor-homes', array_merge( $vendor, array(
+			'methods'  => 'GET',
+			'callback' => array( __CLASS__, 'vendor_homes_batch' ),
+		) ) );
+
 		register_rest_route( self::NS, '/operations/dashboard/widgets', array_merge( $org, array(
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'dashboard_widgets' ),
@@ -390,6 +395,37 @@ class LNKup_Operations_REST {
 			$data = LNKup_Event_Operations::vendor_home( get_current_user_id() );
 		}
 		return rest_ensure_response( $data );
+	}
+
+	/**
+	 * Batch vendor-home enrichment for mobile ops (cuts N+1).
+	 *
+	 * Query: application_ids=1,2,3 (max 20).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function vendor_homes_batch( WP_REST_Request $request ) {
+		$raw = $request->get_param( 'application_ids' );
+		if ( is_string( $raw ) ) {
+			$ids = array_map( 'absint', explode( ',', $raw ) );
+		} else {
+			$ids = array_map( 'absint', (array) $raw );
+		}
+		$ids     = array_values( array_filter( array_unique( $ids ) ) );
+		$ids     = array_slice( $ids, 0, 20 );
+		$user_id = get_current_user_id();
+		$items   = array();
+		foreach ( $ids as $app_id ) {
+			if ( ! LNKup_Capabilities::vendor_owns_application( $app_id, $user_id ) && ! LNKup_Capabilities::user_has_manage_all( $user_id ) ) {
+				continue;
+			}
+			$data = LNKup_Event_Operations::vendor_home_for_application( $app_id, $user_id );
+			if ( is_array( $data ) ) {
+				$data['application_id'] = $app_id;
+				$items[]                = $data;
+			}
+		}
+		return rest_ensure_response( array( 'items' => $items ) );
 	}
 
 	public static function dashboard_widgets( WP_REST_Request $request ) {

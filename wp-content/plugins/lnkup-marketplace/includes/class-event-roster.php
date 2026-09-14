@@ -156,7 +156,7 @@ class LNKup_Event_Roster {
 				case 'approve':
 				case 'reject':
 				case 'waitlist':
-					$results[] = LNKup_Applications::handle_organizer_action( $app_id, $action, $organizer_id );
+					$results[] = LNKup_Applications::handle_organizer_action( $app_id, $action, $organizer_id, $extra );
 					break;
 				case 'check_in':
 					if ( class_exists( 'LNKup_Checkins' ) ) {

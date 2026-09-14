@@ -119,19 +119,34 @@ class LNKup_Discovery {
 		if ( $q && ( empty( $args['sort'] ) || 'newest' === $args['sort'] ) ) {
 			$args['sort'] = 'relevance';
 		}
-		$order_sql = ( 'relevance' === $args['sort'] && $q )
-			? self::build_relevance_order( $q )
-			: self::build_order( $args['sort'], $args['lat'], $args['lng'] );
+		$order_sql = '';
+		if ( 'relevance' === $args['sort'] && $q ) {
+			$relevance = self::build_relevance_order( $q );
+			$order_sql = $relevance['sql'];
+			$params    = array_merge( $params, $relevance['params'] );
+		} else {
+			$order_sql = self::build_order( $args['sort'], $args['lat'], $args['lng'] );
+		}
 
 		$count_sql = "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}";
-		if ( $params ) {
+		if ( $params && 'relevance' !== $args['sort'] ) {
 			$count_sql = $wpdb->prepare( $count_sql, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$total     = (int) $wpdb->get_var( $count_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} elseif ( $params && 'relevance' === $args['sort'] && $q ) {
+			// Count query must not include ORDER BY relevance placeholders.
+			$relevance_count = count( self::build_relevance_order( $q )['params'] );
+			$count_params    = array_slice( $params, 0, max( 0, count( $params ) - $relevance_count ) );
+			$count_sql       = $count_params
+				? $wpdb->prepare( $count_sql, $count_params ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				: $count_sql;
+			$total = (int) $wpdb->get_var( $count_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} else {
+			$total = (int) $wpdb->get_var( $count_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		}
-		$total = (int) $wpdb->get_var( $count_sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
-		$sql = "SELECT * FROM {$table} WHERE {$where_sql} {$order_sql} LIMIT %d OFFSET %d";
+		$sql        = "SELECT * FROM {$table} WHERE {$where_sql} {$order_sql} LIMIT %d OFFSET %d";
 		$all_params = array_merge( $params, array( $per_page, $offset ) );
-		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $all_params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$rows       = $wpdb->get_results( $wpdb->prepare( $sql, $all_params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		$items = array();
 		foreach ( (array) $rows as $row ) {
@@ -424,23 +439,19 @@ class LNKup_Discovery {
 
 	/**
 	 * Relevance-ranked ORDER BY when a search query is present.
+	 * Returns SQL fragment + params for a single outer $wpdb->prepare (no nested prepare).
 	 *
 	 * @param string $q Normalized query.
+	 * @return array{sql:string,params:array}
 	 */
 	private static function build_relevance_order( $q ) {
 		global $wpdb;
 		$q          = self::normalize_query( $q );
 		$like_start = $wpdb->esc_like( $q ) . '%';
 		$like_any   = '%' . $wpdb->esc_like( $q ) . '%';
-		return $wpdb->prepare(
-			'ORDER BY (title = %s) DESC, (LOWER(title) LIKE %s) DESC, (city LIKE %s OR state LIKE %s) DESC, (categories LIKE %s OR event_types LIKE %s) DESC, (search_blob LIKE %s) DESC, trending_score DESC',
-			$q,
-			$like_start,
-			$like_any,
-			$like_any,
-			$like_any,
-			$like_any,
-			$like_any
+		return array(
+			'sql'    => 'ORDER BY (title = %s) DESC, (LOWER(title) LIKE %s) DESC, (city LIKE %s OR state LIKE %s) DESC, (categories LIKE %s OR event_types LIKE %s) DESC, (search_blob LIKE %s) DESC, trending_score DESC',
+			'params' => array( $q, $like_start, $like_any, $like_any, $like_any, $like_any, $like_any ),
 		);
 	}
 

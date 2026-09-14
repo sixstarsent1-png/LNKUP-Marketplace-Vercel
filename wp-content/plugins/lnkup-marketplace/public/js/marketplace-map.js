@@ -92,6 +92,7 @@
     var el = document.getElementById('lnkup-map-view');
     if (!el || map) {
       if (map) {
+        window.lnkupMapInvalidateSize();
         window.lnkupMapRefresh();
       }
       return;
@@ -126,8 +127,18 @@
       ? L.markerClusterGroup({ maxClusterRadius: 50, disableClusteringAtZoom: 15 })
       : L.layerGroup();
     map.addLayer(markerGroup);
+    window.lnkupMapInvalidateSize();
     window.lnkupMapRefresh();
   }
+
+  window.lnkupMapInvalidateSize = function () {
+    if (!map) {
+      return;
+    }
+    requestAnimationFrame(function () {
+      map.invalidateSize();
+    });
+  };
 
   window.lnkupMapRefresh = function (query) {
     if (!map || !markerGroup) {

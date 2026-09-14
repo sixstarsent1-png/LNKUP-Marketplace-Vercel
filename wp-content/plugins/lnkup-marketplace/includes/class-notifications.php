@@ -35,6 +35,167 @@ class LNKup_Notifications {
 	}
 
 	/**
+	 * Resolve application context for email + push.
+	 *
+	 * @param int $app_id Application ID.
+	 * @return array{
+	 *   app_id:int,
+	 *   event_id:int,
+	 *   opportunity_id:int,
+	 *   event_title:string,
+	 *   opportunity_title:string,
+	 *   display_title:string,
+	 *   vendor_user_id:int,
+	 *   organizer_user_id:int,
+	 *   vendor:WP_User|false,
+	 *   organizer:WP_User|false,
+	 *   vendor_business:string,
+	 *   vendor_apps_url:string,
+	 *   vendor_payments_url:string,
+	 *   vendor_pass_url:string,
+	 *   vendor_ops_url:string,
+	 *   organizer_vendors_url:string,
+	 *   organizer_money_url:string,
+	 *   organizer_roster_url:string
+	 * }
+	 */
+	private static function application_context( $app_id ) {
+		$app_id         = absint( $app_id );
+		$event_id       = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
+		$opportunity_id = (int) get_post_meta( $app_id, '_lnkup_opportunity_id', true );
+		$vendor_user_id = (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true );
+		$organizer_id   = (int) get_post_meta( $app_id, '_lnkup_organizer_user_id', true );
+		$profile_id     = (int) get_post_meta( $app_id, '_lnkup_vendor_profile_id', true );
+
+		$event_title       = $event_id ? get_the_title( $event_id ) : '';
+		$opportunity_title = $opportunity_id ? get_the_title( $opportunity_id ) : '';
+		$display_title     = $event_title ? $event_title : ( $opportunity_title ? $opportunity_title : __( 'your opportunity', 'lnkup-marketplace' ) );
+
+		$vendor_business = '';
+		if ( $profile_id ) {
+			$vendor_business = get_the_title( $profile_id );
+		}
+		if ( ! $vendor_business ) {
+			$vendor = get_userdata( $vendor_user_id );
+			$vendor_business = $vendor ? $vendor->display_name : __( 'A vendor', 'lnkup-marketplace' );
+		}
+
+		$vendor_dashboard    = lnkup_page_url_helper( 'vendor-dashboard' );
+		$organizer_dashboard = lnkup_page_url_helper( 'organizer-dashboard' );
+
+		return array(
+			'app_id'                => $app_id,
+			'event_id'              => $event_id,
+			'opportunity_id'        => $opportunity_id,
+			'event_title'           => (string) $event_title,
+			'opportunity_title'     => (string) $opportunity_title,
+			'display_title'         => (string) $display_title,
+			'vendor_user_id'        => $vendor_user_id,
+			'organizer_user_id'     => $organizer_id,
+			'vendor'                => get_userdata( $vendor_user_id ),
+			'organizer'             => get_userdata( $organizer_id ),
+			'vendor_business'       => (string) $vendor_business,
+			'vendor_apps_url'       => add_query_arg( 'view', 'applications', $vendor_dashboard ),
+			'vendor_payments_url'   => add_query_arg( 'view', 'payments', $vendor_dashboard ),
+			'vendor_pass_url'       => add_query_arg(
+				array(
+					'view' => 'operations',
+					'app'  => $app_id,
+					'tab'  => 'pass',
+				),
+				$vendor_dashboard
+			),
+			'vendor_ops_url'        => add_query_arg( 'view', 'operations', $vendor_dashboard ),
+			'organizer_vendors_url' => add_query_arg( 'view', 'applications', $organizer_dashboard ),
+			'organizer_money_url'   => $organizer_dashboard . '#financial',
+			'organizer_roster_url'  => add_query_arg(
+				array(
+					'event'  => $event_id,
+					'roster' => 1,
+				),
+				$organizer_dashboard
+			),
+		);
+	}
+
+	/**
+	 * Escape-safe stacked paragraphs.
+	 *
+	 * @param string ...$paragraphs Plain-text paragraphs.
+	 * @return string
+	 */
+	private static function email_paragraphs( ...$paragraphs ) {
+		$html = '';
+		foreach ( $paragraphs as $paragraph ) {
+			$paragraph = trim( (string) $paragraph );
+			if ( '' === $paragraph ) {
+				continue;
+			}
+			$html .= '<p style="margin:0 0 16px;">' . esc_html( $paragraph ) . '</p>';
+		}
+		return $html;
+	}
+
+	/**
+	 * Lime CTA button block.
+	 *
+	 * @param string $url   Destination URL.
+	 * @param string $label Button label.
+	 * @return string
+	 */
+	private static function email_cta_block( $url, $label ) {
+		$url = (string) $url;
+		if ( '' === $url ) {
+			return '';
+		}
+		return '<p style="margin:24px 0 8px;"><a href="' . esc_url( $url ) . '" style="display:inline-block;padding:12px 24px;background:#c8f542;color:#1a1b1f;text-decoration:none;border-radius:8px;font-weight:700;">'
+			. esc_html( $label ) . '</a></p>';
+	}
+
+	/**
+	 * Event / opportunity meta lines for emails.
+	 *
+	 * @param array  $ctx   application_context().
+	 * @param string $extra Optional extra escaped HTML (e.g. reason).
+	 * @return string
+	 */
+	private static function email_event_meta( $ctx, $extra = '' ) {
+		$html = '<p style="margin:0 0 8px;font-weight:700;font-size:16px;color:#1a1b1f;">' . esc_html( $ctx['display_title'] ) . '</p>';
+		if ( ! empty( $ctx['opportunity_title'] ) && $ctx['opportunity_title'] !== $ctx['event_title'] ) {
+			$html .= '<p style="margin:0 0 16px;font-size:14px;color:#555;">' . esc_html( $ctx['opportunity_title'] ) . '</p>';
+		} elseif ( '' === $extra ) {
+			$html .= '<div style="margin:0 0 8px;"></div>';
+		}
+		if ( $extra ) {
+			$html .= $extra;
+		}
+		return $html;
+	}
+
+	/**
+	 * Safe Expo push helper — never breaks email flow.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $title   Title.
+	 * @param string $body    Body.
+	 * @param array  $data    Deep-link data.
+	 */
+	private static function push_user( $user_id, $title, $body, $data = array() ) {
+		if ( class_exists( 'LNKup_Inbox_Service' ) ) {
+			try {
+				LNKup_Inbox_Service::record_from_push( $user_id, $title, $body, is_array( $data ) ? $data : array() );
+			} catch ( Throwable $e ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( 'LNKup inbox record failed: ' . $e->getMessage() );
+			}
+		}
+		if ( ! class_exists( 'LNKup_Push_Service' ) ) {
+			return;
+		}
+		LNKup_Push_Service::notify_user( $user_id, $title, $body, $data );
+	}
+
+	/**
 	 * Send application submitted.
 	 *
 	 * @param int $app_id Application ID.
@@ -44,24 +205,47 @@ class LNKup_Notifications {
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
 		}
-		$vendor_id = (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true );
-		$user      = get_userdata( $vendor_id );
+		$ctx  = self::application_context( $app_id );
+		$user = $ctx['vendor'];
 		if ( ! $user ) {
 			return;
 		}
-		self::send(
-			$user->user_email,
-			__( 'Application submitted — LNKup', 'lnkup-marketplace' ),
-			'<p>' . esc_html__( 'Your application has been submitted. The organizer will review it soon.', 'lnkup-marketplace' ) . '</p>'
-		);
 
-		$organizer_id = (int) get_post_meta( $app_id, '_lnkup_organizer_user_id', true );
-		$organizer    = get_userdata( $organizer_id );
+		$body  = self::email_paragraphs(
+			__( 'Your application has been submitted. The organizer will review it soon.', 'lnkup-marketplace' )
+		);
+		$body .= self::email_event_meta( $ctx );
+		$body .= self::email_cta_block( $ctx['vendor_apps_url'], __( 'View your requests', 'lnkup-marketplace' ) );
+		self::send( $user->user_email, __( 'Application submitted — LNKup', 'lnkup-marketplace' ), $body );
+
+		$organizer = $ctx['organizer'];
 		if ( $organizer && ! empty( $settings['notify_organizer'] ) ) {
-			self::send(
-				$organizer->user_email,
-				__( 'New vendor application — LNKup', 'lnkup-marketplace' ),
-				'<p>' . esc_html__( 'A vendor has applied to one of your opportunities.', 'lnkup-marketplace' ) . '</p>'
+			$org_body  = self::email_paragraphs(
+				sprintf(
+					/* translators: %s: vendor business name */
+					__( '%s applied to one of your opportunities.', 'lnkup-marketplace' ),
+					$ctx['vendor_business']
+				)
+			);
+			$org_body .= self::email_event_meta( $ctx );
+			$org_body .= self::email_cta_block( $ctx['organizer_vendors_url'], __( 'Review applications', 'lnkup-marketplace' ) );
+			self::send( $organizer->user_email, __( 'New vendor application — LNKup', 'lnkup-marketplace' ), $org_body );
+
+			$push_body = sprintf(
+				/* translators: 1: vendor name, 2: event title */
+				__( '%1$s applied to %2$s.', 'lnkup-marketplace' ),
+				$ctx['vendor_business'],
+				$ctx['display_title']
+			);
+			self::push_user(
+				$ctx['organizer_user_id'],
+				__( 'New vendor application', 'lnkup-marketplace' ),
+				$push_body,
+				array(
+					'type'          => 'organizer_new_vendor_request',
+					'applicationId' => (string) $ctx['app_id'],
+					'href'          => '/(organizer)/vendors',
+				)
 			);
 		}
 	}
@@ -76,15 +260,33 @@ class LNKup_Notifications {
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
 		}
-		$vendor_id = (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true );
-		$user      = get_userdata( $vendor_id );
+		$ctx  = self::application_context( $app_id );
+		$user = $ctx['vendor'];
 		if ( ! $user ) {
 			return;
 		}
-		self::send(
-			$user->user_email,
-			__( 'Application approved — payment required', 'lnkup-marketplace' ),
-			'<p>' . esc_html__( 'Congratulations! You have been approved. Please complete payment to secure your spot.', 'lnkup-marketplace' ) . '</p>'
+
+		$body  = self::email_paragraphs(
+			__( 'Congratulations! You have been approved. Complete payment to secure your spot.', 'lnkup-marketplace' )
+		);
+		$body .= self::email_event_meta( $ctx );
+		$body .= self::email_cta_block( $ctx['vendor_payments_url'], __( 'Complete payment', 'lnkup-marketplace' ) );
+		self::send( $user->user_email, __( 'Application approved — payment required', 'lnkup-marketplace' ), $body );
+
+		$push_body = sprintf(
+			/* translators: %s: event title */
+			__( 'Complete payment to secure your spot for %s.', 'lnkup-marketplace' ),
+			$ctx['display_title']
+		);
+		self::push_user(
+			$ctx['vendor_user_id'],
+			__( 'Application approved', 'lnkup-marketplace' ),
+			$push_body,
+			array(
+				'type'          => 'payment_required',
+				'applicationId' => (string) $ctx['app_id'],
+				'href'          => '/(vendor)/wallet',
+			)
 		);
 	}
 
@@ -108,15 +310,33 @@ class LNKup_Notifications {
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
 		}
-		$vendor_id = (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true );
-		$user      = get_userdata( $vendor_id );
+		$ctx  = self::application_context( $app_id );
+		$user = $ctx['vendor'];
 		if ( ! $user ) {
 			return;
 		}
-		self::send(
-			$user->user_email,
-			__( 'Payment confirmed — LNKup', 'lnkup-marketplace' ),
-			'<p>' . esc_html__( 'Your payment has been received. Your vendor packet is now unlocked.', 'lnkup-marketplace' ) . '</p>'
+
+		$body  = self::email_paragraphs(
+			__( 'Your payment has been received. Your vendor packet and event pass are unlocked.', 'lnkup-marketplace' )
+		);
+		$body .= self::email_event_meta( $ctx );
+		$body .= self::email_cta_block( $ctx['vendor_pass_url'], __( 'Open your pass', 'lnkup-marketplace' ) );
+		self::send( $user->user_email, __( 'Payment confirmed — LNKup', 'lnkup-marketplace' ), $body );
+
+		$push_body = sprintf(
+			/* translators: %s: event title */
+			__( 'Your spot for %s is confirmed. Packet unlocked.', 'lnkup-marketplace' ),
+			$ctx['display_title']
+		);
+		self::push_user(
+			$ctx['vendor_user_id'],
+			__( 'Payment confirmed', 'lnkup-marketplace' ),
+			$push_body,
+			array(
+				'type'          => 'payment_paid',
+				'applicationId' => (string) $ctx['app_id'],
+				'href'          => '/pass/' . $ctx['app_id'],
+			)
 		);
 	}
 
@@ -130,15 +350,33 @@ class LNKup_Notifications {
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
 		}
-		$vendor_id = (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true );
-		$user      = get_userdata( $vendor_id );
+		$ctx  = self::application_context( $app_id );
+		$user = $ctx['vendor'];
 		if ( ! $user ) {
 			return;
 		}
-		self::send(
-			$user->user_email,
-			__( 'Vendor packet unlocked — LNKup', 'lnkup-marketplace' ),
-			'<p>' . esc_html__( 'Your load-in details and QR pass are now available in your dashboard.', 'lnkup-marketplace' ) . '</p>'
+
+		$body  = self::email_paragraphs(
+			__( 'Your load-in details and QR pass are now available.', 'lnkup-marketplace' )
+		);
+		$body .= self::email_event_meta( $ctx );
+		$body .= self::email_cta_block( $ctx['vendor_pass_url'], __( 'View your pass', 'lnkup-marketplace' ) );
+		self::send( $user->user_email, __( 'Vendor packet unlocked — LNKup', 'lnkup-marketplace' ), $body );
+
+		$push_body = sprintf(
+			/* translators: %s: event title */
+			__( 'Load-in details and QR pass are ready for %s.', 'lnkup-marketplace' ),
+			$ctx['display_title']
+		);
+		self::push_user(
+			$ctx['vendor_user_id'],
+			__( 'Packet unlocked', 'lnkup-marketplace' ),
+			$push_body,
+			array(
+				'type'          => 'packet_unlocked',
+				'applicationId' => (string) $ctx['app_id'],
+				'href'          => '/pass/' . $ctx['app_id'],
+			)
 		);
 	}
 
@@ -152,25 +390,33 @@ class LNKup_Notifications {
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
 		}
-		$vendor_id = (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true );
-		$user      = get_userdata( $vendor_id );
+		$ctx  = self::application_context( $app_id );
+		$user = $ctx['vendor'];
 		if ( ! $user ) {
 			return;
 		}
-		$dashboard = lnkup_page_url_helper( 'vendor-dashboard' );
-		$pass_url  = add_query_arg(
-			array(
-				'view' => 'operations',
-				'app'  => absint( $app_id ),
-				'tab'  => 'pass',
-			),
-			$dashboard
+
+		$body  = self::email_paragraphs(
+			__( 'Your organizer updated event-day details on your vendor pass.', 'lnkup-marketplace' )
 		);
-		self::send(
-			$user->user_email,
-			__( 'Event pass updated — LNKup', 'lnkup-marketplace' ),
-			'<p>' . esc_html__( 'Your organizer updated event-day details on your vendor pass.', 'lnkup-marketplace' ) . '</p>'
-			. '<p><a href="' . esc_url( $pass_url ) . '">' . esc_html__( 'View your pass', 'lnkup-marketplace' ) . '</a></p>'
+		$body .= self::email_event_meta( $ctx );
+		$body .= self::email_cta_block( $ctx['vendor_pass_url'], __( 'View your pass', 'lnkup-marketplace' ) );
+		self::send( $user->user_email, __( 'Event pass updated — LNKup', 'lnkup-marketplace' ), $body );
+
+		$push_body = sprintf(
+			/* translators: %s: event title */
+			__( 'Pass details updated for %s.', 'lnkup-marketplace' ),
+			$ctx['display_title']
+		);
+		self::push_user(
+			$ctx['vendor_user_id'],
+			__( 'Event pass updated', 'lnkup-marketplace' ),
+			$push_body,
+			array(
+				'type'          => 'system',
+				'applicationId' => (string) $ctx['app_id'],
+				'href'          => '/pass/' . $ctx['app_id'],
+			)
 		);
 	}
 
@@ -184,17 +430,40 @@ class LNKup_Notifications {
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
 		}
-		$vendor_id = (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true );
-		$user      = get_userdata( $vendor_id );
+		$ctx  = self::application_context( $app_id );
+		$user = $ctx['vendor'];
 		if ( ! $user ) {
 			return;
 		}
-		$reason = get_post_meta( $app_id, '_lnkup_rejection_reason', true );
-		$body   = '<p>' . esc_html__( 'Your application was not accepted for this event.', 'lnkup-marketplace' ) . '</p>';
+
+		$reason      = (string) get_post_meta( $app_id, '_lnkup_rejection_reason', true );
+		$reason_html = '';
 		if ( $reason ) {
-			$body .= '<p><strong>' . esc_html__( 'Reason:', 'lnkup-marketplace' ) . '</strong> ' . esc_html( $reason ) . '</p>';
+			$reason_html = '<p style="margin:0 0 16px;"><strong>' . esc_html__( 'Reason:', 'lnkup-marketplace' ) . '</strong> ' . esc_html( $reason ) . '</p>';
 		}
+
+		$body  = self::email_paragraphs(
+			__( 'Your application was not accepted for this event.', 'lnkup-marketplace' )
+		);
+		$body .= self::email_event_meta( $ctx, $reason_html );
+		$body .= self::email_cta_block( $ctx['vendor_apps_url'], __( 'View your requests', 'lnkup-marketplace' ) );
 		self::send( $user->user_email, __( 'Application update — LNKup', 'lnkup-marketplace' ), $body );
+
+		$push_body = sprintf(
+			/* translators: %s: event title */
+			__( 'Your application for %s was not accepted.', 'lnkup-marketplace' ),
+			$ctx['display_title']
+		);
+		self::push_user(
+			$ctx['vendor_user_id'],
+			__( 'Application update', 'lnkup-marketplace' ),
+			$push_body,
+			array(
+				'type'          => 'application_rejected',
+				'applicationId' => (string) $ctx['app_id'],
+				'href'          => '/(vendor)/requests',
+			)
+		);
 	}
 
 	/**
@@ -203,15 +472,37 @@ class LNKup_Notifications {
 	 * @param int $app_id Application ID.
 	 */
 	public static function send_application_waitlisted( $app_id ) {
-		$vendor_id = (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true );
-		$user      = get_userdata( $vendor_id );
+		$settings = lnkup_get_settings();
+		if ( empty( $settings['notify_vendor'] ) ) {
+			return;
+		}
+		$ctx  = self::application_context( $app_id );
+		$user = $ctx['vendor'];
 		if ( ! $user ) {
 			return;
 		}
-		self::send(
-			$user->user_email,
-			__( 'Application waitlisted — LNKup', 'lnkup-marketplace' ),
-			'<p>' . esc_html__( 'You have been waitlisted for this opportunity. The organizer may contact you if a spot opens.', 'lnkup-marketplace' ) . '</p>'
+
+		$body  = self::email_paragraphs(
+			__( 'You have been waitlisted for this opportunity. The organizer may contact you if a spot opens.', 'lnkup-marketplace' )
+		);
+		$body .= self::email_event_meta( $ctx );
+		$body .= self::email_cta_block( $ctx['vendor_apps_url'], __( 'View your requests', 'lnkup-marketplace' ) );
+		self::send( $user->user_email, __( 'Application waitlisted — LNKup', 'lnkup-marketplace' ), $body );
+
+		$push_body = sprintf(
+			/* translators: %s: event title */
+			__( 'You are waitlisted for %s.', 'lnkup-marketplace' ),
+			$ctx['display_title']
+		);
+		self::push_user(
+			$ctx['vendor_user_id'],
+			__( 'Application waitlisted', 'lnkup-marketplace' ),
+			$push_body,
+			array(
+				'type'          => 'application_waitlisted',
+				'applicationId' => (string) $ctx['app_id'],
+				'href'          => '/(vendor)/requests',
+			)
 		);
 	}
 
@@ -225,15 +516,51 @@ class LNKup_Notifications {
 		if ( empty( $settings['notify_organizer'] ) ) {
 			return;
 		}
+		$payment_id   = absint( $payment_id );
 		$organizer_id = (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true );
 		$user         = get_userdata( $organizer_id );
 		if ( ! $user ) {
 			return;
 		}
-		self::send(
-			$user->user_email,
-			__( 'Vendor payment received — LNKup', 'lnkup-marketplace' ),
-			'<p>' . esc_html__( 'A vendor has completed payment for your event.', 'lnkup-marketplace' ) . '</p>'
+
+		$app_id = (int) get_post_meta( $payment_id, '_lnkup_application_id', true );
+		$ctx    = $app_id ? self::application_context( $app_id ) : null;
+
+		$event_title = $ctx ? $ctx['display_title'] : __( 'your event', 'lnkup-marketplace' );
+		$vendor_name = $ctx ? $ctx['vendor_business'] : __( 'A vendor', 'lnkup-marketplace' );
+		$money_url   = $ctx ? $ctx['organizer_money_url'] : ( lnkup_page_url_helper( 'organizer-dashboard' ) . '#financial' );
+
+		$body  = self::email_paragraphs(
+			sprintf(
+				/* translators: %s: vendor business name */
+				__( '%s completed payment for your event.', 'lnkup-marketplace' ),
+				$vendor_name
+			)
+		);
+		if ( $ctx ) {
+			$body .= self::email_event_meta( $ctx );
+		} else {
+			$body .= '<p style="margin:0 0 16px;font-weight:700;">' . esc_html( $event_title ) . '</p>';
+		}
+		$body .= self::email_cta_block( $money_url, __( 'View money', 'lnkup-marketplace' ) );
+		self::send( $user->user_email, __( 'Vendor payment received — LNKup', 'lnkup-marketplace' ), $body );
+
+		$push_body = sprintf(
+			/* translators: 1: vendor name, 2: event title */
+			__( '%1$s paid for %2$s.', 'lnkup-marketplace' ),
+			$vendor_name,
+			$event_title
+		);
+		self::push_user(
+			$organizer_id,
+			__( 'Vendor payment received', 'lnkup-marketplace' ),
+			$push_body,
+			array(
+				'type'          => 'organizer_payment_received',
+				'paymentId'     => (string) $payment_id,
+				'applicationId' => $app_id ? (string) $app_id : '',
+				'href'          => '/(organizer)/money',
+			)
 		);
 	}
 
@@ -358,16 +685,18 @@ class LNKup_Notifications {
 			$subject = __( 'New LNKup opportunities match your search', 'lnkup-marketplace' );
 		}
 
-		$restore = base64_encode( wp_json_encode( $filters ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
+		$restore  = base64_encode( wp_json_encode( $filters ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
 		$view_all = add_query_arg( 'lnkup_restore', rawurlencode( $restore ), lnkup_page_url_helper( 'opportunities' ) );
 		$manage   = lnkup_page_url_helper( 'favorites' ) . '#lnkup-saved-searches-panel';
 
-		$body  = '<p>' . sprintf(
-			/* translators: 1: count, 2: search name */
-			esc_html__( '%1$d new opportunities match your saved search "%2$s".', 'lnkup-marketplace' ),
-			(int) $count,
-			esc_html( $name )
-		) . '</p>';
+		$body  = self::email_paragraphs(
+			sprintf(
+				/* translators: 1: count, 2: search name */
+				__( '%1$d new opportunities match your saved search "%2$s".', 'lnkup-marketplace' ),
+				(int) $count,
+				$name
+			)
+		);
 
 		$body .= '<div style="margin:16px 0;">';
 		foreach ( array_slice( (array) $items, 0, 5 ) as $item ) {
@@ -397,10 +726,27 @@ class LNKup_Notifications {
 		}
 		$body .= '</div>';
 
-		$body .= '<p><a href="' . esc_url( $view_all ) . '" style="display:inline-block;background:#c8ff00;color:#000;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;">' . esc_html__( 'View all matches', 'lnkup-marketplace' ) . '</a></p>';
+		$body .= self::email_cta_block( $view_all, __( 'View all matches', 'lnkup-marketplace' ) );
 		$body .= '<p style="font-size:13px;color:#666;margin-top:20px;"><a href="' . esc_url( $manage ) . '">' . esc_html__( 'Manage saved search alerts', 'lnkup-marketplace' ) . '</a></p>';
 
 		self::send( $user->user_email, $subject, $body );
+
+		$push_body = sprintf(
+			/* translators: 1: count, 2: search name */
+			__( '%1$d new matches for "%2$s".', 'lnkup-marketplace' ),
+			(int) $count,
+			$name
+		);
+		self::push_user(
+			(int) $user_id,
+			__( 'Saved search matches', 'lnkup-marketplace' ),
+			$push_body,
+			array(
+				'type'     => 'discovery_saved_search',
+				'searchId' => (string) $search_id,
+				'href'     => '/(vendor)/saved-searches',
+			)
+		);
 	}
 
 	/**
@@ -423,16 +769,37 @@ class LNKup_Notifications {
 		$label = '24h' === $window
 			? __( '24 hours', 'lnkup-marketplace' )
 			: ( '48h' === $window ? __( '48 hours', 'lnkup-marketplace' ) : __( '3 days', 'lnkup-marketplace' ) );
-		self::send(
-			$user->user_email,
-			__( 'Favorite event deadline approaching — LNKup', 'lnkup-marketplace' ),
-			'<p>' . sprintf(
+		$find_url = lnkup_page_url_helper( 'opportunities' );
+		$fav_url  = lnkup_page_url_helper( 'favorites' );
+
+		$body  = self::email_paragraphs(
+			sprintf(
 				/* translators: 1: event title, 2: window, 3: deadline */
-				esc_html__( '%1$s closes in about %2$s (deadline %3$s). Apply before spots fill up.', 'lnkup-marketplace' ),
-				esc_html( $title ),
-				esc_html( $label ),
-				esc_html( $deadline )
-			) . '</p>'
+				__( '%1$s closes in about %2$s (deadline %3$s). Apply before spots fill up.', 'lnkup-marketplace' ),
+				$title,
+				$label,
+				$deadline
+			)
+		);
+		$body .= self::email_cta_block( $find_url, __( 'Apply now', 'lnkup-marketplace' ) );
+		$body .= '<p style="margin:16px 0 0;font-size:13px;color:#666;"><a href="' . esc_url( $fav_url ) . '">' . esc_html__( 'View favorites', 'lnkup-marketplace' ) . '</a></p>';
+
+		self::send( $user->user_email, __( 'Favorite event deadline approaching — LNKup', 'lnkup-marketplace' ), $body );
+
+		$push_body = sprintf(
+			/* translators: 1: event title, 2: window */
+			__( '%1$s closes in about %2$s.', 'lnkup-marketplace' ),
+			$title,
+			$label
+		);
+		self::push_user(
+			(int) $user_id,
+			__( 'Favorite deadline soon', 'lnkup-marketplace' ),
+			$push_body,
+			array(
+				'type' => 'discovery_favorite_deadline',
+				'href' => '/(vendor)/favorites',
+			)
 		);
 	}
 
@@ -451,25 +818,47 @@ class LNKup_Notifications {
 		if ( ! $row ) {
 			return;
 		}
-		$vendors = get_users( array( 'role' => 'lnkup_vendor' ) );
+		$event_title = (string) ( $row['title'] ?? '' );
+		$view_url    = add_query_arg( 'apply', absint( $opp_id ), lnkup_page_url_helper( 'opportunities' ) );
+		$vendors     = get_users( array( 'role' => 'lnkup_vendor' ) );
 		foreach ( $vendors as $user ) {
 			if ( ! LNKup_Vendor_Personalization::is_favorite( $user->ID, 'organizers', $organizer_id ) ) {
 				continue;
 			}
-			self::send(
-				$user->user_email,
-				__( 'Favorite organizer posted a new event — LNKup', 'lnkup-marketplace' ),
-				'<p>' . sprintf(
+			$body  = self::email_paragraphs(
+				sprintf(
 					/* translators: %s: event title */
-					esc_html__( 'An organizer you follow posted: %s', 'lnkup-marketplace' ),
-					esc_html( $row['title'] )
-				) . '</p>'
+					__( 'An organizer you follow posted: %s', 'lnkup-marketplace' ),
+					$event_title
+				)
+			);
+			$body .= self::email_cta_block( $view_url, __( 'View opportunity', 'lnkup-marketplace' ) );
+			self::send( $user->user_email, __( 'Favorite organizer posted a new event — LNKup', 'lnkup-marketplace' ), $body );
+
+			$push_body = sprintf(
+				/* translators: %s: event title */
+				__( 'New event: %s', 'lnkup-marketplace' ),
+				$event_title
+			);
+			self::push_user(
+				(int) $user->ID,
+				__( 'Favorite organizer posted', 'lnkup-marketplace' ),
+				$push_body,
+				array(
+					'type'          => 'discovery_favorite_organizer',
+					'opportunityId' => (string) absint( $opp_id ),
+					'href'          => '/(vendor)/find',
+				)
 			);
 		}
 	}
 
 	/**
 	 * Application deadline approaching.
+	 *
+	 * @param int    $user_id  User ID.
+	 * @param string $title    Event title.
+	 * @param string $deadline Deadline.
 	 */
 	public static function send_deadline_approaching( $user_id, $title, $deadline ) {
 		$settings = lnkup_get_settings();
@@ -480,20 +869,41 @@ class LNKup_Notifications {
 		if ( ! $user ) {
 			return;
 		}
-		self::send(
-			$user->user_email,
-			__( 'Application deadline approaching — LNKup', 'lnkup-marketplace' ),
-			'<p>' . sprintf(
+		$find_url = lnkup_page_url_helper( 'opportunities' );
+		$body     = self::email_paragraphs(
+			sprintf(
 				/* translators: 1: event title, 2: deadline */
-				esc_html__( 'The deadline for %1$s is %2$s.', 'lnkup-marketplace' ),
-				esc_html( $title ),
-				esc_html( $deadline )
-			) . '</p>'
+				__( 'The deadline for %1$s is %2$s.', 'lnkup-marketplace' ),
+				$title,
+				$deadline
+			)
+		);
+		$body .= self::email_cta_block( $find_url, __( 'View opportunities', 'lnkup-marketplace' ) );
+		self::send( $user->user_email, __( 'Application deadline approaching — LNKup', 'lnkup-marketplace' ), $body );
+
+		$push_body = sprintf(
+			/* translators: 1: event title, 2: deadline */
+			__( '%1$s deadline: %2$s', 'lnkup-marketplace' ),
+			$title,
+			$deadline
+		);
+		self::push_user(
+			(int) $user_id,
+			__( 'Deadline approaching', 'lnkup-marketplace' ),
+			$push_body,
+			array(
+				'type' => 'discovery_deadline',
+				'href' => '/(vendor)/find',
+			)
 		);
 	}
 
 	/**
 	 * Opportunity almost full.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $title   Event title.
+	 * @param int    $spots   Spots remaining.
 	 */
 	public static function send_almost_full( $user_id, $title, $spots ) {
 		$settings = lnkup_get_settings();
@@ -504,20 +914,40 @@ class LNKup_Notifications {
 		if ( ! $user ) {
 			return;
 		}
-		self::send(
-			$user->user_email,
-			__( 'Opportunity almost full — LNKup', 'lnkup-marketplace' ),
-			'<p>' . sprintf(
+		$find_url = lnkup_page_url_helper( 'opportunities' );
+		$body     = self::email_paragraphs(
+			sprintf(
 				/* translators: 1: event title, 2: spots remaining */
-				esc_html__( '%1$s has only %2$d spots remaining.', 'lnkup-marketplace' ),
-				esc_html( $title ),
+				__( '%1$s has only %2$d spots remaining.', 'lnkup-marketplace' ),
+				$title,
 				(int) $spots
-			) . '</p>'
+			)
+		);
+		$body .= self::email_cta_block( $find_url, __( 'Apply before it fills', 'lnkup-marketplace' ) );
+		self::send( $user->user_email, __( 'Opportunity almost full — LNKup', 'lnkup-marketplace' ), $body );
+
+		$push_body = sprintf(
+			/* translators: 1: event title, 2: spots */
+			__( '%1$s — %2$d spots left', 'lnkup-marketplace' ),
+			$title,
+			(int) $spots
+		);
+		self::push_user(
+			(int) $user_id,
+			__( 'Almost full', 'lnkup-marketplace' ),
+			$push_body,
+			array(
+				'type' => 'discovery_almost_full',
+				'href' => '/(vendor)/find',
+			)
 		);
 	}
 
 	/**
 	 * New event matches vendor profile.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $title   Event title.
 	 */
 	public static function send_profile_match( $user_id, $title ) {
 		$settings = lnkup_get_settings();
@@ -528,14 +958,30 @@ class LNKup_Notifications {
 		if ( ! $user ) {
 			return;
 		}
-		self::send(
-			$user->user_email,
-			__( 'New opportunity matches your profile — LNKup', 'lnkup-marketplace' ),
-			'<p>' . sprintf(
+		$find_url = lnkup_page_url_helper( 'opportunities' );
+		$body     = self::email_paragraphs(
+			sprintf(
 				/* translators: %s: event title */
-				esc_html__( 'A new opportunity matches your vendor profile: %s', 'lnkup-marketplace' ),
-				esc_html( $title )
-			) . '</p>'
+				__( 'A new opportunity matches your vendor profile: %s', 'lnkup-marketplace' ),
+				$title
+			)
+		);
+		$body .= self::email_cta_block( $find_url, __( 'View match', 'lnkup-marketplace' ) );
+		self::send( $user->user_email, __( 'New opportunity matches your profile — LNKup', 'lnkup-marketplace' ), $body );
+
+		$push_body = sprintf(
+			/* translators: %s: event title */
+			__( 'Profile match: %s', 'lnkup-marketplace' ),
+			$title
+		);
+		self::push_user(
+			(int) $user_id,
+			__( 'New profile match', 'lnkup-marketplace' ),
+			$push_body,
+			array(
+				'type' => 'discovery_profile_match',
+				'href' => '/(vendor)/find',
+			)
 		);
 	}
 
@@ -551,17 +997,30 @@ class LNKup_Notifications {
 			return;
 		}
 		$vendor_id = (int) get_post_meta( $invite_id, '_lnkup_vendor_user_id', true );
-		$user = get_userdata( $vendor_id );
+		$user      = get_userdata( $vendor_id );
 		if ( ! $user ) {
 			return;
 		}
 		$message = get_post_meta( $invite_id, '_lnkup_invite_message', true );
-		$body = '<p>' . esc_html__( 'An organizer invited you to apply for an event on LNKup.', 'lnkup-marketplace' ) . '</p>';
+		$body    = self::email_paragraphs(
+			__( 'An organizer invited you to apply for an event on LNKup.', 'lnkup-marketplace' )
+		);
 		if ( $message ) {
-			$body .= '<p>' . esc_html( $message ) . '</p>';
+			$body .= self::email_paragraphs( (string) $message );
 		}
-		$body .= '<p><a href="' . esc_url( $link ) . '">' . esc_html__( 'View invitation', 'lnkup-marketplace' ) . '</a></p>';
+		$body .= self::email_cta_block( $link, __( 'View invitation', 'lnkup-marketplace' ) );
 		self::send( $user->user_email, __( 'You are invited to apply — LNKup', 'lnkup-marketplace' ), $body );
+
+		self::push_user(
+			$vendor_id,
+			__( 'You are invited', 'lnkup-marketplace' ),
+			__( 'An organizer invited you to apply on LNKup.', 'lnkup-marketplace' ),
+			array(
+				'type'     => 'discovery_invite',
+				'inviteId' => (string) absint( $invite_id ),
+				'href'     => '/(vendor)/find',
+			)
+		);
 	}
 
 	/**
@@ -579,23 +1038,39 @@ class LNKup_Notifications {
 		if ( ! $user ) {
 			return;
 		}
-		$event_id = (int) get_post_meta( $application_id, '_lnkup_event_id', true );
-		$roster_url = add_query_arg(
-			array( 'event' => $event_id, 'roster' => 1 ),
-			lnkup_page_url_helper( 'organizer-dashboard' )
+		$ctx = self::application_context( $application_id );
+
+		$body  = self::email_paragraphs(
+			__( 'Your event has ended. Please leave a quick review for your vendors on LNKup.', 'lnkup-marketplace' )
 		);
-		$body = '<p>' . esc_html__( 'Your event has ended. Please review your vendors on LNKup.', 'lnkup-marketplace' ) . '</p>';
-		$body .= '<p><a href="' . esc_url( $roster_url ) . '">' . esc_html__( 'Review vendors', 'lnkup-marketplace' ) . '</a></p>';
+		$body .= self::email_event_meta( $ctx );
+		if ( ! empty( $ctx['vendor_business'] ) ) {
+			$body .= '<p style="margin:0 0 16px;font-size:14px;color:#555;">' . sprintf(
+				/* translators: %s: vendor business name */
+				esc_html__( 'Vendor: %s', 'lnkup-marketplace' ),
+				esc_html( $ctx['vendor_business'] )
+			) . '</p>';
+		}
+		$body .= self::email_cta_block( $ctx['organizer_roster_url'], __( 'Review vendors', 'lnkup-marketplace' ) );
 		self::send( $user->user_email, __( 'Review your vendors — LNKup', 'lnkup-marketplace' ), $body );
+
+		$push_body = sprintf(
+			/* translators: %s: event title */
+			__( 'Leave a review for vendors from %s.', 'lnkup-marketplace' ),
+			$ctx['display_title']
+		);
+		self::push_user(
+			(int) $organizer_id,
+			__( 'Review your vendors', 'lnkup-marketplace' ),
+			$push_body,
+			array(
+				'type'          => 'review_requested',
+				'applicationId' => (string) absint( $application_id ),
+				'href'          => '/(organizer)/vendors',
+			)
+		);
 	}
 
-	/**
-	 * Notify vendors of operations broadcast.
-	 *
-	 * @param int   $event_id   Event ID.
-	 * @param array $vendor_ids Vendor user IDs.
-	 * @param string $message   Message body.
-	 */
 	/**
 	 * Platform outreach invite (mass campaign sign-up link).
 	 *
@@ -783,19 +1258,319 @@ class LNKup_Notifications {
 		return (bool) self::send( $email, $subject, $body );
 	}
 
+	/**
+	 * Vendor welcome (activation drip).
+	 *
+	 * @param int $user_id Vendor user ID.
+	 * @return bool
+	 */
+	public static function send_vendor_welcome( $user_id ) {
+		$settings = lnkup_get_settings();
+		if ( empty( $settings['notify_vendor'] ) || empty( $settings['activation_emails_enabled'] ) ) {
+			return false;
+		}
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user ) {
+			return false;
+		}
+		$profile_url = lnkup_page_url_helper( 'vendor-profile' );
+		$dash_url    = lnkup_page_url_helper( 'vendor-dashboard' );
+
+		$body  = self::email_paragraphs(
+			__( 'Welcome to LNKup — the opportunity network for live-event vendors.', 'lnkup-marketplace' ),
+			__( 'Finish your profile so organizers can approve you faster, then browse booth opportunities near you.', 'lnkup-marketplace' )
+		);
+		$body .= self::email_cta_block( $profile_url, __( 'Complete your profile', 'lnkup-marketplace' ) );
+		$body .= '<p style="margin:16px 0 0;font-size:13px;color:#666;"><a href="' . esc_url( $dash_url ) . '">' . esc_html__( 'Open vendor dashboard', 'lnkup-marketplace' ) . '</a></p>';
+
+		$sent = (bool) self::send( $user->user_email, __( 'Welcome to LNKup', 'lnkup-marketplace' ), $body );
+		if ( $sent ) {
+			self::push_user(
+				(int) $user_id,
+				__( 'Welcome to LNKup', 'lnkup-marketplace' ),
+				__( 'Complete your profile to get ready for events.', 'lnkup-marketplace' ),
+				array(
+					'type' => 'activation_profile',
+					'href' => '/(vendor)/profile',
+				)
+			);
+		}
+		return $sent;
+	}
+
+	/**
+	 * Vendor: finish profile nudge.
+	 *
+	 * @param int $user_id Vendor user ID.
+	 * @return bool
+	 */
+	public static function send_vendor_complete_profile( $user_id ) {
+		$settings = lnkup_get_settings();
+		if ( empty( $settings['notify_vendor'] ) || empty( $settings['activation_emails_enabled'] ) ) {
+			return false;
+		}
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user ) {
+			return false;
+		}
+		$profile_url = lnkup_page_url_helper( 'vendor-profile' );
+
+		$body  = self::email_paragraphs(
+			__( 'Your LNKup profile still needs a few details.', 'lnkup-marketplace' ),
+			__( 'Add business info, photos, and documents so organizers can review and approve you with confidence.', 'lnkup-marketplace' )
+		);
+		$body .= self::email_cta_block( $profile_url, __( 'Finish your profile', 'lnkup-marketplace' ) );
+
+		$sent = (bool) self::send( $user->user_email, __( 'Finish your LNKup profile', 'lnkup-marketplace' ), $body );
+		if ( $sent ) {
+			self::push_user(
+				(int) $user_id,
+				__( 'Finish your profile', 'lnkup-marketplace' ),
+				__( 'Complete your vendor profile to get booking-ready.', 'lnkup-marketplace' ),
+				array(
+					'type' => 'activation_profile',
+					'href' => '/(vendor)/profile',
+				)
+			);
+		}
+		return $sent;
+	}
+
+	/**
+	 * Vendor: find events nudge.
+	 *
+	 * @param int $user_id Vendor user ID.
+	 * @return bool
+	 */
+	public static function send_vendor_find_events( $user_id ) {
+		$settings = lnkup_get_settings();
+		if ( empty( $settings['notify_vendor'] ) || empty( $settings['activation_emails_enabled'] ) ) {
+			return false;
+		}
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user ) {
+			return false;
+		}
+		$find_url = lnkup_page_url_helper( 'opportunities' );
+
+		$body  = self::email_paragraphs(
+			__( 'Ready to book your next booth?', 'lnkup-marketplace' ),
+			__( 'Browse vendor opportunities on LNKup, save events you like, and apply when you find a fit.', 'lnkup-marketplace' )
+		);
+		$body .= self::email_cta_block( $find_url, __( 'Find events', 'lnkup-marketplace' ) );
+
+		$sent = (bool) self::send( $user->user_email, __( 'Find vendor opportunities on LNKup', 'lnkup-marketplace' ), $body );
+		if ( $sent ) {
+			self::push_user(
+				(int) $user_id,
+				__( 'Find events', 'lnkup-marketplace' ),
+				__( 'Browse booth opportunities near you.', 'lnkup-marketplace' ),
+				array(
+					'type' => 'activation_find',
+					'href' => '/(vendor)/find',
+				)
+			);
+		}
+		return $sent;
+	}
+
+	/**
+	 * Vendor: apply nudge.
+	 *
+	 * @param int $user_id Vendor user ID.
+	 * @return bool
+	 */
+	public static function send_vendor_apply_nudge( $user_id ) {
+		$settings = lnkup_get_settings();
+		if ( empty( $settings['notify_vendor'] ) || empty( $settings['activation_emails_enabled'] ) ) {
+			return false;
+		}
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user ) {
+			return false;
+		}
+		$find_url = lnkup_page_url_helper( 'opportunities' );
+
+		$body  = self::email_paragraphs(
+			__( 'You have not applied to an event yet.', 'lnkup-marketplace' ),
+			__( 'Submit your first application so organizers can review your fit and get you booked.', 'lnkup-marketplace' )
+		);
+		$body .= self::email_cta_block( $find_url, __( 'Apply to an event', 'lnkup-marketplace' ) );
+
+		$sent = (bool) self::send( $user->user_email, __( 'Apply to your first LNKup event', 'lnkup-marketplace' ), $body );
+		if ( $sent ) {
+			self::push_user(
+				(int) $user_id,
+				__( 'Apply to an event', 'lnkup-marketplace' ),
+				__( 'Submit your first vendor application on LNKup.', 'lnkup-marketplace' ),
+				array(
+					'type' => 'activation_apply',
+					'href' => '/(vendor)/find',
+				)
+			);
+		}
+		return $sent;
+	}
+
+	/**
+	 * Organizer welcome (activation drip).
+	 *
+	 * @param int $user_id Organizer user ID.
+	 * @return bool
+	 */
+	public static function send_organizer_welcome( $user_id ) {
+		$settings = lnkup_get_settings();
+		if ( empty( $settings['notify_organizer'] ) || empty( $settings['activation_emails_enabled'] ) ) {
+			return false;
+		}
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user ) {
+			return false;
+		}
+		$dash_url   = lnkup_page_url_helper( 'organizer-dashboard' );
+		$create_url = $dash_url . '#create';
+
+		$body  = self::email_paragraphs(
+			__( 'Welcome to LNKup — list vendor opportunities for your events.', 'lnkup-marketplace' ),
+			__( 'Create your first event, set booth details, and start collecting vendor applications.', 'lnkup-marketplace' )
+		);
+		$body .= self::email_cta_block( $create_url, __( 'Create your first event', 'lnkup-marketplace' ) );
+
+		$sent = (bool) self::send( $user->user_email, __( 'Welcome to LNKup for organizers', 'lnkup-marketplace' ), $body );
+		if ( $sent ) {
+			self::push_user(
+				(int) $user_id,
+				__( 'Welcome to LNKup', 'lnkup-marketplace' ),
+				__( 'Create your first event to start booking vendors.', 'lnkup-marketplace' ),
+				array(
+					'type' => 'activation_create_event',
+					'href' => '/(organizer)/launch',
+				)
+			);
+		}
+		return $sent;
+	}
+
+	/**
+	 * Organizer: create first event nudge.
+	 *
+	 * @param int $user_id Organizer user ID.
+	 * @return bool
+	 */
+	public static function send_organizer_create_event( $user_id ) {
+		$settings = lnkup_get_settings();
+		if ( empty( $settings['notify_organizer'] ) || empty( $settings['activation_emails_enabled'] ) ) {
+			return false;
+		}
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user ) {
+			return false;
+		}
+		$create_url = lnkup_page_url_helper( 'organizer-dashboard' ) . '#create';
+
+		$body  = self::email_paragraphs(
+			__( 'You have not published an event on LNKup yet.', 'lnkup-marketplace' ),
+			__( 'Create an event and opportunity so vendors can discover and apply to your booths.', 'lnkup-marketplace' )
+		);
+		$body .= self::email_cta_block( $create_url, __( 'Create event', 'lnkup-marketplace' ) );
+
+		$sent = (bool) self::send( $user->user_email, __( 'Create your first LNKup event', 'lnkup-marketplace' ), $body );
+		if ( $sent ) {
+			self::push_user(
+				(int) $user_id,
+				__( 'Create your first event', 'lnkup-marketplace' ),
+				__( 'Publish an event so vendors can apply.', 'lnkup-marketplace' ),
+				array(
+					'type' => 'activation_create_event',
+					'href' => '/(organizer)/launch',
+				)
+			);
+		}
+		return $sent;
+	}
+
+	/**
+	 * Organizer: review / manage vendors nudge.
+	 *
+	 * @param int $user_id Organizer user ID.
+	 * @return bool
+	 */
+	public static function send_organizer_review_vendors( $user_id ) {
+		$settings = lnkup_get_settings();
+		if ( empty( $settings['notify_organizer'] ) || empty( $settings['activation_emails_enabled'] ) ) {
+			return false;
+		}
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user ) {
+			return false;
+		}
+		$apps_url = add_query_arg( 'view', 'applications', lnkup_page_url_helper( 'organizer-dashboard' ) );
+
+		$body  = self::email_paragraphs(
+			__( 'Keep your vendor pipeline moving.', 'lnkup-marketplace' ),
+			__( 'Review pending applications, invite vendors you want at your event, and approve ready applicants.', 'lnkup-marketplace' )
+		);
+		$body .= self::email_cta_block( $apps_url, __( 'Review vendors', 'lnkup-marketplace' ) );
+
+		$sent = (bool) self::send( $user->user_email, __( 'Review vendors on LNKup', 'lnkup-marketplace' ), $body );
+		if ( $sent ) {
+			self::push_user(
+				(int) $user_id,
+				__( 'Review vendors', 'lnkup-marketplace' ),
+				__( 'Check applications and grow your vendor roster.', 'lnkup-marketplace' ),
+				array(
+					'type' => 'activation_org_review',
+					'href' => '/(organizer)/vendors',
+				)
+			);
+		}
+		return $sent;
+	}
+
+	/**
+	 * Notify vendors of operations broadcast.
+	 *
+	 * @param int    $event_id   Event ID.
+	 * @param array  $vendor_ids Vendor user IDs.
+	 * @param string $message    Message body.
+	 */
 	public static function send_ops_broadcast( $event_id, $vendor_ids, $message ) {
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
 		}
-		$title = get_the_title( $event_id );
-		$body  = '<p>' . esc_html( $message ) . '</p>';
-		$body .= '<p><a href="' . esc_url( add_query_arg( 'view', 'operations', lnkup_page_url_helper( 'vendor-dashboard' ) ) ) . '">' . esc_html__( 'View in dashboard', 'lnkup-marketplace' ) . '</a></p>';
+		$event_id   = absint( $event_id );
+		$title      = get_the_title( $event_id );
+		$ops_url    = add_query_arg( 'view', 'operations', lnkup_page_url_helper( 'vendor-dashboard' ) );
+		$body       = self::email_paragraphs( (string) $message );
+		$body      .= '<p style="margin:0 0 16px;font-weight:700;font-size:16px;">' . esc_html( $title ) . '</p>';
+		$body      .= self::email_cta_block( $ops_url, __( 'View in dashboard', 'lnkup-marketplace' ) );
+		$push_title = sprintf(
+			/* translators: %s: event title */
+			__( 'Event update: %s', 'lnkup-marketplace' ),
+			$title
+		);
+		$push_body = wp_strip_all_tags( (string) $message );
+		if ( strlen( $push_body ) > 140 ) {
+			$push_body = substr( $push_body, 0, 137 ) . '...';
+		}
+
 		foreach ( $vendor_ids as $vendor_id ) {
 			$user = get_userdata( $vendor_id );
-			if ( $user ) {
-				self::send( $user->user_email, sprintf( __( 'Event update: %s', 'lnkup-marketplace' ), $title ), $body );
+			if ( ! $user ) {
+				continue;
 			}
+			self::send( $user->user_email, $push_title, $body );
+			self::push_user(
+				(int) $vendor_id,
+				$push_title,
+				$push_body,
+				array(
+					'type'    => 'system',
+					'eventId' => (string) $event_id,
+					'href'    => '/(vendor)/operations',
+				)
+			);
 		}
 	}
 }

@@ -1,0 +1,113 @@
+/* LNKup branding for wp-login.php (login, lost-password, reset). */
+body.login {
+  background: #0a0a0b;
+  color: #f4f4f5;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+body.login #login {
+  width: 360px;
+  padding: 6% 0 0;
+}
+
+body.login #login h1 a {
+  width: 100%;
+  height: 72px;
+  margin: 0 auto 1.5rem;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 40'%3E%3Crect x='0' y='4' width='32' height='32' rx='12' fill='%23c8f04d'/%3E%3Cpath d='M9.3 20.7 16 13.3l6.7 7.4M6.7 25.3l4.7-5.3M25.3 25.3l-4.7-5.3' fill='none' stroke='%231a2a12' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ctext x='42' y='28' fill='%23f4f4f5' font-family='Sora, Inter, system-ui, sans-serif' font-size='22' font-weight='800'%3ELNKup%3C/text%3E%3C/svg%3E");
+  background-size: 160px 40px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+body.login form {
+  background: #141416;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1.125rem;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  padding: 1.5rem 1.5rem 1.25rem;
+}
+
+body.login form label,
+body.login #nav a,
+body.login #backtoblog a,
+body.login .privacy-policy-page-link a {
+  color: #d4d4d8;
+}
+
+body.login form .input,
+body.login input[type="text"],
+body.login input[type="password"],
+body.login input[type="email"] {
+  background: #0a0a0b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.65rem;
+  color: #f4f4f5;
+  font-size: 1rem;
+  padding: 0.55rem 0.75rem;
+}
+
+body.login form .input:focus,
+body.login input[type="text"]:focus,
+body.login input[type="password"]:focus,
+body.login input[type="email"]:focus {
+  border-color: #c8f04d;
+  box-shadow: 0 0 0 2px rgba(200, 240, 77, 0.25);
+}
+
+body.login .button-primary,
+body.login .wp-core-ui .button-primary {
+  background: #c8f04d;
+  border-color: #c8f04d;
+  border-radius: 0.65rem;
+  color: #1a2a12;
+  font-weight: 700;
+  text-shadow: none;
+  box-shadow: none;
+}
+
+body.login .button-primary:hover,
+body.login .wp-core-ui .button-primary:hover,
+body.login .button-primary:focus,
+body.login .wp-core-ui .button-primary:focus {
+  background: #d6f56a;
+  border-color: #d6f56a;
+  color: #1a2a12;
+  box-shadow: none;
+}
+
+body.login .forgetmenot label {
+  color: #a1a1aa;
+}
+
+body.login #nav,
+body.login #backtoblog {
+  padding: 0 0.25rem;
+}
+
+body.login #nav a:hover,
+body.login #backtoblog a:hover,
+body.login .privacy-policy-page-link a:hover {
+  color: #c8f04d;
+}
+
+body.login #login_error,
+body.login .message,
+body.login .success {
+  background: #141416;
+  border-left-color: #c8f04d;
+  color: #f4f4f5;
+  border-radius: 0.75rem;
+  box-shadow: none;
+}
+
+body.login .lnkup-login-message {
+  margin: 0 0 1rem;
+  color: #a1a1aa;
+  font-size: 0.9375rem;
+}
+
+body.login #language-switcher {
+  color: #a1a1aa;
+}

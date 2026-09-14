@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Wellness vendor tent at an event">
+  <defs>
+    <linearGradient id="cw-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a2e1a"/>
+      <stop offset="100%" stop-color="#0e180e"/>
+    </linearGradient>
+    <radialGradient id="cw-glow" cx="50%" cy="36%" r="50%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#cw-sky)"/>
+  <rect width="720" height="560" fill="url(#cw-glow)"/>
+  <rect x="0" y="430" width="720" height="130" fill="#0c140c"/>
+  <path d="M140 430 L360 160 L580 430 Z" fill="#142014" stroke="#c8f542" stroke-width="2"/>
+  <path d="M200 430 L360 200 L520 430 Z" fill="#0e180e" opacity="0.7"/>
+  <path d="M360 230c28 22 46 40 46 62 0 26-20 42-46 42s-46-16-46-42c0-22 18-40 46-62z" fill="#c8f542" opacity="0.28" stroke="#c8f542"/>
+  <ellipse cx="280" cy="400" rx="34" ry="14" fill="#1a2818"/>
+  <ellipse cx="440" cy="400" rx="34" ry="14" fill="#1a2818"/>
+  <rect x="246" y="360" width="68" height="40" rx="8" fill="#c8f542" opacity="0.15"/>
+  <rect x="406" y="360" width="68" height="40" rx="8" fill="#c8f542" opacity="0.15"/>
+</svg>

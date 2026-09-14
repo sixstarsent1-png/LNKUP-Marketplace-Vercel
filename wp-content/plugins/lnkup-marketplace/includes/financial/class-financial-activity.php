@@ -68,14 +68,51 @@ class LNKup_Financial_Activity {
 	 */
 	public static function format( $row ) {
 		$meta = ! empty( $row['metadata'] ) ? json_decode( $row['metadata'], true ) : array();
+		if ( ! is_array( $meta ) ) {
+			$meta = array();
+		}
+
+		$type   = (string) ( $row['activity_type'] ?? '' );
+		$status = sanitize_key( (string) ( $meta['status'] ?? '' ) );
+		if ( ! $status ) {
+			if ( in_array( $type, array( 'payment_settled', 'payment_received', 'refund_completed', 'organizer_paid', 'packet_unlocked', 'receipt_generated' ), true ) ) {
+				$status = 'completed';
+			} elseif ( in_array( $type, array( 'invoice_created', 'refund_requested', 'reminder_sent' ), true ) ) {
+				$status = 'pending';
+			}
+		}
+
+		$event_id   = absint( $meta['event_id'] ?? 0 );
+		$event_name = '';
+		if ( ! $event_id && 'payment' === ( $row['entity_type'] ?? '' ) && ! empty( $row['entity_id'] ) ) {
+			$event_id = absint( get_post_meta( (int) $row['entity_id'], '_lnkup_event_id', true ) );
+		}
+		if ( $event_id ) {
+			$event_name = get_the_title( $event_id );
+		}
+
+		$label = ! empty( $meta['label'] ) ? (string) $meta['label'] : (string) ( $row['message'] ?? '' );
+		if ( 'payment_settled' === $type && ( ! $label || false !== stripos( $label, 'destination' ) || false !== stripos( $label, 'organizer net' ) ) ) {
+			$label = __( 'Booth payment settled', 'lnkup-marketplace' );
+		}
+
+		$amount = ( null !== $row['amount'] && '' !== $row['amount'] ) ? (float) $row['amount'] : null;
+		if ( ( null === $amount || $amount <= 0 ) && ! empty( $row['message'] ) && preg_match( '/\$\s*([0-9]+(?:\.[0-9]{1,2})?)/', (string) $row['message'], $m ) ) {
+			$amount = (float) $m[1];
+		}
+
 		return array(
 			'id'          => (int) $row['id'],
-			'type'        => $row['activity_type'],
+			'type'        => $type,
+			'label'       => $label,
 			'message'     => $row['message'],
-			'amount'      => null !== $row['amount'] ? (float) $row['amount'] : null,
+			'amount'      => $amount,
+			'status'      => $status ?: null,
+			'event_id'    => $event_id ?: null,
+			'event_name'  => $event_name ?: null,
 			'entity_type' => $row['entity_type'],
 			'entity_id'   => (int) $row['entity_id'],
-			'metadata'    => is_array( $meta ) ? $meta : array(),
+			'metadata'    => $meta,
 			'created_at'  => $row['created_at'],
 		);
 	}

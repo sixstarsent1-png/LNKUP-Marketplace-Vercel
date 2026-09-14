@@ -185,13 +185,19 @@ class LNKup_Vendor_Event_Pass_View {
 						<?php if ( ! empty( $contacts['organizer']['name'] ) ) : ?>
 							<p><?php echo esc_html( sprintf( __( 'Organizer: %1$s%2$s', 'lnkup-marketplace' ), (string) $contacts['organizer']['name'], ! empty( $contacts['organizer']['email'] ) ? ' · ' . (string) $contacts['organizer']['email'] : '' ) ); ?></p>
 						<?php endif; ?>
-						<?php if ( $app_id ) : ?>
-							<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm lnkup-ops-support-open" data-app-id="<?php echo esc_attr( (string) $app_id ); ?>"><?php echo esc_html( lnkup_copy( 'pass_support_cta' ) ); ?></button>
-						<?php endif; ?>
+						<div class="lnkup-vendor-pass__booth-actions">
+							<?php if ( $app_id ) : ?>
+								<button type="button" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm lnkup-ops-support-open" data-app-id="<?php echo esc_attr( (string) $app_id ); ?>"><?php echo esc_html( lnkup_copy( 'pass_message_booth_cta' ) ); ?></button>
+							<?php endif; ?>
+							<?php if ( ! empty( $map['map_url'] ) || ! empty( $map['attachment_url'] ) ) : ?>
+								<?php $map_href = ! empty( $map['map_url'] ) ? (string) $map['map_url'] : '#lnkup-pass-map'; ?>
+								<a href="<?php echo esc_url( $map_href ); ?>" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm"><?php echo esc_html( lnkup_copy( 'pass_view_map_cta' ) ); ?></a>
+							<?php endif; ?>
+						</div>
 					<?php endif; ?>
 				</section>
 
-				<section class="lnkup-vendor-pass__section">
+				<section class="lnkup-vendor-pass__section" id="lnkup-pass-map">
 					<h3><?php echo esc_html( lnkup_copy( 'pass_section_map' ) ); ?></h3>
 					<?php if ( ! empty( $map['attachment_url'] ) ) : ?>
 						<img src="<?php echo esc_url( (string) $map['attachment_url'] ); ?>" alt="" class="lnkup-vendor-pass__map-img" loading="lazy" />

@@ -113,7 +113,7 @@ class LNKup_Vendor_Profile_Form {
 							<label for="products_services"><?php esc_html_e( 'Products / Services Sold', 'lnkup-marketplace' ); ?></label>
 							<textarea id="products_services" name="products_services" rows="3"><?php echo esc_textarea( $meta['products_services'] ); ?></textarea>
 						</div>
-						<div class="lnkup-form-row">
+						<div class="lnkup-form-row" id="categories">
 							<label><?php esc_html_e( 'Vendor Categories', 'lnkup-marketplace' ); ?></label>
 							<div class="lnkup-chip-select">
 								<?php foreach ( $terms as $term ) : ?>

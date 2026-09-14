@@ -642,7 +642,7 @@
 
 .lnkup-dashboard:has(.lnkup-vendor-dash) .lnkup-dashboard__content-inner,
 .lnkup-vendor-dash {
-  overflow-x: hidden;
+  overflow-x: clip;
   min-width: 0;
   max-width: 100%;
 }
@@ -655,5 +655,9 @@
     min-width: 0;
     flex: 1 1 10rem;
   }
+}
+
+#categories {
+  scroll-margin-top: 5.5rem;
 }
 

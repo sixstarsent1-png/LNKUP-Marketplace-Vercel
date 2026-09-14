@@ -18,6 +18,9 @@ class LNKup_Organizer_Launch_Checklist {
 	const STATUS_IN_PROGRESS = 'in_progress';
 	const STATUS_COMPLETE    = 'complete';
 
+	const META_DISMISSED = 'lnkup_organizer_tutorial_dismissed';
+	const META_WELCOME   = 'lnkup_organizer_welcome_seen';
+
 	/**
 	 * Build full checklist payload.
 	 *
@@ -58,17 +61,61 @@ class LNKup_Organizer_Launch_Checklist {
 				++$completed;
 			}
 		}
-		$total = count( $items );
+		$total        = count( $items );
+		$all_complete = $completed >= $total && $total > 0;
+		$dismissed    = $organizer_id > 0 && (bool) get_user_meta( $organizer_id, self::META_DISMISSED, true );
+		$welcome_seen = $organizer_id > 0 && (bool) get_user_meta( $organizer_id, self::META_WELCOME, true );
 
 		return array(
-			'completed'    => $completed,
-			'total'        => $total,
-			'percent'      => $total > 0 ? (int) round( ( $completed / $total ) * 100 ) : 0,
-			'all_complete' => $completed >= $total,
-			'items'        => $items,
-			'primary_event_id' => $event_id,
+			'completed'            => $completed,
+			'total'                => $total,
+			'percent'              => $total > 0 ? (int) round( ( $completed / $total ) * 100 ) : 0,
+			'all_complete'         => $all_complete,
+			'dismissed'            => $dismissed,
+			'show'                 => $all_complete || ! $dismissed,
+			'show_welcome'         => ! $welcome_seen && ! $dismissed && ! $all_complete,
+			'items'                => $items,
+			'primary_event_id'     => $event_id,
 			'primary_opportunity_id' => $opp_id,
 		);
+	}
+
+	/**
+	 * Dismiss incomplete launch checklist (keeps welcome marked seen).
+	 *
+	 * @param int $user_id Organizer user ID.
+	 */
+	public static function dismiss( int $user_id ): void {
+		$user_id = absint( $user_id );
+		if ( $user_id > 0 ) {
+			update_user_meta( $user_id, self::META_DISMISSED, 1 );
+			update_user_meta( $user_id, self::META_WELCOME, 1 );
+		}
+	}
+
+	/**
+	 * Mark organizer welcome modal as seen.
+	 *
+	 * @param int $user_id Organizer user ID.
+	 */
+	public static function mark_welcome_seen( int $user_id ): void {
+		$user_id = absint( $user_id );
+		if ( $user_id > 0 ) {
+			update_user_meta( $user_id, self::META_WELCOME, 1 );
+		}
+	}
+
+	/**
+	 * Re-show checklist without reopening the welcome modal.
+	 *
+	 * @param int $user_id Organizer user ID.
+	 */
+	public static function reset( int $user_id ): void {
+		$user_id = absint( $user_id );
+		if ( $user_id > 0 ) {
+			delete_user_meta( $user_id, self::META_DISMISSED );
+			update_user_meta( $user_id, self::META_WELCOME, 1 );
+		}
 	}
 
 	/**

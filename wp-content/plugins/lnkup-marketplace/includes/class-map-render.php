@@ -26,15 +26,16 @@ class LNKup_Map_Render {
 			$html .= '<img src="' . esc_url( $map['image_url'] ) . '" alt="" class="lnkup-map-canvas__img" id="lnkup-map-canvas-img" />';
 		} else {
 			$html .= '<div class="lnkup-map-canvas__grid" id="lnkup-map-canvas-grid"></div>';
-			if ( in_array( $mode, array( 'builder', 'live' ), true ) ) {
-				$html .= self::empty_state(
-					__( 'No map data yet. Build your venue layout to get started.', 'lnkup-marketplace' ),
-					array(
-						'role'     => 'organizer',
-						'event_id' => $event_id,
-					)
-				);
-			}
+			$empty_role = in_array( $mode, array( 'view', 'packet' ), true ) ? 'vendor' : 'organizer';
+			$html      .= self::empty_state(
+				'vendor' === $empty_role
+					? __( 'No venue map yet.', 'lnkup-marketplace' )
+					: __( 'No map data yet. Build your venue layout to get started.', 'lnkup-marketplace' ),
+				array(
+					'role'     => $empty_role,
+					'event_id' => $event_id,
+				)
+			);
 		}
 		$html .= '<div class="lnkup-map-elements" id="lnkup-map-elements"></div>';
 		$html .= '<svg class="lnkup-map-routes" id="lnkup-map-routes" aria-hidden="true"></svg>';
@@ -77,7 +78,7 @@ class LNKup_Map_Render {
 		$html    .= '<div class="lnkup-map-empty__actions">';
 		if ( 'vendor' === $role ) {
 			$html .= '<p>' . esc_html__( 'Map coming soon. The organizer will add a venue layout before load-in.', 'lnkup-marketplace' ) . '</p>';
-			$html .= '<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm lnkup-ops-goto-tab" data-ops-tab="support">' . esc_html__( 'Contact organizer', 'lnkup-marketplace' ) . '</button>';
+			$html .= '<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm lnkup-ops-goto-tab" data-ops-tab="support">' . esc_html__( 'Message organizer', 'lnkup-marketplace' ) . '</button>';
 		} else {
 			$html .= '<button type="button" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm lnkup-ops-goto-tab" data-ops-tab="map-builder">' . esc_html__( 'Open Map Builder', 'lnkup-marketplace' ) . '</button>';
 			if ( $event_id ) {

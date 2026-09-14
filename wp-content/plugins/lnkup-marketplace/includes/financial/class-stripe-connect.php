@@ -117,8 +117,11 @@ class LNKup_Stripe_Connect {
 	public static function onboarding_status( $user_id ) {
 		$status    = self::get_status( $user_id );
 		$available = self::is_enabled() && ( new LNKup_Stripe_Client() )->is_available();
-		$status['available']       = $available;
-		$status['settlement_mode'] = self::settlement_mode_for_organizer( $user_id );
+		$settings  = lnkup_get_settings();
+		$status['available']                  = $available;
+		$status['settlement_mode']            = self::settlement_mode_for_organizer( $user_id );
+		$status['instant_payouts_enabled']    = ! empty( $settings['connect_instant_payouts_enabled'] );
+		$status['payout_schedule']            = sanitize_key( $settings['connect_payout_schedule'] ?? 'manual' );
 		if ( ! self::is_enabled() ) {
 			$status['code']    = 'connect_not_configured';
 			$status['message'] = __( 'Stripe Connect is not enabled on this marketplace.', 'lnkup-marketplace' );
@@ -190,6 +193,77 @@ class LNKup_Stripe_Connect {
 	}
 
 	/**
+	 * HTTPS bridge URLs that bounce Stripe back into the mobile app.
+	 *
+	 * @param string $kind return|refresh.
+	 * @return string
+	 */
+	public static function connect_app_bridge_url( $kind ) {
+		$kind = 'refresh' === $kind ? 'refresh' : 'return';
+		return home_url( '/?lnkup_app_connect=' . $kind );
+	}
+
+	/**
+	 * Whether a Connect return/refresh URL is allowlisted (open-redirect safe).
+	 *
+	 * @param string $url Candidate URL.
+	 * @return bool
+	 */
+	public static function is_allowed_connect_redirect_url( $url ) {
+		$raw = trim( (string) $url );
+		if ( '' === $raw ) {
+			return false;
+		}
+
+		// Mobile deep links (Stripe may prefer HTTPS; bridge is preferred).
+		if ( preg_match( '#^lnkup://money(?:\?connect=(?:return|refresh))?$#i', $raw ) ) {
+			return true;
+		}
+
+		$url = esc_url_raw( $raw );
+		if ( '' === $url ) {
+			return false;
+		}
+
+		$normalized = untrailingslashit( $url );
+		$allowed    = array(
+			untrailingslashit( self::connect_return_url() ),
+			untrailingslashit( self::connect_refresh_url() ),
+			untrailingslashit( self::connect_app_bridge_url( 'return' ) ),
+			untrailingslashit( self::connect_app_bridge_url( 'refresh' ) ),
+		);
+
+		return in_array( $normalized, $allowed, true );
+	}
+
+	/**
+	 * Redirect Stripe Connect completion into the Expo app scheme.
+	 */
+	public static function maybe_redirect_app_connect() {
+		if ( empty( $_GET['lnkup_app_connect'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		$kind = sanitize_key( wp_unslash( (string) $_GET['lnkup_app_connect'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! in_array( $kind, array( 'return', 'refresh' ), true ) ) {
+			return;
+		}
+		$target = 'lnkup://money?connect=' . rawurlencode( $kind );
+		// Custom schemes are not allowed by wp_safe_redirect; send Location directly.
+		nocache_headers();
+		if ( ! headers_sent() ) {
+			header( 'Location: ' . $target, true, 302 );
+		}
+		exit;
+	}
+
+	/**
+	 * Register Connect hooks.
+	 */
+	public static function init() {
+		add_action( 'template_redirect', array( __CLASS__, 'maybe_redirect_app_connect' ), 1 );
+	}
+
+	/**
 	 * Upsert connected account record.
 	 *
 	 * @param int    $user_id User ID.
@@ -243,6 +317,7 @@ class LNKup_Stripe_Connect {
 			return $remote;
 		}
 		self::apply_stripe_account_payload( $user_id, $remote );
+		self::ensure_payout_schedule( $user_id );
 		LNKup_Financial_Audit::log( 'connect_account_synced', 'user', $user_id, array( 'account_id' => $account['stripe_account_id'] ) );
 		return self::get_status( $user_id );
 	}
@@ -336,11 +411,113 @@ class LNKup_Stripe_Connect {
 	}
 
 	/**
-	 * Create Express account and onboarding link.
+	 * Build Stripe settings.payouts.schedule from LNKup settings.
+	 *
+	 * @return array
+	 */
+	public static function payout_schedule_params_from_settings() {
+		$settings = lnkup_get_settings();
+		$sched    = sanitize_key( $settings['connect_payout_schedule'] ?? 'manual' );
+		if ( 'weekly' === $sched ) {
+			return array(
+				'interval'      => 'weekly',
+				'weekly_anchor' => 'monday',
+			);
+		}
+		if ( 'daily' === $sched ) {
+			return array( 'interval' => 'daily' );
+		}
+		return array( 'interval' => 'manual' );
+	}
+
+	/**
+	 * Best-effort sync of Connect payout schedule (soft-fail).
+	 *
+	 * @param int  $user_id       Organizer user ID.
+	 * @param bool $force_manual  When true (cashout), always set interval to manual so funds stay payable on-demand.
+	 * @return bool True when update succeeded or no update needed.
+	 */
+	public static function ensure_payout_schedule( $user_id, $force_manual = false ) {
+		$settings = lnkup_get_settings();
+		$sched    = sanitize_key( $settings['connect_payout_schedule'] ?? 'manual' );
+		// Soft sync from settings: only push when marketplace wants manual — unless cashout forces it.
+		if ( ! $force_manual && 'manual' !== $sched ) {
+			return true;
+		}
+		$account = self::get_account( $user_id, 'organizer' );
+		if ( ! $account || empty( $account['stripe_account_id'] ) ) {
+			return false;
+		}
+		$client = new LNKup_Stripe_Client();
+		$result = $client->update_connect_account(
+			$account['stripe_account_id'],
+			array(
+				'settings' => array(
+					'payouts' => array(
+						'schedule' => array( 'interval' => 'manual' ),
+					),
+				),
+			)
+		);
+		return ! is_wp_error( $result );
+	}
+
+	/**
+	 * Create Express Dashboard login link for an organizer with an active Connect account.
 	 *
 	 * @param int $user_id Organizer user ID.
+	 * @return array<string, mixed>|WP_Error
 	 */
-	public static function create_onboarding_link( $user_id ) {
+	public static function create_login_link( $user_id ) {
+		if ( ! self::is_enabled() ) {
+			return new WP_Error(
+				'connect_not_configured',
+				__( 'Stripe Connect is not enabled.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
+		}
+		$client = new LNKup_Stripe_Client();
+		if ( ! $client->is_available() ) {
+			return new WP_Error(
+				'stripe_not_configured',
+				__( 'Stripe is not configured.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
+		}
+		$account = self::get_account( $user_id, 'organizer' );
+		if ( ! $account || empty( $account['stripe_account_id'] ) ) {
+			return new WP_Error(
+				'connect_not_started',
+				__( 'Finish payout setup before managing your Stripe account.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
+		}
+		$link = $client->create_login_link( $account['stripe_account_id'] );
+		if ( is_wp_error( $link ) ) {
+			return $link;
+		}
+		$url = is_array( $link ) ? (string) ( $link['url'] ?? '' ) : '';
+		if ( '' === $url ) {
+			return new WP_Error(
+				'stripe_api_error',
+				__( 'Could not open Stripe Express.', 'lnkup-marketplace' ),
+				array( 'status' => 500 )
+			);
+		}
+		return array(
+			'success' => true,
+			'url'     => $url,
+			'message' => __( 'Stripe Express is ready.', 'lnkup-marketplace' ),
+		);
+	}
+
+	/**
+	 * Create Express account and onboarding link.
+	 *
+	 * @param int   $user_id Organizer user ID.
+	 * @param array $args    Optional. return_url, refresh_url (allowlisted).
+	 */
+	public static function create_onboarding_link( $user_id, $args = array() ) {
 		if ( ! self::is_enabled() ) {
 			return array(
 				'success' => false,
@@ -365,6 +542,11 @@ class LNKup_Stripe_Connect {
 				'type'     => ! empty( $settings['connect_express_enabled'] ) ? 'express' : 'standard',
 				'country'  => $settings['connect_platform_country'] ?? 'US',
 				'metadata' => array( 'organizer_user_id' => (string) $user_id ),
+				'settings' => array(
+					'payouts' => array(
+						'schedule' => self::payout_schedule_params_from_settings(),
+					),
+				),
 			);
 			$created = $client->create_connect_account( $params );
 			if ( is_wp_error( $created ) ) {
@@ -389,10 +571,22 @@ class LNKup_Stripe_Connect {
 				'status'  => 'not_started',
 			);
 		}
+
+		$return_url  = self::connect_return_url();
+		$refresh_url = self::connect_refresh_url();
+		if ( ! empty( $args['return_url'] ) && self::is_allowed_connect_redirect_url( $args['return_url'] ) ) {
+			$candidate = trim( (string) $args['return_url'] );
+			$return_url = preg_match( '#^lnkup://#i', $candidate ) ? $candidate : esc_url_raw( $candidate );
+		}
+		if ( ! empty( $args['refresh_url'] ) && self::is_allowed_connect_redirect_url( $args['refresh_url'] ) ) {
+			$candidate   = trim( (string) $args['refresh_url'] );
+			$refresh_url = preg_match( '#^lnkup://#i', $candidate ) ? $candidate : esc_url_raw( $candidate );
+		}
+
 		$link = $client->create_account_link( array(
 			'account'     => $account['stripe_account_id'],
-			'refresh_url' => self::connect_refresh_url(),
-			'return_url'  => self::connect_return_url(),
+			'refresh_url' => $refresh_url,
+			'return_url'  => $return_url,
 			'type'        => 'account_onboarding',
 		) );
 		if ( is_wp_error( $link ) ) {
@@ -453,18 +647,53 @@ class LNKup_Stripe_Connect {
 	/**
 	 * Persist settlement metadata on payment post.
 	 *
-	 * @param int   $payment_id Payment post ID.
-	 * @param int   $organizer_id Organizer ID.
-	 * @param array $breakdown Fee breakdown.
+	 * @param int      $payment_id   Payment post ID.
+	 * @param int      $organizer_id Organizer ID.
+	 * @param array    $breakdown    Fee breakdown.
+	 * @param string   $context      create|settle — settle preserves charge truth (do not flip treasury → destination).
+	 * @param int|null $amount_cents Optional charge amount in cents (stamps destination amount on create).
 	 */
-	public static function persist_payment_settlement_meta( $payment_id, $organizer_id, $breakdown ) {
-		$mode = self::settlement_mode_for_organizer( $organizer_id );
+	public static function persist_payment_settlement_meta( $payment_id, $organizer_id, $breakdown, $context = 'create', $amount_cents = null ) {
+		$payment_id   = absint( $payment_id );
+		$organizer_id = absint( $organizer_id );
+		$context      = ( 'settle' === $context ) ? 'settle' : 'create';
+
+		$existing_mode = (string) get_post_meta( $payment_id, '_lnkup_settlement_mode', true );
+		$existing_dest = (string) get_post_meta( $payment_id, '_lnkup_stripe_destination_account', true );
+
+		if ( 'settle' === $context ) {
+			// Money already charged: mode must match where Stripe funds sit, not Connect readiness now.
+			if ( '' !== $existing_dest ) {
+				$mode = 'destination';
+			} else {
+				// No destination stamped at create → platform charge (or unknown). Keep treasury.
+				$mode = 'platform_treasury';
+			}
+		} else {
+			$mode = self::settlement_mode_for_organizer( $organizer_id );
+		}
+
+		$app_fee_cents = (int) round( (float) ( $breakdown['platform_fee'] ?? 0 ) * 100 );
 		update_post_meta( $payment_id, '_lnkup_settlement_mode', $mode );
-		update_post_meta( $payment_id, '_lnkup_application_fee_cents', (int) round( ( $breakdown['platform_fee'] ?? 0 ) * 100 ) );
+		update_post_meta( $payment_id, '_lnkup_application_fee_cents', $app_fee_cents );
 		update_post_meta( $payment_id, '_lnkup_fee_breakdown', wp_json_encode( $breakdown ) );
 		if ( 'destination' === $mode ) {
-			$account = self::get_account( $organizer_id, 'organizer' );
-			update_post_meta( $payment_id, '_lnkup_stripe_destination_account', $account['stripe_account_id'] ?? '' );
+			if ( '' === $existing_dest ) {
+				$account = self::get_account( $organizer_id, 'organizer' );
+				update_post_meta( $payment_id, '_lnkup_stripe_destination_account', $account['stripe_account_id'] ?? '' );
+			}
+			if ( null !== $amount_cents && (int) $amount_cents > 0 ) {
+				$amount_cents = (int) $amount_cents;
+				update_post_meta( $payment_id, '_lnkup_stripe_charge_amount_cents', $amount_cents );
+				update_post_meta(
+					$payment_id,
+					'_lnkup_stripe_destination_amount',
+					round( max( 0, $amount_cents - $app_fee_cents ) / 100, 2 )
+				);
+			}
+		} elseif ( 'platform_treasury' === $mode && 'destination' === $existing_mode && '' === $existing_dest ) {
+			// Clear a false destination claim that never had a destination account.
+			delete_post_meta( $payment_id, '_lnkup_stripe_destination_account' );
 		}
 	}
 
@@ -521,6 +750,635 @@ class LNKup_Stripe_Connect {
 	}
 
 	/**
+	 * Ledger claim in cents for destination organizers (settlement − processing).
+	 *
+	 * @param int $organizer_id Organizer user ID.
+	 * @return int
+	 */
+	public static function organizer_ledger_claim_cents( $organizer_id ) {
+		if ( ! class_exists( 'LNKup_Organizer_Wallet' ) ) {
+			return 0;
+		}
+		$wallet = LNKup_Organizer_Wallet::get_balances( absint( $organizer_id ) );
+		// Destination get_balances() sets available = connect_settlement − processing.
+		return max( 0, (int) round( (float) ( $wallet['available'] ?? 0 ) * 100 ) );
+	}
+
+	/**
+	 * Platform funds this organizer may recover (ledger claim minus Connect available, capped by platform).
+	 *
+	 * Never returns uncapped platform balance — application fees stay on LNKup.
+	 *
+	 * @param int        $organizer_id            Organizer user ID.
+	 * @param int|null   $connect_available_cents Optional live Connect available cents.
+	 * @param array|null $platform_balance        Optional normalized platform balance payload.
+	 * @return int Cents recoverable via Transfer.
+	 */
+	public static function organizer_recoverable_platform_cents( $organizer_id, $connect_available_cents = null, $platform_balance = null ) {
+		$organizer_id = absint( $organizer_id );
+		if ( ! $organizer_id || ! self::is_enabled() || ! self::is_connect_ready( $organizer_id ) ) {
+			return 0;
+		}
+		if ( 'destination' !== self::settlement_mode_for_organizer( $organizer_id ) ) {
+			return 0;
+		}
+
+		$ledger_claim_cents = self::organizer_ledger_claim_cents( $organizer_id );
+		if ( $ledger_claim_cents < 1 ) {
+			return 0;
+		}
+
+		$client = new LNKup_Stripe_Client();
+
+		if ( null === $connect_available_cents ) {
+			$account = self::get_account( $organizer_id, 'organizer' );
+			if ( ! $account || empty( $account['stripe_account_id'] ) ) {
+				return 0;
+			}
+			$live = $client->retrieve_connect_balance( $account['stripe_account_id'] );
+			if ( is_wp_error( $live ) ) {
+				return 0;
+			}
+			$connect_available_cents = isset( $live['available_cents'] )
+				? (int) $live['available_cents']
+				: (int) round( ( (float) ( $live['available'] ?? 0 ) ) * 100 );
+		}
+		$connect_available_cents = max( 0, (int) $connect_available_cents );
+
+		$stranded_claim = max( 0, $ledger_claim_cents - $connect_available_cents );
+		if ( $stranded_claim < 1 ) {
+			return 0;
+		}
+
+		if ( null === $platform_balance ) {
+			$platform_balance = $client->retrieve_platform_balance();
+		}
+		if ( is_wp_error( $platform_balance ) || ! is_array( $platform_balance ) ) {
+			return 0;
+		}
+		$platform_cents = isset( $platform_balance['available_cents'] )
+			? (int) $platform_balance['available_cents']
+			: (int) round( ( (float) ( $platform_balance['available'] ?? 0 ) ) * 100 );
+
+		return min( $stranded_claim, max( 0, $platform_cents ) );
+	}
+
+	/**
+	 * Transfer platform balance to the organizer Connect account (stranded-funds recovery).
+	 *
+	 * Unlike schedule_transfer(), this is allowed in destination mode so cashout can
+	 * move ledger-owed funds that never destination-charged onto Connect, then payout.
+	 *
+	 * @param int   $organizer_id Organizer user ID.
+	 * @param float $amount       Dollars to transfer.
+	 * @param array $metadata     Stripe metadata.
+	 * @return array|WP_Error
+	 */
+	public static function transfer_platform_to_connect( $organizer_id, $amount, $metadata = array() ) {
+		$organizer_id = absint( $organizer_id );
+		$amount_cents = (int) round( (float) $amount * 100 );
+		if ( $amount_cents < 1 ) {
+			return new WP_Error( 'invalid_amount', __( 'Invalid transfer amount.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		if ( ! self::is_enabled() ) {
+			return new WP_Error( 'connect_disabled', __( 'Stripe Connect is not enabled.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$account = self::get_account( $organizer_id, 'organizer' );
+		if ( ! $account || empty( $account['stripe_account_id'] ) ) {
+			return new WP_Error( 'no_account', __( 'Organizer Connect account not found.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		if ( ! self::is_connect_ready( $organizer_id ) ) {
+			return new WP_Error( 'not_ready', __( 'Connect account is not ready for transfers.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+
+		$settings = lnkup_get_settings();
+		$currency = strtolower( (string) ( $settings['connect_platform_currency'] ?? 'usd' ) );
+		$client   = new LNKup_Stripe_Client();
+
+		$platform = $client->retrieve_platform_balance();
+		if ( is_wp_error( $platform ) ) {
+			$data = $platform->get_error_data();
+			if ( ! is_array( $data ) || empty( $data['status'] ) ) {
+				$platform->add_data( array( 'status' => 400 ) );
+			}
+			return $platform;
+		}
+		$platform_cents = isset( $platform['available_cents'] )
+			? (int) $platform['available_cents']
+			: (int) round( ( (float) ( $platform['available'] ?? 0 ) ) * 100 );
+		$platform_sources = is_array( $platform['source_types'] ?? null ) ? $platform['source_types'] : array();
+
+		if ( $amount_cents > $platform_cents ) {
+			return new WP_Error(
+				'insufficient_platform_balance',
+				sprintf(
+					/* translators: 1: requested 2: platform available */
+					__( 'Need %1$s on the LNKup platform balance to move funds, but only %2$s is available.', 'lnkup-marketplace' ),
+					lnkup_currency( $amount_cents / 100 ),
+					lnkup_currency( $platform_cents / 100 )
+				),
+				array( 'status' => 400 )
+			);
+		}
+
+		$candidates = self::payout_source_type_candidates( $platform_sources, $amount_cents, 'standard' );
+		if ( empty( $candidates ) ) {
+			$msg = sprintf(
+				/* translators: %s: amount */
+				__( 'Cannot move %s from the LNKup platform balance — no single balance bucket covers that amount.', 'lnkup-marketplace' ),
+				lnkup_currency( $amount_cents / 100 )
+			);
+			$split = self::format_source_types_breakdown( $platform_sources );
+			if ( $split ) {
+				$msg .= ' ' . $split;
+			}
+			return new WP_Error( 'insufficient_platform_balance', $msg, array( 'status' => 400 ) );
+		}
+
+		$base_params = array(
+			'amount'      => $amount_cents,
+			'currency'    => $currency,
+			'destination' => $account['stripe_account_id'],
+			'metadata'    => array_merge(
+				array(
+					'organizer_user_id' => (string) $organizer_id,
+					'lnkup_recovery'    => '1',
+				),
+				$metadata
+			),
+		);
+
+		$last_error = null;
+		$transfer   = null;
+		$chosen     = '';
+		foreach ( $candidates as $source_type ) {
+			$params                = $base_params;
+			$params['source_type'] = $source_type;
+			$transfer              = $client->create_transfer( $params );
+			if ( ! is_wp_error( $transfer ) ) {
+				$chosen = $source_type;
+				break;
+			}
+			$last_error = $transfer;
+			if ( ! self::is_retryable_source_balance_error( $transfer ) ) {
+				break;
+			}
+		}
+
+		if ( is_wp_error( $transfer ) || null === $transfer ) {
+			$error = is_wp_error( $last_error ) ? $last_error : new WP_Error(
+				'transfer_failed',
+				__( 'Could not move funds to your payout account.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
+			if ( ! is_array( $error->get_error_data() ) || empty( $error->get_error_data()['status'] ) ) {
+				$error->add_data( array( 'status' => 400 ) );
+			}
+			return $error;
+		}
+
+		LNKup_Financial_Audit::log(
+			'connect_recovery_transfer',
+			'payout',
+			$organizer_id,
+			array(
+				'amount'            => $amount_cents / 100,
+				'transfer_id'       => $transfer['id'] ?? '',
+				'stripe_account_id' => $account['stripe_account_id'],
+				'source_type'       => $chosen,
+			)
+		);
+
+		return array(
+			'status'      => 'transferred',
+			'transfer_id' => $transfer['id'] ?? '',
+			'account_id'  => $account['stripe_account_id'],
+			'source_type' => $chosen,
+		);
+	}
+
+	/**
+	 * Split main Stripe Available into organizer-owed vs LNKup fee remainder.
+	 *
+	 * @return array{
+	 *   synced:bool,
+	 *   error?:string,
+	 *   platform_available:float,
+	 *   platform_pending:float,
+	 *   platform_available_cents:int,
+	 *   source_types:array,
+	 *   organizer_owed_cents:int,
+	 *   organizer_owed:float,
+	 *   fee_remainder_cents:int,
+	 *   fee_remainder:float,
+	 *   organizers:array<int,array>
+	 * }
+	 */
+	public static function platform_balance_split() {
+		$empty = array(
+			'synced'                   => false,
+			'platform_available'       => 0.0,
+			'platform_pending'         => 0.0,
+			'platform_available_cents' => 0,
+			'source_types'             => array(),
+			'organizer_owed_cents'     => 0,
+			'organizer_owed'           => 0.0,
+			'fee_remainder_cents'      => 0,
+			'fee_remainder'            => 0.0,
+			'organizers'               => array(),
+		);
+
+		if ( ! self::is_enabled() ) {
+			$empty['error'] = __( 'Stripe Connect is not enabled.', 'lnkup-marketplace' );
+			return $empty;
+		}
+
+		$client   = new LNKup_Stripe_Client();
+		$platform = $client->retrieve_platform_balance();
+		if ( is_wp_error( $platform ) ) {
+			$empty['error'] = $platform->get_error_message();
+			return $empty;
+		}
+
+		$platform_cents = isset( $platform['available_cents'] )
+			? (int) $platform['available_cents']
+			: (int) round( ( (float) ( $platform['available'] ?? 0 ) ) * 100 );
+		$pending_cents  = isset( $platform['pending_cents'] )
+			? (int) $platform['pending_cents']
+			: (int) round( ( (float) ( $platform['pending'] ?? 0 ) ) * 100 );
+		$source_types   = is_array( $platform['source_types'] ?? null ) ? $platform['source_types'] : array();
+
+		$organizers     = array();
+		$total_stranded = 0;
+
+		global $wpdb;
+		$table = LNKup_Financial_Tables::connected_accounts_table();
+		$rows  = array();
+		if ( LNKup_Financial_Tables::table_exists( $table ) ) {
+			$rows = $wpdb->get_results(
+				"SELECT user_id, stripe_account_id, charges_enabled, payouts_enabled FROM {$table}
+				WHERE role_type = 'organizer' AND stripe_account_id <> '' AND charges_enabled = 1 AND payouts_enabled = 1
+				ORDER BY user_id ASC LIMIT 50",
+				ARRAY_A
+			);
+			if ( ! is_array( $rows ) ) {
+				$rows = array();
+			}
+		}
+
+		foreach ( $rows as $row ) {
+			$user_id = absint( $row['user_id'] ?? 0 );
+			if ( ! $user_id ) {
+				continue;
+			}
+
+			$mode = self::settlement_mode_for_organizer( $user_id );
+			$user = get_userdata( $user_id );
+			$name = $user ? $user->display_name : ( '#' . $user_id );
+
+			if ( 'destination' === $mode ) {
+				if ( ! self::is_connect_ready( $user_id ) ) {
+					continue;
+				}
+				$claim_cents = self::organizer_ledger_claim_cents( $user_id );
+				if ( $claim_cents < 1 ) {
+					continue;
+				}
+				$acct_id = (string) ( $row['stripe_account_id'] ?? '' );
+				$connect_cents = 0;
+				if ( $acct_id ) {
+					$live = $client->retrieve_connect_balance( $acct_id );
+					if ( ! is_wp_error( $live ) ) {
+						$connect_cents = isset( $live['available_cents'] )
+							? (int) $live['available_cents']
+							: (int) round( ( (float) ( $live['available'] ?? 0 ) ) * 100 );
+					}
+				}
+				$stranded = max( 0, $claim_cents - max( 0, $connect_cents ) );
+				if ( $stranded < 1 ) {
+					continue;
+				}
+				$organizers[] = array(
+					'user_id'            => $user_id,
+					'name'               => $name,
+					'settlement_mode'    => 'destination',
+					'recoverable_cents'  => $stranded,
+					'recoverable'        => round( $stranded / 100, 2 ),
+					'ledger_claim_cents' => $claim_cents,
+					'can_recover'        => true,
+				);
+				$total_stranded += $stranded;
+				continue;
+			}
+
+			// Platform treasury: ledger available is also organizer-owed on the main balance.
+			if ( class_exists( 'LNKup_Organizer_Wallet' ) ) {
+				$wallet = LNKup_Organizer_Wallet::get_balances( $user_id );
+				$owed   = max( 0, (int) round( (float) ( $wallet['available'] ?? 0 ) * 100 ) );
+				if ( $owed < 1 ) {
+					continue;
+				}
+				$organizers[] = array(
+					'user_id'            => $user_id,
+					'name'               => $name,
+					'settlement_mode'    => 'platform_treasury',
+					'recoverable_cents'  => $owed,
+					'recoverable'        => round( $owed / 100, 2 ),
+					'ledger_claim_cents' => $owed,
+					'can_recover'        => false,
+				);
+				$total_stranded += $owed;
+			}
+		}
+
+		// Cap aggregate organizer-owed at platform available (fees cannot go negative).
+		$owed_cents = min( $total_stranded, max( 0, $platform_cents ) );
+		$fee_cents  = max( 0, $platform_cents - $owed_cents );
+
+		return array(
+			'synced'                   => true,
+			'platform_available'       => round( $platform_cents / 100, 2 ),
+			'platform_pending'         => round( $pending_cents / 100, 2 ),
+			'platform_available_cents' => $platform_cents,
+			'source_types'             => $source_types,
+			'organizer_owed_cents'     => $owed_cents,
+			'organizer_owed'           => round( $owed_cents / 100, 2 ),
+			'fee_remainder_cents'      => $fee_cents,
+			'fee_remainder'            => round( $fee_cents / 100, 2 ),
+			'organizers'               => $organizers,
+		);
+	}
+
+	/**
+	 * Pay out LNKup fee remainder from the platform Stripe account (Standard).
+	 *
+	 * Amount is capped at fee_remainder so organizer-owed funds stay on platform for recovery.
+	 *
+	 * @param float $amount Dollars.
+	 * @return array|WP_Error
+	 */
+	public static function create_platform_payout( $amount ) {
+		$amount_cents = (int) round( (float) $amount * 100 );
+		if ( $amount_cents < 1 ) {
+			return new WP_Error( 'invalid_amount', __( 'Invalid payout amount.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		if ( ! self::is_enabled() ) {
+			return new WP_Error( 'connect_disabled', __( 'Stripe Connect is not enabled.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+
+		$split = self::platform_balance_split();
+		if ( empty( $split['synced'] ) ) {
+			return new WP_Error(
+				'balance_unavailable',
+				! empty( $split['error'] ) ? (string) $split['error'] : __( 'Could not load platform Stripe balance.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$fee_cents = (int) ( $split['fee_remainder_cents'] ?? 0 );
+		if ( $amount_cents > $fee_cents ) {
+			return new WP_Error(
+				'exceeds_fee_remainder',
+				sprintf(
+					/* translators: 1: requested 2: fee remainder 3: organizer owed */
+					__( 'Requested %1$s but only %2$s is LNKup fee remainder (%3$s is organizer-owed on the platform and must be recovered to Connect first).', 'lnkup-marketplace' ),
+					lnkup_currency( $amount_cents / 100 ),
+					lnkup_currency( $fee_cents / 100 ),
+					lnkup_currency( ( (int) ( $split['organizer_owed_cents'] ?? 0 ) ) / 100 )
+				),
+				array( 'status' => 400 )
+			);
+		}
+
+		$client         = new LNKup_Stripe_Client();
+		$platform       = $client->retrieve_platform_balance();
+		if ( is_wp_error( $platform ) ) {
+			return $platform;
+		}
+		$platform_cents   = isset( $platform['available_cents'] )
+			? (int) $platform['available_cents']
+			: (int) round( ( (float) ( $platform['available'] ?? 0 ) ) * 100 );
+		$platform_sources = is_array( $platform['source_types'] ?? null ) ? $platform['source_types'] : array();
+
+		if ( $amount_cents > $platform_cents ) {
+			return new WP_Error(
+				'insufficient_platform_balance',
+				sprintf(
+					/* translators: 1: requested 2: available */
+					__( 'Requested %1$s but platform Available is only %2$s.', 'lnkup-marketplace' ),
+					lnkup_currency( $amount_cents / 100 ),
+					lnkup_currency( $platform_cents / 100 )
+				),
+				array( 'status' => 400 )
+			);
+		}
+
+		$candidates = self::payout_source_type_candidates( $platform_sources, $amount_cents, 'standard' );
+		if ( empty( $candidates ) ) {
+			$msg = sprintf(
+				/* translators: %s: amount */
+				__( 'Cannot pay out %s — no single platform balance bucket covers that amount.', 'lnkup-marketplace' ),
+				lnkup_currency( $amount_cents / 100 )
+			);
+			$split_label = self::format_source_types_breakdown( $platform_sources );
+			if ( $split_label ) {
+				$msg .= ' ' . $split_label;
+			}
+			return new WP_Error( 'insufficient_platform_balance', $msg, array( 'status' => 400 ) );
+		}
+
+		$settings = lnkup_get_settings();
+		$currency = strtolower( (string) ( $settings['connect_platform_currency'] ?? 'usd' ) );
+		if ( ! empty( $platform['currency'] ) ) {
+			$currency = strtolower( (string) $platform['currency'] );
+		}
+
+		$base_params = array(
+			'amount'   => $amount_cents,
+			'currency' => $currency,
+			'metadata' => array(
+				'lnkup_platform_payout' => '1',
+				'fee_remainder_cents'   => (string) $fee_cents,
+			),
+		);
+
+		$last_error = null;
+		$payout     = null;
+		$chosen     = '';
+		foreach ( $candidates as $source_type ) {
+			$params                = $base_params;
+			$params['source_type'] = $source_type;
+			$payout                = $client->create_platform_payout( $params );
+			if ( ! is_wp_error( $payout ) ) {
+				$chosen = $source_type;
+				break;
+			}
+			$last_error = $payout;
+			if ( ! self::is_retryable_source_balance_error( $payout ) ) {
+				break;
+			}
+		}
+
+		if ( is_wp_error( $payout ) || null === $payout ) {
+			$error = is_wp_error( $last_error ) ? $last_error : new WP_Error(
+				'payout_failed',
+				__( 'Platform payout could not be completed.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
+			return $error;
+		}
+
+		LNKup_Financial_Audit::log(
+			'platform_payout_created',
+			'payout',
+			0,
+			array(
+				'amount'      => $amount_cents / 100,
+				'payout_id'   => $payout['id'] ?? '',
+				'source_type' => $chosen,
+			)
+		);
+
+		return array(
+			'status'      => 'paid',
+			'payout_id'   => $payout['id'] ?? '',
+			'source_type' => $chosen,
+			'amount'      => $amount_cents / 100,
+		);
+	}
+
+	/**
+	 * Friendly label for a Stripe balance source_type key.
+	 *
+	 * @param string $key source_type (card, bank_account, …).
+	 * @return string
+	 */
+	public static function source_type_label( $key ) {
+		$key = sanitize_key( (string) $key );
+		$map = array(
+			'card'         => __( 'Card', 'lnkup-marketplace' ),
+			'bank_account' => __( 'Bank', 'lnkup-marketplace' ),
+			'fpx'          => 'FPX',
+		);
+		if ( isset( $map[ $key ] ) ) {
+			return $map[ $key ];
+		}
+		return $key ? ucwords( str_replace( '_', ' ', $key ) ) : '';
+	}
+
+	/**
+	 * Human-readable Card/Bank split for Connect available balance.
+	 *
+	 * @param array $source_types Map of source_type => cents.
+	 * @return string
+	 */
+	public static function format_source_types_breakdown( $source_types ) {
+		if ( ! is_array( $source_types ) || empty( $source_types ) ) {
+			return '';
+		}
+		$parts = array();
+		foreach ( $source_types as $key => $cents ) {
+			$label   = self::source_type_label( $key );
+			$parts[] = sprintf( '%s: %s', $label, lnkup_currency( ( (int) $cents ) / 100 ) );
+		}
+		return implode( ' · ', $parts );
+	}
+
+	/**
+	 * Pick a Connect payout source_type that covers the requested amount.
+	 *
+	 * Stripe defaults omitted source_type to "card", which fails when funds sit in bank_account.
+	 *
+	 * @param array  $source_types Map of source_type => cents.
+	 * @param int    $amount_cents Requested payout cents.
+	 * @param string $payout_type  standard|instant.
+	 * @return string Empty when none covers (or source_types empty).
+	 */
+	public static function select_payout_source_type( $source_types, $amount_cents, $payout_type = 'standard' ) {
+		$candidates = self::payout_source_type_candidates( $source_types, $amount_cents, $payout_type );
+		return ! empty( $candidates[0] ) ? (string) $candidates[0] : '';
+	}
+
+	/**
+	 * Ordered source_type candidates for a Connect payout.
+	 *
+	 * When Stripe omits source_types but total available covers the amount, falls back to
+	 * bank_account/card (or card/bank for Instant) so we never silently default to card-only.
+	 *
+	 * @param array  $source_types Map of source_type => cents.
+	 * @param int    $amount_cents Requested payout cents.
+	 * @param string $payout_type  standard|instant.
+	 * @return string[]
+	 */
+	public static function payout_source_type_candidates( $source_types, $amount_cents, $payout_type = 'standard' ) {
+		$amount_cents = (int) $amount_cents;
+		$preferred    = ( 'instant' === $payout_type )
+			? array( 'card', 'bank_account' )
+			: array( 'bank_account', 'card' );
+
+		$cents_map = array();
+		foreach ( (array) $source_types as $key => $val ) {
+			$key = sanitize_key( (string) $key );
+			if ( '' === $key ) {
+				continue;
+			}
+			$cents_map[ $key ] = (int) $val;
+		}
+
+		$ordered = array();
+		if ( empty( $cents_map ) ) {
+			// Breakdown missing — probe preferred buckets (Stripe rejects empty ones).
+			return $preferred;
+		}
+
+		foreach ( $preferred as $key ) {
+			if ( isset( $cents_map[ $key ] ) && $cents_map[ $key ] >= $amount_cents ) {
+				$ordered[] = $key;
+			}
+		}
+
+		$extras = array();
+		foreach ( $cents_map as $key => $cents ) {
+			if ( $cents >= $amount_cents && ! in_array( $key, $ordered, true ) ) {
+				$extras[ $key ] = $cents;
+			}
+		}
+		if ( ! empty( $extras ) ) {
+			arsort( $extras, SORT_NUMERIC );
+			foreach ( array_keys( $extras ) as $key ) {
+				$ordered[] = $key;
+			}
+		}
+
+		return $ordered;
+	}
+
+	/**
+	 * Whether a Stripe payout error is worth retrying with another source_type.
+	 *
+	 * @param WP_Error $error Stripe/client error.
+	 * @return bool
+	 */
+	public static function is_retryable_source_balance_error( $error ) {
+		if ( ! is_wp_error( $error ) ) {
+			return false;
+		}
+		$data = $error->get_error_data();
+		$code = is_array( $data ) && ! empty( $data['stripe_code'] ) ? (string) $data['stripe_code'] : '';
+		if ( 'balance_insufficient' === $code ) {
+			return true;
+		}
+		$msg = strtolower( (string) $error->get_error_message() );
+		if ( false !== strpos( $msg, 'insufficient' ) ) {
+			return true;
+		}
+		if ( false !== strpos( $msg, 'too low' ) ) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
 	 * Create payout on connected account (destination mode cashout).
 	 *
 	 * @param int    $organizer_id Organizer ID.
@@ -531,41 +1389,363 @@ class LNKup_Stripe_Connect {
 	public static function create_connect_payout( $organizer_id, $amount, $type = 'standard', $metadata = array() ) {
 		$account = self::get_account( $organizer_id, 'organizer' );
 		if ( ! $account || empty( $account['stripe_account_id'] ) ) {
-			return new WP_Error( 'no_account', __( 'Organizer Connect account not found.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'no_account', __( 'Organizer Connect account not found.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 		if ( ! self::is_connect_ready( $organizer_id ) ) {
-			return new WP_Error( 'not_ready', __( 'Connect account is not ready for payouts.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'not_ready', __( 'Connect account is not ready for payouts.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 		if ( self::has_past_due_requirements( $organizer_id ) ) {
-			return new WP_Error( 'requirements_past_due', __( 'Complete Stripe verification before cashing out.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'requirements_past_due', __( 'Complete Stripe verification before cashing out.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 		$settings = lnkup_get_settings();
 		if ( 'instant' === $type && empty( $settings['connect_instant_payouts_enabled'] ) ) {
-			return new WP_Error( 'instant_disabled', __( 'Instant payouts are not enabled.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'instant_disabled', __( 'Instant payouts are not enabled.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
-		$currency = $settings['connect_platform_currency'] ?? 'usd';
-		$client   = new LNKup_Stripe_Client();
-		$params   = array(
-			'amount'   => (int) round( $amount * 100 ),
-			'currency' => $currency,
+
+		// On-demand cashout: keep funds on the connected account (not auto-paid out).
+		self::ensure_payout_schedule( $organizer_id, true );
+
+		$currency     = strtolower( (string) ( $settings['connect_platform_currency'] ?? 'usd' ) );
+		$amount_cents = (int) round( (float) $amount * 100 );
+		if ( $amount_cents < 1 ) {
+			return new WP_Error( 'invalid_amount', __( 'Invalid cashout amount.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+
+		$client  = new LNKup_Stripe_Client();
+		$acct_id = $account['stripe_account_id'];
+
+		// Re-fetch after schedule update so available figures are current.
+		$live = $client->retrieve_connect_balance( $acct_id );
+		if ( is_wp_error( $live ) ) {
+			$data = $live->get_error_data();
+			if ( ! is_array( $data ) || empty( $data['status'] ) ) {
+				$live->add_data( array( 'status' => 400 ) );
+			}
+			return $live;
+		}
+
+		$available_cents = isset( $live['available_cents'] )
+			? (int) $live['available_cents']
+			: (int) round( ( (float) ( $live['available'] ?? 0 ) ) * 100 );
+		$instant_cents   = isset( $live['instant_available_cents'] )
+			? (int) $live['instant_available_cents']
+			: (int) round( ( (float) ( $live['instant_available'] ?? 0 ) ) * 100 );
+		$source_types    = is_array( $live['source_types'] ?? null ) ? $live['source_types'] : array();
+		$instant_sources = is_array( $live['instant_source_types'] ?? null ) ? $live['instant_source_types'] : array();
+
+		// Stranded funds: ledger-owed money on platform → Transfer to Connect, then payout.
+		if ( $amount_cents > $available_cents ) {
+			$shortfall_cents = $amount_cents - $available_cents;
+			$platform        = $client->retrieve_platform_balance();
+			$recoverable     = self::organizer_recoverable_platform_cents(
+				$organizer_id,
+				$available_cents,
+				is_wp_error( $platform ) ? null : $platform
+			);
+
+			if ( $recoverable >= $shortfall_cents ) {
+				$recovery = self::transfer_platform_to_connect(
+					$organizer_id,
+					$shortfall_cents / 100,
+					array_merge( $metadata, array( 'cashout_recovery' => '1' ) )
+				);
+				if ( is_wp_error( $recovery ) ) {
+					return $recovery;
+				}
+
+				$live = $client->retrieve_connect_balance( $acct_id );
+				if ( is_wp_error( $live ) ) {
+					$data = $live->get_error_data();
+					if ( ! is_array( $data ) || empty( $data['status'] ) ) {
+						$live->add_data( array( 'status' => 400 ) );
+					}
+					return $live;
+				}
+				$available_cents = isset( $live['available_cents'] )
+					? (int) $live['available_cents']
+					: (int) round( ( (float) ( $live['available'] ?? 0 ) ) * 100 );
+				$instant_cents   = isset( $live['instant_available_cents'] )
+					? (int) $live['instant_available_cents']
+					: (int) round( ( (float) ( $live['instant_available'] ?? 0 ) ) * 100 );
+				$source_types    = is_array( $live['source_types'] ?? null ) ? $live['source_types'] : array();
+				$instant_sources = is_array( $live['instant_source_types'] ?? null ) ? $live['instant_source_types'] : array();
+			} elseif ( ! is_wp_error( $platform ) ) {
+				$platform_cents = isset( $platform['available_cents'] )
+					? (int) $platform['available_cents']
+					: (int) round( ( (float) ( $platform['available'] ?? 0 ) ) * 100 );
+				if ( $platform_cents >= $shortfall_cents ) {
+					$acct_suffix = strlen( (string) $acct_id ) > 4 ? substr( (string) $acct_id, -4 ) : (string) $acct_id;
+					$ledger_claim = self::organizer_ledger_claim_cents( $organizer_id );
+					return new WP_Error(
+						'funds_on_platform',
+						sprintf(
+							/* translators: 1: connect available 2: recoverable 3: ledger claim 4: account suffix */
+							__( 'Your Connect payout account (…%4$s) has %1$s available. LNKup can automatically move up to %2$s of ledger-owed platform funds (ledger claim %3$s). Request a smaller amount, or contact support if this looks wrong.', 'lnkup-marketplace' ),
+							lnkup_currency( $available_cents / 100 ),
+							lnkup_currency( $recoverable / 100 ),
+							lnkup_currency( $ledger_claim / 100 ),
+							$acct_suffix
+						),
+						array(
+							'status'                   => 400,
+							'platform_available_cents' => $platform_cents,
+							'connect_available_cents'  => $available_cents,
+							'recoverable_cents'        => $recoverable,
+							'ledger_claim_cents'       => $ledger_claim,
+						)
+					);
+				}
+			}
+		}
+
+		$is_instant        = ( 'instant' === $type );
+		$payable_cents     = $is_instant ? $instant_cents : $available_cents;
+		$candidate_sources = $is_instant ? $instant_sources : $source_types;
+
+		if ( $amount_cents > $payable_cents ) {
+			if ( $is_instant ) {
+				$msg = sprintf(
+					/* translators: 1: requested amount 2: instant available 3: standard available */
+					__( 'Requested %1$s Instant, but only %2$s is Instant-eligible. Standard available is %3$s — use Standard cashout instead.', 'lnkup-marketplace' ),
+					lnkup_currency( $amount_cents / 100 ),
+					lnkup_currency( $instant_cents / 100 ),
+					lnkup_currency( $available_cents / 100 )
+				);
+			} else {
+				$msg = sprintf(
+					/* translators: 1: requested amount 2: available amount */
+					__( 'Requested %1$s but only %2$s is available to pay out.', 'lnkup-marketplace' ),
+					lnkup_currency( $amount_cents / 100 ),
+					lnkup_currency( $available_cents / 100 )
+				);
+			}
+			$split = self::format_source_types_breakdown( $candidate_sources );
+			if ( $split ) {
+				$msg .= ' ' . $split;
+			}
+			return new WP_Error( 'insufficient_balance', $msg, array( 'status' => 400 ) );
+		}
+
+		$candidates = self::payout_source_type_candidates( $candidate_sources, $amount_cents, $type );
+		if ( empty( $candidates ) ) {
+			if ( $is_instant ) {
+				$msg = sprintf(
+					/* translators: 1: requested amount 2: standard available */
+					__( 'Requested %1$s Instant, but no Instant balance bucket covers that amount. Standard available is %2$s — use Standard cashout instead.', 'lnkup-marketplace' ),
+					lnkup_currency( $amount_cents / 100 ),
+					lnkup_currency( $available_cents / 100 )
+				);
+			} else {
+				$msg = sprintf(
+					/* translators: %s: requested amount */
+					__( 'Requested %s, but no single Stripe balance bucket (card vs bank) has enough funds. Stripe payouts use one source type at a time.', 'lnkup-marketplace' ),
+					lnkup_currency( $amount_cents / 100 )
+				);
+			}
+			$split = self::format_source_types_breakdown( $candidate_sources );
+			if ( $split ) {
+				$msg .= ' ' . $split;
+			}
+			return new WP_Error( 'insufficient_balance', $msg, array( 'status' => 400 ) );
+		}
+
+		$externals = $client->list_connect_external_accounts( $acct_id );
+		if ( is_wp_error( $externals ) ) {
+			$data = $externals->get_error_data();
+			if ( ! is_array( $data ) || empty( $data['status'] ) ) {
+				$externals->add_data( array( 'status' => 400 ) );
+			}
+			return $externals;
+		}
+		if ( empty( $externals ) ) {
+			return new WP_Error(
+				'no_external_account',
+				__( 'Add a bank account in payout setup before cashing out.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$instant_destination = '';
+		if ( $is_instant ) {
+			foreach ( $externals as $ext ) {
+				$methods = isset( $ext['available_payout_methods'] ) && is_array( $ext['available_payout_methods'] )
+					? $ext['available_payout_methods']
+					: array();
+				if ( in_array( 'instant', $methods, true ) && ! empty( $ext['id'] ) ) {
+					$instant_destination = (string) $ext['id'];
+					break;
+				}
+			}
+			if ( ! $instant_destination ) {
+				return new WP_Error(
+					'instant_unavailable',
+					__( 'Instant payouts need an eligible debit card or bank on your payout account. Use Standard, or finish Instant setup in Stripe.', 'lnkup-marketplace' ),
+					array( 'status' => 400 )
+				);
+			}
+		}
+
+		$payout_currency = ! empty( $live['currency'] ) ? strtolower( (string) $live['currency'] ) : $currency;
+		$base_params     = array(
+			'amount'   => $amount_cents,
+			'currency' => $payout_currency,
 			'metadata' => array_merge( array( 'organizer_user_id' => (string) $organizer_id ), $metadata ),
 		);
-		if ( 'instant' === $type ) {
-			$params['method'] = 'instant';
+		if ( $is_instant ) {
+			$base_params['method']      = 'instant';
+			$base_params['destination'] = $instant_destination;
 		}
-		$payout = $client->create_connect_payout( $account['stripe_account_id'], $params );
-		if ( is_wp_error( $payout ) ) {
-			return $payout;
+
+		$attempted   = array();
+		$last_error  = null;
+		$chosen      = '';
+		$payout      = null;
+
+		foreach ( $candidates as $source_type ) {
+			$params                  = $base_params;
+			$params['source_type']   = $source_type;
+			$attempted[]             = $source_type;
+			$payout                  = $client->create_connect_payout( $acct_id, $params );
+			if ( ! is_wp_error( $payout ) ) {
+				$chosen = $source_type;
+				break;
+			}
+			$last_error = $payout;
+			if ( ! self::is_retryable_source_balance_error( $payout ) ) {
+				break;
+			}
 		}
+
+		if ( is_wp_error( $payout ) || null === $payout ) {
+			$error = is_wp_error( $last_error ) ? $last_error : new WP_Error(
+				'payout_failed',
+				__( 'Cashout could not be completed.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
+			$msg = self::format_payout_failure_message(
+				$error->get_error_message(),
+				$amount_cents,
+				$available_cents,
+				$instant_cents,
+				$source_types,
+				$instant_sources,
+				$attempted,
+				$acct_id
+			);
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log(
+				sprintf(
+					'[LNKup] create_connect_payout_failed user=%d amount=%s available=%d instant=%d source_types=%s attempted=%s acct=%s message=%s',
+					$organizer_id,
+					(string) $amount,
+					$available_cents,
+					$instant_cents,
+					wp_json_encode( $source_types ),
+					implode( ',', $attempted ),
+					$acct_id,
+					$error->get_error_message()
+				)
+			);
+			LNKup_Financial_Audit::log(
+				'connect_payout_failed',
+				'payout',
+				$organizer_id,
+				array(
+					'amount'   => $amount,
+					'metadata' => array(
+						'source_types'            => $source_types,
+						'instant_source_types'    => $instant_sources,
+						'available_cents'         => $available_cents,
+						'instant_available_cents' => $instant_cents,
+						'attempted'               => $attempted,
+						'message'                 => $error->get_error_message(),
+					),
+				)
+			);
+			$data = $error->get_error_data();
+			if ( ! is_array( $data ) ) {
+				$data = array();
+			}
+			$data['status']                  = ! empty( $data['status'] ) ? $data['status'] : 400;
+			$data['attempted']               = $attempted;
+			$data['source_types']            = $source_types;
+			$data['instant_source_types']    = $instant_sources;
+			$data['available_cents']         = $available_cents;
+			$data['instant_available_cents'] = $instant_cents;
+			return new WP_Error( $error->get_error_code() ? $error->get_error_code() : 'payout_failed', $msg, $data );
+		}
+
 		LNKup_Financial_Audit::log( 'connect_payout_created', 'payout', $organizer_id, array(
-			'amount'     => $amount,
-			'payout_id'  => $payout['id'] ?? '',
-			'payout_type'=> $type,
+			'amount'      => $amount,
+			'payout_id'   => $payout['id'] ?? '',
+			'payout_type' => $type,
+			'metadata'    => array(
+				'source_type'  => $chosen,
+				'source_types' => $source_types,
+				'attempted'    => $attempted,
+			),
 		) );
 		return array(
-			'status'    => 'processing',
-			'payout_id' => $payout['id'] ?? '',
+			'status'      => 'processing',
+			'payout_id'   => $payout['id'] ?? '',
+			'source_type' => $chosen,
 		);
+	}
+
+	/**
+	 * Append diagnostic balance details to a Stripe payout failure message.
+	 *
+	 * @param string $base_message     Stripe/client message.
+	 * @param int    $amount_cents     Requested cents.
+	 * @param int    $available_cents  Standard available cents.
+	 * @param int    $instant_cents    Instant available cents.
+	 * @param array  $source_types     Available source_types map.
+	 * @param array  $instant_sources  Instant source_types map.
+	 * @param array  $attempted        Tried source_type keys.
+	 * @param string $acct_id          Connect account id.
+	 * @return string
+	 */
+	public static function format_payout_failure_message( $base_message, $amount_cents, $available_cents, $instant_cents, $source_types, $instant_sources, $attempted, $acct_id ) {
+		$msg = trim( (string) $base_message );
+		$msg .= ' ' . sprintf(
+			/* translators: 1: requested 2: available 3: instant available */
+			__( 'Requested %1$s. Available %2$s · Instant %3$s.', 'lnkup-marketplace' ),
+			lnkup_currency( ( (int) $amount_cents ) / 100 ),
+			lnkup_currency( ( (int) $available_cents ) / 100 ),
+			lnkup_currency( ( (int) $instant_cents ) / 100 )
+		);
+		$split = self::format_source_types_breakdown( $source_types );
+		if ( $split ) {
+			$msg .= ' ' . sprintf(
+				/* translators: %s: Card/Bank breakdown */
+				__( 'Available by source: %s.', 'lnkup-marketplace' ),
+				$split
+			);
+		}
+		$instant_split = self::format_source_types_breakdown( $instant_sources );
+		if ( $instant_split ) {
+			$msg .= ' ' . sprintf(
+				/* translators: %s: Card/Bank breakdown */
+				__( 'Instant by source: %s.', 'lnkup-marketplace' ),
+				$instant_split
+			);
+		}
+		if ( ! empty( $attempted ) && is_array( $attempted ) ) {
+			$msg .= ' ' . sprintf(
+				/* translators: %s: comma-separated Stripe source_type keys tried */
+				__( 'Tried balance sources: %s.', 'lnkup-marketplace' ),
+				implode( ', ', $attempted )
+			);
+		}
+		$acct_id = (string) $acct_id;
+		if ( strlen( $acct_id ) > 4 ) {
+			$msg .= ' ' . sprintf(
+				/* translators: %s: last 4 of Connect account id */
+				__( 'Connect …%s.', 'lnkup-marketplace' ),
+				substr( $acct_id, -4 )
+			);
+		}
+		return $msg;
 	}
 
 	/**

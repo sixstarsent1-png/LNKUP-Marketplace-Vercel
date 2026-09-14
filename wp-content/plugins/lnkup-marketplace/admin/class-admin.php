@@ -18,6 +18,33 @@ class LNKup_Admin {
 		add_action( 'admin_init', array( __CLASS__, 'maybe_rebuild_index' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'render_activation_error_notice' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'render_deferred_upgrade_notice' ) );
+		add_action( 'admin_notices', array( __CLASS__, 'render_stripe_test_mode_notice' ) );
+	}
+
+	/**
+	 * Warn when test_mode is on with live Stripe keys (unsigned webhook bypass is already blocked when secret is set).
+	 */
+	public static function render_stripe_test_mode_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$settings = function_exists( 'lnkup_get_settings' ) ? lnkup_get_settings() : array();
+		if ( empty( $settings['test_mode'] ) ) {
+			return;
+		}
+		$secret_key = (string) ( $settings['stripe_secret_key'] ?? '' );
+		$is_live    = 0 === strpos( $secret_key, 'sk_live_' ) || 0 === strpos( $secret_key, 'rk_live_' );
+		if ( ! $is_live ) {
+			return;
+		}
+		?>
+		<div class="notice notice-warning">
+			<p>
+				<strong><?php esc_html_e( 'LNKup: Test Mode is on with live Stripe keys.', 'lnkup-marketplace' ); ?></strong>
+				<?php esc_html_e( 'Turn off Test Mode for production. Webhook signatures are still required whenever a signing secret is saved.', 'lnkup-marketplace' ); ?>
+			</p>
+		</div>
+		<?php
 	}
 
 	/**
@@ -183,6 +210,13 @@ class LNKup_Admin {
 		$output['notify_vendor']       = ! empty( $input['notify_vendor'] );
 		$output['notify_organizer']    = ! empty( $input['notify_organizer'] );
 		$output['notify_admin']        = ! empty( $input['notify_admin'] );
+		$output['activation_emails_enabled'] = ! empty( $input['activation_emails_enabled'] );
+		if ( isset( $input['activation_daily_batch'] ) ) {
+			$output['activation_daily_batch'] = max( 10, min( 500, (int) $input['activation_daily_batch'] ) );
+		}
+		if ( isset( $input['expo_push_access_token'] ) ) {
+			$output['expo_push_access_token'] = sanitize_text_field( $input['expo_push_access_token'] );
+		}
 		if ( ! empty( $input['default_documents'] ) && is_array( $input['default_documents'] ) ) {
 			$output['default_documents'] = array_map( 'sanitize_text_field', $input['default_documents'] );
 		}
@@ -194,6 +228,10 @@ class LNKup_Admin {
 		$output['connect_express_enabled']       = ! empty( $input['connect_express_enabled'] );
 		$output['connect_instant_payouts_enabled'] = ! empty( $input['connect_instant_payouts_enabled'] );
 		$output['connect_manual_fallback']       = ! empty( $input['connect_manual_fallback'] );
+		$output['ach_enabled']                   = ! empty( $input['ach_enabled'] );
+		$output['stripe_billing_enabled']        = ! empty( $input['stripe_billing_enabled'] );
+		$output['apple_pay_enabled']             = ! empty( $input['apple_pay_enabled'] );
+		$output['google_pay_enabled']            = ! empty( $input['google_pay_enabled'] );
 		if ( isset( $input['connect_platform_country'] ) ) {
 			$output['connect_platform_country'] = strtoupper( sanitize_text_field( $input['connect_platform_country'] ) );
 		}
@@ -219,6 +257,13 @@ class LNKup_Admin {
 		if ( isset( $input['organizer_commission_percent'] ) ) {
 			$output['organizer_commission_percent'] = max( 0, min( 100, (float) $input['organizer_commission_percent'] ) );
 			$fee_keys_changed = true;
+		}
+		$output['organizer_recruit_enabled'] = ! empty( $input['organizer_recruit_enabled'] );
+		if ( isset( $input['organizer_recruit_percent'] ) ) {
+			$output['organizer_recruit_percent'] = max( 0, min( 100, (float) $input['organizer_recruit_percent'] ) );
+		}
+		if ( isset( $input['organizer_recruit_months'] ) ) {
+			$output['organizer_recruit_months'] = max( 1, min( 36, (int) $input['organizer_recruit_months'] ) );
 		}
 		if ( isset( $input['reserve_percent'] ) ) {
 			$output['reserve_percent'] = max( 0, min( 100, (float) $input['reserve_percent'] ) );
@@ -319,6 +364,69 @@ class LNKup_Admin {
 		if ( isset( $input['connector_organizer_10_booking_bonus'] ) ) {
 			$output['connector_organizer_10_booking_bonus'] = max( 0, (float) $input['connector_organizer_10_booking_bonus'] );
 		}
+		if ( isset( $input['connector_booking_share_percent'] ) ) {
+			$output['connector_booking_share_percent'] = max( 0, min( 100, (float) $input['connector_booking_share_percent'] ) );
+		}
+		if ( isset( $input['connector_booking_share_cap'] ) ) {
+			$output['connector_booking_share_cap'] = max( 0, (float) $input['connector_booking_share_cap'] );
+		}
+		if ( isset( $input['connector_reward_term_months'] ) ) {
+			$output['connector_reward_term_months'] = max( 1, min( 36, (int) $input['connector_reward_term_months'] ) );
+		}
+		if ( isset( $input['connector_payout_hold_days'] ) ) {
+			$output['connector_payout_hold_days'] = max( 0, min( 180, (int) $input['connector_payout_hold_days'] ) );
+		}
+		if ( isset( $input['connector_minimum_payout'] ) ) {
+			$output['connector_minimum_payout'] = max( 0, (float) $input['connector_minimum_payout'] );
+		}
+		$output['connector_vendor_referrals_rewarded'] = ! empty( $input['connector_vendor_referrals_rewarded'] );
+		if ( isset( $input['connector_terms_url'] ) ) {
+			$output['connector_terms_url'] = esc_url_raw( (string) $input['connector_terms_url'] );
+		}
+		if ( isset( $input['connector_support_url'] ) ) {
+			$output['connector_support_url'] = esc_url_raw( (string) $input['connector_support_url'] );
+		}
+		$output['connector_ranks_enabled'] = ! empty( $input['connector_ranks_enabled'] );
+		$output['connector_leaderboard_enabled'] = ! empty( $input['connector_leaderboard_enabled'] );
+		$output['connector_rank_celebration_enabled'] = ! empty( $input['connector_rank_celebration_enabled'] );
+		$output['connector_rank_bonus_requires_approval'] = ! empty( $input['connector_rank_bonus_requires_approval'] );
+		if ( isset( $input['connector_founding_cutoff'] ) ) {
+			$output['connector_founding_cutoff'] = sanitize_text_field( (string) $input['connector_founding_cutoff'] );
+		}
+		$rank_ints = array(
+			'connector_rank_market_builder_activated',
+			'connector_rank_market_builder_bookings',
+			'connector_rank_city_captain_activated',
+			'connector_rank_city_captain_bookings',
+			'connector_rank_city_captain_recurring',
+			'connector_rank_city_director_activated',
+			'connector_rank_city_director_bookings',
+			'connector_rank_city_director_recurring',
+			'connector_rank_regional_partner_activated',
+			'connector_rank_regional_partner_bookings',
+			'connector_rank_regional_partner_recurring',
+			'connector_rank_regional_partner_cities',
+		);
+		foreach ( $rank_ints as $key ) {
+			if ( isset( $input[ $key ] ) ) {
+				$output[ $key ] = max( 0, (int) $input[ $key ] );
+			}
+		}
+		$rank_floats = array(
+			'connector_rank_market_builder_gmv',
+			'connector_rank_market_builder_bonus',
+			'connector_rank_city_captain_gmv',
+			'connector_rank_city_captain_bonus',
+			'connector_rank_city_director_gmv',
+			'connector_rank_city_director_bonus',
+			'connector_rank_regional_partner_gmv',
+			'connector_rank_regional_partner_bonus',
+		);
+		foreach ( $rank_floats as $key ) {
+			if ( isset( $input[ $key ] ) ) {
+				$output[ $key ] = max( 0, (float) $input[ $key ] );
+			}
+		}
 		$output['platform_prelaunch_mode'] = ! empty( $input['platform_prelaunch_mode'] );
 		if ( isset( $input['platform_launch_date'] ) ) {
 			$launch_date = sanitize_text_field( $input['platform_launch_date'] );
@@ -327,6 +435,25 @@ class LNKup_Admin {
 			}
 		}
 		$output['platform_prelaunch_admin_preview'] = ! empty( $input['platform_prelaunch_admin_preview'] );
+		if ( isset( $input['app_release_datetime'] ) ) {
+			$app_dt = sanitize_text_field( (string) $input['app_release_datetime'] );
+			$app_dt = str_replace( 'T', ' ', $app_dt );
+			if ( preg_match( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $app_dt ) ) {
+				$app_dt .= ':00';
+			}
+			if ( preg_match( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $app_dt ) ) {
+				$output['app_release_datetime'] = $app_dt;
+			}
+		}
+		if ( isset( $input['app_release_tz'] ) ) {
+			$tz = sanitize_text_field( (string) $input['app_release_tz'] );
+			try {
+				new DateTimeZone( $tz );
+				$output['app_release_tz'] = $tz;
+			} catch ( Exception $e ) {
+				$output['app_release_tz'] = 'America/New_York';
+			}
+		}
 		LNKup_Marketplace_Cron::sync_with_phase();
 		return $output;
 	}
@@ -452,7 +579,27 @@ class LNKup_Admin {
 					</tr>
 					<tr>
 						<th><?php esc_html_e( 'Enable Test Mode', 'lnkup-marketplace' ); ?></th>
-						<td><label><input type="checkbox" name="lnkup_settings[test_mode]" value="1" <?php checked( $settings['test_mode'] ); ?> /> <?php esc_html_e( 'Use payment simulation when Stripe is not configured', 'lnkup-marketplace' ); ?></label></td>
+						<td><label><input type="checkbox" name="lnkup_settings[test_mode]" value="1" <?php checked( $settings['test_mode'] ); ?> /> <?php esc_html_e( 'Use payment simulation when Stripe is not configured. Does not bypass webhook signature verification when a signing secret is saved.', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+				</table>
+				<h2><?php esc_html_e( 'Payment methods (Financial OS)', 'lnkup-marketplace' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Flags gate WordPress Financial OS behavior. Enable matching methods in the Stripe Dashboard. Apps stay read-only + checkout handoff — they are not the payment system of record.', 'lnkup-marketplace' ); ?></p>
+				<table class="form-table">
+					<tr>
+						<th><?php esc_html_e( 'ACH / bank debit', 'lnkup-marketplace' ); ?></th>
+						<td><label><input type="checkbox" name="lnkup_settings[ach_enabled]" value="1" <?php checked( ! empty( $settings['ach_enabled'] ) ); ?> /> <?php esc_html_e( 'Allow US bank account (ACH) on PaymentIntents; processing webhooks do not unlock packets until succeeded', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Stripe Billing', 'lnkup-marketplace' ); ?></th>
+						<td><label><input type="checkbox" name="lnkup_settings[stripe_billing_enabled]" value="1" <?php checked( ! empty( $settings['stripe_billing_enabled'] ) ); ?> /> <?php esc_html_e( 'Create real Stripe subscriptions when plans have a stripe_price_id (otherwise simulated)', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Apple Pay', 'lnkup-marketplace' ); ?></th>
+						<td><label><input type="checkbox" name="lnkup_settings[apple_pay_enabled]" value="1" <?php checked( ! empty( $settings['apple_pay_enabled'] ) ); ?> /> <?php esc_html_e( 'Operator flag — enable Apple Pay in Stripe Dashboard / Payment Element domains', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Google Pay', 'lnkup-marketplace' ); ?></th>
+						<td><label><input type="checkbox" name="lnkup_settings[google_pay_enabled]" value="1" <?php checked( ! empty( $settings['google_pay_enabled'] ) ); ?> /> <?php esc_html_e( 'Operator flag — enable Google Pay in Stripe Dashboard / Payment Element domains', 'lnkup-marketplace' ); ?></label></td>
 					</tr>
 				</table>
 				<h2><?php esc_html_e( 'Stripe Connect', 'lnkup-marketplace' ); ?></h2>
@@ -497,6 +644,25 @@ class LNKup_Admin {
 						</td>
 					</tr>
 					<tr>
+						<th><?php esc_html_e( 'Organizer recruit referrals', 'lnkup-marketplace' ); ?></th>
+						<td>
+							<label><input type="checkbox" name="lnkup_settings[organizer_recruit_enabled]" value="1" <?php checked( ! isset( $settings['organizer_recruit_enabled'] ) || ! empty( $settings['organizer_recruit_enabled'] ) ); ?> /> <?php esc_html_e( 'Enable invite-organizer program (vendors & organizers)', 'lnkup-marketplace' ); ?></label>
+							<p class="description"><?php esc_html_e( 'Referrers earn a share of LNKup vendor + organizer fees on the referred organizer’s paid booth transactions for the window below.', 'lnkup-marketplace' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="organizer_recruit_percent"><?php esc_html_e( 'Recruit commission (% of platform fees)', 'lnkup-marketplace' ); ?></label></th>
+						<td>
+							<input type="number" step="0.01" id="organizer_recruit_percent" name="lnkup_settings[organizer_recruit_percent]" value="<?php echo esc_attr( (string) ( $settings['organizer_recruit_percent'] ?? 20 ) ); ?>" />
+						</td>
+					</tr>
+					<tr>
+						<th><label for="organizer_recruit_months"><?php esc_html_e( 'Recruit earning window (months)', 'lnkup-marketplace' ); ?></label></th>
+						<td>
+							<input type="number" min="1" max="36" id="organizer_recruit_months" name="lnkup_settings[organizer_recruit_months]" value="<?php echo esc_attr( (string) ( $settings['organizer_recruit_months'] ?? 12 ) ); ?>" class="small-text" />
+						</td>
+					</tr>
+					<tr>
 						<th><label for="reserve_percent"><?php esc_html_e( 'Reserve percent', 'lnkup-marketplace' ); ?></label></th>
 						<td><input type="number" step="0.01" id="reserve_percent" name="lnkup_settings[reserve_percent]" value="<?php echo esc_attr( (string) ( $settings['reserve_percent'] ?? 5 ) ); ?>" /></td>
 					</tr>
@@ -504,9 +670,9 @@ class LNKup_Admin {
 						<th><label for="connect_payout_schedule"><?php esc_html_e( 'Default payout schedule', 'lnkup-marketplace' ); ?></label></th>
 						<td>
 							<select id="connect_payout_schedule" name="lnkup_settings[connect_payout_schedule]">
-								<option value="daily" <?php selected( $settings['connect_payout_schedule'] ?? 'daily', 'daily' ); ?>><?php esc_html_e( 'Daily', 'lnkup-marketplace' ); ?></option>
-								<option value="weekly" <?php selected( $settings['connect_payout_schedule'] ?? 'daily', 'weekly' ); ?>><?php esc_html_e( 'Weekly', 'lnkup-marketplace' ); ?></option>
-								<option value="manual" <?php selected( $settings['connect_payout_schedule'] ?? 'daily', 'manual' ); ?>><?php esc_html_e( 'Manual', 'lnkup-marketplace' ); ?></option>
+								<option value="manual" <?php selected( $settings['connect_payout_schedule'] ?? 'manual', 'manual' ); ?>><?php esc_html_e( 'Manual (recommended for in-app cashout)', 'lnkup-marketplace' ); ?></option>
+								<option value="daily" <?php selected( $settings['connect_payout_schedule'] ?? 'manual', 'daily' ); ?>><?php esc_html_e( 'Daily', 'lnkup-marketplace' ); ?></option>
+								<option value="weekly" <?php selected( $settings['connect_payout_schedule'] ?? 'manual', 'weekly' ); ?>><?php esc_html_e( 'Weekly', 'lnkup-marketplace' ); ?></option>
 							</select>
 						</td>
 					</tr>
@@ -560,7 +726,19 @@ class LNKup_Admin {
 						<td>
 							<label><input type="checkbox" name="lnkup_settings[notify_vendor]" value="1" <?php checked( $settings['notify_vendor'] ); ?> /> <?php esc_html_e( 'Vendor notifications', 'lnkup-marketplace' ); ?></label><br>
 							<label><input type="checkbox" name="lnkup_settings[notify_organizer]" value="1" <?php checked( $settings['notify_organizer'] ); ?> /> <?php esc_html_e( 'Organizer notifications', 'lnkup-marketplace' ); ?></label><br>
-							<label><input type="checkbox" name="lnkup_settings[notify_admin]" value="1" <?php checked( $settings['notify_admin'] ); ?> /> <?php esc_html_e( 'Admin notifications', 'lnkup-marketplace' ); ?></label>
+							<label><input type="checkbox" name="lnkup_settings[notify_admin]" value="1" <?php checked( $settings['notify_admin'] ); ?> /> <?php esc_html_e( 'Admin notifications', 'lnkup-marketplace' ); ?></label><br>
+							<label><input type="checkbox" name="lnkup_settings[activation_emails_enabled]" value="1" <?php checked( ! isset( $settings['activation_emails_enabled'] ) || ! empty( $settings['activation_emails_enabled'] ) ); ?> /> <?php esc_html_e( 'Activation drip (welcome, finish profile, find events / create event)', 'lnkup-marketplace' ); ?></label>
+							<p class="description" style="margin-top:8px;">
+								<label for="activation_daily_batch"><?php esc_html_e( 'Daily activation batch size', 'lnkup-marketplace' ); ?></label>
+								<input type="number" min="10" max="500" id="activation_daily_batch" name="lnkup_settings[activation_daily_batch]" value="<?php echo esc_attr( (string) ( $settings['activation_daily_batch'] ?? 100 ) ); ?>" class="small-text" />
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="expo_push_access_token"><?php esc_html_e( 'Expo Push Access Token', 'lnkup-marketplace' ); ?></label></th>
+						<td>
+							<input type="password" id="expo_push_access_token" name="lnkup_settings[expo_push_access_token]" value="<?php echo esc_attr( $settings['expo_push_access_token'] ?? '' ); ?>" class="regular-text" autocomplete="off" />
+							<p class="description"><?php esc_html_e( 'Optional. Bearer token for Expo Push API. Leave blank to use the public endpoint (fine for staging).', 'lnkup-marketplace' ); ?></p>
 						</td>
 					</tr>
 					<tr>
@@ -658,11 +836,11 @@ class LNKup_Admin {
 					</tr>
 				</table>
 				<h2><?php esc_html_e( 'City Connector rewards', 'lnkup-marketplace' ); ?></h2>
-				<p class="description"><?php esc_html_e( 'Manual approval by default. Rewards never auto-payout via Stripe.', 'lnkup-marketplace' ); ?></p>
+				<p class="description"><?php esc_html_e( 'When enabled, connectors earn a share of qualifying booth GMV from organizers they directly refer. The term starts at that organizer’s first completed booking. Organizer-side attribution wins if both sides were referred. Admin must approve after the hold; rewards never auto-payout via Stripe. There is no base or guaranteed payment.', 'lnkup-marketplace' ); ?></p>
 				<table class="form-table">
 					<tr>
 						<th><?php esc_html_e( 'Enable connector rewards', 'lnkup-marketplace' ); ?></th>
-						<td><label><input type="checkbox" name="lnkup_settings[connector_rewards_enabled]" value="1" <?php checked( ! empty( $settings['connector_rewards_enabled'] ) ); ?> /> <?php esc_html_e( 'Queue rewards on qualifying milestones', 'lnkup-marketplace' ); ?></label></td>
+						<td><label><input type="checkbox" name="lnkup_settings[connector_rewards_enabled]" value="1" <?php checked( ! empty( $settings['connector_rewards_enabled'] ) ); ?> /> <?php esc_html_e( 'Queue a pending reward on each qualifying completed booth payment', 'lnkup-marketplace' ); ?></label></td>
 					</tr>
 					<tr>
 						<th><label for="connector_reward_mode"><?php esc_html_e( 'Reward mode', 'lnkup-marketplace' ); ?></label></th>
@@ -675,20 +853,111 @@ class LNKup_Admin {
 						</td>
 					</tr>
 					<tr>
+						<th><label for="connector_booking_share_percent"><?php esc_html_e( 'Booth GMV share (%)', 'lnkup-marketplace' ); ?></label></th>
+						<td><input type="number" step="0.1" min="0" max="100" id="connector_booking_share_percent" name="lnkup_settings[connector_booking_share_percent]" value="<?php echo esc_attr( (string) ( $settings['connector_booking_share_percent'] ?? 10 ) ); ?>" class="small-text" />
+						<p class="description"><?php esc_html_e( 'Percent of booth price (_lnkup_vendor_spot_fee), not LNKup platform take or organizer commission.', 'lnkup-marketplace' ); ?></p></td>
+					</tr>
+					<tr>
+						<th><label for="connector_booking_share_cap"><?php esc_html_e( 'Per-transaction cap ($)', 'lnkup-marketplace' ); ?></label></th>
+						<td><input type="number" step="0.01" min="0" id="connector_booking_share_cap" name="lnkup_settings[connector_booking_share_cap]" value="<?php echo esc_attr( (string) ( $settings['connector_booking_share_cap'] ?? 0 ) ); ?>" class="small-text" />
+						<p class="description"><?php esc_html_e( '0 disables the cap.', 'lnkup-marketplace' ); ?></p></td>
+					</tr>
+					<tr>
+						<th><label for="connector_reward_term_months"><?php esc_html_e( 'Reward term (months)', 'lnkup-marketplace' ); ?></label></th>
+						<td><input type="number" min="1" max="36" id="connector_reward_term_months" name="lnkup_settings[connector_reward_term_months]" value="<?php echo esc_attr( (string) ( $settings['connector_reward_term_months'] ?? 12 ) ); ?>" class="small-text" /></td>
+					</tr>
+					<tr>
+						<th><label for="connector_payout_hold_days"><?php esc_html_e( 'Hold period (days)', 'lnkup-marketplace' ); ?></label></th>
+						<td><input type="number" min="0" max="180" id="connector_payout_hold_days" name="lnkup_settings[connector_payout_hold_days]" value="<?php echo esc_attr( (string) ( $settings['connector_payout_hold_days'] ?? 30 ) ); ?>" class="small-text" /></td>
+					</tr>
+					<tr>
+						<th><label for="connector_minimum_payout"><?php esc_html_e( 'Minimum payout ($)', 'lnkup-marketplace' ); ?></label></th>
+						<td><input type="number" step="0.01" min="0" id="connector_minimum_payout" name="lnkup_settings[connector_minimum_payout]" value="<?php echo esc_attr( (string) ( $settings['connector_minimum_payout'] ?? 50 ) ); ?>" class="small-text" /></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Vendor referral earnings', 'lnkup-marketplace' ); ?></th>
+						<td><label><input type="checkbox" name="lnkup_settings[connector_vendor_referrals_rewarded]" value="1" <?php checked( ! empty( $settings['connector_vendor_referrals_rewarded'] ) ); ?> /> <?php esc_html_e( 'Also queue booking rewards when only the vendor (not the organizer) was referred', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><label for="connector_terms_url"><?php esc_html_e( 'Program terms URL', 'lnkup-marketplace' ); ?></label></th>
+						<td><input type="url" id="connector_terms_url" name="lnkup_settings[connector_terms_url]" value="<?php echo esc_attr( (string) ( $settings['connector_terms_url'] ?? '' ) ); ?>" class="regular-text" /></td>
+					</tr>
+					<tr>
+						<th><label for="connector_support_url"><?php esc_html_e( 'Support / contact URL', 'lnkup-marketplace' ); ?></label></th>
+						<td><input type="url" id="connector_support_url" name="lnkup_settings[connector_support_url]" value="<?php echo esc_attr( (string) ( $settings['connector_support_url'] ?? '' ) ); ?>" class="regular-text" /></td>
+					</tr>
+					<tr>
 						<th><label for="connector_vendor_signup_credit"><?php esc_html_e( 'Vendor signup credit ($)', 'lnkup-marketplace' ); ?></label></th>
 						<td><input type="number" step="0.01" min="0" id="connector_vendor_signup_credit" name="lnkup_settings[connector_vendor_signup_credit]" value="<?php echo esc_attr( (string) ( $settings['connector_vendor_signup_credit'] ?? 0 ) ); ?>" class="small-text" /></td>
 					</tr>
 					<tr>
-						<th><label for="connector_vendor_paid_booking_credit"><?php esc_html_e( 'Vendor paid booking credit ($)', 'lnkup-marketplace' ); ?></label></th>
-						<td><input type="number" step="0.01" min="0" id="connector_vendor_paid_booking_credit" name="lnkup_settings[connector_vendor_paid_booking_credit]" value="<?php echo esc_attr( (string) ( $settings['connector_vendor_paid_booking_credit'] ?? 10 ) ); ?>" class="small-text" /></td>
-					</tr>
-					<tr>
-						<th><label for="connector_organizer_first_booking_credit"><?php esc_html_e( 'Organizer first booking credit ($)', 'lnkup-marketplace' ); ?></label></th>
-						<td><input type="number" step="0.01" min="0" id="connector_organizer_first_booking_credit" name="lnkup_settings[connector_organizer_first_booking_credit]" value="<?php echo esc_attr( (string) ( $settings['connector_organizer_first_booking_credit'] ?? 0 ) ); ?>" class="small-text" /></td>
-					</tr>
-					<tr>
 						<th><label for="connector_organizer_10_booking_bonus"><?php esc_html_e( 'Organizer 10-booking bonus ($)', 'lnkup-marketplace' ); ?></label></th>
 						<td><input type="number" step="0.01" min="0" id="connector_organizer_10_booking_bonus" name="lnkup_settings[connector_organizer_10_booking_bonus]" value="<?php echo esc_attr( (string) ( $settings['connector_organizer_10_booking_bonus'] ?? 0 ) ); ?>" class="small-text" /></td>
+					</tr>
+				</table>
+				<h2><?php esc_html_e( 'City Connector ranks', 'lnkup-marketplace' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Rank never changes commission. Bonuses stay pending until an admin approves them. Hold days reuse the connector payout hold above.', 'lnkup-marketplace' ); ?></p>
+				<table class="form-table">
+					<tr>
+						<th><?php esc_html_e( 'Enable ranks', 'lnkup-marketplace' ); ?></th>
+						<td><label><input type="checkbox" name="lnkup_settings[connector_ranks_enabled]" value="1" <?php checked( ! empty( $settings['connector_ranks_enabled'] ) ); ?> /> <?php esc_html_e( 'Calculate and display City Connector ranks', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Leaderboard', 'lnkup-marketplace' ); ?></th>
+						<td><label><input type="checkbox" name="lnkup_settings[connector_leaderboard_enabled]" value="1" <?php checked( ! empty( $settings['connector_leaderboard_enabled'] ) ); ?> /> <?php esc_html_e( 'Show opt-in city leaderboard (no dollars)', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Celebration', 'lnkup-marketplace' ); ?></th>
+						<td><label><input type="checkbox" name="lnkup_settings[connector_rank_celebration_enabled]" value="1" <?php checked( ! empty( $settings['connector_rank_celebration_enabled'] ) ); ?> /> <?php esc_html_e( 'Show a one-time celebration when a rank is earned', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Bonus approval', 'lnkup-marketplace' ); ?></th>
+						<td><label><input type="checkbox" name="lnkup_settings[connector_rank_bonus_requires_approval]" value="1" <?php checked( ! empty( $settings['connector_rank_bonus_requires_approval'] ) ); ?> /> <?php esc_html_e( 'Rank bonuses require admin approval (recommended)', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><label for="connector_founding_cutoff"><?php esc_html_e( 'Founding City Partner cutoff', 'lnkup-marketplace' ); ?></label></th>
+						<td><input type="date" id="connector_founding_cutoff" name="lnkup_settings[connector_founding_cutoff]" value="<?php echo esc_attr( (string) ( $settings['connector_founding_cutoff'] ?? '' ) ); ?>" />
+						<p class="description"><?php esc_html_e( 'Empty = every approved connector is founding. Date is inclusive.', 'lnkup-marketplace' ); ?></p></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Market Builder', 'lnkup-marketplace' ); ?></th>
+						<td>
+							<label><?php esc_html_e( 'Activated', 'lnkup-marketplace' ); ?> <input type="number" min="0" name="lnkup_settings[connector_rank_market_builder_activated]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_market_builder_activated'] ?? 3 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'Bookings', 'lnkup-marketplace' ); ?> <input type="number" min="0" name="lnkup_settings[connector_rank_market_builder_bookings]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_market_builder_bookings'] ?? 15 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'GMV', 'lnkup-marketplace' ); ?> <input type="number" min="0" step="0.01" name="lnkup_settings[connector_rank_market_builder_gmv]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_market_builder_gmv'] ?? 3000 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'Bonus', 'lnkup-marketplace' ); ?> <input type="number" min="0" step="0.01" name="lnkup_settings[connector_rank_market_builder_bonus]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_market_builder_bonus'] ?? 100 ) ); ?>" class="small-text" /></label>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'City Captain', 'lnkup-marketplace' ); ?></th>
+						<td>
+							<label><?php esc_html_e( 'Activated', 'lnkup-marketplace' ); ?> <input type="number" min="0" name="lnkup_settings[connector_rank_city_captain_activated]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_city_captain_activated'] ?? 10 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'Bookings', 'lnkup-marketplace' ); ?> <input type="number" min="0" name="lnkup_settings[connector_rank_city_captain_bookings]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_city_captain_bookings'] ?? 60 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'GMV', 'lnkup-marketplace' ); ?> <input type="number" min="0" step="0.01" name="lnkup_settings[connector_rank_city_captain_gmv]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_city_captain_gmv'] ?? 15000 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'Recurring', 'lnkup-marketplace' ); ?> <input type="number" min="0" name="lnkup_settings[connector_rank_city_captain_recurring]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_city_captain_recurring'] ?? 3 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'Bonus', 'lnkup-marketplace' ); ?> <input type="number" min="0" step="0.01" name="lnkup_settings[connector_rank_city_captain_bonus]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_city_captain_bonus'] ?? 250 ) ); ?>" class="small-text" /></label>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'City Director', 'lnkup-marketplace' ); ?></th>
+						<td>
+							<label><?php esc_html_e( 'Activated', 'lnkup-marketplace' ); ?> <input type="number" min="0" name="lnkup_settings[connector_rank_city_director_activated]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_city_director_activated'] ?? 25 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'Bookings', 'lnkup-marketplace' ); ?> <input type="number" min="0" name="lnkup_settings[connector_rank_city_director_bookings]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_city_director_bookings'] ?? 200 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'GMV', 'lnkup-marketplace' ); ?> <input type="number" min="0" step="0.01" name="lnkup_settings[connector_rank_city_director_gmv]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_city_director_gmv'] ?? 50000 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'Recurring', 'lnkup-marketplace' ); ?> <input type="number" min="0" name="lnkup_settings[connector_rank_city_director_recurring]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_city_director_recurring'] ?? 8 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'Bonus', 'lnkup-marketplace' ); ?> <input type="number" min="0" step="0.01" name="lnkup_settings[connector_rank_city_director_bonus]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_city_director_bonus'] ?? 500 ) ); ?>" class="small-text" /></label>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Regional Partner', 'lnkup-marketplace' ); ?></th>
+						<td>
+							<label><?php esc_html_e( 'Activated', 'lnkup-marketplace' ); ?> <input type="number" min="0" name="lnkup_settings[connector_rank_regional_partner_activated]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_regional_partner_activated'] ?? 50 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'Bookings', 'lnkup-marketplace' ); ?> <input type="number" min="0" name="lnkup_settings[connector_rank_regional_partner_bookings]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_regional_partner_bookings'] ?? 500 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'GMV', 'lnkup-marketplace' ); ?> <input type="number" min="0" step="0.01" name="lnkup_settings[connector_rank_regional_partner_gmv]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_regional_partner_gmv'] ?? 125000 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'Recurring', 'lnkup-marketplace' ); ?> <input type="number" min="0" name="lnkup_settings[connector_rank_regional_partner_recurring]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_regional_partner_recurring'] ?? 15 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'Cities', 'lnkup-marketplace' ); ?> <input type="number" min="1" name="lnkup_settings[connector_rank_regional_partner_cities]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_regional_partner_cities'] ?? 2 ) ); ?>" class="small-text" /></label>
+							<label><?php esc_html_e( 'Bonus', 'lnkup-marketplace' ); ?> <input type="number" min="0" step="0.01" name="lnkup_settings[connector_rank_regional_partner_bonus]" value="<?php echo esc_attr( (string) ( $settings['connector_rank_regional_partner_bonus'] ?? 1000 ) ); ?>" class="small-text" /></label>
+						</td>
 					</tr>
 				</table>
 				<h2><?php esc_html_e( 'Outreach throttling', 'lnkup-marketplace' ); ?></h2>
@@ -723,7 +992,7 @@ class LNKup_Admin {
 					</tr>
 				</table>
 				<h2><?php esc_html_e( 'Pre-launch', 'lnkup-marketplace' ); ?></h2>
-				<p class="description"><?php esc_html_e( 'Before the launch date, vendors see a waitlist experience. LNKup admins can optionally preview the full marketplace while pre-launch is active.', 'lnkup-marketplace' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Before the launch date, vendors see a waitlist experience. LNKup admins can optionally preview the full marketplace while pre-launch is active. Marketplace open is independent of the mobile app release date below.', 'lnkup-marketplace' ); ?></p>
 				<table class="form-table">
 					<tr>
 						<th><?php esc_html_e( 'Pre-launch mode', 'lnkup-marketplace' ); ?></th>
@@ -761,6 +1030,32 @@ class LNKup_Admin {
 								<?php esc_html_e( 'Allow LNKup admins to browse and test apply flows before public launch', 'lnkup-marketplace' ); ?>
 							</label>
 							<p class="description"><?php esc_html_e( 'Applies to users with LNKup admin access only. Public visitors and vendors still see the pre-launch gate.', 'lnkup-marketplace' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="app_release_datetime"><?php esc_html_e( 'App release datetime', 'lnkup-marketplace' ); ?></label></th>
+						<td>
+							<?php
+							$app_dt_raw = (string) ( $settings['app_release_datetime'] ?? '2026-08-16 12:00:00' );
+							$app_dt_raw = str_replace( ' ', 'T', substr( $app_dt_raw, 0, 16 ) );
+							?>
+							<input type="datetime-local" id="app_release_datetime" name="lnkup_settings[app_release_datetime]" value="<?php echo esc_attr( $app_dt_raw ); ?>" />
+							<p class="description">
+								<?php
+								printf(
+									/* translators: %s: formatted app release label */
+									esc_html__( 'Homepage app bar shows until this moment. Current label: %s', 'lnkup-marketplace' ),
+									esc_html( lnkup_get_app_release_label() )
+								);
+								?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="app_release_tz"><?php esc_html_e( 'App release timezone', 'lnkup-marketplace' ); ?></label></th>
+						<td>
+							<input type="text" id="app_release_tz" name="lnkup_settings[app_release_tz]" value="<?php echo esc_attr( (string) ( $settings['app_release_tz'] ?? 'America/New_York' ) ); ?>" class="regular-text" />
+							<p class="description"><?php esc_html_e( 'PHP timezone ID (default America/New_York). Does not gate the web marketplace.', 'lnkup-marketplace' ); ?></p>
 						</td>
 					</tr>
 				</table>

@@ -60,30 +60,51 @@ class LNKup_Marketplace_Analytics {
 	 */
 	public static function track( $type, $data = array(), $user_id = 0, $opp_id = 0 ) {
 		global $wpdb;
-		$wpdb->insert(
-			self::table_name(),
-			array(
-				'event_type'     => sanitize_key( $type ),
-				'event_data'     => wp_json_encode( $data ),
-				'user_id'        => $user_id ?: get_current_user_id(),
-				'opportunity_id' => absint( $opp_id ),
-				'created_at'     => current_time( 'mysql' ),
-			),
-			array( '%s', '%s', '%d', '%d', '%s' )
-		);
+		try {
+			$wpdb->insert(
+				self::table_name(),
+				array(
+					'event_type'     => sanitize_key( $type ),
+					'event_data'     => wp_json_encode( $data ),
+					'user_id'        => $user_id ?: get_current_user_id(),
+					'opportunity_id' => absint( $opp_id ),
+					'created_at'     => current_time( 'mysql' ),
+				),
+				array( '%s', '%s', '%d', '%d', '%s' )
+			);
 
-		if ( 'search' === $type && ! empty( $data['q'] ) ) {
-			self::bump_popular_search( $data['q'] );
+			if ( 'search' === $type && ! empty( $data['q'] ) ) {
+				self::bump_popular_search( $data['q'] );
+			}
+			if ( 'search_no_results' === $type && ! empty( $data['q'] ) ) {
+				$zero = self::option_array( 'lnkup_zero_result_searches' );
+				$key  = sanitize_text_field( (string) $data['q'] );
+				if ( '' !== $key ) {
+					$zero[ $key ] = (int) ( $zero[ $key ] ?? 0 ) + 1;
+					arsort( $zero );
+					update_option( 'lnkup_zero_result_searches', array_slice( $zero, 0, 50, true ) );
+				}
+			}
+			if ( 'filter_use' === $type && ! empty( $data['filter'] ) ) {
+				self::bump_filter_usage( $data['filter'] );
+			}
+		} catch ( Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+			// Never let analytics crash Find / marketplace search.
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( 'LNKup_Marketplace_Analytics::track failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
 		}
-		if ( 'search_no_results' === $type && ! empty( $data['q'] ) ) {
-			$zero = get_option( 'lnkup_zero_result_searches', array() );
-			$zero[ $data['q'] ] = ( $zero[ $data['q'] ] ?? 0 ) + 1;
-			arsort( $zero );
-			update_option( 'lnkup_zero_result_searches', array_slice( $zero, 0, 50, true ) );
-		}
-		if ( 'filter_use' === $type && ! empty( $data['filter'] ) ) {
-			self::bump_filter_usage( $data['filter'] );
-		}
+	}
+
+	/**
+	 * Coerce a wp_option to an array (corrupt/scalar options must not TypeError).
+	 *
+	 * @param string $option Option name.
+	 * @return array
+	 */
+	private static function option_array( $option ) {
+		$value = get_option( $option, array() );
+		return is_array( $value ) ? $value : array();
 	}
 
 	/**
@@ -92,23 +113,40 @@ class LNKup_Marketplace_Analytics {
 	 * @param string $filter Filter key.
 	 */
 	private static function bump_filter_usage( $filter ) {
-		$usage = get_option( 'lnkup_filter_usage', array() );
+		$usage = self::option_array( 'lnkup_filter_usage' );
 		$key   = sanitize_key( $filter );
-		$usage[ $key ] = ( $usage[ $key ] ?? 0 ) + 1;
+		if ( '' === $key ) {
+			return;
+		}
+		$usage[ $key ] = (int) ( $usage[ $key ] ?? 0 ) + 1;
 		arsort( $usage );
 		update_option( 'lnkup_filter_usage', array_slice( $usage, 0, 30, true ) );
 	}
 
 	/**
 	 * Bump popular search counter.
+	 *
+	 * @param string $q Query.
 	 */
 	private static function bump_popular_search( $q ) {
-		$popular = get_option( 'lnkup_popular_searches', array() );
-		$q = sanitize_text_field( $q );
-		if ( ! in_array( $q, $popular, true ) ) {
-			array_unshift( $popular, $q );
+		$popular = self::option_array( 'lnkup_popular_searches' );
+		$q       = sanitize_text_field( (string) $q );
+		if ( '' === $q ) {
+			return;
 		}
-		update_option( 'lnkup_popular_searches', array_slice( array_unique( $popular ), 0, 20 ) );
+		// Legacy / corrupt rows may be associative maps — keep list of strings only.
+		$list = array();
+		foreach ( $popular as $item ) {
+			if ( is_string( $item ) && '' !== $item ) {
+				$list[] = $item;
+			} elseif ( is_array( $item ) && ! empty( $item['q'] ) ) {
+				$list[] = sanitize_text_field( (string) $item['q'] );
+			}
+		}
+		if ( ! in_array( $q, $list, true ) ) {
+			array_unshift( $list, $q );
+		}
+		update_option( 'lnkup_popular_searches', array_values( array_slice( array_unique( $list ), 0, 20 ) ) );
 	}
 
 	/**

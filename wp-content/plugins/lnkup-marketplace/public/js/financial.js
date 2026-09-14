@@ -1036,18 +1036,29 @@
       if (!hasRevenue && (!activity || !activity.length)) {
         html += '<div class="lnkup-empty-state lnkup-empty-state--compact"><p class="lnkup-empty-state__desc">' + escapeHtml((window.lnkupUiCopy && window.lnkupUiCopy.empty_financial) || 'No financial activity yet. Payments will appear here once vendors start booking.') + '</p></div>';
       }
-      if (dash.charts && dash.charts.revenue_by_month && dash.charts.revenue_by_month.length) {
-        html += '<h3>Revenue by month</h3>' + chartBars(dash.charts.revenue_by_month, 'revenue', 'month');
+      html += '<div class="lnkup-fin-chart-shell" data-testid="lnkup-fin-chart-shell">';
+      var monthRows = dash.charts && dash.charts.revenue_by_month ? dash.charts.revenue_by_month : [];
+      if (monthRows.length) {
+        html += '<h3>Revenue by month</h3>' + chartBars(monthRows, 'revenue', 'month');
+      } else {
+        var chartMsg = balances.stripeSynced
+          ? 'Charts unavailable'
+          : 'Balances syncing with Stripe';
+        html += infoCard(
+          'Revenue by month',
+          '<p class="lnkup-muted">' + escapeHtml(chartMsg) + '</p><p><button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" data-fin-retry-overview>Retry</button></p>',
+          'warn'
+        );
       }
       html += '</div>';
+      html += '</div>';
       panel.innerHTML = html;
-      var retryBtn = panel.querySelector('[data-fin-retry-overview]');
-      if (retryBtn) {
+      panel.querySelectorAll('[data-fin-retry-overview]').forEach(function (retryBtn) {
         retryBtn.addEventListener('click', function () {
           panel.dataset.loaded = '';
           loadOrganizerOverview(panel);
         });
-      }
+      });
       if (window.LNKupUI && typeof LNKupUI.animateKpiCards === 'function') {
         LNKupUI.animateKpiCards(panel);
       }

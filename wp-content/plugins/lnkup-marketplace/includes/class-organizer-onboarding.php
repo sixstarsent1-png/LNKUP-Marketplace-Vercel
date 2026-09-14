@@ -49,8 +49,19 @@ class LNKup_Organizer_Onboarding {
 				update_post_meta( $event_id, '_lnkup_' . $field, $val );
 			}
 		}
+		if ( ! empty( $input['ticketing_url'] ) ) {
+			update_post_meta( $event_id, '_lnkup_external_source_url', esc_url_raw( (string) $input['ticketing_url'] ) );
+		}
 		update_post_meta( $event_id, '_lnkup_venue_hidden', ! empty( $input['venue_hidden'] ) );
 		update_post_meta( $event_id, '_lnkup_status', 'published' );
+
+		$gallery_raw = $input['gallery_ids'] ?? $input['gallery'] ?? '';
+		if ( $gallery_raw || ! empty( $input['featured_image_id'] ) ) {
+			lnkup_save_post_gallery( $event_id, $gallery_raw );
+			if ( ! empty( $input['featured_image_id'] ) ) {
+				update_post_meta( $event_id, '_lnkup_featured_image_id', absint( $input['featured_image_id'] ) );
+			}
+		}
 
 		if ( ! empty( $input['event_type'] ) ) {
 			wp_set_object_terms( $event_id, sanitize_text_field( (string) $input['event_type'] ), 'lnkup_event_type' );
@@ -165,6 +176,15 @@ class LNKup_Organizer_Onboarding {
 		update_post_meta( $opp_id, '_lnkup_application_deadline', $deadline );
 		update_post_meta( $opp_id, '_lnkup_opportunity_status', 'open' );
 
+		$event_gallery = lnkup_parse_gallery_ids( get_post_meta( $event_id, '_lnkup_gallery_ids', true ) );
+		if ( $event_gallery ) {
+			update_post_meta( $opp_id, '_lnkup_gallery_ids', wp_json_encode( $event_gallery ) );
+		}
+		$event_featured = (int) get_post_meta( $event_id, '_lnkup_featured_image_id', true );
+		if ( $event_featured ) {
+			update_post_meta( $opp_id, '_lnkup_featured_image_id', $event_featured );
+		}
+
 		if ( isset( $input['deposit_required'] ) ) {
 			update_post_meta( $opp_id, '_lnkup_deposit_required', ! empty( $input['deposit_required'] ) );
 		}
@@ -183,15 +203,38 @@ class LNKup_Organizer_Onboarding {
 		self::apply_required_documents( $opp_id, $input, $settings );
 		self::apply_vendor_categories( $opp_id, $input );
 
-		if ( class_exists( 'LNKup_Geocoder' ) ) {
-			LNKup_Geocoder::geocode_event( $event_id );
+		$indexed = true;
+		try {
+			if ( class_exists( 'LNKup_Geocoder' ) ) {
+				LNKup_Geocoder::geocode_event( $event_id );
+			}
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( 'LNKup create_opportunity geocode: ' . $e->getMessage() );
+			}
 		}
 
-		$synced  = LNKup_Marketplace_Index::sync_opportunity( $opp_id );
-		$indexed = ! is_wp_error( $synced );
+		try {
+			$synced  = LNKup_Marketplace_Index::sync_opportunity( $opp_id );
+			$indexed = ! is_wp_error( $synced );
+		} catch ( Throwable $e ) {
+			$indexed = false;
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( 'LNKup create_opportunity sync: ' . $e->getMessage() );
+			}
+		}
 
-		if ( class_exists( 'LNKup_Event_Operations' ) ) {
-			LNKup_Event_Operations::bootstrap_from_event( $event_id );
+		try {
+			if ( class_exists( 'LNKup_Event_Operations' ) ) {
+				LNKup_Event_Operations::bootstrap_from_event( $event_id );
+			}
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( 'LNKup create_opportunity bootstrap: ' . $e->getMessage() );
+			}
 		}
 
 		if ( '' !== $client_token ) {
@@ -373,5 +416,308 @@ class LNKup_Organizer_Onboarding {
 			),
 			'operations_url'          => add_query_arg( array( 'event' => $event_id, 'ops' => 1 ), $dash_url ),
 		);
+	}
+
+	/**
+	 * Update vendor fee and/or spots on an organizer-owned opportunity.
+	 *
+	 * @param int        $opp_id       Opportunity post ID.
+	 * @param float|null $vendor_fee   New fee (null = leave unchanged).
+	 * @param int|null   $spots_total  New spots total (null = leave unchanged).
+	 * @param int        $organizer_id Organizer user ID.
+	 * @return array<string, mixed>|WP_Error
+	 */
+	public static function update_opportunity_pricing( int $opp_id, $vendor_fee, $spots_total, int $organizer_id ) {
+		$opp = get_post( $opp_id );
+		if ( ! $opp || 'lnkup_opportunity' !== $opp->post_type ) {
+			return new WP_Error( 'invalid_opportunity', __( 'Invalid opportunity.', 'lnkup-marketplace' ) );
+		}
+
+		$event_id   = (int) get_post_meta( $opp_id, '_lnkup_event_id', true );
+		$owns_event = $event_id > 0 && LNKup_Capabilities::user_owns_post( $event_id, $organizer_id, '_lnkup_organizer_user_id' );
+		$owns_opp   = LNKup_Capabilities::user_owns_post( $opp_id, $organizer_id, '_lnkup_organizer_user_id' );
+		if ( ! $owns_event && ! $owns_opp && ! LNKup_Capabilities::user_has_manage_all( $organizer_id ) ) {
+			return new WP_Error( 'forbidden', __( 'You cannot edit this opportunity.', 'lnkup-marketplace' ) );
+		}
+
+		$old_total     = (int) get_post_meta( $opp_id, '_lnkup_spots_total', true );
+		$old_remaining = (int) get_post_meta( $opp_id, '_lnkup_spots_remaining', true );
+		$filled        = max( 0, $old_total - $old_remaining );
+
+		$fee = null === $vendor_fee
+			? (float) get_post_meta( $opp_id, '_lnkup_vendor_fee', true )
+			: LNKup_Security::sanitize_money( $vendor_fee );
+		if ( $fee < 0 ) {
+			return new WP_Error( 'invalid_fee', __( 'Vendor fee cannot be negative.', 'lnkup-marketplace' ) );
+		}
+
+		$spots = null === $spots_total ? $old_total : absint( $spots_total );
+		if ( $spots < 1 ) {
+			return new WP_Error( 'invalid_spots', __( 'At least one vendor spot is required.', 'lnkup-marketplace' ) );
+		}
+		if ( $spots < $filled ) {
+			return new WP_Error(
+				'spots_too_low',
+				sprintf(
+					/* translators: %d: number of filled spots */
+					__( 'Spots cannot be less than %d already filled.', 'lnkup-marketplace' ),
+					$filled
+				)
+			);
+		}
+
+		$new_remaining = max( 0, $spots - $filled );
+
+		update_post_meta( $opp_id, '_lnkup_vendor_fee', $fee );
+		update_post_meta( $opp_id, '_lnkup_spots_total', $spots );
+		update_post_meta( $opp_id, '_lnkup_spots_remaining', $new_remaining );
+
+		$indexed = true;
+		if ( class_exists( 'LNKup_Marketplace_Index' ) ) {
+			$synced  = LNKup_Marketplace_Index::sync_opportunity( $opp_id );
+			$indexed = ! is_wp_error( $synced );
+		}
+
+		return array(
+			'message'         => __( 'Vendor fee and spots updated.', 'lnkup-marketplace' ),
+			'opportunity_id'  => $opp_id,
+			'event_id'        => $event_id,
+			'vendor_fee'      => $fee,
+			'spots_total'     => $spots,
+			'spots_remaining' => $new_remaining,
+			'indexed'         => $indexed,
+		);
+	}
+
+	/**
+	 * Update organizer-owned event listing fields after create.
+	 *
+	 * @param int                  $event_id     Event post ID.
+	 * @param array<string, mixed> $input        PATCH-style input.
+	 * @param int                  $organizer_id Organizer user ID.
+	 * @return array<string, mixed>|WP_Error
+	 */
+	public static function update_event_from_request( int $event_id, array $input, int $organizer_id ) {
+		$event = get_post( $event_id );
+		if ( ! $event || 'lnkup_event' !== $event->post_type ) {
+			return new WP_Error( 'invalid_event', __( 'Invalid event.', 'lnkup-marketplace' ) );
+		}
+		if ( ! LNKup_Capabilities::user_owns_post( $event_id, $organizer_id, '_lnkup_organizer_user_id' )
+			&& ! LNKup_Capabilities::user_has_manage_all( $organizer_id ) ) {
+			return new WP_Error( 'forbidden', __( 'You cannot edit this event.', 'lnkup-marketplace' ) );
+		}
+
+		$update = array( 'ID' => $event_id );
+		if ( isset( $input['event_name'] ) || isset( $input['title'] ) ) {
+			$name = isset( $input['event_name'] )
+				? sanitize_text_field( (string) $input['event_name'] )
+				: sanitize_text_field( (string) $input['title'] );
+			if ( '' === $name ) {
+				return new WP_Error( 'missing_name', __( 'Event name is required.', 'lnkup-marketplace' ) );
+			}
+			$update['post_title'] = $name;
+		}
+		if ( array_key_exists( 'description', $input ) ) {
+			$update['post_content'] = sanitize_textarea_field( (string) $input['description'] );
+		}
+		if ( count( $update ) > 1 ) {
+			$saved = wp_update_post( $update, true );
+			if ( is_wp_error( $saved ) ) {
+				return $saved;
+			}
+		}
+
+		$meta_fields = array( 'event_date', 'start_time', 'end_time', 'city', 'state', 'venue_name', 'venue_address', 'expected_attendance', 'ticketing_platform', 'ticketing_url' );
+		foreach ( $meta_fields as $field ) {
+			if ( ! array_key_exists( $field, $input ) ) {
+				continue;
+			}
+			$val = 'ticketing_url' === $field ? esc_url_raw( (string) $input[ $field ] ) : sanitize_text_field( (string) $input[ $field ] );
+			update_post_meta( $event_id, '_lnkup_' . $field, $val );
+		}
+		if ( ! empty( $input['ticketing_url'] ) ) {
+			update_post_meta( $event_id, '_lnkup_external_source_url', esc_url_raw( (string) $input['ticketing_url'] ) );
+		}
+		if ( array_key_exists( 'venue_hidden', $input ) ) {
+			update_post_meta( $event_id, '_lnkup_venue_hidden', ! empty( $input['venue_hidden'] ) );
+		}
+
+		$gallery_raw = $input['gallery_ids'] ?? $input['gallery'] ?? null;
+		if ( null !== $gallery_raw || ! empty( $input['featured_image_id'] ) ) {
+			lnkup_save_post_gallery( $event_id, $gallery_raw ?? '' );
+			if ( ! empty( $input['featured_image_id'] ) ) {
+				update_post_meta( $event_id, '_lnkup_featured_image_id', absint( $input['featured_image_id'] ) );
+			}
+		}
+
+		if ( ! empty( $input['event_type'] ) ) {
+			wp_set_object_terms( $event_id, sanitize_text_field( (string) $input['event_type'] ), 'lnkup_event_type' );
+		}
+
+		if ( class_exists( 'LNKup_Geocoder' ) ) {
+			LNKup_Geocoder::geocode_event( $event_id );
+		}
+
+		$dash_url = lnkup_page_url_helper( 'organizer-dashboard' );
+
+		return array(
+			'message'        => __( 'Event updated.', 'lnkup-marketplace' ),
+			'event_id'       => $event_id,
+			'event_title'    => get_the_title( $event_id ),
+			'event_date'     => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
+			'event_city'     => (string) get_post_meta( $event_id, '_lnkup_city', true ),
+			'view_event_url' => $dash_url . '#events',
+		);
+	}
+
+	/**
+	 * Normalize fee rows into opportunity create inputs (one booth price per vendor type).
+	 *
+	 * Accepts `opportunities` array, or legacy single `vendor_fee` + `categories`,
+	 * or parallel POST arrays `fee_category[]` / `fee_amount[]` / `fee_spots[]`.
+	 *
+	 * @param array<string, mixed> $input Request input.
+	 * @return array<int, array<string, mixed>>|WP_Error
+	 */
+	public static function normalize_opportunity_rows( array $input ) {
+		$rows = array();
+
+		if ( ! empty( $input['opportunities'] ) && is_array( $input['opportunities'] ) ) {
+			foreach ( $input['opportunities'] as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+				$rows[] = $row;
+			}
+		} elseif ( ! empty( $input['fee_category'] ) && is_array( $input['fee_category'] ) ) {
+			$cats   = $input['fee_category'];
+			$fees   = isset( $input['fee_amount'] ) && is_array( $input['fee_amount'] ) ? $input['fee_amount'] : array();
+			$spots  = isset( $input['fee_spots'] ) && is_array( $input['fee_spots'] ) ? $input['fee_spots'] : array();
+			$count  = count( $cats );
+			for ( $i = 0; $i < $count; $i++ ) {
+				$cat = sanitize_text_field( (string) $cats[ $i ] );
+				if ( '' === $cat ) {
+					continue;
+				}
+				$rows[] = array(
+					'categories'       => array( $cat ),
+					'vendor_category'  => $cat,
+					'vendor_fee'       => $fees[ $i ] ?? 250,
+					'spots_total'      => $spots[ $i ] ?? 10,
+					'opportunity_title'=> $cat,
+				);
+			}
+		} elseif ( isset( $input['vendor_fee'] ) || isset( $input['spots_total'] ) || ! empty( $input['categories'] ) || ! empty( $input['vendor_categories'] ) ) {
+			$rows[] = $input;
+		}
+
+		if ( empty( $rows ) ) {
+			return new WP_Error(
+				'missing_fee_rows',
+				__( 'Add at least one vendor type with a booth price.', 'lnkup-marketplace' )
+			);
+		}
+
+		$normalized = array();
+		foreach ( $rows as $row ) {
+			$categories = array();
+			if ( ! empty( $row['categories'] ) && is_array( $row['categories'] ) ) {
+				$categories = array_values( array_filter( array_map( 'sanitize_text_field', $row['categories'] ) ) );
+			} elseif ( ! empty( $row['vendor_categories'] ) && is_array( $row['vendor_categories'] ) ) {
+				$categories = array_values( array_filter( array_map( 'sanitize_text_field', $row['vendor_categories'] ) ) );
+			} elseif ( ! empty( $row['vendor_category'] ) || ! empty( $row['category'] ) ) {
+				$cat = sanitize_text_field( (string) ( $row['vendor_category'] ?? $row['category'] ) );
+				if ( '' !== $cat ) {
+					$categories = array( $cat );
+				}
+			}
+
+			$fee = isset( $row['vendor_fee'] ) ? LNKup_Security::sanitize_money( $row['vendor_fee'] ) : 250.0;
+			if ( $fee < 0 ) {
+				return new WP_Error( 'invalid_fee', __( 'Vendor fee cannot be negative.', 'lnkup-marketplace' ) );
+			}
+			$spots = isset( $row['spots_total'] ) ? absint( $row['spots_total'] ) : 10;
+			if ( $spots < 1 ) {
+				return new WP_Error( 'invalid_spots', __( 'At least one vendor spot is required.', 'lnkup-marketplace' ) );
+			}
+
+			$title = isset( $row['opportunity_title'] ) ? sanitize_text_field( (string) $row['opportunity_title'] ) : '';
+			if ( '' === $title && ! empty( $categories[0] ) ) {
+				$title = $categories[0];
+			}
+
+			$item = $row;
+			$item['categories']        = $categories;
+			$item['vendor_fee']        = $fee;
+			$item['spots_total']       = $spots;
+			if ( '' !== $title ) {
+				$item['opportunity_title'] = $title;
+			}
+			$normalized[] = $item;
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * Create one or more priced opportunities for an event (per vendor-type booth prices).
+	 *
+	 * @param int                  $event_id     Event post ID.
+	 * @param array<string, mixed> $input        Request with opportunities / fee rows / legacy single fee.
+	 * @param int                  $organizer_id Organizer user ID.
+	 * @return array<string, mixed>|WP_Error
+	 */
+	public static function create_opportunities_for_event( int $event_id, array $input, int $organizer_id ) {
+		$rows = self::normalize_opportunity_rows( $input );
+		if ( is_wp_error( $rows ) ) {
+			return $rows;
+		}
+
+		$created = array();
+		$first   = null;
+		foreach ( $rows as $index => $row ) {
+			// Shared event-level fields from parent input when missing on row.
+			foreach ( array( 'application_deadline', 'indoor', 'outdoor', 'environment', 'document_mode', 'required_documents', 'organizer_notes', 'deposit_required', 'packet_lock' ) as $shared ) {
+				if ( ! array_key_exists( $shared, $row ) && array_key_exists( $shared, $input ) ) {
+					$row[ $shared ] = $input[ $shared ];
+				}
+			}
+			if ( ! empty( $input['client_token'] ) && empty( $row['client_token'] ) ) {
+				$row['client_token'] = sanitize_text_field( (string) $input['client_token'] ) . '_r' . $index;
+			}
+
+			$result = self::create_opportunity_for_event( $event_id, $row, $organizer_id );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+			$created[] = array(
+				'opportunity_id' => (int) ( $result['opportunity_id'] ?? 0 ),
+				'vendor_fee'     => (float) ( $result['vendor_fee'] ?? 0 ),
+				'spots_total'    => (int) ( $result['spots_total'] ?? 0 ),
+				'title'          => (string) ( $result['opportunity_title'] ?? get_the_title( (int) ( $result['opportunity_id'] ?? 0 ) ) ),
+			);
+			if ( null === $first ) {
+				$first = $result;
+			}
+		}
+
+		$payload = is_array( $first ) ? $first : array();
+		$payload['opportunities']       = $created;
+		$payload['opportunity_ids']     = array_map(
+			static function ( $row ) {
+				return (int) $row['opportunity_id'];
+			},
+			$created
+		);
+		$payload['opportunity_id']       = (int) ( $created[0]['opportunity_id'] ?? 0 );
+		$payload['message']             = count( $created ) > 1
+			? sprintf(
+				/* translators: %d: number of vendor type listings */
+				__( 'Published %d vendor type listings with separate booth prices.', 'lnkup-marketplace' ),
+				count( $created )
+			)
+			: ( $payload['message'] ?? __( 'Vendor opportunity published.', 'lnkup-marketplace' ) );
+
+		return $payload;
 	}
 }

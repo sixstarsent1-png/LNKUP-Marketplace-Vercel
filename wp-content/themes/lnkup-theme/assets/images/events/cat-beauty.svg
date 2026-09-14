@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Beauty vendor booth at an event">
+  <defs>
+    <linearGradient id="cb-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a2e1a"/>
+      <stop offset="100%" stop-color="#0e180e"/>
+    </linearGradient>
+    <radialGradient id="cb-glow" cx="52%" cy="34%" r="48%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#cb-sky)"/>
+  <rect width="720" height="560" fill="url(#cb-glow)"/>
+  <rect x="0" y="430" width="720" height="130" fill="#0c140c"/>
+  <rect x="170" y="270" width="380" height="170" rx="8" fill="#142014" stroke="#c8f542" stroke-width="2"/>
+  <rect x="240" y="175" width="240" height="110" rx="8" fill="#0a120a" stroke="#c8f542" stroke-width="2"/>
+  <ellipse cx="360" cy="230" rx="46" ry="38" fill="#c8f542" opacity="0.12" stroke="#c8f542"/>
+  <rect x="210" y="300" width="36" height="50" rx="8" fill="#c8f542" opacity="0.35"/>
+  <rect x="260" y="308" width="28" height="42" rx="6" fill="#c8f542" opacity="0.25"/>
+  <rect x="430" y="300" width="36" height="50" rx="8" fill="#c8f542" opacity="0.3"/>
+  <rect x="480" y="312" width="24" height="38" rx="6" fill="#c8f542" opacity="0.22"/>
+  <circle cx="360" cy="330" r="8" fill="#c8f542" opacity="0.5"/>
+  <circle cx="390" cy="338" r="5" fill="#c8f542" opacity="0.35"/>
+  <circle cx="330" cy="338" r="5" fill="#c8f542" opacity="0.35"/>
+</svg>

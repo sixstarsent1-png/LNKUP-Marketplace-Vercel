@@ -1,18 +1,19 @@
 document.addEventListener('DOMContentLoaded', function () {
-  var launchBar = document.getElementById('lnkup-launch-bar');
-  var dismissBtn = document.getElementById('lnkup-launch-bar-dismiss');
-  var storageKey = 'lnkup_launch_bar_dismissed';
-
-  if (launchBar && dismissBtn) {
+  function bindDismissibleBar(barId, btnId, storageKey) {
+    var bar = document.getElementById(barId);
+    var dismissBtn = document.getElementById(btnId);
+    if (!bar || !dismissBtn) {
+      return;
+    }
     try {
       if (localStorage.getItem(storageKey) === '1') {
-        launchBar.hidden = true;
+        bar.hidden = true;
       }
     } catch (e) {
       /* ignore */
     }
     dismissBtn.addEventListener('click', function () {
-      launchBar.hidden = true;
+      bar.hidden = true;
       try {
         localStorage.setItem(storageKey, '1');
       } catch (err) {
@@ -20,6 +21,9 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     });
   }
+
+  bindDismissibleBar('lnkup-launch-bar', 'lnkup-launch-bar-dismiss', 'lnkup_launch_bar_dismissed');
+  bindDismissibleBar('lnkup-app-release-bar', 'lnkup-app-release-bar-dismiss', 'lnkup_app_release_bar_dismissed');
 
   var countdownRoot = document.getElementById('launch-countdown');
   if (countdownRoot && window.lnkupLaunch && window.lnkupLaunch.launchIso) {

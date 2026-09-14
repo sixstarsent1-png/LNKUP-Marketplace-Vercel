@@ -12,10 +12,12 @@ defined( 'ABSPATH' ) || exit;
 class LNKup_External_Events_Sync {
 
 	const STATE_OPTION = 'lnkup_external_sync_state';
+	const QUOTA_OPTION = 'lnkup_google_cse_quota';
 
 	const MODE_FULL      = 'full';
 	const MODE_DISCOVERY = 'discovery';
 	const MODE_REFRESH   = 'refresh';
+	const MODE_GOOGLE    = 'google';
 
 	/**
 	 * Default launch market slugs for sync.
@@ -72,6 +74,8 @@ class LNKup_External_Events_Sync {
 			)
 		);
 
+		$google_templates = (string) ( $settings['google_search_templates'] ?? '' );
+
 		return array(
 			'enabled'                     => ! empty( $settings['external_sync_enabled'] ),
 			'frequency'                   => $frequency,
@@ -85,6 +89,10 @@ class LNKup_External_Events_Sync {
 			'vendor_keywords'             => $vendor_list ?: LNKup_External_Events::default_vendor_sync_terms(),
 			'fetch_delay_seconds'         => 1,
 			'max_fetch_seconds'           => max( 60, (int) ( $settings['external_sync_max_fetch_seconds'] ?? 300 ) ),
+			'google_enabled'              => ! empty( $settings['external_sync_google_enabled'] ),
+			'google_daily_budget'         => max( 1, min( 1000, (int) ( $settings['google_search_daily_budget'] ?? 100 ) ) ),
+			'google_queries_per_run'      => max( 1, min( 25, (int) ( $settings['google_search_queries_per_run'] ?? 10 ) ) ),
+			'google_templates'            => $google_templates,
 			'run_started_at'              => 0,
 		);
 	}
@@ -107,6 +115,15 @@ class LNKup_External_Events_Sync {
 		$settings['external_sync_vendor_keywords']     = sanitize_text_field( (string) ( $input['external_sync_vendor_keywords'] ?? '' ) );
 		$settings['external_sync_max_fetch_seconds']   = max( 60, (int) ( $input['external_sync_max_fetch_seconds'] ?? 300 ) );
 		$settings['external_sync_max_candidates_per_market'] = max( 5, (int) ( $input['external_sync_max_candidates_per_market'] ?? 35 ) );
+		$settings['external_sync_google_enabled']            = ! empty( $input['external_sync_google_enabled'] );
+		$cse_key = sanitize_text_field( (string) ( $input['google_cse_api_key'] ?? '' ) );
+		if ( '' !== $cse_key ) {
+			$settings['google_cse_api_key'] = $cse_key;
+		}
+		$settings['google_cse_cx'] = sanitize_text_field( (string) ( $input['google_cse_cx'] ?? $settings['google_cse_cx'] ?? '' ) );
+		$settings['google_search_daily_budget']              = max( 1, min( 1000, (int) ( $input['google_search_daily_budget'] ?? 100 ) ) );
+		$settings['google_search_queries_per_run']           = max( 1, min( 25, (int) ( $input['google_search_queries_per_run'] ?? 10 ) ) );
+		$settings['google_search_templates']                 = sanitize_textarea_field( (string) ( $input['google_search_templates'] ?? '' ) );
 
 		$slugs = array();
 		if ( ! empty( $input['external_sync_market_slugs'] ) && is_array( $input['external_sync_market_slugs'] ) ) {
@@ -170,9 +187,18 @@ class LNKup_External_Events_Sync {
 			'skipped'               => 0,
 			'skipped_vendor_filter' => 0,
 			'errors'                => 0,
+			'google_queries'        => 0,
 			'partial'               => false,
 			'messages'              => array(),
 		);
+
+		if ( self::MODE_GOOGLE === $mode ) {
+			$config['google_enabled'] = true;
+			$google                   = self::run_google_discovery_batch( $config, $market );
+			$summary                  = self::merge_summary( $summary, $google );
+			self::record_run( $summary );
+			return $summary;
+		}
 
 		if ( self::MODE_REFRESH !== $mode ) {
 			$discovery = self::run_discovery_batch( $config, $market );
@@ -194,7 +220,7 @@ class LNKup_External_Events_Sync {
 	 * @return array<string, mixed>
 	 */
 	protected static function merge_summary( array $base, array $partial ): array {
-		foreach ( array( 'discovered', 'imported', 'refreshed', 'skipped', 'skipped_vendor_filter', 'errors' ) as $key ) {
+		foreach ( array( 'discovered', 'imported', 'refreshed', 'skipped', 'skipped_vendor_filter', 'errors', 'google_queries' ) as $key ) {
 			$base[ $key ] = (int) ( $base[ $key ] ?? 0 ) + (int) ( $partial[ $key ] ?? 0 );
 		}
 		if ( ! empty( $partial['partial'] ) ) {
@@ -373,7 +399,272 @@ class LNKup_External_Events_Sync {
 			}
 		}
 
+		if ( ! empty( $config['google_enabled'] ) && ! self::run_time_budget_exceeded( $config ) ) {
+			$config['imported_so_far'] = $imported;
+			$google                    = self::run_google_discovery_batch( $config, $market );
+			$summary                   = self::merge_summary( $summary, $google );
+		}
+
 		return $summary;
+	}
+
+	/**
+	 * Drain a chunk of Google Search query combinations into pending_review.
+	 *
+	 * @param array<string, mixed> $config Sync config.
+	 * @param string               $market Optional market slug.
+	 * @return array<string, mixed>
+	 */
+	public static function run_google_discovery_batch( array $config, string $market = '' ): array {
+		$summary = array(
+			'discovered'            => 0,
+			'imported'              => 0,
+			'skipped'               => 0,
+			'skipped_vendor_filter' => 0,
+			'errors'                => 0,
+			'google_queries'        => 0,
+			'partial'               => false,
+			'messages'              => array(),
+		);
+
+		if ( empty( $config['google_enabled'] ) ) {
+			return $summary;
+		}
+
+		$client = LNKup_Search_Client_Google_Cse::from_settings();
+		if ( ! $client->is_configured() ) {
+			$summary['messages'][] = __( 'Google Search ingest skipped — CSE credentials missing.', 'lnkup-marketplace' );
+			return $summary;
+		}
+
+		if ( ! class_exists( 'LNKup_Search_Ingest_Tables' ) || ! class_exists( 'LNKup_Search_Query_Combinator' ) ) {
+			return $summary;
+		}
+
+		LNKup_Search_Ingest_Tables::create_tables();
+
+		$run_date   = wp_date( 'Y-m-d' );
+		$markets    = LNKup_Search_Query_Combinator::market_contexts( (array) ( $config['market_slugs'] ?? array() ) );
+		if ( '' !== $market ) {
+			$market  = sanitize_key( $market );
+			$markets = array_values(
+				array_filter(
+					$markets,
+					static function ( $row ) use ( $market ) {
+						return $market === sanitize_key( (string) ( $row['slug'] ?? '' ) );
+					}
+				)
+			);
+		}
+
+		$templates = LNKup_Search_Query_Combinator::parse_templates( (string) ( $config['google_templates'] ?? '' ) );
+		$combos    = LNKup_Search_Query_Combinator::expand( $markets, $templates );
+		LNKup_Search_Ingest_Tables::enqueue_combinations( $combos, $run_date );
+
+		$remaining_quota = self::google_quota_remaining( $config );
+		if ( $remaining_quota < 1 ) {
+			$summary['messages'][] = __( 'Google Search daily budget reached.', 'lnkup-marketplace' );
+			return $summary;
+		}
+
+		$query_limit = min( (int) ( $config['google_queries_per_run'] ?? 10 ), $remaining_quota );
+		$claimed     = LNKup_Search_Ingest_Tables::claim_next( $query_limit, $run_date );
+		$provider    = LNKup_External_Sources::get( 'google' );
+		if ( ! $provider || ! $provider->supports_discovery() ) {
+			$summary['last_error'] = __( 'Google discovery provider unavailable.', 'lnkup-marketplace' );
+			++$summary['errors'];
+			return $summary;
+		}
+
+		$max_new  = (int) ( $config['max_new_per_run'] ?? 25 );
+		$imported = (int) ( $config['imported_so_far'] ?? 0 );
+		$delay    = max( 1, (int) ( $config['fetch_delay_seconds'] ?? 1 ) );
+
+		foreach ( $claimed as $row ) {
+			if ( $imported >= $max_new ) {
+				LNKup_Search_Ingest_Tables::release_to_pending( (int) $row['id'] );
+				break;
+			}
+			if ( self::run_time_budget_exceeded( $config ) ) {
+				self::mark_partial_time_budget( $summary );
+				LNKup_Search_Ingest_Tables::release_to_pending( (int) $row['id'] );
+				break;
+			}
+			if ( self::google_quota_remaining( $config ) < 1 ) {
+				$summary['messages'][] = __( 'Google Search daily budget reached.', 'lnkup-marketplace' );
+				LNKup_Search_Ingest_Tables::release_to_pending( (int) $row['id'] );
+				break;
+			}
+
+			$query_text = (string) ( $row['query_text'] ?? '' );
+			sleep( $delay );
+			$urls = $provider->discover_event_urls(
+				array(
+					'query_text'  => $query_text,
+					'market_slug' => (string) ( $row['market_slug'] ?? '' ),
+				)
+			);
+			self::increment_google_quota();
+			++$summary['google_queries'];
+
+			$row_stats = array(
+				'results_found' => 0,
+				'imported'      => 0,
+				'skipped'       => 0,
+				'last_error'    => '',
+			);
+
+			if ( is_wp_error( $urls ) ) {
+				++$summary['errors'];
+				$summary['messages'][] = $urls->get_error_message();
+				$summary['last_error'] = $urls->get_error_message();
+				LNKup_Search_Ingest_Tables::finish(
+					(int) $row['id'],
+					LNKup_Search_Ingest_Tables::STATUS_ERROR,
+					array( 'last_error' => $urls->get_error_message() )
+				);
+				if ( 'quota' === $urls->get_error_code() ) {
+					break;
+				}
+				continue;
+			}
+
+			$row_stats['results_found'] = count( $urls );
+			$summary['discovered']     += count( $urls );
+
+			foreach ( $urls as $url ) {
+				if ( $imported >= $max_new || self::run_time_budget_exceeded( $config ) ) {
+					if ( self::run_time_budget_exceeded( $config ) ) {
+						self::mark_partial_time_budget( $summary );
+					}
+					break;
+				}
+
+				$dup = LNKup_External_Events::find_duplicate( $url, '', 'google' );
+				if ( ! $dup ) {
+					$dup = LNKup_External_Events::find_duplicate( $url );
+				}
+				if ( $dup ) {
+					++$summary['skipped'];
+					++$row_stats['skipped'];
+					continue;
+				}
+
+				sleep( $delay );
+				$parsed = $provider->parse_url( $url );
+				if ( is_wp_error( $parsed ) ) {
+					++$summary['errors'];
+					$summary['last_error'] = $parsed->get_error_message();
+					continue;
+				}
+
+				if ( empty( $parsed['city'] ) && ! empty( $row['city'] ) ) {
+					$parsed['city'] = (string) $row['city'];
+				}
+				if ( empty( $parsed['state'] ) && ! empty( $row['state'] ) ) {
+					$parsed['state'] = (string) $row['state'];
+				}
+				$parsed['discovery_query'] = $query_text;
+				if ( empty( $parsed['workflow_status'] ) ) {
+					$parsed['workflow_status'] = LNKup_External_Events::WORKFLOW_PENDING_REVIEW;
+				}
+
+				if ( ! self::passes_vendor_relevance_filter( $parsed, $config ) ) {
+					++$summary['skipped_vendor_filter'];
+					++$summary['skipped'];
+					++$row_stats['skipped'];
+					continue;
+				}
+
+				self::apply_vendor_fit_score( $parsed, $config );
+
+				if ( ! self::passes_keyword_filter( $parsed, (array) ( $config['keywords'] ?? array() ) ) ) {
+					++$summary['skipped'];
+					++$row_stats['skipped'];
+					continue;
+				}
+
+				if ( self::is_past_event( $parsed ) ) {
+					++$summary['skipped'];
+					++$row_stats['skipped'];
+					continue;
+				}
+
+				unset( $parsed['_preview_confidence'] );
+				$id = LNKup_External_Events::create( $parsed );
+				if ( is_wp_error( $id ) ) {
+					if ( 'duplicate' === $id->get_error_code() ) {
+						++$summary['skipped'];
+						++$row_stats['skipped'];
+					} else {
+						++$summary['errors'];
+						$summary['last_error'] = $id->get_error_message();
+					}
+					continue;
+				}
+
+				++$imported;
+				++$summary['imported'];
+				++$row_stats['imported'];
+				if ( class_exists( 'LNKup_External_Events_Timeline' ) ) {
+					LNKup_External_Events_Timeline::log(
+						(int) $id,
+						'sync_discovered',
+						0,
+						array(
+							'market_slug'     => (string) ( $row['market_slug'] ?? '' ),
+							'source_url'      => $url,
+							'discovery_query' => $query_text,
+						)
+					);
+				}
+			}
+
+			LNKup_Search_Ingest_Tables::finish( (int) $row['id'], LNKup_Search_Ingest_Tables::STATUS_DONE, $row_stats );
+		}
+
+		return $summary;
+	}
+
+	/**
+	 * Remaining CSE queries for today.
+	 *
+	 * @param array<string, mixed> $config Sync config.
+	 */
+	public static function google_quota_remaining( array $config ): int {
+		$budget = max( 1, (int) ( $config['google_daily_budget'] ?? 100 ) );
+		$used   = (int) ( self::google_quota_state()['count'] ?? 0 );
+		return max( 0, $budget - $used );
+	}
+
+	/**
+	 * Daily CSE usage counter.
+	 *
+	 * @return array{date: string, count: int}
+	 */
+	public static function google_quota_state(): array {
+		$today = wp_date( 'Y-m-d' );
+		$state = get_option( self::QUOTA_OPTION, array() );
+		if ( ! is_array( $state ) || ( $state['date'] ?? '' ) !== $today ) {
+			return array(
+				'date'  => $today,
+				'count' => 0,
+			);
+		}
+		return array(
+			'date'  => $today,
+			'count' => max( 0, (int) ( $state['count'] ?? 0 ) ),
+		);
+	}
+
+	/**
+	 * Increment today's CSE call count.
+	 */
+	public static function increment_google_quota(): int {
+		$state          = self::google_quota_state();
+		$state['count'] = (int) $state['count'] + 1;
+		update_option( self::QUOTA_OPTION, $state, false );
+		return (int) $state['count'];
 	}
 
 	/**

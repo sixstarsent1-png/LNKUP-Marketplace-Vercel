@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Service vendor booth at an event">
+  <defs>
+    <linearGradient id="cs-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a2e1a"/>
+      <stop offset="100%" stop-color="#0e180e"/>
+    </linearGradient>
+    <radialGradient id="cs-glow" cx="50%" cy="38%" r="50%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.26"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#cs-sky)"/>
+  <rect width="720" height="560" fill="url(#cs-glow)"/>
+  <rect x="0" y="430" width="720" height="130" fill="#0c140c"/>
+  <rect x="150" y="250" width="420" height="190" rx="8" fill="#142014" stroke="#c8f542" stroke-width="2"/>
+  <path d="M140 250h440l-26-56H166z" fill="#1a2818" stroke="#c8f542" stroke-width="1.5"/>
+  <rect x="200" y="290" width="140" height="90" rx="4" fill="#0a120a" stroke="#c8f542" opacity="0.7"/>
+  <path d="M230 320h80M230 340h60" stroke="#c8f542" stroke-width="3" opacity="0.4"/>
+  <rect x="380" y="300" width="28" height="90" rx="3" fill="#c8f542" opacity="0.28" transform="rotate(-20 394 345)"/>
+  <rect x="430" y="295" width="22" height="100" rx="3" fill="#c8f542" opacity="0.22" transform="rotate(18 441 345)"/>
+  <circle cx="460" cy="330" r="22" fill="none" stroke="#c8f542" stroke-width="3" opacity="0.45"/>
+  <rect x="230" y="204" width="260" height="24" rx="3" fill="#c8f542" opacity="0.2" stroke="#c8f542"/>
+</svg>

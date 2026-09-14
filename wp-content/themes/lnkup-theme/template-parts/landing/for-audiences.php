@@ -5,44 +5,72 @@
  * @package LNKup_Theme
  */
 
-$signup_url      = lnkup_theme_registration_url();
-$organizer_url   = lnkup_page_url( 'organizer-dashboard' );
-$profile_url     = lnkup_page_url( 'vendor-profile' );
-$launch_label    = lnkup_theme_launch_label();
-$marketplace_open = lnkup_theme_marketplace_open();
+$signup_url       = lnkup_theme_registration_url();
+$organizer_url    = lnkup_page_url( 'organizer-dashboard' );
+$profile_url      = lnkup_page_url( 'vendor-profile' );
+$vendor_signup    = function_exists( 'lnkup_theme_market_signup_url' )
+	? lnkup_theme_market_signup_url( 'vendor' )
+	: add_query_arg( 'role', 'vendor', $signup_url );
+$organizer_signup = function_exists( 'lnkup_theme_market_signup_url' )
+	? lnkup_theme_market_signup_url( 'organizer' )
+	: add_query_arg( 'role', 'organizer', $signup_url );
+$eyebrow          = (string) lnkup_landing_get( 'aud_eyebrow', '' );
+$title            = (string) lnkup_landing_get( 'aud_title', '' );
+$lead             = trim( (string) lnkup_landing_get( 'aud_lead', '' ) );
+$vendor_title     = (string) lnkup_landing_get( 'aud_vendor_title', '' );
+$vendor_desc      = (string) lnkup_landing_get( 'aud_vendor_desc', '' );
+$vendor_bullets   = lnkup_landing_lines( (string) lnkup_landing_get( 'aud_vendor_bullets', '' ) );
+$vendor_cta       = (string) lnkup_landing_get( 'aud_vendor_cta', __( 'Sign up as vendor', 'lnkup-theme' ) );
+$vendor_image     = lnkup_landing_image_url( 'aud_vendor_image_id', 'images/events/block-party.svg' );
+$org_title        = (string) lnkup_landing_get( 'aud_org_title', '' );
+$org_desc         = (string) lnkup_landing_get( 'aud_org_desc', '' );
+$org_bullets      = lnkup_landing_lines( (string) lnkup_landing_get( 'aud_org_bullets', '' ) );
+$org_cta          = (string) lnkup_landing_get( 'aud_org_cta', __( 'Sign up as organizer', 'lnkup-theme' ) );
+$org_image        = lnkup_landing_image_url( 'aud_org_image_id', 'images/events/greek-picnic.svg' );
 ?>
-<section class="lnkup-section lnkup-section--muted lnkup-section--bordered lnkup-reveal" id="for-audiences">
+<section class="lnkup-section lnkup-section--editorial lnkup-reveal" id="for-audiences">
 	<div class="lnkup-container">
 		<div class="lnkup-section__intro">
-			<p class="lnkup-eyebrow"><?php esc_html_e( 'Who it\'s for', 'lnkup-theme' ); ?></p>
-			<h2 class="lnkup-heading lnkup-heading--section"><?php esc_html_e( 'Built for vendors and organizers', 'lnkup-theme' ); ?></h2>
+			<?php lnkup_theme_section_kicker( '02 / NETWORK', $eyebrow ); ?>
+			<h2 class="lnkup-heading lnkup-heading--section"><?php echo esc_html( $title ); ?></h2>
+			<?php if ( $lead ) : ?>
+				<p class="lnkup-section__lead"><?php echo esc_html( $lead ); ?></p>
+			<?php endif; ?>
 		</div>
 		<div class="lnkup-audience-grid">
-			<article class="lnkup-card lnkup-audience-card">
-				<div class="lnkup-audience-card__icon" aria-hidden="true">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"/><path d="M3 9l2.5-4h13L21 9"/><path d="M12 13v4"/></svg>
+			<article class="lnkup-card lnkup-audience-card lnkup-audience-card--visual">
+				<div class="lnkup-audience-card__media">
+					<img src="<?php echo esc_url( $vendor_image ); ?>" alt="" width="640" height="400" loading="lazy" />
 				</div>
-				<h3 class="lnkup-audience-card__title"><?php esc_html_e( 'Vendors', 'lnkup-theme' ); ?></h3>
-				<p class="lnkup-audience-card__desc"><?php esc_html_e( 'Food trucks, artisans, retailers, and service vendors looking for booth opportunities at festivals, markets, and live events.', 'lnkup-theme' ); ?></p>
-				<ul class="lnkup-audience-card__list">
-					<li><?php esc_html_e( 'Create your free profile today', 'lnkup-theme' ); ?></li>
-					<li><?php echo esc_html( $marketplace_open ? __( 'Browse and apply to events', 'lnkup-theme' ) : ( $launch_label ? sprintf( __( 'Apply when we launch %s', 'lnkup-theme' ), $launch_label ) : __( 'Apply when we launch', 'lnkup-theme' ) ) ); ?></li>
-					<li><?php esc_html_e( 'Pay only when accepted', 'lnkup-theme' ); ?></li>
-				</ul>
-				<a href="<?php echo esc_url( is_user_logged_in() ? $profile_url : $signup_url ); ?>" class="lnkup-btn lnkup-btn--primary"><?php esc_html_e( 'Sign up as vendor', 'lnkup-theme' ); ?></a>
+				<div class="lnkup-audience-card__body">
+					<h3 class="lnkup-audience-card__title"><?php echo esc_html( $vendor_title ); ?></h3>
+					<p class="lnkup-audience-card__desc"><?php echo esc_html( $vendor_desc ); ?></p>
+					<?php if ( $vendor_bullets ) : ?>
+						<ul class="lnkup-audience-card__list">
+							<?php foreach ( $vendor_bullets as $bullet ) : ?>
+								<li><?php echo esc_html( $bullet ); ?></li>
+							<?php endforeach; ?>
+						</ul>
+					<?php endif; ?>
+					<a href="<?php echo esc_url( is_user_logged_in() ? $profile_url : $vendor_signup ); ?>" class="lnkup-btn lnkup-btn--primary"><?php echo esc_html( $vendor_cta ); ?></a>
+				</div>
 			</article>
-			<article class="lnkup-card lnkup-audience-card">
-				<div class="lnkup-audience-card__icon lnkup-audience-card__icon--organizer" aria-hidden="true">
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+			<article class="lnkup-card lnkup-audience-card lnkup-audience-card--visual">
+				<div class="lnkup-audience-card__media">
+					<img src="<?php echo esc_url( $org_image ); ?>" alt="" width="640" height="400" loading="lazy" />
 				</div>
-				<h3 class="lnkup-audience-card__title"><?php esc_html_e( 'Organizers', 'lnkup-theme' ); ?></h3>
-				<p class="lnkup-audience-card__desc"><?php esc_html_e( 'Event producers who need a vendor layer — not ticketing. Keep selling tickets on Posh, Eventbrite, and Universe.', 'lnkup-theme' ); ?></p>
-				<ul class="lnkup-audience-card__list">
-					<li><?php esc_html_e( 'Sign up and launch vendor opportunities', 'lnkup-theme' ); ?></li>
-					<li><?php esc_html_e( 'Review applications and collect payments', 'lnkup-theme' ); ?></li>
-					<li><?php esc_html_e( 'Run day-of operations from one hub', 'lnkup-theme' ); ?></li>
-				</ul>
-				<a href="<?php echo esc_url( is_user_logged_in() ? $organizer_url : $signup_url ); ?>" class="lnkup-btn lnkup-btn--outline"><?php esc_html_e( 'Sign up as organizer', 'lnkup-theme' ); ?></a>
+				<div class="lnkup-audience-card__body">
+					<h3 class="lnkup-audience-card__title"><?php echo esc_html( $org_title ); ?></h3>
+					<p class="lnkup-audience-card__desc"><?php echo esc_html( $org_desc ); ?></p>
+					<?php if ( $org_bullets ) : ?>
+						<ul class="lnkup-audience-card__list">
+							<?php foreach ( $org_bullets as $bullet ) : ?>
+								<li><?php echo esc_html( $bullet ); ?></li>
+							<?php endforeach; ?>
+						</ul>
+					<?php endif; ?>
+					<a href="<?php echo esc_url( is_user_logged_in() ? $organizer_url : $organizer_signup ); ?>" class="lnkup-btn lnkup-btn--outline"><?php echo esc_html( $org_cta ); ?></a>
+				</div>
 			</article>
 		</div>
 	</div>

@@ -31,6 +31,7 @@ class LNKup_Financial_Render {
 					<button type="button" class="lnkup-fin-tab" role="tab" aria-selected="false" data-tab="wallet" data-section="wallet"><span class="lnkup-fin-tab__label"><?php esc_html_e( 'Wallet & Credits', 'lnkup-marketplace' ); ?></span></button>
 					<button type="button" class="lnkup-fin-tab" role="tab" aria-selected="false" data-tab="referrals" data-section="wallet"><span class="lnkup-fin-tab__label"><?php esc_html_e( 'Referral Credits', 'lnkup-marketplace' ); ?></span></button>
 					<button type="button" class="lnkup-fin-tab" role="tab" aria-selected="false" data-tab="refunds" data-section="wallet"><span class="lnkup-fin-tab__label"><?php esc_html_e( 'Refunds', 'lnkup-marketplace' ); ?></span></button>
+					<button type="button" class="lnkup-fin-tab" role="tab" aria-selected="false" data-tab="disputes" data-section="wallet"><span class="lnkup-fin-tab__label"><?php esc_html_e( 'Disputes', 'lnkup-marketplace' ); ?></span></button>
 					<button type="button" class="lnkup-fin-tab" role="tab" aria-selected="false" data-tab="premium" data-section="extras"><span class="lnkup-fin-tab__label"><?php esc_html_e( 'Premium Listings', 'lnkup-marketplace' ); ?></span></button>
 					<button type="button" class="lnkup-fin-tab" role="tab" aria-selected="false" data-tab="tax" data-section="extras"><span class="lnkup-fin-tab__label"><?php esc_html_e( 'Tax Center', 'lnkup-marketplace' ); ?></span></button>
 					<button type="button" class="lnkup-fin-tab" role="tab" aria-selected="false" data-tab="reports" data-section="reports"><span class="lnkup-fin-tab__label"><?php esc_html_e( 'Reports', 'lnkup-marketplace' ); ?></span></button>
@@ -46,6 +47,7 @@ class LNKup_Financial_Render {
 				<div class="lnkup-fin-panel" data-panel="tax" id="lnkup-fin-vendor-tax"></div>
 				<div class="lnkup-fin-panel" data-panel="receipts" id="lnkup-fin-vendor-receipts"></div>
 				<div class="lnkup-fin-panel" data-panel="refunds" id="lnkup-fin-vendor-refunds"></div>
+				<div class="lnkup-fin-panel" data-panel="disputes" id="lnkup-fin-vendor-disputes"></div>
 				<div class="lnkup-fin-panel" data-panel="reports" id="lnkup-fin-vendor-reports"></div>
 			</div>
 		</div>
@@ -80,6 +82,7 @@ class LNKup_Financial_Render {
 					<button type="button" class="lnkup-fin-tab" role="tab" aria-selected="false" data-tab="budget" data-section="planning"><span class="lnkup-fin-tab__icon" aria-hidden="true">▦</span><span class="lnkup-fin-tab__label"><?php esc_html_e( 'Budget', 'lnkup-marketplace' ); ?></span></button>
 					<button type="button" class="lnkup-fin-tab" role="tab" aria-selected="false" data-tab="forecast" data-section="planning"><span class="lnkup-fin-tab__icon" aria-hidden="true">⌁</span><span class="lnkup-fin-tab__label"><?php esc_html_e( 'Forecast', 'lnkup-marketplace' ); ?></span></button>
 					<button type="button" class="lnkup-fin-tab" role="tab" aria-selected="false" data-tab="refunds" data-section="planning"><span class="lnkup-fin-tab__icon" aria-hidden="true">↩</span><span class="lnkup-fin-tab__label"><?php esc_html_e( 'Refunds', 'lnkup-marketplace' ); ?></span></button>
+					<button type="button" class="lnkup-fin-tab" role="tab" aria-selected="false" data-tab="disputes" data-section="planning"><span class="lnkup-fin-tab__icon" aria-hidden="true">⚠</span><span class="lnkup-fin-tab__label"><?php esc_html_e( 'Disputes', 'lnkup-marketplace' ); ?></span></button>
 					<button type="button" class="lnkup-fin-tab" role="tab" aria-selected="false" data-tab="tax" data-section="account"><span class="lnkup-fin-tab__icon" aria-hidden="true">⎙</span><span class="lnkup-fin-tab__label"><?php esc_html_e( 'Tax', 'lnkup-marketplace' ); ?></span></button>
 					<button type="button" class="lnkup-fin-tab" role="tab" aria-selected="false" data-tab="settings" data-section="account"><span class="lnkup-fin-tab__icon" aria-hidden="true">⚙</span><span class="lnkup-fin-tab__label"><?php esc_html_e( 'Settings', 'lnkup-marketplace' ); ?></span></button>
 				</div>
@@ -95,6 +98,7 @@ class LNKup_Financial_Render {
 				<div class="lnkup-fin-panel lnkup-fin-tab-panel" role="tabpanel" data-panel="budget" id="lnkup-fin-org-budget"></div>
 				<div class="lnkup-fin-panel lnkup-fin-tab-panel" role="tabpanel" data-panel="forecast" id="lnkup-fin-org-forecast"></div>
 				<div class="lnkup-fin-panel lnkup-fin-tab-panel" role="tabpanel" data-panel="refunds" id="lnkup-fin-org-refunds"></div>
+				<div class="lnkup-fin-panel lnkup-fin-tab-panel" role="tabpanel" data-panel="disputes" id="lnkup-fin-org-disputes"></div>
 				<div class="lnkup-fin-panel lnkup-fin-tab-panel" role="tabpanel" data-panel="tax" id="lnkup-fin-org-tax"></div>
 				<div class="lnkup-fin-panel lnkup-fin-tab-panel" role="tabpanel" data-panel="reports" id="lnkup-fin-org-reports"></div>
 				<div class="lnkup-fin-panel lnkup-fin-tab-panel" role="tabpanel" data-panel="settings" id="lnkup-fin-org-settings"></div>

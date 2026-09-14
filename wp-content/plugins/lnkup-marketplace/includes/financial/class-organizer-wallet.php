@@ -53,6 +53,18 @@ class LNKup_Organizer_Wallet {
 	 * @param int $user_id Organizer user ID.
 	 */
 	public static function get_balances( $user_id ) {
+		$user_id = absint( $user_id );
+		$settlement_mode = class_exists( 'LNKup_Stripe_Connect' )
+			? LNKup_Stripe_Connect::settlement_mode_for_organizer( $user_id )
+			: 'platform_treasury';
+
+		// Connect became ready after platform charges: move stranded treasury credits
+		// into connect_settlement so recovery / Cash Out can see them.
+		if ( 'destination' === $settlement_mode ) {
+			self::migrate_treasury_balance_to_connect_settlement( $user_id );
+			self::backfill_platform_payments_to_connect_settlement( $user_id );
+		}
+
 		$wallet = self::get_or_create( $user_id );
 		if ( ! $wallet ) {
 			return array(
@@ -64,7 +76,7 @@ class LNKup_Organizer_Wallet {
 				'connect_settlement' => 0,
 				'last_payout'        => null,
 				'next_scheduled'     => null,
-				'settlement_mode'    => class_exists( 'LNKup_Stripe_Connect' ) ? LNKup_Stripe_Connect::settlement_mode_for_organizer( $user_id ) : 'platform_treasury',
+				'settlement_mode'    => $settlement_mode,
 			);
 		}
 
@@ -75,15 +87,12 @@ class LNKup_Organizer_Wallet {
 		}
 
 		$connect_settlement = self::sum_connect_settlement( $user_id );
-		$settlement_mode    = class_exists( 'LNKup_Stripe_Connect' ) ? LNKup_Stripe_Connect::settlement_mode_for_organizer( $user_id ) : 'platform_treasury';
 		$available          = (float) $wallet['available_balance'];
 		$pending            = (float) $wallet['pending_balance'];
 		if ( 'destination' === $settlement_mode ) {
+			// Tracked settlement minus in-flight cashouts. Live withdrawable amount
+			// for destination cashout comes from Stripe via organizer_cashout_available().
 			$available = max( 0, $connect_settlement - (float) $wallet['processing_balance'] );
-			if ( $connect_settlement > 0 && $pending <= 0 ) {
-				$pending = $connect_settlement;
-				$available = 0;
-			}
 		}
 
 		return array(
@@ -97,6 +106,229 @@ class LNKup_Organizer_Wallet {
 			'next_scheduled'     => null,
 			'settlement_mode'    => $settlement_mode,
 		);
+	}
+
+	/**
+	 * Convert stranded treasury available_balance into connect_settlement when Connect is ready.
+	 *
+	 * Idempotent: no-op when available_balance is already ~0.
+	 *
+	 * @param int $user_id Organizer user ID.
+	 * @return float Amount migrated (dollars), or 0.
+	 */
+	public static function migrate_treasury_balance_to_connect_settlement( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( ! $user_id ) {
+			return 0.0;
+		}
+		if ( ! class_exists( 'LNKup_Stripe_Connect' ) || ! LNKup_Stripe_Connect::is_connect_ready( $user_id ) ) {
+			return 0.0;
+		}
+		if ( 'destination' !== LNKup_Stripe_Connect::settlement_mode_for_organizer( $user_id ) ) {
+			return 0.0;
+		}
+
+		global $wpdb;
+		$wallet = self::get_or_create( $user_id );
+		if ( ! $wallet ) {
+			return 0.0;
+		}
+
+		$amount = round( (float) ( $wallet['available_balance'] ?? 0 ), 2 );
+		if ( $amount < 0.01 ) {
+			return 0.0;
+		}
+
+		$entries = LNKup_Treasury_Tables::organizer_wallet_entries_table();
+		$wallets = LNKup_Treasury_Tables::organizer_wallets_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $entries ) || ! LNKup_Financial_Tables::table_exists( $wallets ) ) {
+			return 0.0;
+		}
+
+		// Zero treasury available first so concurrent reads do not double-migrate.
+		$wpdb->update(
+			$wallets,
+			array(
+				'available_balance' => 0,
+				'updated_at'        => current_time( 'mysql' ),
+			),
+			array( 'id' => (int) $wallet['id'] )
+		);
+
+		$wpdb->insert(
+			$entries,
+			array(
+				'wallet_id'       => (int) $wallet['id'],
+				'user_id'         => $user_id,
+				'entry_type'      => 'connect_settlement',
+				'amount'          => $amount,
+				'balance_after'   => 0,
+				'source_type'     => 'treasury_migration',
+				'source_id'       => 0,
+				'payment_post_id' => 0,
+				'note'            => __( 'Migrated stranded treasury balance for Connect recovery', 'lnkup-marketplace' ),
+				'metadata'        => wp_json_encode(
+					array(
+						'migrated_from_treasury' => true,
+						'amount'                 => $amount,
+					)
+				),
+				'created_at'      => current_time( 'mysql' ),
+			)
+		);
+
+		if ( class_exists( 'LNKup_Financial_Audit' ) ) {
+			LNKup_Financial_Audit::log(
+				'treasury_migrated_to_connect_settlement',
+				'wallet',
+				$user_id,
+				array( 'amount' => $amount )
+			);
+		}
+
+		return $amount;
+	}
+
+	/**
+	 * Whether any wallet ledger row exists for a payment.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 * @return bool
+	 */
+	public static function has_wallet_entry_for_payment( $payment_id ) {
+		global $wpdb;
+		$table = LNKup_Treasury_Tables::organizer_wallet_entries_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return false;
+		}
+		$found = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT id FROM {$table} WHERE payment_post_id = %d LIMIT 1",
+				absint( $payment_id )
+			)
+		);
+		return (bool) $found;
+	}
+
+	/**
+	 * Backfill connect_settlement for paid platform charges missing a recovery claim.
+	 *
+	 * Covers booth payments that landed on the master Stripe account with no wallet
+	 * ledger (migrate is a no-op when available_balance is already 0).
+	 *
+	 * @param int $user_id Organizer user ID.
+	 * @return int Number of payments backfilled.
+	 */
+	public static function backfill_platform_payments_to_connect_settlement( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( ! $user_id ) {
+			return 0;
+		}
+		if ( ! class_exists( 'LNKup_Stripe_Connect' ) || ! LNKup_Stripe_Connect::is_connect_ready( $user_id ) ) {
+			return 0;
+		}
+		if ( 'destination' !== LNKup_Stripe_Connect::settlement_mode_for_organizer( $user_id ) ) {
+			return 0;
+		}
+		if ( ! function_exists( 'lnkup_get_payments_for_user' ) || ! class_exists( 'LNKup_Fee_Engine' ) ) {
+			return 0;
+		}
+
+		$wallet = self::get_or_create( $user_id );
+		if ( ! $wallet ) {
+			return 0;
+		}
+
+		$claim = self::sum_connect_settlement( $user_id );
+		$avail = round( (float) ( $wallet['available_balance'] ?? 0 ), 2 );
+		// When claim and available are both empty, recreate from paid platform payments
+		// even if orphan treasury credit rows exist. When claim already exists (e.g. after
+		// migrate), only fill payments that have no ledger row (avoid double-count).
+		$orphan_mode = ( $claim < 0.01 && $avail < 0.01 );
+
+		$backfilled = 0;
+		$payments   = lnkup_get_payments_for_user( $user_id, 'organizer' );
+		foreach ( (array) $payments as $payment ) {
+			$payment_id = (int) $payment->ID;
+			if ( ! $payment_id ) {
+				continue;
+			}
+			if ( 'paid' !== (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ) ) {
+				continue;
+			}
+			if ( self::has_connect_settlement_for_payment( $payment_id ) ) {
+				continue;
+			}
+
+			// Destination-stamped charges belong on Connect; skip platform recovery.
+			$dest = (string) get_post_meta( $payment_id, '_lnkup_stripe_destination_account', true );
+			if ( '' !== $dest ) {
+				continue;
+			}
+
+			if ( ! $orphan_mode && self::has_wallet_entry_for_payment( $payment_id ) ) {
+				continue;
+			}
+
+			$breakdown = LNKup_Fee_Engine::calculate_for_payment( $payment_id );
+			$net       = (float) ( $breakdown['payout_eligible_amount'] ?? $breakdown['organizer_net'] ?? 0 );
+			if ( $net < 0.01 ) {
+				// Meta incomplete — derive organizer share from totals / amount.
+				$total   = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
+				if ( $total < 0.01 ) {
+					$total = (float) get_post_meta( $payment_id, '_lnkup_amount', true );
+				}
+				$app_fee = (float) get_post_meta( $payment_id, '_lnkup_application_fee_cents', true );
+				if ( $app_fee >= 1 ) {
+					$app_fee = $app_fee / 100;
+				} else {
+					$app_fee = (float) ( $breakdown['platform_fee'] ?? 0 );
+				}
+				$net = max( 0, round( $total - $app_fee, 2 ) );
+				$breakdown['organizer_net']           = $net;
+				$breakdown['payout_eligible_amount'] = $net;
+			}
+			if ( $net < 0.01 ) {
+				continue;
+			}
+
+			if ( ! self::record_connect_settlement( $user_id, $payment_id, $breakdown ) ) {
+				continue;
+			}
+
+			global $wpdb;
+			$table = LNKup_Treasury_Tables::organizer_wallet_entries_table();
+			$wpdb->update(
+				$table,
+				array(
+					'note'     => __( 'Platform charge recovered for Connect cashout', 'lnkup-marketplace' ),
+					'metadata' => wp_json_encode(
+						array(
+							'settlement_mode'   => 'platform_treasury',
+							'recovery_backfill' => true,
+							'breakdown'         => $breakdown,
+						)
+					),
+				),
+				array(
+					'payment_post_id' => $payment_id,
+					'entry_type'      => 'connect_settlement',
+					'user_id'         => $user_id,
+				)
+			);
+			$backfilled++;
+		}
+
+		if ( $backfilled > 0 && class_exists( 'LNKup_Financial_Audit' ) ) {
+			LNKup_Financial_Audit::log(
+				'platform_payments_backfilled_to_connect_settlement',
+				'wallet',
+				$user_id,
+				array( 'payments' => $backfilled )
+			);
+		}
+
+		return $backfilled;
 	}
 
 	/**

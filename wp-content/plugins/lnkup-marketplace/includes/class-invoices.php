@@ -190,6 +190,7 @@ class LNKup_Invoices {
 			'event_title'    => (int) $row['event_id'] ? get_the_title( (int) $row['event_id'] ) : '',
 			'issue_date'     => $row['issue_date'],
 			'created_at'     => $row['created_at'],
+			'pdf_url'        => rest_url( 'lnkup/v1/financial/invoices/' . (int) $row['id'] . '/pdf' ),
 		);
 	}
 

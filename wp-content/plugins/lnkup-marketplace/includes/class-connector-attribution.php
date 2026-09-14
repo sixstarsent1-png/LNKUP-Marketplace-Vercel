@@ -52,6 +52,9 @@ class LNKup_Connector_Attribution {
 			0,
 			'clicked'
 		);
+		if ( ! empty( $_GET['cc'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			LNKup_Connector::record_content_click( (int) $row['connector_id'], sanitize_key( wp_unslash( (string) $_GET['cc'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
 	}
 
 	/**

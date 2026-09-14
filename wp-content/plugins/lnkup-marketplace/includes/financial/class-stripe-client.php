@@ -98,11 +98,50 @@ class LNKup_Stripe_Client {
 	}
 
 	/**
+	 * @param array  $params          Stripe subscription params.
+	 * @param string $idempotency_key Optional idempotency key.
+	 * @return array|WP_Error
+	 */
+	public function create_subscription( $params, $idempotency_key = '' ) {
+		return $this->request( 'POST', 'subscriptions', $params, $idempotency_key );
+	}
+
+	/**
+	 * @param string $subscription_id Stripe subscription ID.
+	 * @param array  $params          Optional params (e.g. cancel_at_period_end).
+	 * @return array|WP_Error
+	 */
+	public function cancel_subscription( $subscription_id, $params = array() ) {
+		$path = 'subscriptions/' . rawurlencode( $subscription_id );
+		if ( empty( $params ) ) {
+			return $this->request( 'DELETE', $path );
+		}
+		return $this->request( 'POST', $path, $params );
+	}
+
+	/**
+	 * @param string $subscription_id Stripe subscription ID.
+	 * @return array|WP_Error
+	 */
+	public function retrieve_subscription( $subscription_id ) {
+		return $this->request( 'GET', 'subscriptions/' . rawurlencode( $subscription_id ) );
+	}
+
+	/**
 	 * @param array $params Account params.
 	 * @return array|WP_Error
 	 */
 	public function create_connect_account( $params ) {
 		return $this->request( 'POST', 'accounts', $params );
+	}
+
+	/**
+	 * @param string $account_id Connect account ID.
+	 * @param array  $params     Update params.
+	 * @return array|WP_Error
+	 */
+	public function update_connect_account( $account_id, $params ) {
+		return $this->request( 'POST', 'accounts/' . $account_id, $params );
 	}
 
 	/**
@@ -130,7 +169,7 @@ class LNKup_Stripe_Client {
 	}
 
 	/**
-	 * Retrieve Connect account balance (available + pending).
+	 * Retrieve Connect account balance (available + pending + instant).
 	 *
 	 * @param string $stripe_account_id Connected account ID.
 	 * @return array|WP_Error
@@ -143,31 +182,146 @@ class LNKup_Stripe_Client {
 			'',
 			array( 'Stripe-Account' => $stripe_account_id )
 		);
+		return $this->normalize_balance_payload( $balance );
+	}
+
+	/**
+	 * Retrieve platform (LNKup) Stripe balance — no Stripe-Account header.
+	 *
+	 * @return array|WP_Error
+	 */
+	public function retrieve_platform_balance() {
+		$balance = $this->request( 'GET', 'balance', array(), '', array() );
+		return $this->normalize_balance_payload( $balance );
+	}
+
+	/**
+	 * Normalize Stripe Balance API payload into dollars + cents maps.
+	 *
+	 * @param array|WP_Error $balance Raw balance or error.
+	 * @return array|WP_Error
+	 */
+	private function normalize_balance_payload( $balance ) {
 		if ( is_wp_error( $balance ) ) {
 			return $balance;
 		}
 
-		$available = 0;
-		$pending   = 0;
-		$currency  = 'usd';
-		foreach ( (array) ( $balance['available'] ?? array() ) as $item ) {
-			if ( 'usd' === strtolower( (string) ( $item['currency'] ?? '' ) ) ) {
+		$settings         = function_exists( 'lnkup_get_settings' ) ? lnkup_get_settings() : array();
+		$preferred        = strtolower( (string) ( $settings['connect_platform_currency'] ?? 'usd' ) );
+		$available_items  = (array) ( $balance['available'] ?? array() );
+		$pending_items    = (array) ( $balance['pending'] ?? array() );
+		$instant_items    = (array) ( $balance['instant_available'] ?? array() );
+		$available        = 0;
+		$pending          = 0;
+		$instant          = 0;
+		$currency         = $preferred;
+		$source_types     = array();
+		$instant_sources  = array();
+		$matched          = false;
+
+		foreach ( $available_items as $item ) {
+			$item_currency = strtolower( (string) ( $item['currency'] ?? '' ) );
+			if ( $item_currency === $preferred ) {
 				$available += (int) ( $item['amount'] ?? 0 );
-				$currency   = $item['currency'];
+				$currency   = $item_currency;
+				$matched    = true;
+				$item_sources = is_array( $item['source_types'] ?? null ) ? $item['source_types'] : array();
+				foreach ( $item_sources as $source_key => $source_cents ) {
+					$key = sanitize_key( (string) $source_key );
+					if ( '' === $key ) {
+						continue;
+					}
+					$source_types[ $key ] = (int) ( $source_types[ $key ] ?? 0 ) + (int) $source_cents;
+				}
 			}
 		}
-		foreach ( (array) ( $balance['pending'] ?? array() ) as $item ) {
-			if ( 'usd' === strtolower( (string) ( $item['currency'] ?? '' ) ) ) {
+		foreach ( $pending_items as $item ) {
+			if ( strtolower( (string) ( $item['currency'] ?? '' ) ) === $preferred ) {
 				$pending += (int) ( $item['amount'] ?? 0 );
+			}
+		}
+		foreach ( $instant_items as $item ) {
+			if ( strtolower( (string) ( $item['currency'] ?? '' ) ) === $preferred ) {
+				$instant += (int) ( $item['amount'] ?? 0 );
+				$item_sources = is_array( $item['source_types'] ?? null ) ? $item['source_types'] : array();
+				foreach ( $item_sources as $source_key => $source_cents ) {
+					$key = sanitize_key( (string) $source_key );
+					if ( '' === $key ) {
+						continue;
+					}
+					$instant_sources[ $key ] = (int) ( $instant_sources[ $key ] ?? 0 ) + (int) $source_cents;
+				}
+			}
+		}
+
+		if ( ! $matched && ! empty( $available_items[0] ) ) {
+			$fallback         = $available_items[0];
+			$currency         = strtolower( (string) ( $fallback['currency'] ?? $preferred ) );
+			$available        = (int) ( $fallback['amount'] ?? 0 );
+			$source_types     = array();
+			$item_sources     = is_array( $fallback['source_types'] ?? null ) ? $fallback['source_types'] : array();
+			foreach ( $item_sources as $source_key => $source_cents ) {
+				$key = sanitize_key( (string) $source_key );
+				if ( '' === $key ) {
+					continue;
+				}
+				$source_types[ $key ] = (int) $source_cents;
+			}
+			$pending = 0;
+			foreach ( $pending_items as $item ) {
+				if ( strtolower( (string) ( $item['currency'] ?? '' ) ) === $currency ) {
+					$pending += (int) ( $item['amount'] ?? 0 );
+				}
+			}
+			$instant         = 0;
+			$instant_sources = array();
+			foreach ( $instant_items as $item ) {
+				if ( strtolower( (string) ( $item['currency'] ?? '' ) ) === $currency ) {
+					$instant += (int) ( $item['amount'] ?? 0 );
+					$item_sources = is_array( $item['source_types'] ?? null ) ? $item['source_types'] : array();
+					foreach ( $item_sources as $source_key => $source_cents ) {
+						$key = sanitize_key( (string) $source_key );
+						if ( '' === $key ) {
+							continue;
+						}
+						$instant_sources[ $key ] = (int) ( $instant_sources[ $key ] ?? 0 ) + (int) $source_cents;
+					}
+				}
 			}
 		}
 
 		return array(
-			'available' => round( $available / 100, 2 ),
-			'pending'   => round( $pending / 100, 2 ),
-			'currency'  => $currency,
-			'synced'    => true,
+			'available'               => round( $available / 100, 2 ),
+			'pending'                 => round( $pending / 100, 2 ),
+			'instant_available'       => round( $instant / 100, 2 ),
+			'available_cents'         => $available,
+			'pending_cents'           => $pending,
+			'instant_available_cents' => $instant,
+			'currency'                => $currency,
+			'source_types'            => $source_types,
+			'instant_source_types'    => $instant_sources,
+			'synced'                  => true,
 		);
+	}
+
+	/**
+	 * List external accounts (bank / debit) for a connected account.
+	 *
+	 * @param string $stripe_account_id Connected account ID.
+	 * @return array|WP_Error List of account objects or error.
+	 */
+	public function list_connect_external_accounts( $stripe_account_id ) {
+		$result = $this->request(
+			'GET',
+			'accounts/' . $stripe_account_id . '/external_accounts',
+			array( 'limit' => 20 ),
+			'',
+			array()
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return is_array( $result['data'] ?? null ) ? $result['data'] : array();
 	}
 
 	/**
@@ -185,6 +339,16 @@ class LNKup_Stripe_Client {
 	 */
 	public function create_connect_payout( $account_id, $params ) {
 		return $this->request( 'POST', 'payouts', $params, '', array( 'Stripe-Account' => $account_id ) );
+	}
+
+	/**
+	 * Create a payout on the platform (LNKup main) Stripe account.
+	 *
+	 * @param array $params Payout params (amount, currency, source_type, …).
+	 * @return array|WP_Error
+	 */
+	public function create_platform_payout( $params ) {
+		return $this->request( 'POST', 'payouts', $params, '', array() );
 	}
 
 	/**
@@ -300,8 +464,16 @@ class LNKup_Stripe_Client {
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 		$code = wp_remote_retrieve_response_code( $response );
 		if ( $code >= 400 || ! empty( $body['error'] ) ) {
-			$message = $body['error']['message'] ?? __( 'Stripe API error.', 'lnkup-marketplace' );
-			return new WP_Error( 'stripe_error', $message, array( 'status' => $code ) );
+			$message    = $body['error']['message'] ?? __( 'Stripe API error.', 'lnkup-marketplace' );
+			$stripe_code = isset( $body['error']['code'] ) ? (string) $body['error']['code'] : '';
+			return new WP_Error(
+				'stripe_error',
+				$message,
+				array(
+					'status'      => $code,
+					'stripe_code' => $stripe_code,
+				)
+			);
 		}
 		return $body;
 	}
@@ -355,10 +527,19 @@ class LNKup_Stripe_Client {
 					$obj = \Stripe\Refund::create( $params, $opts );
 					break;
 				case 'accounts':
-					if ( 'GET' === $method && $id ) {
+					if ( 'GET' === $method && $id && 'external_accounts' === $action ) {
+						if ( is_callable( array( '\Stripe\Account', 'allExternalAccounts' ) ) ) {
+							$obj = \Stripe\Account::allExternalAccounts( $id, $params, $opts );
+						} else {
+							$acct = \Stripe\Account::retrieve( $id, array(), $opts );
+							$obj  = $acct->external_accounts->all( $params );
+						}
+					} elseif ( 'GET' === $method && $id ) {
 						$obj = \Stripe\Account::retrieve( $id, array(), $opts );
 					} elseif ( 'POST' === $method && $id && 'login_links' === $action ) {
 						$obj = \Stripe\Account::createLoginLink( $id, $params, $opts );
+					} elseif ( 'POST' === $method && $id ) {
+						$obj = \Stripe\Account::update( $id, $params, $opts );
 					} elseif ( 'POST' === $method && ! $id ) {
 						$obj = \Stripe\Account::create( $params, $opts );
 					}
@@ -384,15 +565,38 @@ class LNKup_Stripe_Client {
 						$obj = \Stripe\PaymentMethod::all( $params );
 					}
 					break;
+				case 'subscriptions':
+					if ( 'GET' === $method && $id ) {
+						$obj = \Stripe\Subscription::retrieve( $id, $opts );
+					} elseif ( 'DELETE' === $method && $id ) {
+						$obj = \Stripe\Subscription::cancel( $id, $params ?: null, $opts );
+					} elseif ( 'POST' === $method && $id ) {
+						$obj = \Stripe\Subscription::update( $id, $params, $opts );
+					} else {
+						$obj = \Stripe\Subscription::create( $params, $opts );
+					}
+					break;
 				case 'balance':
-					$obj = \Stripe\Balance::retrieve( array(), $opts );
+					// Balance::retrieve( $opts ) takes a single opts argument (not params, opts).
+					$obj = \Stripe\Balance::retrieve( $opts );
 					break;
 				default:
 					return new WP_Error( 'stripe_error', __( 'Unsupported Stripe resource.', 'lnkup-marketplace' ) );
 			}
 			return json_decode( wp_json_encode( $obj ), true );
 		} catch ( Exception $e ) {
-			return new WP_Error( 'stripe_error', $e->getMessage() );
+			$stripe_code = '';
+			if ( is_object( $e ) && method_exists( $e, 'getStripeCode' ) ) {
+				$stripe_code = (string) $e->getStripeCode();
+			}
+			return new WP_Error(
+				'stripe_error',
+				$e->getMessage(),
+				array(
+					'status'      => 400,
+					'stripe_code' => $stripe_code,
+				)
+			);
 		}
 	}
 

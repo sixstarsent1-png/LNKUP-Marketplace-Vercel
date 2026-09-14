@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Food truck at an event">
+  <defs>
+    <linearGradient id="cft-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a2e1a"/>
+      <stop offset="100%" stop-color="#0e180e"/>
+    </linearGradient>
+    <radialGradient id="cft-glow" cx="55%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.26"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#cft-sky)"/>
+  <rect width="720" height="560" fill="url(#cft-glow)"/>
+  <rect x="0" y="430" width="720" height="130" fill="#0c140c"/>
+  <rect x="90" y="220" width="430" height="200" rx="10" fill="#142014" stroke="#c8f542" stroke-width="2"/>
+  <rect x="520" y="270" width="130" height="150" rx="10" fill="#1a2818" stroke="#c8f542" stroke-width="2"/>
+  <path d="M520 270h90l60 70v80h-150z" fill="#162016" stroke="#c8f542" stroke-width="1.5"/>
+  <rect x="120" y="250" width="280" height="90" rx="4" fill="#0a120a" stroke="#c8f542" stroke-width="1.5"/>
+  <rect x="140" y="268" width="80" height="12" rx="2" fill="#c8f542" opacity="0.4"/>
+  <rect x="140" y="290" width="60" height="10" rx="2" fill="#c8f542" opacity="0.2"/>
+  <rect x="420" y="248" width="70" height="50" rx="3" fill="#0a120a" stroke="#c8f542" opacity="0.6"/>
+  <circle cx="200" cy="440" r="38" fill="#081008" stroke="#c8f542" stroke-width="3"/>
+  <circle cx="200" cy="440" r="16" fill="#1a2818"/>
+  <circle cx="480" cy="440" r="38" fill="#081008" stroke="#c8f542" stroke-width="3"/>
+  <circle cx="480" cy="440" r="16" fill="#1a2818"/>
+  <rect x="150" y="185" width="220" height="28" rx="3" fill="#c8f542" opacity="0.22" stroke="#c8f542"/>
+</svg>

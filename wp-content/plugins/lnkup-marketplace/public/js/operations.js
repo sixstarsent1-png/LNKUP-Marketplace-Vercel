@@ -273,18 +273,37 @@
     var wrap = document.getElementById('lnkup-vendor-support-panel');
     var appId = wrap ? wrap.getAttribute('data-app-id') : '';
     if (!appId) {
-      panel.innerHTML = '<p class="lnkup-muted">No application selected.</p>';
+      if (window.LNKupUI && LNKupUI.panelEmpty) {
+        LNKupUI.panelEmpty(panel, {
+          title: 'No application selected',
+          desc: 'Choose an event to view support requests.',
+          compact: true
+        });
+      } else {
+        panel.innerHTML = '<p class="lnkup-muted">No application selected.</p>';
+      }
       return;
+    }
+    if (window.LNKupUI && LNKupUI.panelSkeleton) {
+      LNKupUI.panelSkeleton(panel, 1);
     }
     opsFetch('/applications/' + appId + '/support').then(function (res) {
       var items = (res && res.items) ? res.items : [];
       if (!items.length) {
-        panel.innerHTML = '<p class="lnkup-muted">No support requests yet.</p>';
+        if (window.LNKupUI && LNKupUI.panelEmpty) {
+          LNKupUI.panelEmpty(panel, {
+            title: 'No support requests yet',
+            desc: 'Need help on event day? Start a new request above.',
+            compact: true
+          });
+        } else {
+          panel.innerHTML = '<p class="lnkup-muted">No support requests yet.</p>';
+        }
         return;
       }
       var html = '';
       items.forEach(function (item) {
-        html += '<div class="lnkup-ops-support-item">';
+        html += '<div class="lnkup-ops-support-item lnkup-surface--secondary">';
         html += '<div class="lnkup-ops-support-item__meta">';
         html += '<span class="lnkup-badge">' + escapeHtml(item.category_label || item.category || '') + '</span>';
         html += '<span class="lnkup-muted">' + escapeHtml(item.status || '') + '</span>';
@@ -298,7 +317,14 @@
       });
       panel.innerHTML = html;
     }).catch(function () {
-      panel.innerHTML = '<p class="lnkup-muted">Could not load support history.</p>';
+      if (window.LNKupUI && LNKupUI.panelError) {
+        LNKupUI.panelError(panel, {
+          title: 'Could not load support history',
+          desc: 'Try refreshing or contact support.'
+        });
+      } else {
+        panel.innerHTML = '<p class="lnkup-muted">Could not load support history.</p>';
+      }
     });
   }
 

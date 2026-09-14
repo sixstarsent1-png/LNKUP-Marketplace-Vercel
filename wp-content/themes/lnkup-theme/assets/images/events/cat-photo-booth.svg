@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Photo booth at an event">
+  <defs>
+    <linearGradient id="cp-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a2e1a"/>
+      <stop offset="100%" stop-color="#0e180e"/>
+    </linearGradient>
+    <radialGradient id="cp-glow" cx="50%" cy="34%" r="48%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#cp-sky)"/>
+  <rect width="720" height="560" fill="url(#cp-glow)"/>
+  <rect x="0" y="440" width="720" height="120" fill="#0c140c"/>
+  <rect x="230" y="150" width="260" height="300" rx="10" fill="#142014" stroke="#c8f542" stroke-width="2.5"/>
+  <rect x="255" y="180" width="210" height="150" rx="6" fill="#0a120a" stroke="#c8f542" stroke-width="1.5"/>
+  <circle cx="360" cy="255" r="36" fill="none" stroke="#c8f542" stroke-width="3" opacity="0.7"/>
+  <circle cx="360" cy="255" r="14" fill="#c8f542" opacity="0.35"/>
+  <rect x="270" y="350" width="180" height="70" rx="4" fill="#0a120a" stroke="#c8f542" opacity="0.6"/>
+  <rect x="300" y="368" width="50" height="36" rx="2" fill="#c8f542" opacity="0.25"/>
+  <rect x="370" y="368" width="50" height="36" rx="2" fill="#c8f542" opacity="0.2"/>
+  <circle cx="455" cy="200" r="8" fill="#c8f542" opacity="0.7"/>
+</svg>

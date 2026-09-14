@@ -32,6 +32,12 @@ class LNKup_Referral_Credits {
 				return;
 			}
 		}
+		if ( class_exists( 'LNKup_Organizer_Recruit_Referrals' ) ) {
+			$org = LNKup_Organizer_Recruit_Referrals::resolve_code( $code );
+			if ( $org ) {
+				return;
+			}
+		}
 		setcookie(
 			'lnkup_ref',
 			$code,

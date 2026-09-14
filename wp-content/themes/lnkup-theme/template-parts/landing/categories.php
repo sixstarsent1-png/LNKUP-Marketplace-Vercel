@@ -5,19 +5,28 @@
  * @package LNKup_Theme
  */
 
-$categories = array(
-	'Food Vendor', 'Food Truck', 'Desserts', 'Drinks', 'Retail', 'Clothing',
-	'Beauty', 'Jewelry', 'Art', 'Photo Booth', 'Services', 'Wellness', 'Merchandise',
-);
+$eyebrow    = (string) lnkup_landing_get( 'cat_eyebrow', '' );
+$title      = (string) lnkup_landing_get( 'cat_title', '' );
+$aside      = (string) lnkup_landing_get( 'cat_aside', '' );
+$categories = lnkup_landing_lines( (string) lnkup_landing_get( 'cat_list', '' ) );
+$banner     = lnkup_landing_image_url( 'cat_image_id', 'images/events/sunset-miami.svg' );
 ?>
-<section id="categories" class="lnkup-section">
+<section id="categories" class="lnkup-section lnkup-categories-section lnkup-reveal">
+	<?php if ( $banner ) : ?>
+		<div class="lnkup-categories-section__banner" aria-hidden="true">
+			<img src="<?php echo esc_url( $banner ); ?>" alt="" width="1600" height="480" loading="lazy" />
+			<span class="lnkup-categories-section__scrim"></span>
+		</div>
+	<?php endif; ?>
 	<div class="lnkup-container">
 		<div class="lnkup-section__header-row">
 			<div class="lnkup-section__intro">
-				<p class="lnkup-eyebrow"><?php esc_html_e( 'Vendor categories', 'lnkup-theme' ); ?></p>
-				<h2 class="lnkup-heading lnkup-heading--section"><?php esc_html_e( 'Whatever you bring to the event', 'lnkup-theme' ); ?></h2>
+				<?php lnkup_theme_section_kicker( '03 / CATEGORIES', $eyebrow ); ?>
+				<h2 class="lnkup-heading lnkup-heading--section"><?php echo esc_html( $title ); ?></h2>
 			</div>
-			<p class="lnkup-section__aside"><?php esc_html_e( '13 categories · more launching soon', 'lnkup-theme' ); ?></p>
+			<?php if ( $aside ) : ?>
+				<p class="lnkup-section__aside"><?php echo esc_html( $aside ); ?></p>
+			<?php endif; ?>
 		</div>
 		<div class="lnkup-categories">
 			<?php foreach ( $categories as $cat ) : ?>

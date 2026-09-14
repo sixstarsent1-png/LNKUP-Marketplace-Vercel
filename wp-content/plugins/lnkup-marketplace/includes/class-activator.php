@@ -83,11 +83,20 @@ class LNKup_Activator {
 		if ( class_exists( 'LNKup_External_Events_Tables' ) ) {
 			LNKup_External_Events_Tables::create_tables();
 		}
+		if ( class_exists( 'LNKup_Search_Ingest_Tables' ) ) {
+			LNKup_Search_Ingest_Tables::create_tables();
+		}
 		if ( class_exists( 'LNKup_Vendor_Import_Tables' ) ) {
 			LNKup_Vendor_Import_Tables::create_tables();
 		}
 		if ( class_exists( 'LNKup_Connector_Tables' ) ) {
 			LNKup_Connector_Tables::create_tables();
+		}
+		if ( class_exists( 'LNKup_Push_Tables' ) ) {
+			LNKup_Push_Tables::create_tables();
+		}
+		if ( class_exists( 'LNKup_Inbox_Tables' ) ) {
+			LNKup_Inbox_Tables::create_tables();
 		}
 	}
 
@@ -187,6 +196,11 @@ class LNKup_Activator {
 				'content'  => '[lnkup_organizer_dashboard]',
 			),
 			'opportunities'       => array(
+				'title'    => 'Find Events',
+				'template' => 'page-templates/vendor-shell.php',
+				'content'  => '[lnkup_opportunities_feed]',
+			),
+			'find-events'         => array(
 				'title'    => 'Find Events',
 				'template' => 'page-templates/vendor-shell.php',
 				'content'  => '[lnkup_opportunities_feed]',
@@ -295,6 +309,10 @@ class LNKup_Activator {
 				'template' => 'page-templates/vendor-shell.php',
 				'content'  => '[lnkup_opportunities_feed]',
 			),
+			'find-events'    => array(
+				'template' => 'page-templates/vendor-shell.php',
+				'content'  => '[lnkup_opportunities_feed]',
+			),
 			'vendor-profile' => array(
 				'template' => 'page-templates/vendor-shell.php',
 				'content'  => '[lnkup_vendor_profile_form]',
@@ -363,6 +381,7 @@ class LNKup_Activator {
 			'vendor-dashboard'    => 'page-templates/vendor-dashboard.php',
 			'organizer-dashboard' => 'page-templates/organizer-dashboard.php',
 			'opportunities'       => 'page-templates/vendor-shell.php',
+			'find-events'         => 'page-templates/vendor-shell.php',
 			'vendor-profile'      => 'page-templates/vendor-shell.php',
 			'favorites'           => 'page-templates/vendor-shell.php',
 		);

@@ -11,7 +11,7 @@ defined( 'ABSPATH' ) || exit;
 
 class LNKup_External_Events_Tables {
 
-	const SCHEMA_VERSION = '2.0';
+	const SCHEMA_VERSION = '2.1';
 
 	/**
 	 * Create external events tables.
@@ -40,6 +40,9 @@ class LNKup_External_Events_Tables {
 				organizer_name varchar(255) NOT NULL DEFAULT '',
 				organizer_url varchar(500) NOT NULL DEFAULT '',
 				organizer_email varchar(191) NOT NULL DEFAULT '',
+				application_url varchar(500) NOT NULL DEFAULT '',
+				organizer_instagram varchar(255) NOT NULL DEFAULT '',
+				discovery_query varchar(255) NOT NULL DEFAULT '',
 				event_type varchar(128) NOT NULL DEFAULT '',
 				vendor_fit_score int unsigned NOT NULL DEFAULT 0,
 				workflow_status varchar(32) NOT NULL DEFAULT 'published',

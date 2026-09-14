@@ -18,12 +18,22 @@ class LNKup_Ajax {
 		add_action( 'wp_ajax_lnkup_upload_document', array( __CLASS__, 'handle_upload_document' ) );
 		add_action( 'wp_ajax_lnkup_review_application', array( __CLASS__, 'handle_review_application' ) );
 		add_action( 'wp_ajax_lnkup_create_event', array( __CLASS__, 'handle_create_event' ) );
+		add_action( 'wp_ajax_lnkup_update_event', array( __CLASS__, 'handle_update_event' ) );
 		add_action( 'wp_ajax_lnkup_create_opportunity', array( __CLASS__, 'handle_create_opportunity' ) );
+		add_action( 'wp_ajax_lnkup_update_opportunity_pricing', array( __CLASS__, 'handle_update_opportunity_pricing' ) );
 		add_action( 'wp_ajax_lnkup_download_document', array( 'LNKup_Documents', 'handle_download' ) );
 		add_action( 'wp_ajax_lnkup_export_vendors', array( __CLASS__, 'handle_export_vendors' ) );
 		add_action( 'wp_ajax_lnkup_event_intelligence', array( __CLASS__, 'handle_event_intelligence' ) );
 		add_action( 'wp_ajax_lnkup_filter_opportunities', array( __CLASS__, 'handle_filter_opportunities' ) );
 		add_action( 'wp_ajax_nopriv_lnkup_filter_opportunities', array( __CLASS__, 'handle_filter_opportunities' ) );
+		add_action( 'wp_ajax_lnkup_dismiss_vendor_tutorial', array( __CLASS__, 'handle_dismiss_vendor_tutorial' ) );
+		add_action( 'wp_ajax_lnkup_vendor_welcome_seen', array( __CLASS__, 'handle_vendor_welcome_seen' ) );
+		add_action( 'wp_ajax_lnkup_reset_vendor_tutorial', array( __CLASS__, 'handle_reset_vendor_tutorial' ) );
+		add_action( 'wp_ajax_lnkup_dismiss_organizer_tutorial', array( __CLASS__, 'handle_dismiss_organizer_tutorial' ) );
+		add_action( 'wp_ajax_lnkup_organizer_welcome_seen', array( __CLASS__, 'handle_organizer_welcome_seen' ) );
+		add_action( 'wp_ajax_lnkup_reset_organizer_tutorial', array( __CLASS__, 'handle_reset_organizer_tutorial' ) );
+		add_action( 'wp_ajax_lnkup_dashboard_tour_seen', array( __CLASS__, 'handle_dashboard_tour_seen' ) );
+		add_action( 'wp_ajax_lnkup_reset_dashboard_tour', array( __CLASS__, 'handle_reset_dashboard_tour' ) );
 	}
 
 	/**
@@ -236,35 +246,240 @@ class LNKup_Ajax {
 	}
 
 	/**
+	 * Clear stray output buffers before JSON AJAX responses.
+	 */
+	private static function clear_ajax_output_buffers() {
+		while ( ob_get_level() > 0 ) {
+			ob_end_clean();
+		}
+	}
+
+	/**
+	 * Send JSON success after clearing buffers.
+	 *
+	 * @param mixed $data Response data.
+	 */
+	private static function send_json_success( $data = null ) {
+		self::clear_ajax_output_buffers();
+		wp_send_json_success( $data );
+	}
+
+	/**
+	 * Send JSON error after clearing buffers.
+	 *
+	 * @param mixed $data   Response data.
+	 * @param int   $status HTTP status.
+	 */
+	private static function send_json_error( $data = null, $status = null ) {
+		self::clear_ajax_output_buffers();
+		if ( null === $status ) {
+			wp_send_json_error( $data );
+		}
+		wp_send_json_error( $data, $status );
+	}
+
+	/**
+	 * Verify nonce for AJAX JSON responses (no HTML wp_die).
+	 *
+	 * @param string $action Nonce action.
+	 * @return true|void Sends JSON error and exits on failure.
+	 */
+	private static function require_ajax_nonce( $action ) {
+		$nonce = isset( $_REQUEST['lnkup_nonce'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['lnkup_nonce'] ) ) : '';
+		if ( ! wp_verify_nonce( $nonce, $action ) ) {
+			self::send_json_error(
+				array( 'message' => __( 'Security check failed. Refresh the page and try again.', 'lnkup-marketplace' ) ),
+				403
+			);
+		}
+		return true;
+	}
+
+	/**
+	 * Require capability for AJAX JSON responses (no HTML wp_die).
+	 *
+	 * @param string $cap Capability.
+	 * @return true|void Sends JSON error and exits on failure.
+	 */
+	private static function require_ajax_cap( $cap ) {
+		if ( ! current_user_can( $cap ) && ! LNKup_Capabilities::user_has_manage_all() ) {
+			self::send_json_error(
+				array( 'message' => __( 'Permission denied.', 'lnkup-marketplace' ) ),
+				403
+			);
+		}
+		return true;
+	}
+
+	/**
 	 * Handle event creation/import.
 	 */
 	public static function handle_create_event() {
-		LNKup_Security::verify_nonce( 'lnkup_event' );
-		LNKup_Capabilities::require_cap( 'lnkup_manage_own_events' );
+		self::require_ajax_nonce( 'lnkup_event' );
+		self::require_ajax_cap( 'lnkup_manage_own_events' );
 
-		$result = LNKup_Organizer_Onboarding::create_event_from_request( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$input = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+		try {
+			$result = LNKup_Organizer_Onboarding::create_event_from_request( $input );
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( 'LNKup create_event: ' . $e->getMessage() );
+			}
+			self::send_json_error(
+				array( 'message' => __( 'Could not create the event. Please try again.', 'lnkup-marketplace' ) ),
+				500
+			);
+		}
+
 		if ( is_wp_error( $result ) ) {
-			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+			self::send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+
+		$open_apps = ! empty( $input['open_vendor_applications'] );
+		$event_id  = isset( $result['event_id'] ) ? (int) $result['event_id'] : 0;
+
+		// Decode JSON opportunities blob from multi-fee create form.
+		if ( ! empty( $input['opportunities_json'] ) && is_string( $input['opportunities_json'] ) ) {
+			$decoded = json_decode( $input['opportunities_json'], true );
+			if ( is_array( $decoded ) ) {
+				$input['opportunities'] = $decoded;
+			}
+		}
+
+		if ( $open_apps && $event_id > 0 ) {
+			try {
+				$opp_result = LNKup_Organizer_Onboarding::create_opportunities_for_event(
+					$event_id,
+					$input,
+					get_current_user_id()
+				);
+			} catch ( Throwable $e ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					error_log( 'LNKup create_event opportunity: ' . $e->getMessage() );
+				}
+				$opp_result = new WP_Error(
+					'opp_failed',
+					__( 'Event created, but vendor opportunity could not be created. You can add it next.', 'lnkup-marketplace' )
+				);
+			}
+
+			if ( is_wp_error( $opp_result ) ) {
+				$result['onboarding'] = true;
+				$result['message']    = $opp_result->get_error_message();
+				self::send_json_success( $result );
+			}
+
+			$result                        = array_merge( $result, $opp_result );
+			$result['onboarding']          = false;
+			$result['opportunity_created'] = true;
+			$result['message']             = $opp_result['message'] ?? __( 'Event published with vendor applications open.', 'lnkup-marketplace' );
+			self::send_json_success( $result );
 		}
 
 		$result['message'] = __( 'Event created. You can add vendor opportunities anytime.', 'lnkup-marketplace' );
 
-		wp_send_json_success( $result );
+		self::send_json_success( $result );
+	}
+
+	/**
+	 * Update event listing fields after create.
+	 */
+	public static function handle_update_event() {
+		self::require_ajax_nonce( 'lnkup_event' );
+		self::require_ajax_cap( 'lnkup_manage_own_events' );
+
+		$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
+		$input    = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+		try {
+			$result = LNKup_Organizer_Onboarding::update_event_from_request(
+				$event_id,
+				$input,
+				get_current_user_id()
+			);
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( 'LNKup update_event: ' . $e->getMessage() );
+			}
+			self::send_json_error(
+				array( 'message' => __( 'Could not update the event. Please try again.', 'lnkup-marketplace' ) ),
+				500
+			);
+		}
+
+		if ( is_wp_error( $result ) ) {
+			$status = 'forbidden' === $result->get_error_code() ? 403 : 400;
+			self::send_json_error( array( 'message' => $result->get_error_message() ), $status );
+		}
+
+		self::send_json_success( $result );
+	}
+
+	/**
+	 * Update opportunity fee and spots.
+	 */
+	public static function handle_update_opportunity_pricing() {
+		self::require_ajax_nonce( 'lnkup_opportunity' );
+		self::require_ajax_cap( 'lnkup_manage_own_opportunities' );
+
+		$opp_id = isset( $_POST['opportunity_id'] ) ? absint( $_POST['opportunity_id'] ) : 0;
+		$fee    = isset( $_POST['vendor_fee'] ) ? wp_unslash( $_POST['vendor_fee'] ) : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$spots  = isset( $_POST['spots_total'] ) ? absint( $_POST['spots_total'] ) : 0;
+
+		try {
+			$result = LNKup_Organizer_Onboarding::update_opportunity_pricing(
+				$opp_id,
+				$fee,
+				$spots,
+				get_current_user_id()
+			);
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( 'LNKup update_opportunity_pricing: ' . $e->getMessage() );
+			}
+			self::send_json_error(
+				array( 'message' => __( 'Could not update fee and spots. Please try again.', 'lnkup-marketplace' ) ),
+				500
+			);
+		}
+
+		if ( is_wp_error( $result ) ) {
+			$status = 'forbidden' === $result->get_error_code() ? 403 : 400;
+			self::send_json_error( array( 'message' => $result->get_error_message() ), $status );
+		}
+
+		self::send_json_success( $result );
 	}
 
 	/**
 	 * Handle opportunity creation.
 	 */
 	public static function handle_create_opportunity() {
-		LNKup_Security::verify_nonce( 'lnkup_opportunity' );
-		LNKup_Capabilities::require_cap( 'lnkup_manage_own_opportunities' );
+		self::require_ajax_nonce( 'lnkup_opportunity' );
+		self::require_ajax_cap( 'lnkup_manage_own_opportunities' );
 
 		$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
-		$result   = LNKup_Organizer_Onboarding::create_opportunity_for_event(
-			$event_id,
-			wp_unslash( $_POST ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
-			get_current_user_id()
-		);
+		try {
+			$result = LNKup_Organizer_Onboarding::create_opportunity_for_event(
+				$event_id,
+				wp_unslash( $_POST ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				get_current_user_id()
+			);
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( 'LNKup create_opportunity: ' . $e->getMessage() );
+			}
+			wp_send_json_error(
+				array( 'message' => __( 'Could not create the opportunity. Please try again.', 'lnkup-marketplace' ) ),
+				500
+			);
+		}
 
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
@@ -357,5 +572,133 @@ class LNKup_Ajax {
 				'has_external'   => ! empty( $result['has_external'] ),
 			)
 		);
+	}
+
+	/**
+	 * Dismiss vendor getting-started tutorial.
+	 */
+	public static function handle_dismiss_vendor_tutorial() {
+		LNKup_Security::verify_nonce( 'lnkup_action' );
+		if ( ! is_user_logged_in() ) {
+			wp_send_json_error( array( 'message' => __( 'Sign in required.', 'lnkup-marketplace' ) ), 401 );
+		}
+		if ( ! class_exists( 'LNKup_Vendor_Getting_Started' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Tutorial unavailable.', 'lnkup-marketplace' ) ), 503 );
+		}
+		LNKup_Vendor_Getting_Started::dismiss( get_current_user_id() );
+		wp_send_json_success( array( 'dismissed' => true ) );
+	}
+
+	/**
+	 * Mark vendor welcome popup as seen.
+	 */
+	public static function handle_vendor_welcome_seen() {
+		LNKup_Security::verify_nonce( 'lnkup_action' );
+		if ( ! is_user_logged_in() ) {
+			wp_send_json_error( array( 'message' => __( 'Sign in required.', 'lnkup-marketplace' ) ), 401 );
+		}
+		if ( ! class_exists( 'LNKup_Vendor_Getting_Started' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Tutorial unavailable.', 'lnkup-marketplace' ) ), 503 );
+		}
+		LNKup_Vendor_Getting_Started::mark_welcome_seen( get_current_user_id() );
+		wp_send_json_success( array( 'welcome_seen' => true ) );
+	}
+
+	/**
+	 * Re-show vendor getting-started checklist (does not reopen welcome).
+	 */
+	public static function handle_reset_vendor_tutorial() {
+		LNKup_Security::verify_nonce( 'lnkup_action' );
+		if ( ! is_user_logged_in() ) {
+			wp_send_json_error( array( 'message' => __( 'Sign in required.', 'lnkup-marketplace' ) ), 401 );
+		}
+		if ( ! class_exists( 'LNKup_Vendor_Getting_Started' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Tutorial unavailable.', 'lnkup-marketplace' ) ), 503 );
+		}
+		LNKup_Vendor_Getting_Started::reset( get_current_user_id() );
+		wp_send_json_success( array( 'reset' => true ) );
+	}
+
+	/**
+	 * Dismiss organizer launch checklist.
+	 */
+	public static function handle_dismiss_organizer_tutorial() {
+		LNKup_Security::verify_nonce( 'lnkup_action' );
+		if ( ! is_user_logged_in() ) {
+			wp_send_json_error( array( 'message' => __( 'Sign in required.', 'lnkup-marketplace' ) ), 401 );
+		}
+		if ( ! class_exists( 'LNKup_Organizer_Launch_Checklist' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Checklist unavailable.', 'lnkup-marketplace' ) ), 503 );
+		}
+		LNKup_Organizer_Launch_Checklist::dismiss( get_current_user_id() );
+		wp_send_json_success( array( 'dismissed' => true ) );
+	}
+
+	/**
+	 * Mark organizer welcome popup as seen.
+	 */
+	public static function handle_organizer_welcome_seen() {
+		LNKup_Security::verify_nonce( 'lnkup_action' );
+		if ( ! is_user_logged_in() ) {
+			wp_send_json_error( array( 'message' => __( 'Sign in required.', 'lnkup-marketplace' ) ), 401 );
+		}
+		if ( ! class_exists( 'LNKup_Organizer_Launch_Checklist' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Checklist unavailable.', 'lnkup-marketplace' ) ), 503 );
+		}
+		LNKup_Organizer_Launch_Checklist::mark_welcome_seen( get_current_user_id() );
+		wp_send_json_success( array( 'welcome_seen' => true ) );
+	}
+
+	/**
+	 * Re-show organizer launch checklist (does not reopen welcome).
+	 */
+	public static function handle_reset_organizer_tutorial() {
+		LNKup_Security::verify_nonce( 'lnkup_action' );
+		if ( ! is_user_logged_in() ) {
+			wp_send_json_error( array( 'message' => __( 'Sign in required.', 'lnkup-marketplace' ) ), 401 );
+		}
+		if ( ! class_exists( 'LNKup_Organizer_Launch_Checklist' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Checklist unavailable.', 'lnkup-marketplace' ) ), 503 );
+		}
+		LNKup_Organizer_Launch_Checklist::reset( get_current_user_id() );
+		wp_send_json_success( array( 'reset' => true ) );
+	}
+
+	/**
+	 * Mark platform tour as seen.
+	 */
+	public static function handle_dashboard_tour_seen() {
+		LNKup_Security::verify_nonce( 'lnkup_action' );
+		if ( ! is_user_logged_in() ) {
+			wp_send_json_error( array( 'message' => __( 'Sign in required.', 'lnkup-marketplace' ) ), 401 );
+		}
+		if ( ! class_exists( 'LNKup_Dashboard_Tour' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Tour unavailable.', 'lnkup-marketplace' ) ), 503 );
+		}
+		$role = isset( $_POST['role'] ) ? sanitize_key( wp_unslash( (string) $_POST['role'] ) ) : 'vendor'; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( ! in_array( $role, array( 'vendor', 'organizer' ), true ) ) {
+			$role = 'vendor';
+		}
+		LNKup_Dashboard_Tour::mark_seen( get_current_user_id(), $role );
+		wp_send_json_success( array( 'tour_seen' => true ) );
+	}
+
+	/**
+	 * Replay platform tour from Help (does not reopen welcome).
+	 */
+	public static function handle_reset_dashboard_tour() {
+		LNKup_Security::verify_nonce( 'lnkup_action' );
+		if ( ! is_user_logged_in() ) {
+			wp_send_json_error( array( 'message' => __( 'Sign in required.', 'lnkup-marketplace' ) ), 401 );
+		}
+		if ( ! class_exists( 'LNKup_Dashboard_Tour' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Tour unavailable.', 'lnkup-marketplace' ) ), 503 );
+		}
+		$role = isset( $_POST['role'] ) ? sanitize_key( wp_unslash( (string) $_POST['role'] ) ) : 'vendor'; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( ! in_array( $role, array( 'vendor', 'organizer' ), true ) ) {
+			$role = 'vendor';
+		}
+		LNKup_Dashboard_Tour::reset( get_current_user_id(), $role );
+		wp_send_json_success( array( 'reset' => true ) );
 	}
 }

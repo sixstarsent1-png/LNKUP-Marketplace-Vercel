@@ -153,29 +153,42 @@ class LNKup_Vendor_Personalization {
 
 	/**
 	 * Add search to history.
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $query   Query string.
+	 * @param array  $filters Filter snapshot.
 	 */
 	public static function add_search_history( $user_id, $query, $filters = array() ) {
 		$query = trim( (string) $query );
 		if ( '' === $query && empty( $filters ) ) {
 			return;
 		}
-		$history = self::get_search_history( $user_id );
+		$history = self::get_search_history_entries( $user_id );
 		$entry   = array(
 			'q'       => sanitize_text_field( $query ),
-			'filters' => $filters,
+			'filters' => is_array( $filters ) ? $filters : array(),
 			'at'      => current_time( 'mysql' ),
 		);
-		$history = array_values( array_filter( $history, function ( $h ) use ( $entry ) {
-			return $h['q'] !== $entry['q'];
-		} ) );
+		$history = array_values(
+			array_filter(
+				$history,
+				function ( $h ) use ( $entry ) {
+					$hq = is_array( $h ) ? (string) ( $h['q'] ?? '' ) : (string) $h;
+					return $hq !== $entry['q'];
+				}
+			)
+		);
 		array_unshift( $history, $entry );
 		update_user_meta( $user_id, 'lnkup_search_history', array_slice( $history, 0, self::MAX_HISTORY ) );
 	}
 
 	/**
-	 * Get search history queries.
+	 * Raw search history entries (arrays).
+	 *
+	 * @param int $user_id User ID.
+	 * @return array<int, array{q:string,filters?:array,at?:string}|string>
 	 */
-	public static function get_search_history( $user_id = 0 ) {
+	private static function get_search_history_entries( $user_id = 0 ) {
 		$user_id = $user_id ?: get_current_user_id();
 		if ( ! $user_id ) {
 			return array();
@@ -184,9 +197,39 @@ class LNKup_Vendor_Personalization {
 		if ( ! is_array( $data ) ) {
 			return array();
 		}
-		return array_map( function ( $h ) {
-			return is_array( $h ) ? ( $h['q'] ?? '' ) : (string) $h;
-		}, $data );
+		$out = array();
+		foreach ( $data as $h ) {
+			if ( is_array( $h ) && isset( $h['q'] ) ) {
+				$out[] = $h;
+			} elseif ( is_string( $h ) && '' !== trim( $h ) ) {
+				$out[] = array(
+					'q'       => sanitize_text_field( $h ),
+					'filters' => array(),
+					'at'      => '',
+				);
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Get search history queries (string labels for suggestions UI).
+	 *
+	 * @param int $user_id User ID.
+	 * @return string[]
+	 */
+	public static function get_search_history( $user_id = 0 ) {
+		$entries = self::get_search_history_entries( $user_id );
+		return array_values(
+			array_filter(
+				array_map(
+					function ( $h ) {
+						return is_array( $h ) ? (string) ( $h['q'] ?? '' ) : (string) $h;
+					},
+					$entries
+				)
+			)
+		);
 	}
 
 	/**

@@ -300,7 +300,8 @@ class LNKup_Marketplace_Index {
 			'view_count'          => $view_count,
 			'trending_score'      => $trending,
 			'search_blob'         => implode( ' ', array_filter( $search_parts ) ),
-			'featured_image_id'   => (int) get_post_meta( $event_id, '_lnkup_featured_image_id', true ),
+			'featured_image_id'   => (int) get_post_meta( $opportunity_id, '_lnkup_featured_image_id', true )
+				?: (int) get_post_meta( $event_id, '_lnkup_featured_image_id', true ),
 			'load_in_time'        => (string) get_post_meta( $opportunity_id, '_lnkup_load_in_time', true ),
 			'required_documents'  => self::normalize_required_documents( get_post_meta( $opportunity_id, '_lnkup_required_documents', true ) ),
 			'created_at'          => $opp->post_date,

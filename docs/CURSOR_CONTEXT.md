@@ -2,7 +2,7 @@
 
 Human-readable context for AI-assisted development. Pair with `.cursor/rules/lnkup-architecture.mdc` (always-applied agent rules).
 
-**Deep references:** [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) · [CURRENT_STATE.md](CURRENT_STATE.md) · [UI_UX.md](UI_UX.md)
+**Deep references:** [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) · [CURRENT_STATE.md](CURRENT_STATE.md) · [APP_GAP_ANALYSIS.md](APP_GAP_ANALYSIS.md) · [PUSH_NOTIFICATIONS_DEPTH.md](PUSH_NOTIFICATIONS_DEPTH.md) · [PHASE_ACTIVATION_EMAILS.md](PHASE_ACTIVATION_EMAILS.md) · [PHASE_RETENTION_PUSH.md](PHASE_RETENTION_PUSH.md) · [PHASE_PUSH_PREFS_BADGE.md](PHASE_PUSH_PREFS_BADGE.md) · [UI_UX.md](UI_UX.md)
 
 ---
 
@@ -18,7 +18,7 @@ Human-readable context for AI-assisted development. Pair with `.cursor/rules/lnk
 
 **Not in scope:** Attendee ticketing (stays on Posh, Eventbrite, Universe, etc.). LNKup owns the **vendor layer** only.
 
-**Current version:** Plugin v12.1.0 · Theme v1.0.0 · ~177 PHP files · ~200 REST routes · 70+ SQL tables · 12 Playwright E2E specs.
+**Current version:** Plugin v12.17.0 · Theme v1.4.5 · ~200 PHP files · ~210 REST routes · 78+ SQL tables · 26 WordPress E2E specs · 30 Next.js BFF routes
 
 ---
 
@@ -26,17 +26,21 @@ Human-readable context for AI-assisted development. Pair with `.cursor/rules/lnk
 
 | Layer | Technology | Status |
 |-------|-----------|--------|
-| **Production** | WordPress 6.0+ + `lnkup-theme` + `lnkup-marketplace` | Live marketplace |
-| **Reference (canonical)** | Next.js in `lnk-up-marketplace-ui/` | Runnable mock app — Phase 1 target |
+| **Production** | WordPress 6.0+ + `lnkup-theme` + `lnkup-marketplace` | Live marketplace — system of record |
+| **Premium web app** | Next.js in `lnk-up-marketplace-ui/` on Vercel | Live BFF + selective WP integration (App Phases 1–16) |
+| **Native mobile** | Expo in `lnk-up-marketplace-mobile/` | Native Phases 1–10 — store hardening + organizer Launch + Find discovery + notification center + More hub + push + profile/docs |
+| **Design IA (mobile)** | `lnkup-app-reference/` | v0 mobile-web mock for native IA; not production |
 | **Reference (legacy)** | Next.js in root `app/` + `components/` | Older v0 template; do not expand |
 
 ### Reference UI
 
-**`lnk-up-marketplace-ui/`** is the canonical runnable mock (vendor / organizer / admin shells, mock data, panel states). Dev: `cd lnk-up-marketplace-ui && pnpm dev`.
+**`lnk-up-marketplace-ui/`** is the canonical Next.js web app (vendor / organizer / admin shells, live BFF, mock fallbacks). Dev: `cd lnk-up-marketplace-ui && pnpm dev`. Production: https://lnkup-marketplace-ui.vercel.app
 
-Root `app/` is legacy (marketing landing + older dashboards). Phase 2 ports winning patterns from `lnk-up-marketplace-ui/` into the WordPress theme/plugin — **without** replacing production files in Phase 1.
+**`lnk-up-marketplace-mobile/`** is the Expo iOS/Android app. Dev: `cd lnk-up-marketplace-mobile && npx expo start`. See [§14.3](SYSTEM_OVERVIEW.md#143-native-mobile-architecture). Native Phase 9: organizer Launch lite. Native Phase 10: store release hardening ([STORE_RELEASE.md](../lnk-up-marketplace-mobile/STORE_RELEASE.md)); map discovery and automated store submit still deferred / operator-owned.
 
-Unless the user explicitly asks to work on the reference UI, **production feature work belongs in the WordPress plugin and theme**.
+Root `app/` is legacy. **WordPress visual port from the app is deferred** — app-only rollout continues per [App Roadmap §14.2](SYSTEM_OVERVIEW.md#142-app-roadmap-phases-126). Phases 22–26 **Built**; Phase 26: [PHASE_26_FINANCIAL_OS_EXPANSION.md](PHASE_26_FINANCIAL_OS_EXPANSION.md); organizer event import: [PHASE_EXTERNAL_EVENT_IMPORT.md](PHASE_EXTERNAL_EVENT_IMPORT.md); queue: [Phases 22–26](PHASES_22_26_ROADMAP.md).
+
+Unless the user explicitly asks to work on the Next.js or Expo app, **production business logic belongs in the WordPress plugin and theme**.
 
 ---
 
@@ -55,8 +59,11 @@ lnk-up-marketplace-platform/
 │       ├── inc/dashboard.php          # Role gates, nav
 │       ├── page-templates/            # Dashboard templates
 │       └── assets/dist/               # Compiled CSS
-├── app/                               # Reference Next.js (NOT production)
-├── components/                        # Reference React (NOT production)
+├── lnk-up-marketplace-ui/             # Premium Next.js web app (Vercel BFF)
+├── lnk-up-marketplace-mobile/         # Expo iOS/Android native app
+├── lnkup-app-reference/               # Mobile design IA (mock only)
+├── app/                               # Legacy Next.js (NOT production)
+├── components/                        # Legacy React (NOT production)
 ├── tests/e2e/                         # Playwright specs (WordPress target)
 ├── docs/                              # Architecture docs
 ├── scripts/build-plugin-zip.ps1       # Plugin zip builder
@@ -80,6 +87,7 @@ lnk-up-marketplace-platform/
 | **No attendee ticketing** | Out of scope. |
 | **Theme vs plugin** | Theme = layout/shell/CSS. Plugin = all business logic. |
 | **REST security** | Every route needs `permission_callback`. Financial routes are never public. |
+| **Native mobile** | Expo in `lnk-up-marketplace-mobile/`. Touch only when asked. No Stripe SDK. Auth = SecureStore Application Password → WP REST (not web cookie BFF). |
 | **WP_Error handling** | Always `is_wp_error()` before array access. Never leak PHP notices into JSON. |
 | **Role separation** | Vendor dashboard ≠ organizer dashboard. Preserve capability/ownership checks. |
 | **Event + opportunity** | Creating an event should also create the first opportunity with `_lnkup_event_id`. |

@@ -41,6 +41,92 @@ class LNKup_Applications_REST {
 				'permission_callback' => array( __CLASS__, 'vendor_permission' ),
 			)
 		);
+
+		register_rest_route(
+			self::NS,
+			'/applications/vendor',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'vendor_applications' ),
+				'permission_callback' => array( __CLASS__, 'vendor_permission' ),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
+			'/applications/organizer',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'organizer_applications' ),
+				'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+			)
+		);
+	}
+
+	/**
+	 * GET vendor application list for dashboard / headless app.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function vendor_applications( WP_REST_Request $request ) {
+		unset( $request );
+		$user_id = get_current_user_id();
+		$apps    = lnkup_get_applications_for_user( $user_id, 'vendor' );
+		$items   = array();
+
+		foreach ( $apps as $app ) {
+			$meta       = LNKup_Vendor_Dashboard_Data::application_event_meta( $app );
+			$status     = (string) get_post_meta( $app->ID, '_lnkup_application_status', true );
+			$opp_id     = (int) get_post_meta( $app->ID, '_lnkup_opportunity_id', true );
+			$card       = $opp_id ? lnkup_get_opportunity_card_data( $opp_id ) : array();
+			$payment    = class_exists( 'LNKup_Payments' ) ? LNKup_Payments::get_for_application( $app->ID ) : null;
+			$pay_status = $payment ? (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true ) : '';
+
+			if ( 'approved' === $status && $payment && 'pending' === $pay_status ) {
+				$status = 'payment_required';
+			}
+
+			$amount_due = $meta['fee'];
+			if ( $payment ) {
+				$amount_due = (float) get_post_meta( $payment->ID, '_lnkup_total_amount', true );
+				if ( $amount_due <= 0 ) {
+					$amount_due = (float) get_post_meta( $payment->ID, '_lnkup_amount', true );
+				}
+				if ( $amount_due <= 0 ) {
+					$amount_due = (float) get_post_meta( $payment->ID, '_lnkup_total', true );
+				}
+			}
+
+			$items[] = array(
+				'application_id'  => (int) $app->ID,
+				'opportunity_id'  => $opp_id,
+				'event_id'        => (int) $meta['event_id'],
+				'event_name'      => (string) $meta['event_title'],
+				'event_date'      => (string) $meta['date'],
+				'city'            => (string) $meta['city'],
+				'state'           => (string) $meta['state'],
+				'organizer_name'  => (string) ( $card['organizer_name'] ?? '' ),
+				'category'        => (string) get_post_meta( $app->ID, '_lnkup_selected_category', true ),
+				'status'          => $status ?: 'submitted',
+				'submitted_at'    => (string) ( get_post_meta( $app->ID, '_lnkup_submitted_at', true ) ?: $app->post_date ),
+				'approved_at'     => (string) get_post_meta( $app->ID, '_lnkup_decided_at', true ),
+				'payment_due_at'  => (string) get_post_meta( $app->ID, '_lnkup_payment_due_at', true ),
+				'amount_due'      => $amount_due,
+				'currency'        => 'USD',
+				'vendor_fee'      => (float) $meta['fee'],
+				'featured_image'  => (string) ( $card['featured_image'] ?? '' ),
+				'payment_id'      => $payment ? (int) $payment->ID : 0,
+				'payment_status'  => $pay_status,
+				'rejection_reason'=> (string) get_post_meta( $app->ID, '_lnkup_rejection_reason', true ),
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'items' => $items,
+				'total' => count( $items ),
+			)
+		);
 	}
 
 	/**
@@ -141,6 +227,123 @@ class LNKup_Applications_REST {
 				'warnings'       => $warnings,
 			)
 		);
+	}
+
+	/**
+	 * GET organizer application list for dashboard / headless app.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function organizer_applications( WP_REST_Request $request ) {
+		unset( $request );
+		$user_id = get_current_user_id();
+		$apps    = lnkup_get_applications_for_user( $user_id, 'organizer' );
+		$items   = array();
+
+		foreach ( $apps as $app ) {
+			$meta       = LNKup_Vendor_Dashboard_Data::application_event_meta( $app );
+			$status     = (string) get_post_meta( $app->ID, '_lnkup_application_status', true );
+			$opp_id     = (int) get_post_meta( $app->ID, '_lnkup_opportunity_id', true );
+			$profile_id = (int) get_post_meta( $app->ID, '_lnkup_vendor_profile_id', true );
+			$vendor_id  = (int) get_post_meta( $app->ID, '_lnkup_vendor_user_id', true );
+			$card       = $opp_id ? lnkup_get_opportunity_card_data( $opp_id ) : array();
+			$payment    = class_exists( 'LNKup_Payments' ) ? LNKup_Payments::get_for_application( $app->ID ) : null;
+			$pay_status = $payment ? (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true ) : '';
+
+			if ( 'approved' === $status && $payment && 'pending' === $pay_status ) {
+				$status = 'payment_required';
+			}
+
+			$amount_due = $meta['fee'];
+			if ( $payment ) {
+				$amount_due = (float) get_post_meta( $payment->ID, '_lnkup_total_amount', true );
+				if ( $amount_due <= 0 ) {
+					$amount_due = (float) get_post_meta( $payment->ID, '_lnkup_amount', true );
+				}
+				if ( $amount_due <= 0 ) {
+					$amount_due = (float) get_post_meta( $payment->ID, '_lnkup_total', true );
+				}
+			}
+
+			$business_name = '';
+			$trust_badges  = array();
+			if ( $profile_id && class_exists( 'LNKup_Vendor_CRM_Profile' ) ) {
+				$profile = LNKup_Vendor_CRM_Profile::get( $profile_id, $user_id );
+				if ( is_array( $profile ) ) {
+					$business_name = (string) ( $profile['business_name'] ?? '' );
+					if ( ! empty( $profile['verified'] ) ) {
+						$trust_badges[] = 'verified';
+					}
+					if ( ! empty( $profile['badges'] ) && is_array( $profile['badges'] ) ) {
+						$trust_badges = array_merge( $trust_badges, $profile['badges'] );
+					}
+				}
+			}
+			if ( ! $business_name && $vendor_id ) {
+				$user = get_userdata( $vendor_id );
+				$business_name = $user ? $user->display_name : '';
+			}
+
+			$readiness = class_exists( 'LNKup_Vendor_Readiness' )
+				? LNKup_Vendor_Readiness::checklist( $app->ID )
+				: array();
+			$docs_status = 'unknown';
+			if ( ! empty( $readiness['percent'] ) && (int) $readiness['percent'] >= 100 ) {
+				$docs_status = 'ready';
+			} elseif ( ! empty( $readiness['pending_top'] ) ) {
+				$docs_status = 'missing';
+			} elseif ( ! empty( $readiness['percent'] ) ) {
+				$docs_status = 'pending';
+			}
+
+			$items[] = array(
+				'application_id'    => (int) $app->ID,
+				'opportunity_id'    => $opp_id,
+				'event_id'          => (int) $meta['event_id'],
+				'event_name'        => (string) $meta['event_title'],
+				'opportunity_name'  => (string) ( $card['title'] ?? $card['name'] ?? '' ),
+				'event_date'        => (string) $meta['date'],
+				'city'              => (string) $meta['city'],
+				'state'             => (string) $meta['state'],
+				'vendor_profile_id' => $profile_id,
+				'vendor_user_id'    => $vendor_id,
+				'vendor_business_name' => $business_name,
+				'category'          => (string) get_post_meta( $app->ID, '_lnkup_selected_category', true ),
+				'status'            => $status ?: 'submitted',
+				'submitted_at'      => (string) ( get_post_meta( $app->ID, '_lnkup_submitted_at', true ) ?: $app->post_date ),
+				'approved_at'       => (string) get_post_meta( $app->ID, '_lnkup_decided_at', true ),
+				'payment_due_at'    => (string) get_post_meta( $app->ID, '_lnkup_payment_due_at', true ),
+				'amount_due'        => $amount_due,
+				'currency'          => 'USD',
+				'vendor_fee'        => (float) $meta['fee'],
+				'payment_id'        => $payment ? (int) $payment->ID : 0,
+				'payment_status'    => $pay_status,
+				'documents_status'  => $docs_status,
+				'trust_badges'      => array_values( array_unique( array_filter( $trust_badges ) ) ),
+				'message'           => (string) $app->post_content,
+				'rejection_reason'  => (string) get_post_meta( $app->ID, '_lnkup_rejection_reason', true ),
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'items' => $items,
+				'total' => count( $items ),
+			)
+		);
+	}
+
+	/**
+	 * Organizer permission callback.
+	 */
+	public static function organizer_permission() {
+		if ( ! is_user_logged_in() ) {
+			return false;
+		}
+		return current_user_can( 'lnkup_review_applications' )
+			|| ( class_exists( 'LNKup_Roles' ) && LNKup_Roles::is_organizer() )
+			|| current_user_can( 'manage_options' )
+			|| LNKup_Capabilities::user_has_manage_all();
 	}
 
 	/**

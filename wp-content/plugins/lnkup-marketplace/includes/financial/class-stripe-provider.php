@@ -30,7 +30,7 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 		return $this->create_checkout_session( $payment_id );
 	}
 
-	public function create_checkout_session( $payment_id ) {
+	public function create_checkout_session( $payment_id, $args = array() ) {
 		$check = $this->validate_payment_access( $payment_id );
 		if ( is_wp_error( $check ) ) {
 			return $check;
@@ -39,29 +39,28 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 			return ( new LNKup_Manual_Provider() )->create_checkout_session( $payment_id );
 		}
 
-		$amount_cents = $this->amount_cents( $payment_id );
+		$prepared = $this->prepare_charge_for_stripe( $payment_id );
+		if ( is_wp_error( $prepared ) ) {
+			return $prepared;
+		}
+
+		$amount_cents = $prepared['amount_cents'];
 		$meta         = $this->payment_metadata( $payment_id );
 		$customer     = $this->get_or_create_customer( (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true ) );
 		if ( is_wp_error( $customer ) ) {
 			return $customer;
 		}
 
-		$organizer_id   = (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true );
-		$breakdown      = LNKup_Fee_Engine::calculate_for_payment( $payment_id );
-		$pi_data        = array( 'metadata' => $meta );
-		$connect_params = $this->connect_charge_params( $organizer_id, $breakdown );
-		if ( $connect_params ) {
-			$pi_data = array_merge( $pi_data, $connect_params );
-		}
-		if ( class_exists( 'LNKup_Stripe_Connect' ) ) {
-			LNKup_Stripe_Connect::persist_payment_settlement_meta( $payment_id, $organizer_id, $breakdown );
+		$pi_data = array( 'metadata' => $meta );
+		if ( ! empty( $prepared['connect_params'] ) ) {
+			$pi_data = array_merge( $pi_data, $prepared['connect_params'] );
 		}
 
-		$session = $this->client->create_checkout_session( array(
+		$session_params = array(
 			'mode'                => 'payment',
 			'customer'            => $customer['id'],
-			'success_url'         => $this->success_url( $payment_id ),
-			'cancel_url'          => $this->cancel_url(),
+			'success_url'         => $this->success_url( $payment_id, $args ),
+			'cancel_url'          => $this->cancel_url( $payment_id, $args ),
 			'client_reference_id' => (string) $payment_id,
 			'payment_intent_data' => $pi_data,
 			'line_items'          => array(
@@ -74,7 +73,22 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 					'quantity'   => 1,
 				),
 			),
-		) );
+		);
+
+		// Mirror PaymentIntent ACH contract: exclude bank debit when marketplace ACH is off.
+		$excluded = $this->excluded_payment_method_types();
+		if ( ! empty( $excluded ) ) {
+			$session_params['excluded_payment_method_types'] = $excluded;
+		}
+		if ( ! empty( lnkup_get_settings()['ach_enabled'] ) ) {
+			$session_params['payment_method_options'] = array(
+				'us_bank_account' => array(
+					'verification_method' => 'automatic',
+				),
+			);
+		}
+
+		$session = $this->client->create_checkout_session( $session_params );
 
 		if ( is_wp_error( $session ) ) {
 			return $session;
@@ -105,13 +119,16 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 			return $customer;
 		}
 
-		$amount_cents = $this->amount_cents( $payment_id );
+		$prepared = $this->prepare_charge_for_stripe( $payment_id );
+		if ( is_wp_error( $prepared ) ) {
+			return $prepared;
+		}
+
+		$amount_cents = $prepared['amount_cents'];
 		$meta         = $this->payment_metadata( $payment_id );
 		$idempotency  = 'lnkup_pi_' . $payment_id . '_' . $amount_cents;
 
-		$organizer_id = (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true );
-		$breakdown    = LNKup_Fee_Engine::calculate_for_payment( $payment_id );
-		$params       = array(
+		$params = array(
 			'amount'                    => $amount_cents,
 			'currency'                  => 'usd',
 			'customer'                  => $customer['id'],
@@ -119,18 +136,28 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 			'metadata'                  => $meta,
 		);
 
-		if ( ! empty( $args['payment_method_id'] ) ) {
-			$params['payment_method']      = sanitize_text_field( $args['payment_method_id'] );
-			$params['confirm']             = false;
-			unset( $params['automatic_payment_methods'] );
+		$excluded = $this->excluded_payment_method_types();
+		if ( ! empty( $excluded ) ) {
+			$params['excluded_payment_method_types'] = $excluded;
 		}
 
-		$connect = $this->connect_charge_params( $organizer_id, $breakdown );
-		if ( $connect ) {
-			$params = array_merge( $params, $connect );
+		if ( ! empty( lnkup_get_settings()['ach_enabled'] ) ) {
+			$params['payment_method_options'] = array(
+				'us_bank_account' => array(
+					'verification_method' => 'automatic',
+				),
+			);
 		}
-		if ( class_exists( 'LNKup_Stripe_Connect' ) ) {
-			LNKup_Stripe_Connect::persist_payment_settlement_meta( $payment_id, $organizer_id, $breakdown );
+
+		if ( ! empty( $args['payment_method_id'] ) ) {
+			$params['payment_method'] = sanitize_text_field( $args['payment_method_id'] );
+			$params['confirm']        = false;
+			unset( $params['automatic_payment_methods'] );
+			unset( $params['excluded_payment_method_types'] );
+		}
+
+		if ( ! empty( $prepared['connect_params'] ) ) {
+			$params = array_merge( $params, $prepared['connect_params'] );
 		}
 
 		$intent = $this->client->create_payment_intent( $params, $idempotency );
@@ -141,10 +168,10 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 		update_post_meta( $payment_id, '_lnkup_stripe_payment_intent', sanitize_text_field( $intent['id'] ?? '' ) );
 
 		return array(
-			'mode'             => 'embedded',
-			'client_secret'    => $intent['client_secret'] ?? '',
-			'intent_id'        => $intent['id'] ?? '',
-			'publishable_key'  => $this->client->get_publishable_key(),
+			'mode'            => 'embedded',
+			'client_secret'   => $intent['client_secret'] ?? '',
+			'intent_id'       => $intent['id'] ?? '',
+			'publishable_key' => $this->client->get_publishable_key(),
 		);
 	}
 
@@ -287,6 +314,21 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 	}
 
 	/**
+	 * Payment method types to exclude when marketplace flags are off.
+	 * Keep automatic_payment_methods enabled; do not hardcode payment_method_types.
+	 *
+	 * @return string[]
+	 */
+	private function excluded_payment_method_types() {
+		$settings = lnkup_get_settings();
+		$excluded = array();
+		if ( empty( $settings['ach_enabled'] ) ) {
+			$excluded[] = 'us_bank_account';
+		}
+		return $excluded;
+	}
+
+	/**
 	 * @param int $payment_id Payment ID.
 	 */
 	private function amount_cents( $payment_id ) {
@@ -310,16 +352,33 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 	}
 
 	/**
-	 * @param int $payment_id Payment ID.
+	 * @param int   $payment_id Payment ID.
+	 * @param array $args       Checkout args (return_to, app_base_url, application_id).
 	 */
-	private function success_url( $payment_id ) {
+	private function success_url( $payment_id, $args = array() ) {
+		if ( ! empty( $args['return_to'] ) && 'app' === $args['return_to'] ) {
+			$app_url = lnkup_vendor_app_payment_return_url( $payment_id, 'success', $args );
+			if ( $app_url ) {
+				return $app_url;
+			}
+		}
 		return add_query_arg(
 			array( 'lnkup_payment' => 'success', 'payment_id' => $payment_id ),
 			lnkup_page_url_helper( 'vendor-dashboard' )
 		);
 	}
 
-	private function cancel_url() {
+	/**
+	 * @param int   $payment_id Payment ID.
+	 * @param array $args       Checkout args.
+	 */
+	private function cancel_url( $payment_id, $args = array() ) {
+		if ( ! empty( $args['return_to'] ) && 'app' === $args['return_to'] ) {
+			$app_url = lnkup_vendor_app_payment_return_url( $payment_id, 'cancelled', $args );
+			if ( $app_url ) {
+				return $app_url;
+			}
+		}
 		return add_query_arg( array( 'lnkup_payment' => 'cancel' ), lnkup_page_url_helper( 'vendor-dashboard' ) );
 	}
 
@@ -336,6 +395,61 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ) );
 		}
 		return true;
+	}
+
+	/**
+	 * Refresh fees, validate Connect application_fee vs charge amount, stamp settlement meta.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 * @return array{amount_cents:int,breakdown:array,connect_params:array}|WP_Error
+	 */
+	private function prepare_charge_for_stripe( $payment_id ) {
+		$payment_id = absint( $payment_id );
+		if ( class_exists( 'LNKup_Payments' ) ) {
+			LNKup_Payments::refresh_pending_fees( $payment_id );
+		}
+
+		$amount_cents = $this->amount_cents( $payment_id );
+		if ( $amount_cents <= 0 ) {
+			return new WP_Error(
+				'invalid_amount',
+				__( 'Payment amount must be greater than zero.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$organizer_id  = (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true );
+		$breakdown     = LNKup_Fee_Engine::calculate_for_payment( $payment_id );
+		$app_fee_cents = (int) round( (float) ( $breakdown['platform_fee'] ?? 0 ) * 100 );
+
+		if ( $app_fee_cents < 0 || $app_fee_cents >= $amount_cents ) {
+			return new WP_Error(
+				'invalid_application_fee',
+				__( 'Marketplace fee must be less than the charge amount. Check booth price and fee settings.', 'lnkup-marketplace' ),
+				array(
+					'status'                => 400,
+					'amount_cents'          => $amount_cents,
+					'application_fee_cents' => $app_fee_cents,
+				)
+			);
+		}
+
+		$connect_params = $this->connect_charge_params( $organizer_id, $breakdown );
+		if ( class_exists( 'LNKup_Stripe_Connect' ) ) {
+			LNKup_Stripe_Connect::persist_payment_settlement_meta(
+				$payment_id,
+				$organizer_id,
+				$breakdown,
+				'create',
+				$amount_cents
+			);
+		}
+
+		return array(
+			'amount_cents'   => $amount_cents,
+			'breakdown'      => $breakdown,
+			'connect_params' => $connect_params,
+		);
 	}
 
 	/**

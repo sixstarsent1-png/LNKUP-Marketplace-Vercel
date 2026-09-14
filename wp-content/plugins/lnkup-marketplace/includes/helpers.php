@@ -604,41 +604,69 @@ function lnkup_opportunity_illustration_filename( $opp ) {
 }
 
 /**
- * Human alt for a Find Events card image. Never empty, never "image of".
+ * Human alt for a Find Events card image. Never empty, never a filename.
  *
  * @param array $opp Opportunity or external-event data.
  */
 function lnkup_opportunity_card_alt( $opp ) {
-	$opp        = is_array( $opp ) ? $opp : array();
-	$scene      = '';
-	$categories = isset( $opp['categories'] ) && is_array( $opp['categories'] ) ? $opp['categories'] : array();
-	foreach ( $categories as $category ) {
-		if ( lnkup_opportunity_illustration_from_category( $category ) ) {
-			$scene = trim( (string) preg_replace( '/\s+vendor$/i', '', (string) $category ) );
-			break;
-		}
-	}
-	if ( ! $scene && ! empty( $opp['event_type_label'] ) ) {
-		$scene = (string) $opp['event_type_label'];
-	}
-	if ( ! $scene ) {
-		$scene = __( 'Vendor event', 'lnkup-marketplace' );
+	$opp   = is_array( $opp ) ? $opp : array();
+	$title = trim( (string) ( $opp['event_name'] ?? $opp['name'] ?? $opp['title'] ?? '' ) );
+	if ( '' === $title ) {
+		$title = __( 'Vendor event', 'lnkup-marketplace' );
 	}
 	$city = trim( (string) ( $opp['city'] ?? '' ) );
 	if ( $city ) {
-		return $scene . ' in ' . $city;
+		return $title . ' in ' . $city;
 	}
-	return $scene;
+	return $title;
 }
 
 /**
- * Card image URL: uploaded photo or category fallback JPG.
+ * Accept only real image URLs for cards; reject event page / Next.js image proxies.
+ *
+ * @param string $url Candidate image URL.
+ */
+function lnkup_sanitize_card_image_url( $url ) {
+	$url = trim( (string) $url );
+	if ( '' === $url ) {
+		return '';
+	}
+	if ( class_exists( 'LNKup_External_Source_Eventbrite' ) ) {
+		$remote = LNKup_External_Source_Eventbrite::sanitize_image_url( $url );
+		if ( '' !== $remote ) {
+			return $remote;
+		}
+	}
+	$home = untrailingslashit( home_url( '/' ) );
+	$is_local = ( 0 === strpos( $url, $home ) )
+		|| ( 0 === strpos( $url, '/' ) && 0 !== strpos( $url, '//' ) );
+	if ( ! $is_local ) {
+		return '';
+	}
+	if ( preg_match( '#\.(jpg|jpeg|png|gif|webp|avif)(\?|$)#i', $url ) ) {
+		return $url;
+	}
+	if ( preg_match( '#/(uploads|images|media|assets)/#i', $url ) ) {
+		return $url;
+	}
+	return '';
+}
+
+/**
+ * Card image URL: uploaded/remote photo or category fallback JPG.
  *
  * @param array $opp Opportunity data.
  */
 function lnkup_opportunity_illustration_url( $opp ) {
-	if ( ! empty( $opp['featured_image'] ) ) {
-		return (string) $opp['featured_image'];
+	$opp = is_array( $opp ) ? $opp : array();
+	foreach ( array( 'featured_image', 'image_url', 'image' ) as $key ) {
+		if ( empty( $opp[ $key ] ) ) {
+			continue;
+		}
+		$clean = lnkup_sanitize_card_image_url( (string) $opp[ $key ] );
+		if ( '' !== $clean ) {
+			return $clean;
+		}
 	}
 	return lnkup_opportunity_category_fallback_url( $opp );
 }
@@ -806,20 +834,10 @@ function lnkup_redirect_find_events_alias() {
 	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
 		return;
 	}
-	global $wp;
-	$request = isset( $wp->request ) ? trim( (string) $wp->request, '/' ) : '';
-	if ( ! $request && ! empty( $_SERVER['REQUEST_URI'] ) ) {
-		$path    = (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH );
-		$home    = untrailingslashit( (string) ( wp_parse_url( home_url( '/' ), PHP_URL_PATH ) ?: '' ) );
-		if ( $home && 0 === strpos( $path, $home ) ) {
-			$path = substr( $path, strlen( $home ) );
-		}
-		$request = trim( $path, '/' );
-	}
-	if ( 'find-events' !== $request ) {
+	if ( get_page_by_path( 'find-events' ) ) {
 		return;
 	}
-	if ( get_page_by_path( 'find-events' ) ) {
+	if ( 'find-events' !== lnkup_current_request_slug() ) {
 		return;
 	}
 	$target = lnkup_page_url_helper( 'opportunities' );
@@ -828,6 +846,40 @@ function lnkup_redirect_find_events_alias() {
 	}
 	wp_safe_redirect( $target, 301 );
 	exit;
+}
+
+/**
+ * Current front-end path slug, even when $wp->request is empty.
+ */
+function lnkup_current_request_slug() {
+	global $wp;
+	$candidates = array();
+	if ( isset( $wp->request ) ) {
+		$candidates[] = trim( (string) $wp->request, '/' );
+	}
+	if ( ! empty( $_SERVER['REQUEST_URI'] ) ) {
+		$path = (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH );
+		$home = untrailingslashit( (string) ( wp_parse_url( home_url( '/' ), PHP_URL_PATH ) ?: '' ) );
+		if ( $home && 0 === strpos( $path, $home ) ) {
+			$path = substr( $path, strlen( $home ) );
+		}
+		$candidates[] = trim( (string) $path, '/' );
+	}
+	foreach ( $candidates as $candidate ) {
+		if ( '' === $candidate ) {
+			continue;
+		}
+		$last = basename( $candidate );
+		if ( 'find-events' === $candidate || 'find-events' === $last ) {
+			return 'find-events';
+		}
+	}
+	foreach ( $candidates as $candidate ) {
+		if ( '' !== $candidate ) {
+			return $candidate;
+		}
+	}
+	return '';
 }
 
 /**
@@ -1606,10 +1658,9 @@ function lnkup_format_index_row( $row, $compare = false ) {
 		}
 	}
 
-	if ( empty( $item['featured_image'] ) ) {
-		$item['featured_image'] = lnkup_opportunity_illustration_url( $item );
-	}
-	$item['image_alt'] = lnkup_opportunity_card_alt( $item );
+	$item['featured_image']         = lnkup_opportunity_illustration_url( $item );
+	$item['category_fallback_url']  = lnkup_opportunity_category_fallback_url( $item );
+	$item['image_alt']              = lnkup_opportunity_card_alt( $item );
 
 	return $item;
 }

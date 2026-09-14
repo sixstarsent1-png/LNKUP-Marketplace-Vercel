@@ -48,47 +48,55 @@ class LNKup_Trending {
 		global $wpdb;
 		$table = LNKup_Marketplace_Index::table_name();
 		$limit = absint( $limit );
+		$today = gmdate( 'Y-m-d' );
+		// Exclude past events and expired application deadlines from discovery rails.
+		$active = $wpdb->prepare(
+			'(event_date IS NULL OR event_date >= %s) AND (deadline IS NULL OR deadline >= %s)',
+			$today,
+			$today
+		);
 
 		switch ( $section ) {
 			case 'trending':
-				$sql = "SELECT * FROM {$table} ORDER BY trending_score DESC LIMIT {$limit}";
+				$sql = "SELECT * FROM {$table} WHERE {$active} ORDER BY trending_score DESC LIMIT {$limit}";
 				break;
 			case 'most_applied':
-				$sql = "SELECT * FROM {$table} ORDER BY application_count DESC LIMIT {$limit}";
+				$sql = "SELECT * FROM {$table} WHERE {$active} ORDER BY application_count DESC LIMIT {$limit}";
 				break;
 			case 'popular_week':
 				$sql = $wpdb->prepare(
-					"SELECT * FROM {$table} WHERE created_at >= %s ORDER BY view_count DESC LIMIT {$limit}",
+					"SELECT * FROM {$table} WHERE {$active} AND created_at >= %s ORDER BY view_count DESC LIMIT {$limit}",
 					gmdate( 'Y-m-d H:i:s', strtotime( '-7 days' ) )
 				);
 				break;
 			case 'recently_added':
-				$sql = "SELECT * FROM {$table} ORDER BY created_at DESC LIMIT {$limit}";
+				$sql = "SELECT * FROM {$table} WHERE {$active} ORDER BY created_at DESC LIMIT {$limit}";
 				break;
 			case 'closing_soon':
 				$sql = $wpdb->prepare(
-					"SELECT * FROM {$table} WHERE deadline IS NOT NULL AND deadline >= %s AND deadline <= %s ORDER BY deadline ASC LIMIT {$limit}",
-					gmdate( 'Y-m-d' ),
+					"SELECT * FROM {$table} WHERE {$active} AND deadline IS NOT NULL AND deadline >= %s AND deadline <= %s ORDER BY deadline ASC LIMIT {$limit}",
+					$today,
 					gmdate( 'Y-m-d', strtotime( '+14 days' ) )
 				);
 				break;
 			case 'almost_full':
-				$sql = "SELECT * FROM {$table} WHERE spots_total > 0 AND (spots_remaining / spots_total) <= 0.1 ORDER BY spots_remaining ASC LIMIT {$limit}";
+				$sql = "SELECT * FROM {$table} WHERE {$active} AND spots_total > 0 AND (spots_remaining / spots_total) <= 0.1 ORDER BY spots_remaining ASC LIMIT {$limit}";
 				break;
 			case 'new_organizer':
 				$sql = $wpdb->prepare(
-					"SELECT * FROM {$table} WHERE created_at >= %s ORDER BY created_at DESC LIMIT {$limit}",
+					"SELECT * FROM {$table} WHERE {$active} AND created_at >= %s ORDER BY created_at DESC LIMIT {$limit}",
 					gmdate( 'Y-m-d H:i:s', strtotime( '-30 days' ) )
 				);
 				break;
 			case 'featured_organizer':
-				$sql = "SELECT * FROM {$table} WHERE organizer_verified = 1 ORDER BY organizer_rating DESC, trending_score DESC LIMIT {$limit}";
+				$sql = "SELECT * FROM {$table} WHERE {$active} AND organizer_verified = 1 ORDER BY organizer_rating DESC, trending_score DESC LIMIT {$limit}";
 				break;
 			default:
-				$sql = "SELECT * FROM {$table} ORDER BY trending_score DESC LIMIT {$limit}";
+				$sql = "SELECT * FROM {$table} WHERE {$active} ORDER BY trending_score DESC LIMIT {$limit}";
 		}
 
-		$cache_key = 'lnkup_trend_' . md5( $section . $limit );
+		// Cache key versioned so past-event filter takes effect immediately after deploy.
+		$cache_key = 'lnkup_trend_v2_' . md5( $section . $limit . $today );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
 			return $cached;

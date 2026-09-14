@@ -38,9 +38,10 @@ test.describe('Vendor dashboard UI', () => {
       await expect(page.locator('#lnkup-sidebar')).toBeVisible();
       await expect(page.getByRole('link', { name: /^home$/i })).toBeVisible();
       await expect(page.getByRole('link', { name: /find events/i })).toBeVisible();
+      await expect(page.getByRole('link', { name: /^requests$/i })).toBeVisible();
+      await expect(page.locator('.lnkup-dashboard__nav-more').first()).toBeVisible();
+      await page.locator('.lnkup-dashboard__nav-more summary').click();
       await expect(page.getByRole('link', { name: /event operations/i })).toBeVisible();
-      await expect(page.getByRole('link', { name: /applications/i })).toBeVisible();
-      await expect(page.locator('.lnkup-dashboard__nav-section').first()).toBeVisible();
 
       const sidebar = page.locator('#lnkup-sidebar');
       const sidebarBox = await sidebar.boundingBox();
@@ -80,15 +81,18 @@ test.describe('Vendor dashboard UI', () => {
 
     test('view navigation renders correct headings and active nav', async ({ page }) => {
       const views = [
-        { query: 'applications', heading: /my applications/i, link: /applications/i },
-        { query: 'documents', heading: /documents & compliance/i, link: /documents/i },
-        { query: 'payments', heading: /^payments$/i, link: /payments/i },
-        { query: 'operations', heading: /event operations/i, link: /event operations/i },
-        { query: 'growth', heading: /^growth$/i, link: /^growth$/i },
+        { query: 'applications', heading: /my applications/i, link: /^requests$/i },
+        { query: 'documents', heading: /documents & compliance/i, link: /documents/i, expandMore: true },
+        { query: 'payments', heading: /^payments$/i, link: /^wallet$/i },
+        { query: 'operations', heading: /event operations/i, link: /event operations/i, expandMore: true },
+        { query: 'growth', heading: /^growth$/i, link: /^growth$/i, expandMore: true },
       ];
       for (const item of views) {
         await page.goto(`/vendor-dashboard/?view=${item.query}`);
         await expect(page.getByRole('heading', { name: item.heading })).toBeVisible();
+        if (item.expandMore) {
+          await page.locator('.lnkup-dashboard__nav-more summary').click();
+        }
         await expect(page.getByRole('link', { name: item.link })).toHaveClass(/is-active/);
       }
     });

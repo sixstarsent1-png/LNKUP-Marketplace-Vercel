@@ -132,6 +132,7 @@ class LNKup_Meta {
 				'_lnkup_generator_allowed'   => array( 'type' => 'boolean', 'default' => false, 'sanitize_callback' => 'rest_sanitize_boolean' ),
 				'_lnkup_free_vendor_parking' => array( 'type' => 'boolean', 'default' => false, 'sanitize_callback' => 'rest_sanitize_boolean' ),
 				'_lnkup_featured_image_id'   => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
+				'_lnkup_gallery_ids'         => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
 				'_lnkup_tags'                => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
 				'_lnkup_ops_stage'           => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
 				'_lnkup_ops_stage_updated_at'=> array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
@@ -174,6 +175,8 @@ class LNKup_Meta {
 				'_lnkup_application_count'   => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
 				'_lnkup_load_in_time'        => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
 				'_lnkup_invite_only'         => array( 'type' => 'boolean', 'default' => false, 'sanitize_callback' => 'rest_sanitize_boolean' ),
+				'_lnkup_gallery_ids'         => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
+				'_lnkup_featured_image_id'   => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
 			),
 			'lnkup_application' => array(
 				'_lnkup_vendor_profile_id'   => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),

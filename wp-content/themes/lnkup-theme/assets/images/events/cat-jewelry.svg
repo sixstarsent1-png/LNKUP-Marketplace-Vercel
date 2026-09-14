@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Jewelry vendor case at an event">
+  <defs>
+    <linearGradient id="cj-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a2e1a"/>
+      <stop offset="100%" stop-color="#0e180e"/>
+    </linearGradient>
+    <radialGradient id="cj-glow" cx="50%" cy="36%" r="48%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#cj-sky)"/>
+  <rect width="720" height="560" fill="url(#cj-glow)"/>
+  <rect x="0" y="430" width="720" height="130" fill="#0c140c"/>
+  <rect x="160" y="250" width="400" height="190" rx="8" fill="#142014" stroke="#c8f542" stroke-width="2"/>
+  <rect x="190" y="275" width="340" height="110" rx="4" fill="#0a120a" stroke="#c8f542" stroke-width="1.5"/>
+  <path d="M360 295l14 28h-28z" fill="#c8f542" opacity="0.7"/>
+  <circle cx="250" cy="330" r="12" fill="none" stroke="#c8f542" stroke-width="2" opacity="0.7"/>
+  <circle cx="470" cy="330" r="12" fill="none" stroke="#c8f542" stroke-width="2" opacity="0.7"/>
+  <circle cx="300" cy="318" r="7" fill="#c8f542" opacity="0.45"/>
+  <circle cx="420" cy="318" r="7" fill="#c8f542" opacity="0.45"/>
+  <rect x="330" y="350" width="60" height="8" rx="2" fill="#c8f542" opacity="0.35"/>
+  <rect x="200" y="210" width="320" height="24" rx="3" fill="#c8f542" opacity="0.18" stroke="#c8f542"/>
+</svg>

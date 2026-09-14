@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Art vendor booth at an event">
+  <defs>
+    <linearGradient id="ca-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a2e1a"/>
+      <stop offset="100%" stop-color="#0e180e"/>
+    </linearGradient>
+    <radialGradient id="ca-glow" cx="48%" cy="38%" r="50%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.26"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#ca-sky)"/>
+  <rect width="720" height="560" fill="url(#ca-glow)"/>
+  <rect x="0" y="430" width="720" height="130" fill="#0c140c"/>
+  <rect x="150" y="280" width="420" height="160" rx="6" fill="#142014" stroke="#c8f542" stroke-width="2"/>
+  <line x1="300" y1="430" x2="360" y2="200" stroke="#2a3828" stroke-width="6"/>
+  <line x1="360" y1="200" x2="420" y2="430" stroke="#2a3828" stroke-width="6"/>
+  <rect x="275" y="175" width="170" height="130" rx="3" fill="#0a120a" stroke="#c8f542" stroke-width="2"/>
+  <circle cx="330" cy="230" r="22" fill="#c8f542" opacity="0.25"/>
+  <path d="M300 280h120" stroke="#c8f542" stroke-width="2" opacity="0.35"/>
+  <rect x="180" y="300" width="70" height="90" rx="2" fill="#0a120a" stroke="#c8f542" opacity="0.6"/>
+  <rect x="470" y="300" width="70" height="90" rx="2" fill="#0a120a" stroke="#c8f542" opacity="0.6"/>
+  <rect x="195" y="318" width="40" height="28" fill="#c8f542" opacity="0.2"/>
+  <rect x="485" y="318" width="40" height="28" fill="#c8f542" opacity="0.2"/>
+</svg>

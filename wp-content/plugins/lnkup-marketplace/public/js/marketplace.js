@@ -240,12 +240,120 @@
 
   function postForm(form, extraHeaders) {
     var data = new FormData(form);
-    if (!data.get('lnkup_nonce') && window.lnkupAjax) {
-      data.append('lnkup_nonce', window.lnkupAjax.nonce);
-    }
+    // Prefer form nonce (action-specific, e.g. lnkup_event). Never overwrite with lnkupAjax.nonce (lnkup_action).
     var headers = extraHeaders || {};
-    return fetch(window.lnkupAjax.url, { method: 'POST', body: data, credentials: 'same-origin', headers: headers })
-      .then(function (r) { return r.json(); });
+    var ajaxUrl = (window.lnkupAjax && window.lnkupAjax.url) || '';
+    if (!ajaxUrl) {
+      return Promise.reject(Object.assign(new Error('missing_ajax_url'), { nonJson: true, status: 0 }));
+    }
+    return fetch(ajaxUrl, { method: 'POST', body: data, credentials: 'same-origin', headers: headers })
+      .then(function (r) {
+        return r.text().then(function (text) {
+          var trimmed = (text || '').replace(/^\uFEFF/, '').trim();
+          // Strip leading PHP notices/warnings before JSON object/array.
+          var jsonStart = trimmed.search(/[\{\[]/);
+          var candidate = jsonStart > 0 ? trimmed.slice(jsonStart) : trimmed;
+          try {
+            return JSON.parse(candidate);
+          } catch (parseErr) {
+            var err = new Error('non_json');
+            err.status = r.status;
+            err.nonJson = true;
+            err.bodyPreview = trimmed.replace(/\s+/g, ' ').slice(0, 160);
+            throw err;
+          }
+        });
+      });
+  }
+
+  /**
+   * Validate create-event form; jump wizard to first invalid step.
+   * @param {HTMLFormElement} form
+   * @param {HTMLElement|null} errBox
+   * @return {boolean}
+   */
+  function validateCreateEventForm(form, errBox) {
+    var finder = window.lnkupOrganizerFirstInvalidCreateField;
+    var hit = typeof finder === 'function' ? finder() : null;
+    if (!hit) {
+      // Fallback: scan form required fields (skip disabled).
+      var fields = form.querySelectorAll('input, select, textarea');
+      for (var i = 0; i < fields.length; i++) {
+        var el = fields[i];
+        if (el.disabled || el.type === 'hidden' || el.type === 'submit' || el.type === 'button') {
+          continue;
+        }
+        if (typeof el.checkValidity === 'function' && !el.checkValidity()) {
+          hit = { field: el, stepId: null };
+          var section = el.closest('.lnkup-organizer-create-section');
+          if (section && section.id) {
+            hit.stepId = section.id;
+          }
+          break;
+        }
+      }
+    }
+    if (!hit || !hit.field) {
+      return true;
+    }
+    if (hit.stepId && typeof window.lnkupOrganizerSetWizardStep === 'function') {
+      window.lnkupOrganizerSetWizardStep(hit.stepId);
+    }
+    var msg = hit.field.validationMessage || 'Please complete the required fields before publishing.';
+    if (errBox) {
+      errBox.innerHTML = '<p class="lnkup-alert lnkup-alert--error">' + escapeLaunchHtml(msg) + '</p>';
+      errBox.hidden = false;
+    }
+    showToast(msg, 'error');
+    try {
+      if (typeof hit.field.reportValidity === 'function') {
+        hit.field.reportValidity();
+      }
+      hit.field.focus();
+    } catch (e) {
+      // ignore
+    }
+    return false;
+  }
+
+  function ajaxFailureMessage(err) {
+    if (!err) {
+      return 'Something went wrong. Please try again.';
+    }
+    if (err.nonJson) {
+      if (err.bodyPreview && typeof console !== 'undefined' && console.warn) {
+        console.warn('LNKup AJAX non-JSON response', err.status, err.bodyPreview);
+      }
+      if (err.status === 403 || err.status === 401) {
+        return 'Session expired or permission denied — refresh the page and try again.';
+      }
+      var preview = (err.bodyPreview || '').toLowerCase();
+      if (preview.indexOf('security') !== -1 || preview.indexOf('permission') !== -1 || preview.indexOf('forbidden') !== -1) {
+        return 'Session expired or permission denied — refresh the page and try again.';
+      }
+      var plain = (err.bodyPreview || '')
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 140);
+      if (err.status === 500 || err.status === 0 || (plain && plain.length > 8)) {
+        var statusBit = err.status ? ' (HTTP ' + err.status + ')' : '';
+        if (plain && plain.length > 8) {
+          return 'Server error while publishing' + statusBit + ': ' + plain;
+        }
+        return 'Server error while publishing' + statusBit + ' — refresh the page and try again.';
+      }
+      if (err.bodyPreview && err.bodyPreview.length > 8 && err.bodyPreview.indexOf('<') === -1) {
+        return 'Could not publish: ' + err.bodyPreview;
+      }
+      return 'Could not reach the server with a valid response — refresh the page and try again.';
+    }
+    if (err.message && err.message !== 'non_json' && err.message !== 'missing_ajax_url') {
+      return err.message;
+    }
+    return 'Something went wrong. Please try again.';
   }
 
   function showApplySuccess(msg) {
@@ -397,11 +505,17 @@
       if (eventSubmitting) {
         return;
       }
-      setEventSubmitting(true);
       errBox = document.getElementById('lnkup-create-event-error');
       if (errBox) {
         errBox.hidden = true;
       }
+      if (form.id === 'lnkup-create-event-form' && !validateCreateEventForm(form, errBox)) {
+        return;
+      }
+      if (form.id === 'lnkup-create-event-form') {
+        collectFeeRowsToJson(form);
+      }
+      setEventSubmitting(true);
     }
 
     if (form.id === 'lnkup-create-first-opportunity-form') {
@@ -471,6 +585,14 @@
           showToast(msg, 'error');
           return;
         }
+        // Opportunity already created with the event — skip Accept-vendors onboarding.
+        if (res.data && (res.data.opportunity_id || res.data.opportunity_created)) {
+          if (res.data && showLaunchSuccess(res.data, msg)) {
+            return;
+          }
+          showToast(msg, 'success');
+          return;
+        }
         if (res.data && res.data.onboarding) {
           showVendorOnboardingStep(res.data);
           return;
@@ -480,14 +602,74 @@
         }
         showToast(msg, 'success');
       }
-    }).catch(function () {
+    }).catch(function (err) {
       setEventSubmitting(false);
       setOppSubmitting(false);
-      showToast('Something went wrong. Please try again.', 'error');
+      var failMsg = ajaxFailureMessage(err);
+      if (form.classList.contains('lnkup-event-form')) {
+        var eventErr = document.getElementById('lnkup-create-event-error');
+        if (eventErr) {
+          eventErr.innerHTML = '<p class="lnkup-alert lnkup-alert--error">' + escapeLaunchHtml(failMsg) + '</p>';
+          eventErr.hidden = false;
+        }
+      }
+      showToast(failMsg, 'error');
     });
   });
 
   document.addEventListener('click', function (e) {
+    var pricingSave = e.target.closest('.lnkup-opp-pricing-save');
+    if (pricingSave) {
+      e.preventDefault();
+      var oppId = pricingSave.getAttribute('data-opportunity-id');
+      var row = pricingSave.closest('tr');
+      if (!oppId || !row) {
+        return;
+      }
+      var feeInput = row.querySelector('.lnkup-opp-fee-input');
+      var spotsInput = row.querySelector('.lnkup-opp-spots-input');
+      var nonceInput = document.querySelector('#lnkup-create-opportunity-form input[name="lnkup_nonce"]');
+      var nonce = (window.lnkupAjax && window.lnkupAjax.opportunityNonce) ? window.lnkupAjax.opportunityNonce : '';
+      if (!nonce && nonceInput) {
+        nonce = nonceInput.value;
+      }
+      if (!nonce) {
+        showToast('Could not verify session. Refresh and try again.', 'error');
+        return;
+      }
+      var spotsVal = spotsInput ? String(spotsInput.value || '').trim() : '';
+      if (!spotsVal || Number(spotsVal) < 1) {
+        showToast('At least one vendor spot is required.', 'error');
+        return;
+      }
+      var data = new FormData();
+      data.append('action', 'lnkup_update_opportunity_pricing');
+      data.append('opportunity_id', oppId);
+      data.append('vendor_fee', feeInput ? feeInput.value : '');
+      data.append('spots_total', spotsVal);
+      data.append('lnkup_nonce', nonce);
+      pricingSave.disabled = true;
+      fetch(window.lnkupAjax.url, { method: 'POST', body: data, credentials: 'same-origin' })
+        .then(function (r) { return r.text(); })
+        .then(function (text) {
+          var res;
+          try {
+            res = JSON.parse((text || '').replace(/^\uFEFF/, '').trim());
+          } catch (err) {
+            throw new Error('non_json');
+          }
+          var msg = (res.data && res.data.message) ? res.data.message : (res.success ? 'Updated.' : 'Could not update.');
+          showToast(msg, res.success ? 'success' : 'error');
+        })
+        .catch(function () {
+          showToast('Could not update fee and spots. Refresh and try again.', 'error');
+        })
+        .then(function () {
+          pricingSave.disabled = false;
+        });
+      return;
+    }
+
     var choiceBtn = e.target.closest('[data-onboarding-choice]');
     if (choiceBtn) {
       e.preventDefault();
@@ -585,6 +767,11 @@
     var titleOut = document.getElementById('lnkup-publish-event-title');
     var dateOut = document.getElementById('lnkup-publish-event-date');
     var cityOut = document.getElementById('lnkup-publish-event-city');
+    var feeOut = document.getElementById('lnkup-publish-vendor-fee');
+    var spotsOut = document.getElementById('lnkup-publish-spots');
+    var feeRow = document.getElementById('lnkup-publish-vendor-fee-row');
+    var spotsRow = document.getElementById('lnkup-publish-spots-row');
+    var openCb = document.getElementById('lnkup_open_vendor_applications');
     if (titleOut && nameEl) {
       titleOut.textContent = nameEl.value || '—';
     }
@@ -594,6 +781,103 @@
     if (cityOut && cityEl) {
       cityOut.textContent = cityEl.value || '—';
     }
+    var openApps = !openCb || openCb.checked;
+    if (feeRow) {
+      feeRow.hidden = !openApps;
+    }
+    if (spotsRow) {
+      spotsRow.hidden = !openApps;
+    }
+    var rows = document.querySelectorAll('#lnkup-fee-rows [data-fee-row]');
+    var feeParts = [];
+    var spotsTotal = 0;
+    rows.forEach(function (row) {
+      var cat = row.querySelector('.lnkup-fee-row__category');
+      var fee = row.querySelector('.lnkup-fee-row__fee');
+      var spots = row.querySelector('.lnkup-fee-row__spots');
+      var catLabel = cat && cat.value ? cat.value : 'Vendor';
+      var feeVal = fee && fee.value !== '' ? Number(fee.value) : NaN;
+      var spotsVal = spots && spots.value !== '' ? parseInt(spots.value, 10) : 0;
+      if (!isNaN(feeVal)) {
+        feeParts.push(catLabel + ' $' + feeVal.toFixed(2));
+      }
+      if (spotsVal > 0) {
+        spotsTotal += spotsVal;
+      }
+    });
+    if (feeOut) {
+      if (!openApps) {
+        feeOut.textContent = 'Skipped';
+      } else if (feeParts.length) {
+        feeOut.textContent = feeParts.join(' · ');
+      } else {
+        feeOut.textContent = '—';
+      }
+    }
+    if (spotsOut) {
+      if (!openApps) {
+        spotsOut.textContent = 'Skipped';
+      } else if (spotsTotal > 0) {
+        spotsOut.textContent = String(spotsTotal);
+      } else {
+        spotsOut.textContent = '—';
+      }
+    }
+  }
+  window.lnkupSyncPublishSummary = syncPublishSummary;
+
+  function collectFeeRowsToJson(form) {
+    var hidden = form.querySelector('#lnkup_opportunities_json');
+    if (!hidden) {
+      return;
+    }
+    var rows = form.querySelectorAll('#lnkup-fee-rows [data-fee-row]');
+    var opportunities = [];
+    rows.forEach(function (row) {
+      var cat = row.querySelector('.lnkup-fee-row__category');
+      var fee = row.querySelector('.lnkup-fee-row__fee');
+      var spots = row.querySelector('.lnkup-fee-row__spots');
+      var category = cat && cat.value ? String(cat.value).trim() : '';
+      if (!category) {
+        return;
+      }
+      opportunities.push({
+        categories: [category],
+        vendor_category: category,
+        vendor_fee: fee ? fee.value : 250,
+        spots_total: spots ? spots.value : 10,
+        opportunity_title: category
+      });
+    });
+    hidden.value = JSON.stringify(opportunities);
+  }
+
+  function initFeeRows(form) {
+    if (!form) {
+      return;
+    }
+    var addBtn = form.querySelector('#lnkup-add-fee-row');
+    var list = form.querySelector('#lnkup-fee-rows');
+    var tpl = form.querySelector('#lnkup-fee-row-template');
+    if (addBtn && list && tpl) {
+      addBtn.addEventListener('click', function () {
+        var node = tpl.content.cloneNode(true);
+        list.appendChild(node);
+        syncPublishSummary();
+      });
+    }
+    form.addEventListener('click', function (e) {
+      var removeBtn = e.target.closest('.lnkup-fee-row__remove');
+      if (!removeBtn) {
+        return;
+      }
+      var row = removeBtn.closest('[data-fee-row]');
+      var rows = form.querySelectorAll('#lnkup-fee-rows [data-fee-row]');
+      if (row && rows.length > 1) {
+        row.remove();
+        syncPublishSummary();
+      }
+    });
   }
 
   function detectImportPlatform(url) {
@@ -605,8 +889,83 @@
     }
     if (host.indexOf('eventbrite') !== -1) return 'Eventbrite';
     if (host.indexOf('posh') !== -1) return 'Posh';
+    if (/\.(rss|xml|atom)(\?|$)/i.test(url) || /\/(feed|rss|atom)(\/|$)/i.test(url)) return 'RSS';
     if (host.indexOf('universe') !== -1) return 'Universe';
     return 'Manual';
+  }
+
+  function formatImportDateParts(datetime) {
+    if (!datetime || typeof datetime !== 'string') {
+      return { date: '', time: '' };
+    }
+    var normalized = datetime.replace(' ', 'T');
+    var d = new Date(normalized + (normalized.indexOf('Z') === -1 && normalized.indexOf('+') === -1 ? 'Z' : ''));
+    if (isNaN(d.getTime())) {
+      var m = datetime.match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?/);
+      if (m) {
+        return { date: m[1], time: m[2] || '' };
+      }
+      return { date: '', time: '' };
+    }
+    var yyyy = d.getUTCFullYear();
+    var mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    var dd = String(d.getUTCDate()).padStart(2, '0');
+    var hh = String(d.getUTCHours()).padStart(2, '0');
+    var mi = String(d.getUTCMinutes()).padStart(2, '0');
+    return { date: yyyy + '-' + mm + '-' + dd, time: hh + ':' + mi };
+  }
+
+  function applyImportPreviewToForm(createPanel, data) {
+    var form = createPanel ? createPanel.querySelector('#lnkup-create-event-form') : document.getElementById('lnkup-create-event-form');
+    if (!form || !data) {
+      return;
+    }
+    var platformSelect = form.querySelector('#ticketing_platform');
+    var hiddenUrl = form.querySelector('#lnkup_create_event_ticketing_url');
+    var nameEl = form.querySelector('#event_name');
+    var descEl = form.querySelector('#description');
+    var cityEl = form.querySelector('#event_city');
+    var stateEl = form.querySelector('#event_state');
+    var venueEl = form.querySelector('#venue_name');
+    var dateEl = form.querySelector('#event_date');
+    var startEl = form.querySelector('#start_time');
+    var endEl = form.querySelector('#end_time');
+
+    if (platformSelect && data.ticketing_platform) {
+      platformSelect.value = data.ticketing_platform;
+    }
+    if (hiddenUrl && data.source_url) {
+      hiddenUrl.value = data.source_url;
+    }
+    if (nameEl && data.title) {
+      nameEl.value = data.title;
+    }
+    if (descEl && data.description) {
+      descEl.value = data.description;
+    }
+    if (cityEl && data.city) {
+      cityEl.value = data.city;
+    }
+    if (stateEl && data.state) {
+      stateEl.value = String(data.state).slice(0, 2).toUpperCase();
+    }
+    if (venueEl && data.venue_name) {
+      venueEl.value = data.venue_name;
+    }
+    var startParts = formatImportDateParts(data.start_datetime);
+    var endParts = formatImportDateParts(data.end_datetime);
+    if (dateEl && startParts.date) {
+      dateEl.value = startParts.date;
+    }
+    if (startEl && startParts.time) {
+      startEl.value = startParts.time;
+    }
+    if (endEl && endParts.time) {
+      endEl.value = endParts.time;
+    }
+    if (typeof window.lnkupSyncPublishSummary === 'function') {
+      window.lnkupSyncPublishSummary();
+    }
   }
 
   function runImportPreview() {
@@ -614,39 +973,89 @@
     var input = createPanel ? createPanel.querySelector('#ticketing_url_import') : document.getElementById('ticketing_url_import');
     var loading = createPanel ? createPanel.querySelector('#lnkup-import-loading') : document.getElementById('lnkup-import-loading');
     var preview = createPanel ? createPanel.querySelector('#lnkup-import-preview') : document.getElementById('lnkup-import-preview');
-    var platformSelect = createPanel ? createPanel.querySelector('#ticketing_platform') : document.getElementById('ticketing_platform');
-    var hiddenUrl = createPanel ? createPanel.querySelector('#lnkup_create_event_ticketing_url') : document.getElementById('lnkup_create_event_ticketing_url');
+    var errorBox = createPanel ? createPanel.querySelector('#lnkup-import-error') : document.getElementById('lnkup-import-error');
     var importDetails = createPanel ? createPanel.querySelector('.lnkup-organizer-import-collapse') : null;
+    var btn = createPanel ? createPanel.querySelector('#lnkup-import-preview-btn') : document.getElementById('lnkup-import-preview-btn');
     if (!input || !loading || !preview) {
       return;
     }
     var url = (input.value || '').trim();
     if (!url) {
-      showToast('Enter a ticketing URL first.', 'error');
+      showToast('Enter a ticketing or feed URL first.', 'error');
       return;
     }
+
+    var ajax = window.lnkupAjax || {};
+    var restBase = (ajax.externalEventsRestUrl || ajax.connectorRestUrl || '').replace(/\/$/, '') || '/wp-json/lnkup/v1';
     preview.hidden = true;
+    if (errorBox) {
+      errorBox.hidden = true;
+      errorBox.textContent = '';
+    }
     loading.hidden = false;
-    setTimeout(function () {
+    if (btn) {
+      btn.disabled = true;
+      btn.setAttribute('aria-busy', 'true');
+    }
+
+    fetch(restBase + '/external-events/organizer/import-url', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-WP-Nonce': ajax.restNonce || ''
+      },
+      body: JSON.stringify({ url: url, preview: true })
+    }).then(function (r) {
+      return r.json().then(function (body) {
+        return { ok: r.ok, status: r.status, body: body };
+      });
+    }).then(function (res) {
       loading.hidden = true;
-      var platform = detectImportPlatform(url);
-      if (platformSelect) {
-        platformSelect.value = platform;
+      if (btn) {
+        btn.disabled = false;
+        btn.setAttribute('aria-busy', 'false');
       }
-      if (hiddenUrl) {
-        hiddenUrl.value = url;
+      var body = res.body || {};
+      if (!res.ok) {
+        var errMsg = body.message || (body.data && body.data.message) || 'Could not import this URL. Paste details manually.';
+        if (errorBox) {
+          errorBox.textContent = errMsg;
+          errorBox.hidden = false;
+        }
+        showToast(errMsg, 'error');
+        return;
       }
-      preview.innerHTML = '<p class="lnkup-import-preview__title">Import ready</p>' +
-        '<p class="lnkup-import-preview__meta">Source: <strong>' + platform + '</strong></p>' +
-        '<p class="lnkup-import-preview__meta">' + url + '</p>' +
-        '<p class="lnkup-muted">Complete the event form below — your ticketing URL is saved.</p>';
+
+      applyImportPreviewToForm(createPanel, body);
+      var platform = body.ticketing_platform || detectImportPlatform(url);
+      var title = escapeLaunchHtml(body.title || 'Imported event');
+      var metaDate = body.start_datetime ? escapeLaunchHtml(String(body.start_datetime)) : '';
+      var metaLoc = [body.venue_name, body.city, body.state].filter(Boolean).map(escapeLaunchHtml).join(', ');
+      preview.innerHTML = '<p class="lnkup-import-preview__title">' + title + '</p>' +
+        '<p class="lnkup-import-preview__meta">Source: <strong>' + escapeLaunchHtml(platform) + '</strong></p>' +
+        (metaDate ? '<p class="lnkup-import-preview__meta">' + metaDate + '</p>' : '') +
+        (metaLoc ? '<p class="lnkup-import-preview__meta">' + metaLoc + '</p>' : '') +
+        '<p class="lnkup-muted">Form fields were filled from the source. Complete Vendors, then review and publish.</p>';
       preview.hidden = false;
       if (importDetails && !importDetails.open) {
         importDetails.open = true;
       }
       setCreateMode('new');
-      showToast('Ticketing link recognized.', 'success');
-    }, 900);
+      showToast('Event details imported.', 'success');
+    }).catch(function () {
+      loading.hidden = true;
+      if (btn) {
+        btn.disabled = false;
+        btn.setAttribute('aria-busy', 'false');
+      }
+      var failMsg = 'Could not reach import service. Paste details manually.';
+      if (errorBox) {
+        errorBox.textContent = failMsg;
+        errorBox.hidden = false;
+      }
+      showToast(failMsg, 'error');
+    });
   }
 
   function setCreateMode(mode) {
@@ -671,10 +1080,25 @@
     var createPanel = document.getElementById('lnkup-create-panel');
     var createForm = createPanel ? createPanel.querySelector('#lnkup-create-event-form') : document.getElementById('lnkup-create-event-form');
     if (createForm) {
+      initFeeRows(createForm);
       createForm.addEventListener('input', syncPublishSummary);
       createForm.addEventListener('change', syncPublishSummary);
       syncPublishSummary();
     }
+    document.addEventListener('click', function (e) {
+      var toggle = e.target.closest('.lnkup-edit-event-toggle');
+      if (!toggle) {
+        return;
+      }
+      var eventId = toggle.getAttribute('data-edit-event');
+      var form = document.querySelector('[data-edit-event-form="' + eventId + '"]');
+      if (!form) {
+        return;
+      }
+      var open = form.hidden;
+      form.hidden = !open;
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
     document.querySelectorAll('[data-create-mode]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         setCreateMode(btn.getAttribute('data-create-mode') || 'new');
@@ -732,5 +1156,113 @@
           });
       });
     }
+
+    function filterOpportunityPricingByEvent(eventId) {
+      var panel = document.getElementById('lnkup-opportunities-pricing');
+      if (!panel) {
+        return;
+      }
+      var rows = panel.querySelectorAll('tbody tr[data-event-id]');
+      var emptyEl = document.getElementById('lnkup-opp-pricing-empty');
+      var hintEl = document.getElementById('lnkup-opp-pricing-hint');
+      var visible = 0;
+      rows.forEach(function (row) {
+        var match = !eventId || String(row.getAttribute('data-event-id') || '') === String(eventId);
+        row.hidden = !match;
+        if (match) {
+          visible += 1;
+        }
+      });
+      if (emptyEl) {
+        emptyEl.hidden = visible > 0 || !eventId;
+      }
+      var table = panel.querySelector('table');
+      if (table) {
+        table.hidden = visible === 0 && !!eventId;
+      }
+      if (hintEl && eventId) {
+        hintEl.textContent = visible > 0
+          ? 'Showing opportunities for this event. Clear the URL hash (#events) to see all.'
+          : 'No opportunities for this event yet. Add one from Launch event.';
+      }
+      panel.classList.toggle('is-focused', !!eventId);
+      if (eventId) {
+        try {
+          panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (err) {
+          panel.scrollIntoView(true);
+        }
+      }
+    }
+
+    function syncPricingFromHash() {
+      var hash = (window.location.hash || '').replace(/^#/, '');
+      var match = hash.match(/^pricing-(\d+)$/);
+      var eventId = match
+        ? match[1]
+        : (document.documentElement.getAttribute('data-lnkup-pricing-event') || '');
+      if (match) {
+        document.documentElement.setAttribute('data-lnkup-pricing-event', match[1]);
+      }
+      filterOpportunityPricingByEvent(eventId);
+    }
+
+    syncPricingFromHash();
+    window.addEventListener('hashchange', syncPricingFromHash);
+
+    (function bindEventGalleryPicker() {
+      var pickBtn = document.getElementById('lnkup-event-gallery-pick');
+      var hidden = document.getElementById('lnkup_event_gallery_ids');
+      var preview = document.getElementById('lnkup-event-gallery-preview');
+      if (!pickBtn || !hidden) {
+        return;
+      }
+      var selected = [];
+      function renderPreview() {
+        if (!preview) {
+          return;
+        }
+        preview.innerHTML = '';
+        selected.forEach(function (item) {
+          var fig = document.createElement('figure');
+          fig.className = 'lnkup-event-gallery-preview__item';
+          if (item.type === 'video') {
+            fig.innerHTML = '<span class="lnkup-event-gallery-preview__video">Video</span>';
+          } else if (item.url) {
+            fig.innerHTML = '<img src="' + escapeLaunchHtml(item.url) + '" alt="" />';
+          }
+          preview.appendChild(fig);
+        });
+        hidden.value = selected.map(function (s) { return s.id; }).join(',');
+      }
+      pickBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (!window.wp || !wp.media) {
+          showToast('Media library unavailable. Refresh and try again.', 'error');
+          return;
+        }
+        var frame = wp.media({
+          title: 'Event photos & videos',
+          button: { text: 'Add to event' },
+          multiple: true,
+          library: { type: ['image', 'video'] }
+        });
+        frame.on('select', function () {
+          var selection = frame.state().get('selection');
+          selected = [];
+          selection.each(function (attachment) {
+            var json = attachment.toJSON();
+            var mime = String(json.mime || '');
+            selected.push({
+              id: json.id,
+              url: json.sizes && json.sizes.medium ? json.sizes.medium.url : (json.url || ''),
+              type: mime.indexOf('video/') === 0 ? 'video' : 'image'
+            });
+          });
+          renderPreview();
+        });
+        frame.open();
+      });
+    })();
   });
 })();

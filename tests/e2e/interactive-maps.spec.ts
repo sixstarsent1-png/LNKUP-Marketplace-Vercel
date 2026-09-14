@@ -19,6 +19,40 @@ test.describe('Interactive Maps', () => {
     await page.goto('/opportunities/');
     await expect(page.locator('#lnkup-results-grid')).toBeVisible({ timeout: 15000 });
   });
+
+  test('split view places map beside the list at desktop', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/opportunities/');
+    if (await page.getByTestId('lnkup-prelaunch-marketplace').isVisible().catch(() => false)) {
+      test.skip(true, 'Marketplace is closed');
+    }
+    const splitToggle = page.getByRole('button', { name: /^split$/i });
+    if (!(await splitToggle.count())) {
+      test.skip(true, 'Split view requires marketplace phase 1b+');
+    }
+
+    const search = page.locator('#lnkup-search-input');
+    await search.fill('Raleigh');
+    await search.press('Enter');
+    await expect(page.locator('#lnkup-result-count')).toContainText(/opportunit/i, { timeout: 15000 });
+
+    await splitToggle.click();
+    const split = page.locator('#lnkup-split-layout');
+    await expect(split).toHaveClass(/is-split/);
+    await expect(split.locator('#lnkup-external-legal')).toHaveCount(0);
+
+    const list = page.locator('#lnkup-grid-view');
+    const map = page.locator('#lnkup-map-view');
+    await expect(list).toBeVisible();
+    await expect(map).toBeVisible();
+
+    const listBox = await list.boundingBox();
+    const mapBox = await map.boundingBox();
+    expect(listBox).toBeTruthy();
+    expect(mapBox).toBeTruthy();
+    expect(Math.abs((mapBox?.y ?? 0) - (listBox?.y ?? 0))).toBeLessThan(160);
+    expect(mapBox?.x ?? 0).toBeGreaterThan(listBox?.x ?? 0);
+  });
 });
 
 test.describe('Interactive Maps authenticated', () => {

@@ -197,9 +197,12 @@ class LNKup_Vendor_Invites {
 	/**
 	 * Events and opportunities available for organizer invites.
 	 *
-	 * @param int $organizer_id Organizer user ID.
+	 * @param int                  $organizer_id Organizer user ID.
+	 * @param array<string, mixed> $args         Optional. Pass include_all => true to include closed / empty events (mobile Events list).
+	 * @return array<string, mixed>
 	 */
-	public static function get_invite_options_for_organizer( $organizer_id ) {
+	public static function get_invite_options_for_organizer( $organizer_id, $args = array() ) {
+		$include_all = ! empty( $args['include_all'] );
 		$events = get_posts(
 			array(
 				'post_type'      => 'lnkup_event',
@@ -225,17 +228,19 @@ class LNKup_Vendor_Invites {
 			$opp_items = array();
 			foreach ( $opportunities as $opp ) {
 				$status = get_post_meta( $opp->ID, '_lnkup_opportunity_status', true );
-				if ( $status && 'open' !== $status ) {
+				if ( ! $include_all && $status && 'open' !== $status ) {
 					continue;
 				}
 				$opp_items[] = array(
 					'id'              => $opp->ID,
 					'label'           => $opp->post_title,
+					'status'          => $status ? (string) $status : 'open',
+					'spots_total'     => (int) get_post_meta( $opp->ID, '_lnkup_spots_total', true ),
 					'spots_remaining' => (int) get_post_meta( $opp->ID, '_lnkup_spots_remaining', true ),
 					'vendor_fee'      => (float) get_post_meta( $opp->ID, '_lnkup_vendor_fee', true ),
 				);
 			}
-			if ( ! $opp_items ) {
+			if ( ! $include_all && ! $opp_items ) {
 				continue;
 			}
 			$items[] = array(
@@ -243,6 +248,7 @@ class LNKup_Vendor_Invites {
 				'event_title'   => $event->post_title,
 				'date'          => (string) get_post_meta( $event->ID, '_lnkup_event_date', true ),
 				'city'          => (string) get_post_meta( $event->ID, '_lnkup_city', true ),
+				'state'         => (string) get_post_meta( $event->ID, '_lnkup_state', true ),
 				'opportunities' => $opp_items,
 			);
 		}

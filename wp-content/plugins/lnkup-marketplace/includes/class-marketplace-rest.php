@@ -138,29 +138,59 @@ class LNKup_Marketplace_REST {
 	}
 
 	public static function search( WP_REST_Request $request ) {
-		$args   = self::parse_search_args( $request );
-		$result = lnkup_get_filtered_opportunities( $args );
-		if ( 0 === $result['total'] && ! empty( $request->get_param( 'q' ) ) ) {
-			LNKup_Marketplace_Analytics::track( 'search_no_results', array( 'q' => $request->get_param( 'q' ) ) );
-		} else {
-			LNKup_Marketplace_Analytics::track( 'search', array( 'q' => $request->get_param( 'q' ) ?? '', 'total' => $result['total'] ) );
-		}
-		$filter_keys = array( 'city', 'state', 'date_preset', 'attendance_bucket', 'fee_max', 'categories' );
-		foreach ( $filter_keys as $key ) {
-			if ( ! empty( $args[ $key ] ) ) {
-				LNKup_Marketplace_Analytics::track( 'filter_use', array( 'filter' => $key ) );
+		try {
+			$args   = self::parse_search_args( $request );
+			$result = lnkup_get_filtered_opportunities( $args );
+			if ( ! is_array( $result ) ) {
+				$result = array(
+					'items'    => array(),
+					'total'    => 0,
+					'page'     => 1,
+					'per_page' => 24,
+					'pages'    => 0,
+				);
 			}
-		}
-		foreach ( array( 'fee_free', 'indoor', 'outdoor', 'power_available', 'verified_organizer', 'instant_approval', 'has_spots' ) as $bool_key ) {
-			if ( ! empty( $args[ $bool_key ] ) ) {
-				LNKup_Marketplace_Analytics::track( 'filter_use', array( 'filter' => $bool_key ) );
+			try {
+				if ( 0 === (int) ( $result['total'] ?? 0 ) && ! empty( $request->get_param( 'q' ) ) ) {
+					LNKup_Marketplace_Analytics::track( 'search_no_results', array( 'q' => $request->get_param( 'q' ) ) );
+				} else {
+					LNKup_Marketplace_Analytics::track(
+						'search',
+						array(
+							'q'     => $request->get_param( 'q' ) ?? '',
+							'total' => $result['total'] ?? 0,
+						)
+					);
+				}
+				$filter_keys = array( 'city', 'state', 'date_preset', 'attendance_bucket', 'fee_max', 'categories' );
+				foreach ( $filter_keys as $key ) {
+					if ( ! empty( $args[ $key ] ) ) {
+						LNKup_Marketplace_Analytics::track( 'filter_use', array( 'filter' => $key ) );
+					}
+				}
+				foreach ( array( 'fee_free', 'indoor', 'outdoor', 'power_available', 'verified_organizer', 'instant_approval', 'has_spots' ) as $bool_key ) {
+					if ( ! empty( $args[ $bool_key ] ) ) {
+						LNKup_Marketplace_Analytics::track( 'filter_use', array( 'filter' => $bool_key ) );
+					}
+				}
+				$user_id = get_current_user_id();
+				if ( $user_id && ! empty( $request->get_param( 'q' ) ) ) {
+					LNKup_Vendor_Personalization::add_search_history( $user_id, $request->get_param( 'q' ), $args );
+				}
+			} catch ( Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+				// Analytics / history must never fail the search response.
 			}
+			return rest_ensure_response( $result );
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( 'LNKup marketplace search failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
+			return new WP_Error(
+				'lnkup_search_failed',
+				__( 'Search is temporarily unavailable. Please try again.', 'lnkup-marketplace' ),
+				array( 'status' => 500 )
+			);
 		}
-		$user_id = get_current_user_id();
-		if ( $user_id && ! empty( $request->get_param( 'q' ) ) ) {
-			LNKup_Vendor_Personalization::add_search_history( $user_id, $request->get_param( 'q' ), $args );
-		}
-		return rest_ensure_response( $result );
 	}
 
 	public static function suggestions( WP_REST_Request $request ) {

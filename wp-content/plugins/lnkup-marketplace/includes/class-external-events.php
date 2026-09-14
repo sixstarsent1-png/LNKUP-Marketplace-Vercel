@@ -328,6 +328,8 @@ class LNKup_External_Events {
 			'organizer_name',
 			'event_type',
 			'source_event_id',
+			'application_url',
+			'organizer_instagram',
 		);
 
 		$data = array();
@@ -1911,6 +1913,15 @@ class LNKup_External_Events {
 		if ( $creating || isset( $data['organizer_email'] ) ) {
 			$row['organizer_email'] = sanitize_email( (string) ( $data['organizer_email'] ?? '' ) );
 		}
+		if ( $creating || isset( $data['application_url'] ) ) {
+			$row['application_url'] = esc_url_raw( (string) ( $data['application_url'] ?? '' ) );
+		}
+		if ( $creating || isset( $data['organizer_instagram'] ) ) {
+			$row['organizer_instagram'] = self::sanitize_instagram( (string) ( $data['organizer_instagram'] ?? '' ) );
+		}
+		if ( $creating || isset( $data['discovery_query'] ) ) {
+			$row['discovery_query'] = sanitize_text_field( (string) ( $data['discovery_query'] ?? '' ) );
+		}
 		if ( $creating || isset( $data['event_type'] ) ) {
 			$row['event_type'] = sanitize_text_field( (string) ( $data['event_type'] ?? '' ) );
 		}
@@ -1924,6 +1935,31 @@ class LNKup_External_Events {
 			$row['workflow_status'] = sanitize_key( (string) ( $data['workflow_status'] ?? self::WORKFLOW_PUBLISHED ) ) ?: self::WORKFLOW_PUBLISHED;
 		}
 		return $row;
+	}
+
+	/**
+	 * Normalize an Instagram handle or URL.
+	 *
+	 * @param string $value Handle or profile URL.
+	 */
+	public static function sanitize_instagram( string $value ): string {
+		$value = trim( $value );
+		if ( '' === $value ) {
+			return '';
+		}
+		if ( preg_match( '#instagram\.com/([A-Za-z0-9._]+)#i', $value, $m ) ) {
+			$handle = $m[1];
+		} else {
+			$handle = ltrim( $value, '@' );
+		}
+		$handle = sanitize_text_field( $handle );
+		if ( '' === $handle || in_array( strtolower( $handle ), array( 'p', 'reel', 'reels', 'stories', 'explore' ), true ) ) {
+			return '';
+		}
+		if ( ! preg_match( '/^[A-Za-z0-9._]+$/', $handle ) ) {
+			return '';
+		}
+		return 'https://www.instagram.com/' . $handle;
 	}
 
 	/**

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Retail vendor table at an event">
+  <defs>
+    <linearGradient id="cr-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a2e1a"/>
+      <stop offset="100%" stop-color="#0e180e"/>
+    </linearGradient>
+    <radialGradient id="cr-glow" cx="50%" cy="38%" r="50%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.26"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#cr-sky)"/>
+  <rect width="720" height="560" fill="url(#cr-glow)"/>
+  <rect x="0" y="430" width="720" height="130" fill="#0c140c"/>
+  <rect x="130" y="250" width="460" height="190" rx="8" fill="#142014" stroke="#c8f542" stroke-width="2"/>
+  <path d="M120 250h480l-26-58H146z" fill="#1a2818" stroke="#c8f542" stroke-width="1.5"/>
+  <rect x="160" y="290" width="70" height="70" rx="4" fill="#0a120a" stroke="#c8f542" opacity="0.7"/>
+  <rect x="250" y="280" width="70" height="80" rx="4" fill="#0a120a" stroke="#c8f542" opacity="0.8"/>
+  <rect x="340" y="295" width="70" height="65" rx="4" fill="#0a120a" stroke="#c8f542" opacity="0.7"/>
+  <rect x="430" y="285" width="70" height="75" rx="4" fill="#0a120a" stroke="#c8f542" opacity="0.75"/>
+  <path d="M180 290v-28h30v28" fill="none" stroke="#c8f542" stroke-width="2" opacity="0.55"/>
+  <path d="M270 280v-32h30v32" fill="none" stroke="#c8f542" stroke-width="2" opacity="0.55"/>
+  <path d="M450 285v-30h30v30" fill="none" stroke="#c8f542" stroke-width="2" opacity="0.55"/>
+  <rect x="200" y="202" width="320" height="26" rx="3" fill="#c8f542" opacity="0.2" stroke="#c8f542"/>
+</svg>

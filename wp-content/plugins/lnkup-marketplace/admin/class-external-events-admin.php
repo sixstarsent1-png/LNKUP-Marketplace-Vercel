@@ -102,6 +102,8 @@ class LNKup_External_Events_Admin {
 			'event_type'          => sanitize_text_field( wp_unslash( (string) ( $_POST['event_type'] ?? '' ) ) ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			'description_excerpt' => sanitize_textarea_field( wp_unslash( (string) ( $_POST['description_excerpt'] ?? '' ) ) ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			'source_event_id'     => sanitize_text_field( wp_unslash( (string) ( $_POST['source_event_id'] ?? '' ) ) ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			'application_url'     => esc_url_raw( wp_unslash( (string) ( $_POST['application_url'] ?? '' ) ) ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			'organizer_instagram' => LNKup_External_Events::sanitize_instagram( wp_unslash( (string) ( $_POST['organizer_instagram'] ?? '' ) ) ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		);
 
 		$result = LNKup_External_Events::create( $data );
@@ -291,6 +293,12 @@ class LNKup_External_Events_Admin {
 		}
 		if ( isset( $_POST['event_type'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			$data['event_type'] = sanitize_text_field( wp_unslash( (string) $_POST['event_type'] ) );
+		}
+		if ( isset( $_POST['application_url'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$data['application_url'] = esc_url_raw( wp_unslash( (string) $_POST['application_url'] ) );
+		}
+		if ( isset( $_POST['organizer_instagram'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$data['organizer_instagram'] = LNKup_External_Events::sanitize_instagram( wp_unslash( (string) $_POST['organizer_instagram'] ) );
 		}
 		if ( $data ) {
 			LNKup_External_Events::update( $id, $data );
@@ -542,6 +550,27 @@ class LNKup_External_Events_Admin {
 					<?php endforeach; ?>
 				</select>
 			</p>
+			<p>
+				<label><?php esc_html_e( 'Application URL', 'lnkup-marketplace' ); ?></label><br />
+				<input class="large-text" type="url" name="application_url" value="<?php echo esc_attr( (string) ( $row['application_url'] ?? '' ) ); ?>" placeholder="https://example.com/vendors/apply" />
+			</p>
+			<p>
+				<label><?php esc_html_e( 'Instagram', 'lnkup-marketplace' ); ?></label><br />
+				<input class="regular-text" type="text" name="organizer_instagram" value="<?php echo esc_attr( (string) ( $row['organizer_instagram'] ?? '' ) ); ?>" placeholder="https://www.instagram.com/…" />
+			</p>
+			<?php if ( ! empty( $row['discovery_query'] ) ) : ?>
+				<p class="description" data-testid="lnkup-ext-discovery-query">
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %s: Google query */
+							__( 'Found via: %s', 'lnkup-marketplace' ),
+							(string) $row['discovery_query']
+						)
+					);
+					?>
+				</p>
+			<?php endif; ?>
 			<p class="submit" style="display:flex;gap:0.5rem;flex-wrap:wrap;">
 				<button type="submit" class="button button-primary" name="lnkup_external_events_action" value="approve"><?php esc_html_e( 'Approve & publish', 'lnkup-marketplace' ); ?></button>
 				<button type="submit" class="button" name="lnkup_external_events_action" value="save_review"><?php esc_html_e( 'Save', 'lnkup-marketplace' ); ?></button>
@@ -567,7 +596,7 @@ class LNKup_External_Events_Admin {
 		$url = esc_url_raw( wp_unslash( (string) ( $_POST['source_url'] ?? '' ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		$provider = LNKup_External_Sources::detect_from_url( $url );
 		if ( ! $provider ) {
-			self::redirect_notice( 'error', __( 'Unsupported URL. Eventbrite only in V2.', 'lnkup-marketplace' ) );
+			self::redirect_notice( 'error', __( 'Unsupported URL. Use Eventbrite, Posh (/e/…), an RSS/Atom feed, or a public event website.', 'lnkup-marketplace' ) );
 		}
 		$data = $provider->parse_url( $url );
 		if ( is_wp_error( $data ) ) {
@@ -594,7 +623,7 @@ class LNKup_External_Events_Admin {
 			self::redirect_notice( 'error', __( 'Auto sync is unavailable.', 'lnkup-marketplace' ), 'sync' );
 		}
 		$mode = sanitize_key( wp_unslash( (string) ( $_POST['sync_mode'] ?? 'full' ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
-		if ( ! in_array( $mode, array( 'full', 'discovery', 'refresh' ), true ) ) {
+		if ( ! in_array( $mode, array( 'full', 'discovery', 'refresh', 'google' ), true ) ) {
 			$mode = LNKup_External_Events_Sync::MODE_FULL;
 		}
 		$summary = LNKup_External_Events_Sync::run( $mode );
@@ -718,7 +747,7 @@ class LNKup_External_Events_Admin {
 				$selected   = (array) ( $config['market_slugs'] ?? LNKup_External_Events_Sync::default_market_slugs() );
 				?>
 				<div data-testid="lnkup-external-autosync">
-					<p class="description"><?php esc_html_e( 'Automatically discover Eventbrite events for launch cities and refresh stale listings. New imports land in the Review queue. Use a real server cron for reliable scheduling on production.', 'lnkup-marketplace' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Automatically discover Eventbrite and Google Search vendor-opportunity pages for launch cities and refresh stale listings. New imports land in the Review queue. Use a real server cron for reliable scheduling on production.', 'lnkup-marketplace' ); ?></p>
 					<?php if ( ! empty( $state['finished_at'] ) ) : ?>
 						<div class="lnkup-admin-kpi-grid" style="margin:1rem 0;">
 							<div class="lnkup-admin-kpi"><strong><?php echo esc_html( (string) ( $state['finished_at'] ?? '—' ) ); ?></strong><span><?php esc_html_e( 'Last run', 'lnkup-marketplace' ); ?></span></div>
@@ -727,6 +756,7 @@ class LNKup_External_Events_Admin {
 							<div class="lnkup-admin-kpi"><strong><?php echo esc_html( (string) (int) ( $state['refreshed'] ?? 0 ) ); ?></strong><span><?php esc_html_e( 'Refreshed', 'lnkup-marketplace' ); ?></span></div>
 							<div class="lnkup-admin-kpi"><strong><?php echo esc_html( (string) (int) ( $state['errors'] ?? 0 ) ); ?></strong><span><?php esc_html_e( 'Errors', 'lnkup-marketplace' ); ?></span></div>
 							<div class="lnkup-admin-kpi"><strong><?php echo esc_html( (string) (int) ( $state['skipped_vendor_filter'] ?? 0 ) ); ?></strong><span><?php esc_html_e( 'Skipped (vendor filter)', 'lnkup-marketplace' ); ?></span></div>
+							<div class="lnkup-admin-kpi"><strong><?php echo esc_html( (string) (int) ( $state['google_queries'] ?? 0 ) ); ?></strong><span><?php esc_html_e( 'Google queries', 'lnkup-marketplace' ); ?></span></div>
 						</div>
 						<?php if ( ! empty( $state['last_error'] ) ) : ?>
 							<p class="description"><strong><?php esc_html_e( 'Last error:', 'lnkup-marketplace' ); ?></strong> <?php echo esc_html( (string) $state['last_error'] ); ?></p>
@@ -808,6 +838,56 @@ class LNKup_External_Events_Admin {
 									<p class="description"><?php esc_html_e( 'Total seconds for discovery + refresh combined. Default 300. Increase if you sync many cities.', 'lnkup-marketplace' ); ?></p>
 								</td>
 							</tr>
+							<tr>
+								<th scope="row"><?php esc_html_e( 'Google Search ingest', 'lnkup-marketplace' ); ?></th>
+								<td>
+									<label><input type="checkbox" name="external_sync_google_enabled" value="1" <?php checked( ! empty( $config['google_enabled'] ) ); ?> /> <?php esc_html_e( 'Discover vendor-opportunity pages via Google Custom Search (review queue only)', 'lnkup-marketplace' ); ?></label>
+									<p class="description"><?php esc_html_e( 'Requires a Programmable Search Engine that searches the entire web (not a single site). Do not scrape google.com HTML.', 'lnkup-marketplace' ); ?></p>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="google_cse_api_key"><?php esc_html_e( 'Google CSE API key', 'lnkup-marketplace' ); ?></label></th>
+								<td><input class="regular-text" type="password" name="google_cse_api_key" id="google_cse_api_key" value="<?php echo esc_attr( (string) ( lnkup_get_settings()['google_cse_api_key'] ?? '' ) ); ?>" autocomplete="off" /></td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="google_cse_cx"><?php esc_html_e( 'Google CSE engine ID (cx)', 'lnkup-marketplace' ); ?></label></th>
+								<td><input class="regular-text" type="text" name="google_cse_cx" id="google_cse_cx" value="<?php echo esc_attr( (string) ( lnkup_get_settings()['google_cse_cx'] ?? '' ) ); ?>" /></td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="google_search_daily_budget"><?php esc_html_e( 'Daily Google query budget', 'lnkup-marketplace' ); ?></label></th>
+								<td>
+									<input type="number" min="1" max="1000" class="small-text" name="google_search_daily_budget" id="google_search_daily_budget" value="<?php echo esc_attr( (string) (int) ( $config['google_daily_budget'] ?? 100 ) ); ?>" />
+									<?php
+									$quota = class_exists( 'LNKup_External_Events_Sync' ) ? LNKup_External_Events_Sync::google_quota_state() : array();
+									if ( ! empty( $quota['date'] ) ) {
+										echo '<p class="description">';
+										echo esc_html(
+											sprintf(
+												/* translators: 1: used count, 2: date */
+												__( 'Used %1$d queries on %2$s.', 'lnkup-marketplace' ),
+												(int) ( $quota['count'] ?? 0 ),
+												(string) $quota['date']
+											)
+										);
+										echo '</p>';
+									}
+									?>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="google_search_queries_per_run"><?php esc_html_e( 'Google queries per run', 'lnkup-marketplace' ); ?></label></th>
+								<td>
+									<input type="number" min="1" max="25" class="small-text" name="google_search_queries_per_run" id="google_search_queries_per_run" value="<?php echo esc_attr( (string) (int) ( $config['google_queries_per_run'] ?? 10 ) ); ?>" />
+									<p class="description"><?php esc_html_e( 'Chunk size. A 50 × city combinator is drained over multiple cron ticks.', 'lnkup-marketplace' ); ?></p>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row"><label for="google_search_templates"><?php esc_html_e( 'Google query templates', 'lnkup-marketplace' ); ?></label></th>
+								<td>
+									<textarea class="large-text" rows="8" name="google_search_templates" id="google_search_templates"><?php echo esc_textarea( (string) ( $config['google_templates'] ?? '' ) ); ?></textarea>
+									<p class="description"><?php esc_html_e( 'One per line. Placeholders: {city}, {state}, {year}. Leave empty for built-in vendor-application templates.', 'lnkup-marketplace' ); ?></p>
+								</td>
+							</tr>
 						</table>
 						<?php submit_button( __( 'Save auto sync settings', 'lnkup-marketplace' ) ); ?>
 					</form>
@@ -819,6 +899,7 @@ class LNKup_External_Events_Admin {
 							<option value="full"><?php esc_html_e( 'Full (discovery + refresh)', 'lnkup-marketplace' ); ?></option>
 							<option value="discovery"><?php esc_html_e( 'Discovery only', 'lnkup-marketplace' ); ?></option>
 							<option value="refresh"><?php esc_html_e( 'Refresh only', 'lnkup-marketplace' ); ?></option>
+							<option value="google"><?php esc_html_e( 'Google Search batch', 'lnkup-marketplace' ); ?></option>
 						</select>
 						<?php submit_button( __( 'Run sync now', 'lnkup-marketplace' ), 'secondary', 'submit', false ); ?>
 					</form>
@@ -837,11 +918,12 @@ class LNKup_External_Events_Admin {
 					<p><a href="<?php echo esc_url( admin_url( 'admin.php?page=lnkup-external-events&tab=events&needs_email=1' ) ); ?>"><?php esc_html_e( 'View events needing organizer email →', 'lnkup-marketplace' ); ?></a></p>
 				<?php endif; ?>
 			<?php elseif ( 'import' === $tab ) : ?>
-			<h2><?php esc_html_e( 'Paste Eventbrite URL', 'lnkup-marketplace' ); ?></h2>
+			<h2><?php esc_html_e( 'Paste Eventbrite, Posh, or RSS URL', 'lnkup-marketplace' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Eventbrite and Posh event pages are scraped. RSS/Atom feeds import the next upcoming item (or ?item=0). Creates a pending-review external listing.', 'lnkup-marketplace' ); ?></p>
 			<form method="post" data-testid="lnkup-external-url-form">
 				<?php wp_nonce_field( 'lnkup_external_events_admin' ); ?>
 				<input type="hidden" name="lnkup_external_events_action" value="import_url" />
-				<p><input class="large-text" type="url" name="source_url" placeholder="https://www.eventbrite.com/e/..." required /></p>
+				<p><input class="large-text" type="url" name="source_url" placeholder="https://www.eventbrite.com/e/… · https://posh.vip/e/… · https://example.com/feed" required /></p>
 				<?php submit_button( __( 'Import URL (pending review)', 'lnkup-marketplace' ) ); ?>
 			</form>
 			<h2><?php esc_html_e( 'Add single event', 'lnkup-marketplace' ); ?></h2>
@@ -897,6 +979,13 @@ class LNKup_External_Events_Admin {
 					<option value="start_datetime" <?php selected( $filters['order_by'] ?? '', 'start_datetime' ); ?>><?php esc_html_e( 'Event date (soonest)', 'lnkup-marketplace' ); ?></option>
 				</select>
 				<input type="text" name="city" placeholder="<?php esc_attr_e( 'City', 'lnkup-marketplace' ); ?>" value="<?php echo esc_attr( $filters['city'] ?? '' ); ?>" />
+				<select name="platform">
+					<option value=""><?php esc_html_e( 'All sources', 'lnkup-marketplace' ); ?></option>
+					<option value="eventbrite" <?php selected( $filters['platform'] ?? '', 'eventbrite' ); ?>><?php esc_html_e( 'Eventbrite', 'lnkup-marketplace' ); ?></option>
+					<option value="google" <?php selected( $filters['platform'] ?? '', 'google' ); ?>><?php esc_html_e( 'Google Search', 'lnkup-marketplace' ); ?></option>
+					<option value="posh" <?php selected( $filters['platform'] ?? '', 'posh' ); ?>><?php esc_html_e( 'Posh', 'lnkup-marketplace' ); ?></option>
+					<option value="rss" <?php selected( $filters['platform'] ?? '', 'rss' ); ?>><?php esc_html_e( 'RSS', 'lnkup-marketplace' ); ?></option>
+				</select>
 				<label>
 					<?php esc_html_e( 'Min vendor fit', 'lnkup-marketplace' ); ?>
 					<input type="number" min="0" max="100" class="small-text" name="min_vendor_fit" value="<?php echo esc_attr( (string) (int) ( $filters['min_vendor_fit'] ?? 0 ) ); ?>" data-testid="lnkup-ext-review-min-fit" />
@@ -973,6 +1062,9 @@ class LNKup_External_Events_Admin {
 									</p>
 								<?php endif; ?>
 								<a href="<?php echo esc_url( (string) ( $row['source_url'] ?? '#' ) ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Source', 'lnkup-marketplace' ); ?></a>
+								<?php if ( ! empty( $row['source_platform'] ) ) : ?>
+									<span class="description"><?php echo esc_html( (string) $row['source_platform'] ); ?></span>
+								<?php endif; ?>
 							</td>
 							<td><?php echo esc_html( (string) ( $row['start_datetime'] ?? '' ) ); ?></td>
 							<td><?php echo esc_html( trim( ( $row['city'] ?? '' ) . ', ' . ( $row['state'] ?? '' ), ', ' ) ); ?></td>

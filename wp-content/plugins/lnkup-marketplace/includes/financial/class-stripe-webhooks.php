@@ -52,7 +52,7 @@ class LNKup_Stripe_Webhooks {
 					self::handle_payment_intent_succeeded( $obj );
 					break;
 				case 'payment_intent.processing':
-					self::handle_payment_intent_succeeded( $obj );
+					self::handle_payment_intent_processing( $obj );
 					break;
 				case 'payment_intent.payment_failed':
 					self::handle_payment_intent_failed( $obj );
@@ -66,7 +66,7 @@ class LNKup_Stripe_Webhooks {
 				case 'customer.subscription.created':
 				case 'customer.subscription.updated':
 				case 'customer.subscription.deleted':
-					LNKup_Financial_Audit::log( 'subscription_event', 'subscription', 0, array( 'type' => $type ) );
+					self::handle_subscription_event( $obj, $type );
 					break;
 				case 'account.updated':
 					LNKup_Stripe_Connect::handle_account_updated( $obj );
@@ -175,12 +175,54 @@ class LNKup_Stripe_Webhooks {
 		if ( ! $payment_id && ! empty( $session['metadata']['payment_post_id'] ) ) {
 			$payment_id = absint( $session['metadata']['payment_post_id'] );
 		}
-		$intent = $session['payment_intent'] ?? '';
+		if ( ! $payment_id ) {
+			return;
+		}
+
+		$intent_raw = $session['payment_intent'] ?? '';
+		$intent_id  = '';
+		if ( is_string( $intent_raw ) ) {
+			$intent_id = $intent_raw;
+		} elseif ( is_array( $intent_raw ) && ! empty( $intent_raw['id'] ) ) {
+			$intent_id = (string) $intent_raw['id'];
+		}
+
+		if ( $intent_id ) {
+			LNKup_Financial_Service::backfill_stripe_payment_meta( $payment_id, $intent_id );
+		}
+
+		// ACH / delayed methods: session.completed can fire before funds clear.
+		// Only finalize when Stripe reports payment_status=paid; otherwise wait for payment_intent.succeeded.
+		$payment_status = isset( $session['payment_status'] ) ? (string) $session['payment_status'] : '';
+		if ( 'paid' !== $payment_status ) {
+			LNKup_Financial_Service::mark_payment_processing(
+				$payment_id,
+				$intent_id,
+				array(
+					'source'          => 'checkout_session',
+					'payment_status'  => $payment_status,
+				)
+			);
+			return;
+		}
+
+		LNKup_Financial_Service::finalize_payment( $payment_id, $intent_id, array( 'source' => 'checkout_session' ) );
+	}
+
+	/**
+	 * ACH / delayed PaymentIntent — record processing without finalizing.
+	 *
+	 * @param array $intent Payment intent.
+	 */
+	private static function handle_payment_intent_processing( $intent ) {
+		$payment_id = self::resolve_payment_id( $intent );
 		if ( $payment_id ) {
-			if ( $intent ) {
-				LNKup_Financial_Service::backfill_stripe_payment_meta( $payment_id, $intent );
-			}
-			LNKup_Financial_Service::finalize_payment( $payment_id, $intent, array( 'source' => 'checkout_session' ) );
+			LNKup_Financial_Service::backfill_stripe_payment_meta( $payment_id, $intent['id'] ?? '' );
+			LNKup_Financial_Service::mark_payment_processing(
+				$payment_id,
+				$intent['id'] ?? '',
+				array( 'source' => 'payment_intent.processing' )
+			);
 		}
 	}
 
@@ -193,6 +235,28 @@ class LNKup_Stripe_Webhooks {
 			LNKup_Financial_Service::backfill_stripe_payment_meta( $payment_id, $intent['id'] ?? '' );
 			LNKup_Financial_Service::finalize_payment( $payment_id, $intent['id'] ?? '', array( 'source' => 'payment_intent' ) );
 		}
+	}
+
+	/**
+	 * Sync Stripe Billing subscription into local subscription row.
+	 *
+	 * @param array  $subscription Stripe subscription object.
+	 * @param string $type         Event type.
+	 */
+	private static function handle_subscription_event( $subscription, $type ) {
+		if ( class_exists( 'LNKup_Subscriptions' ) ) {
+			LNKup_Subscriptions::sync_from_stripe_event( $subscription, $type );
+		}
+		LNKup_Financial_Audit::log(
+			'subscription_event',
+			'subscription',
+			0,
+			array(
+				'type'         => $type,
+				'provider_ref' => sanitize_text_field( $subscription['id'] ?? '' ),
+				'status'       => sanitize_key( $subscription['status'] ?? '' ),
+			)
+		);
 	}
 
 	/**

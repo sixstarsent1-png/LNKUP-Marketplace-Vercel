@@ -1766,7 +1766,7 @@
 
 /* Organizer command center */
 .lnkup-organizer-dash {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 .lnkup-organizer-section-card[id],
@@ -1778,7 +1778,7 @@
 }
 
 .lnkup-dashboard:has(.lnkup-organizer-dash) .lnkup-dashboard__content-inner {
-  overflow-x: hidden;
+  overflow-x: clip;
   min-width: 0;
   max-width: 100%;
 }

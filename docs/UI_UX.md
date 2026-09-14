@@ -559,7 +559,7 @@ Landing partials: `hero.php`, `site-header.php`, `site-footer.php`, `categories.
 
 **Event card fields:**
 
-Title · date · city/state · venue · category badges · booth fee · attendance estimate · spots remaining · application deadline · organizer verified badge · Apply · Save/Favorite
+Cover photo (organizer upload, then Eventbrite URL, then one realistic category JPG) · title · date · city/state · venue · category badges · booth fee · attendance estimate · spots remaining · application deadline · organizer verified badge · Apply · Save/Favorite. Alt is `{category} in {city}` — never empty and never “image of…”.
 
 **Explore More rails** (hide when empty):
 
@@ -1067,6 +1067,20 @@ Copy-paste QA checklist after UI changes.
 - [ ] No PHP notices in JSON responses
 - [ ] Browser console free of unhandled promise rejections on dashboard load
 
+### City Connector command center
+
+`/connector-dashboard/` is a WordPress panel (`[lnkup_connector_dashboard]` + `connector.js` / `connector.css`). Views: Overview, Get Started, My Referrals, Earnings, Ranks, Resources, Content Studio, Profile. New connectors land on Get Started. In-dashboard links switch views with `history.pushState` (no full reload). Desktop keeps the sidebar and in-page tabs; on small screens the shortcode tabs hide and a five-item bottom nav is used (Home, Referrals, Create → `?view=studio`, Earnings, More).
+
+Get Started is a **Launch Plan**, not a long underlined checklist. The header shows phase, percent, required count, rank, and ETA. Only the current action is expanded, with a specific button label (never generic “Continue”). Completed rows collapse; upcoming rows stay compact. Growth-style cards post to `/connector/profile` and refresh the next action. The Share sheet remains on Home, Get Started, and the sticky CTA — it is not the bottom-nav Create control.
+
+Content Studio (`?view=studio`, alias `create`) is the video builder: weekly mission, category chips, desktop panel / mobile bottom sheet (focus trap, Esc, 44px, `prefers-reduced-motion`), copy script/caption/on-screen, download shot list, open referral link, mark planned, and submit a published social URL. Analytics copy states that conversions use referral attribution, not a claim that a post caused them.
+
+The Share sheet is the surface for hero “Share Your Link” and the sticky CTA. It includes organizer and vendor URLs, QR, copy / native share, Instagram (app scheme with https fallback), and scripts. Copy confirmation uses a live region (“Referral link copied”), not `alert`.
+
+Overview is a command center: compact “Grow LNKup in [City]” hero, unmixed KPIs (estimated stays separate from pending/approved/paid), a backend-driven next-best-action, funnel conversion % only when the from-step count is at least 5, and an activity timeline. The rank card under the hero shows the current badge (plus Founding City Partner when earned), next-rank percent, remaining copy from PHP, and per-requirement progress bars. Ranks (`?view=ranks`) is an expandable five-tier roadmap plus an opt-in city leaderboard (name, rank, bookings, activated organizers — never dollars). A one-time celebration sheet reuses the share-sheet dialog (focus trap, Esc, 44px targets, `prefers-reduced-motion`). Badge color is not the only cue — each badge includes the rank name. Referrals filter client-side. Earnings next-payout text is the earliest real `available_at` or “After LNKup approval.”
+
+Copy rules: no base payment, no guaranteed income. Marketing may say “10% for 12 months”; the ledger is booth GMV × configured share. Mention a per-transaction cap only when `terms.share_cap > 0`. Max content width 72rem.
+
 ---
 
 ## Appendix A: Plugin Stylesheet Index
@@ -1077,6 +1091,7 @@ Copy-paste QA checklist after UI changes.
 | `marketplace-v2.css` | Find Events marketplace |
 | `financial.css` | Organizer Financial + vendor Payments |
 | `growth.css` | Vendor Growth dashboard |
+| `connector.css` | City Connector command center (launch plan, studio, share sheet, funnel, referrals, earnings, ranks) |
 | `operations.css` | Event Operations command center |
 | `intelligence.css` | Organizer Intelligence |
 | `organizer-crm.css` | Organizer CRM / command center |

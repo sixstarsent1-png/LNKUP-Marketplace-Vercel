@@ -14,7 +14,7 @@ $market = $ctx['market'];
 <section class="lnkup-section lnkup-reveal" id="categories">
 	<div class="lnkup-container">
 		<div class="lnkup-section__intro">
-			<p class="lnkup-eyebrow"><?php esc_html_e( 'Vendor categories', 'lnkup-theme' ); ?></p>
+			<?php lnkup_theme_section_kicker( '01 / VENDORS', __( 'Vendor categories', 'lnkup-theme' ) ); ?>
 			<h2 class="lnkup-heading lnkup-heading--section">
 				<?php
 				echo esc_html(

@@ -101,30 +101,40 @@ class LNKup_Financial {
 	}
 
 	/**
-	 * Organizer collected vendor spot fees.
+	 * Resolve booth fee amount from a payment CPT (matches activity / checkout).
+	 *
+	 * @param int $payment_id Payment post ID.
+	 * @return float
+	 */
+	public static function payment_booth_amount( $payment_id ) {
+		$payment_id = absint( $payment_id );
+		if ( ! $payment_id ) {
+			return 0.0;
+		}
+		foreach ( array( '_lnkup_total_amount', '_lnkup_amount', '_lnkup_vendor_spot_fee', '_lnkup_total' ) as $key ) {
+			$amount = (float) get_post_meta( $payment_id, $key, true );
+			if ( $amount > 0 ) {
+				return round( $amount, 2 );
+			}
+		}
+		return 0.0;
+	}
+
+	/**
+	 * Organizer collected vendor booth fees (paid payment CPTs are source of truth).
 	 *
 	 * @param int $user_id Organizer user ID.
 	 */
 	public static function organizer_collected_revenue( $user_id ) {
-		global $wpdb;
-		$table = LNKup_Financial_Tables::transactions_table();
-		$sum   = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE organizer_user_id = %d AND type = 'payment' AND status = 'paid'",
-				$user_id
-			)
-		);
-		if ( null === $sum ) {
-			$payments = lnkup_get_payments_for_user( $user_id, 'organizer' );
-			$total = 0;
-			foreach ( $payments as $p ) {
-				if ( 'paid' === get_post_meta( $p->ID, '_lnkup_payment_status', true ) ) {
-					$total += (float) get_post_meta( $p->ID, '_lnkup_vendor_spot_fee', true );
-				}
+		$user_id  = absint( $user_id );
+		$payments = lnkup_get_payments_for_user( $user_id, 'organizer' );
+		$total    = 0.0;
+		foreach ( $payments as $p ) {
+			if ( 'paid' === get_post_meta( $p->ID, '_lnkup_payment_status', true ) ) {
+				$total += self::payment_booth_amount( $p->ID );
 			}
-			return round( $total, 2 );
 		}
-		return round( (float) $sum, 2 );
+		return round( $total, 2 );
 	}
 
 	/**
@@ -134,47 +144,37 @@ class LNKup_Financial {
 	 */
 	public static function organizer_pending_revenue( $user_id ) {
 		$payments = lnkup_get_payments_for_user( $user_id, 'organizer' );
-		$total    = 0;
+		$total    = 0.0;
 		foreach ( $payments as $p ) {
 			$status = get_post_meta( $p->ID, '_lnkup_payment_status', true );
 			if ( 'paid' !== $status ) {
-				$total += (float) get_post_meta( $p->ID, '_lnkup_vendor_spot_fee', true );
+				$total += self::payment_booth_amount( $p->ID );
 			}
 		}
 		return round( $total, 2 );
 	}
 
 	/**
-	 * Collected revenue for a single event.
+	 * Collected revenue for a single event (paid payment CPTs are source of truth).
 	 *
 	 * @param int $event_id Event post ID.
 	 */
 	public static function event_collected_revenue( $event_id ) {
-		global $wpdb;
-		$table = LNKup_Financial_Tables::transactions_table();
-		if ( LNKup_Financial_Tables::table_exists( $table ) ) {
-			$sum = $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE event_id = %d AND type = 'payment' AND status = 'paid'",
-					absint( $event_id )
-				)
-			);
-			if ( null !== $sum ) {
-				return round( (float) $sum, 2 );
-			}
-		}
-		$payments = get_posts( array(
-			'post_type'      => 'lnkup_payment',
-			'posts_per_page' => -1,
-			'meta_query'     => array(
-				array( 'key' => '_lnkup_event_id', 'value' => absint( $event_id ) ),
-				array( 'key' => '_lnkup_payment_status', 'value' => 'paid' ),
-			),
-			'fields'         => 'ids',
-		) );
-		$total = 0;
+		$event_id = absint( $event_id );
+		$payments = get_posts(
+			array(
+				'post_type'      => 'lnkup_payment',
+				'posts_per_page' => -1,
+				'meta_query'     => array(
+					array( 'key' => '_lnkup_event_id', 'value' => $event_id ),
+					array( 'key' => '_lnkup_payment_status', 'value' => 'paid' ),
+				),
+				'fields'         => 'ids',
+			)
+		);
+		$total = 0.0;
 		foreach ( $payments as $pid ) {
-			$total += (float) get_post_meta( $pid, '_lnkup_vendor_spot_fee', true );
+			$total += self::payment_booth_amount( (int) $pid );
 		}
 		return round( $total, 2 );
 	}

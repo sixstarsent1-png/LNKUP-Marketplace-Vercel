@@ -99,13 +99,13 @@ class LNKup_Reputation_Render {
 	public static function review_card( $review ) {
 		ob_start();
 		?>
-		<article class="lnkup-rep-review-card">
-			<header>
+		<article class="lnkup-rep-review-card lnkup-surface--primary lnkup-micro-lift">
+			<header class="lnkup-rep-review-card__header">
 				<?php echo self::star_rating( $review['overall_rating'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 				<span class="lnkup-muted"><?php echo esc_html( $review['event_title'] ); ?> · <?php echo esc_html( $review['created_at'] ); ?></span>
 			</header>
 			<?php if ( ! empty( $review['public_text'] ) ) : ?>
-				<p><?php echo esc_html( $review['public_text'] ); ?></p>
+				<p class="lnkup-rep-review-card__body"><?php echo esc_html( $review['public_text'] ); ?></p>
 			<?php endif; ?>
 		</article>
 		<?php

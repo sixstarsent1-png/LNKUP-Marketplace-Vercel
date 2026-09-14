@@ -17,6 +17,25 @@ class LNKup_Transactions {
 	}
 
 	/**
+	 * Booth amount for ledger amount column (matches Collected / Activity).
+	 *
+	 * @param int $payment_id Payment post ID.
+	 * @return float
+	 */
+	private static function booth_amount_for_payment( $payment_id ) {
+		if ( class_exists( 'LNKup_Financial' ) && method_exists( 'LNKup_Financial', 'payment_booth_amount' ) ) {
+			return (float) LNKup_Financial::payment_booth_amount( $payment_id );
+		}
+		foreach ( array( '_lnkup_total_amount', '_lnkup_amount', '_lnkup_vendor_spot_fee', '_lnkup_total' ) as $key ) {
+			$amount = (float) get_post_meta( $payment_id, $key, true );
+			if ( $amount > 0 ) {
+				return round( $amount, 2 );
+			}
+		}
+		return 0.0;
+	}
+
+	/**
 	 * Record ledger row from payment CPT.
 	 *
 	 * @param int    $payment_id Payment post ID.
@@ -32,6 +51,7 @@ class LNKup_Transactions {
 		$status   = get_post_meta( $payment_id, '_lnkup_payment_status', true ) ?: 'pending';
 		$type     = 'payment';
 		$now      = current_time( 'mysql' );
+		$amount   = self::booth_amount_for_payment( $payment_id );
 
 		if ( $existing && 'payment_completed' !== $event ) {
 			return (int) $existing['id'];
@@ -43,16 +63,22 @@ class LNKup_Transactions {
 			$wpdb->update(
 				$table,
 				array(
-					'status'       => sanitize_key( $status ),
-					'provider_ref' => sanitize_text_field( (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true ) ),
-					'updated_at'   => $now,
+					'status'            => sanitize_key( $status ),
+					'amount'            => $amount,
+					'vendor_user_id'    => (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true ),
+					'organizer_user_id' => (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true ),
+					'event_id'          => (int) get_post_meta( $payment_id, '_lnkup_event_id', true ),
+					'opportunity_id'    => (int) get_post_meta( $payment_id, '_lnkup_opportunity_id', true ),
+					'application_id'    => (int) get_post_meta( $payment_id, '_lnkup_application_id', true ),
+					'provider_ref'      => sanitize_text_field( (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true ) ),
+					'updated_at'        => $now,
 				),
 				array( 'id' => (int) $existing['id'] ),
-				array( '%s', '%s', '%s' ),
+				array( '%s', '%f', '%d', '%d', '%d', '%d', '%d', '%s', '%s' ),
 				array( '%d' )
 			);
 			LNKup_Financial_Audit::log( 'payment_completed', 'transaction', (int) $existing['id'], array(
-				'amount'   => (float) get_post_meta( $payment_id, '_lnkup_total_amount', true ),
+				'amount'   => $amount,
 				'metadata' => array( 'payment_post_id' => $payment_id ),
 			) );
 			return (int) $existing['id'];
@@ -66,7 +92,7 @@ class LNKup_Transactions {
 				'public_id'         => self::generate_public_id(),
 				'type'              => $type,
 				'status'            => sanitize_key( $status ),
-				'amount'            => (float) get_post_meta( $payment_id, '_lnkup_total_amount', true ),
+				'amount'            => $amount,
 				'currency'          => 'USD',
 				'vendor_user_id'    => (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true ),
 				'organizer_user_id' => (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true ),
@@ -89,7 +115,7 @@ class LNKup_Transactions {
 
 		$txn_id = (int) $wpdb->insert_id;
 		LNKup_Financial_Audit::log( $event, 'transaction', $txn_id, array(
-			'amount'   => (float) get_post_meta( $payment_id, '_lnkup_total_amount', true ),
+			'amount'   => $amount,
 			'metadata' => array( 'payment_post_id' => $payment_id ),
 		) );
 		return $txn_id;
@@ -118,6 +144,12 @@ class LNKup_Transactions {
 			$table,
 			array(
 				'status'                => sanitize_key( get_post_meta( $payment_id, '_lnkup_payment_status', true ) ?: 'pending' ),
+				'amount'                => self::booth_amount_for_payment( $payment_id ),
+				'vendor_user_id'        => $vendor_id,
+				'organizer_user_id'     => (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true ),
+				'event_id'              => (int) get_post_meta( $payment_id, '_lnkup_event_id', true ),
+				'opportunity_id'        => (int) get_post_meta( $payment_id, '_lnkup_opportunity_id', true ),
+				'application_id'        => $app_id,
 				'invoice_number'        => $invoice['invoice_number'] ?? '',
 				'payment_method'        => LNKup_Payment_Provider::get_active_provider_id(),
 				'stripe_customer_id'    => sanitize_text_field( (string) get_user_meta( $vendor_id, '_lnkup_stripe_customer_id', true ) ),
@@ -135,7 +167,7 @@ class LNKup_Transactions {
 				'updated_at'            => current_time( 'mysql' ),
 			),
 			array( 'id' => (int) $existing['id'] ),
-			array( '%s', '%s', '%s', '%s', '%s', '%s', '%f', '%f', '%f', '%f', '%f', '%f', '%f', '%s', '%s', '%s' ),
+			array( '%s', '%f', '%d', '%d', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%f', '%f', '%f', '%f', '%f', '%f', '%f', '%s', '%s', '%s' ),
 			array( '%d' )
 		);
 	}
@@ -315,6 +347,53 @@ class LNKup_Transactions {
 			}
 		}
 		update_option( 'lnkup_financial_backfilled', LNKUP_VERSION );
+	}
+
+	/**
+	 * Repair ledger amount / party columns from paid payment CPTs.
+	 *
+	 * @param int $organizer_user_id Optional organizer scope (0 = all paid payments).
+	 * @return int Number of payments synced.
+	 */
+	public static function backfill_amounts_from_payments( $organizer_user_id = 0 ) {
+		$organizer_user_id = absint( $organizer_user_id );
+		$table             = LNKup_Financial_Tables::transactions_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return 0;
+		}
+
+		$args = array(
+			'post_type'      => 'lnkup_payment',
+			'posts_per_page' => -1,
+			'fields'         => 'ids',
+			'post_status'    => 'any',
+			'meta_query'     => array(
+				array(
+					'key'   => '_lnkup_payment_status',
+					'value' => 'paid',
+				),
+			),
+		);
+		if ( $organizer_user_id > 0 ) {
+			$args['meta_query'][] = array(
+				'key'   => '_lnkup_organizer_user_id',
+				'value' => $organizer_user_id,
+			);
+		}
+
+		$payment_ids = get_posts( $args );
+		$synced      = 0;
+		foreach ( (array) $payment_ids as $payment_id ) {
+			$payment_id = (int) $payment_id;
+			if ( ! $payment_id ) {
+				continue;
+			}
+			self::record_from_payment_post( $payment_id, 'payment_created' );
+			self::record_from_payment_post( $payment_id, 'payment_completed' );
+			self::sync_extended_fields( $payment_id );
+			$synced++;
+		}
+		return $synced;
 	}
 
 	/**

@@ -136,27 +136,30 @@ class LNKup_Financial_Reports {
 		global $wpdb;
 		$table = LNKup_Financial_Tables::transactions_table();
 		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
-			return array(
-				'revenue'           => LNKup_Financial::organizer_collected_revenue( $user_id ),
-				'gross_revenue'     => 0,
-				'platform_fees'     => 0,
-				'collected'         => 0,
-				'refunds'           => 0,
-				'outstanding'       => 0,
-				'pending_payouts'   => 0,
-				'available_balance' => 0,
-				'refund_requests'   => 0,
-				'open_disputes'     => 0,
-				'revenue_by_event'  => array(),
-				'by_event'          => array(),
-				'by_month'          => array(),
-				'by_category'       => array(),
-				'completion_rate'   => 0,
-			);
+		return array(
+			'revenue'           => LNKup_Financial::organizer_collected_revenue( $user_id ),
+			'gross_revenue'     => LNKup_Financial::organizer_collected_revenue( $user_id ),
+			'platform_fees'     => 0,
+			'collected'         => LNKup_Financial::organizer_collected_revenue( $user_id ),
+			'refunds'           => 0,
+			'outstanding'       => LNKup_Financial::organizer_pending_revenue( $user_id ),
+			'pending_payouts'   => 0,
+			'available_balance' => 0,
+			'refund_requests'   => 0,
+			'open_disputes'     => 0,
+			'revenue_by_event'  => array(),
+			'by_event'          => array(),
+			'by_month'          => array(),
+			'by_category'       => array(),
+			'completion_rate'   => 0,
+		);
 		}
 		$gross = (float) $wpdb->get_var(
 			$wpdb->prepare( "SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE organizer_user_id = %d AND type = 'payment' AND status = 'paid'", $user_id )
 		);
+		$collected_cpt = LNKup_Financial::organizer_collected_revenue( $user_id );
+		// CPT booth totals are source of truth for Collected / Gross Revenue KPIs.
+		$gross = $collected_cpt;
 		$platform_fees = (float) $wpdb->get_var(
 			$wpdb->prepare( "SELECT COALESCE(SUM(platform_fee), 0) FROM {$table} WHERE organizer_user_id = %d AND type = 'payment' AND status = 'paid'", $user_id )
 		);
@@ -166,6 +169,10 @@ class LNKup_Financial_Reports {
 		$pending = (float) $wpdb->get_var(
 			$wpdb->prepare( "SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE organizer_user_id = %d AND type = 'payment' AND status = 'pending'", $user_id )
 		);
+		$pending_cpt = LNKup_Financial::organizer_pending_revenue( $user_id );
+		if ( $pending_cpt > 0 && $pending <= 0 ) {
+			$pending = $pending_cpt;
+		}
 		$by_event = self::revenue_by_event( $user_id );
 		$by_month = self::revenue_by_month( $user_id );
 		$total_bookings = array_sum( array_column( $by_event, 'bookings' ) );
@@ -189,10 +196,10 @@ class LNKup_Financial_Reports {
 			// Non-critical report metrics.
 		}
 		return array(
-			'revenue'              => LNKup_Financial::organizer_collected_revenue( $user_id ),
+			'revenue'              => $collected_cpt,
 			'gross_revenue'        => round( $gross, 2 ),
 			'platform_fees'        => round( $platform_fees, 2 ),
-			'collected'            => round( $gross, 2 ),
+			'collected'            => round( $collected_cpt, 2 ),
 			'refunds'              => round( $refunds, 2 ),
 			'outstanding'          => round( $pending, 2 ),
 			'pending_payouts'      => $pending_payouts,
@@ -313,16 +320,44 @@ class LNKup_Financial_Reports {
 
 	public static function for_event( $event_id ) {
 		global $wpdb;
-		$table = LNKup_Financial_Tables::transactions_table();
-		$collected = (float) $wpdb->get_var(
-			$wpdb->prepare( "SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE event_id = %d AND type = 'payment' AND status = 'paid'", $event_id )
-		);
-		$pending = (float) $wpdb->get_var(
-			$wpdb->prepare( "SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE event_id = %d AND type = 'payment' AND status = 'pending'", $event_id )
-		);
-		$refunds = (float) $wpdb->get_var(
-			$wpdb->prepare( "SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE event_id = %d AND type = 'refund'", $event_id )
-		);
+		$event_id  = absint( $event_id );
+		$table     = LNKup_Financial_Tables::transactions_table();
+		$collected = LNKup_Financial::event_collected_revenue( $event_id );
+
+		$pending = 0.0;
+		if ( LNKup_Financial_Tables::table_exists( $table ) ) {
+			$pending = (float) $wpdb->get_var(
+				$wpdb->prepare( "SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE event_id = %d AND type = 'payment' AND status = 'pending'", $event_id )
+			);
+		}
+		if ( $pending <= 0 ) {
+			$pending_posts = get_posts(
+				array(
+					'post_type'      => 'lnkup_payment',
+					'posts_per_page' => -1,
+					'meta_query'     => array(
+						array( 'key' => '_lnkup_event_id', 'value' => $event_id ),
+						array(
+							'key'     => '_lnkup_payment_status',
+							'value'   => 'paid',
+							'compare' => '!=',
+						),
+					),
+					'fields'         => 'ids',
+				)
+			);
+			$pending = 0.0;
+			foreach ( $pending_posts as $pid ) {
+				$pending += LNKup_Financial::payment_booth_amount( (int) $pid );
+			}
+		}
+
+		$refunds = 0.0;
+		if ( LNKup_Financial_Tables::table_exists( $table ) ) {
+			$refunds = (float) $wpdb->get_var(
+				$wpdb->prepare( "SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE event_id = %d AND type = 'refund'", $event_id )
+			);
+		}
 		$apps = get_posts(
 			array(
 				'post_type'      => 'lnkup_application',
@@ -332,25 +367,37 @@ class LNKup_Financial_Reports {
 				'meta_value'     => $event_id,
 			)
 		);
-		$total_apps = count( $apps );
-		$paid_apps = 0;
+		$total_apps              = count( $apps );
+		$paid_apps               = 0;
+		$payment_required_apps   = 0;
 		foreach ( $apps as $app_id ) {
-			if ( in_array( get_post_meta( $app_id, '_lnkup_application_status', true ), array( 'paid', 'completed' ), true ) ) {
+			$status = get_post_meta( $app_id, '_lnkup_application_status', true );
+			if ( in_array( $status, array( 'paid', 'completed' ), true ) ) {
 				$paid_apps++;
+			} elseif ( in_array( $status, array( 'payment_required', 'approved' ), true ) ) {
+				$payment_required_apps++;
 			}
 		}
 		$completion = $total_apps ? round( ( $paid_apps / $total_apps ) * 100, 1 ) : 0;
-		$timeline = $wpdb->get_results(
-			$wpdb->prepare( "SELECT * FROM {$table} WHERE event_id = %d ORDER BY created_at DESC LIMIT 25", $event_id ),
-			ARRAY_A
-		);
+		$timeline   = array();
+		if ( LNKup_Financial_Tables::table_exists( $table ) ) {
+			$timeline = $wpdb->get_results(
+				$wpdb->prepare( "SELECT * FROM {$table} WHERE event_id = %d ORDER BY created_at DESC LIMIT 25", $event_id ),
+				ARRAY_A
+			);
+			if ( ! is_array( $timeline ) ) {
+				$timeline = array();
+			}
+		}
 		return array(
-			'projected_revenue'  => round( $collected + $pending, 2 ),
-			'collected_revenue'  => round( $collected, 2 ),
-			'pending_revenue'    => round( $pending, 2 ),
-			'refunds'            => round( $refunds, 2 ),
-			'payment_completion' => $completion,
-			'timeline'           => array_map( array( 'LNKup_Transactions', 'format' ), $timeline ),
+			'projected_revenue'       => round( $collected + $pending, 2 ),
+			'collected_revenue'       => round( $collected, 2 ),
+			'pending_revenue'         => round( $pending, 2 ),
+			'refunds'                 => round( $refunds, 2 ),
+			'payment_completion'      => $completion,
+			'paid_vendor_count'       => $paid_apps,
+			'payment_required_count'  => $payment_required_apps,
+			'timeline'                => array_map( array( 'LNKup_Transactions', 'format' ), $timeline ),
 		);
 	}
 

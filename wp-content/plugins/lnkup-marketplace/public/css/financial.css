@@ -7,8 +7,18 @@
 }
 
 .lnkup-organizer-dash .lnkup-fin-shell {
+  overflow-x: clip;
+}
+
+.lnkup-fin-table-wrap {
   overflow-x: auto;
+  max-width: 100%;
   -webkit-overflow-scrolling: touch;
+}
+
+.lnkup-fin-chart-shell {
+  min-height: 10rem;
+  margin-top: 1.25rem;
 }
 
 .lnkup-fin-balance-hero { border-radius: var(--lnkup-radius-lg, 1.125rem); border: 1px solid var(--border); background: linear-gradient(135deg, color-mix(in oklch, var(--card) 92%, var(--accent) 8%), var(--card)); padding: 1.25rem; margin-bottom: 1rem; }

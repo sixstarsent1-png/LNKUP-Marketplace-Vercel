@@ -21,7 +21,7 @@ class LNKup_Manual_Provider extends LNKup_Payment_Provider {
 		return $this->create_checkout_session( $payment_id );
 	}
 
-	public function create_checkout_session( $payment_id ) {
+	public function create_checkout_session( $payment_id, $args = array() ) {
 		$payment = get_post( $payment_id );
 		if ( ! $payment || 'lnkup_payment' !== $payment->post_type ) {
 			return new WP_Error( 'invalid', __( 'Invalid payment.', 'lnkup-marketplace' ) );

@@ -126,6 +126,31 @@ class LNKup_Payments {
 	}
 
 	/**
+	 * Mark ACH/async payment as processing — does not unlock packets or mark application paid.
+	 *
+	 * @param int    $payment_id Payment ID.
+	 * @param string $intent_id  Stripe intent ID.
+	 */
+	public static function mark_processing( $payment_id, $intent_id = '' ) {
+		$status = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
+		if ( in_array( $status, array( 'paid', 'processing' ), true ) ) {
+			if ( $intent_id ) {
+				update_post_meta( $payment_id, '_lnkup_stripe_payment_intent', sanitize_text_field( $intent_id ) );
+			}
+			return true;
+		}
+
+		update_post_meta( $payment_id, '_lnkup_payment_status', 'processing' );
+		update_post_meta( $payment_id, '_lnkup_processing_at', current_time( 'mysql' ) );
+		if ( $intent_id ) {
+			update_post_meta( $payment_id, '_lnkup_stripe_payment_intent', sanitize_text_field( $intent_id ) );
+		}
+
+		LNKup_Transactions::record_from_payment_post( $payment_id, 'payment_processing' );
+		return true;
+	}
+
+	/**
 	 * Mark payment as paid.
 	 *
 	 * @param int    $payment_id Payment ID.
@@ -308,28 +333,58 @@ class LNKup_Payments {
 			: '';
 		$fee_mismatch   = 'pending' === $payment_status && abs( $stored_checkout_fee - $current_checkout_fee ) > 0.01;
 		$settings       = lnkup_get_settings();
+		$total_charged  = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
+		$platform_fee   = (float) get_post_meta( $payment_id, '_lnkup_lnkup_fee', true );
+		$app_fee_cents  = (int) get_post_meta( $payment_id, '_lnkup_application_fee_cents', true );
+		if ( $app_fee_cents <= 0 && $platform_fee > 0 ) {
+			$app_fee_cents = (int) round( $platform_fee * 100 );
+		}
+		$charge_cents = (int) get_post_meta( $payment_id, '_lnkup_stripe_charge_amount_cents', true );
+		if ( $charge_cents <= 0 && $total_charged > 0 ) {
+			$charge_cents = (int) round( $total_charged * 100 );
+		}
+		$dest_amount = (float) get_post_meta( $payment_id, '_lnkup_stripe_destination_amount', true );
+		if ( $dest_amount <= 0 && $charge_cents > 0 && $app_fee_cents >= 0 ) {
+			$dest_amount = round( max( 0, $charge_cents - $app_fee_cents ) / 100, 2 );
+		}
+		$expected_app_fee = (float) ( $breakdown['platform_fee'] ?? 0 );
+		$expected_net     = (float) ( $breakdown['organizer_net'] ?? 0 );
 
 		return array(
 			'booth_fee_stored'               => $spot_fee,
 			'booth_fee_opportunity'          => $opp_fee,
 			'booth_fee_mismatch'             => $opp_id > 0 && abs( $spot_fee - $opp_fee ) > 0.01,
-			'total_charged'                  => (float) get_post_meta( $payment_id, '_lnkup_total_amount', true ),
-			'platform_fee'                   => (float) get_post_meta( $payment_id, '_lnkup_lnkup_fee', true ),
+			'total_charged'                  => $total_charged,
+			'platform_fee'                   => $platform_fee,
 			'vendor_checkout_fee'            => $stored_checkout_fee,
 			'vendor_checkout_fee_current'    => round( $current_checkout_fee, 2 ),
 			'vendor_checkout_fee_mismatch'   => $fee_mismatch,
 			'organizer_commission'           => (float) get_post_meta( $payment_id, '_lnkup_organizer_commission', true ),
 			'processing_fee'                 => (float) get_post_meta( $payment_id, '_lnkup_processing_fee', true ),
-			'organizer_net'                  => (float) ( $breakdown['organizer_net'] ?? 0 ),
+			'organizer_net'                  => $expected_net,
 			'settlement_mode'                => (string) get_post_meta( $payment_id, '_lnkup_settlement_mode', true ),
 			'stripe_payment_intent'          => $stripe_intent,
 			'stripe_intent_status'           => $stripe_status,
 			'can_reconcile'                  => ( 'paid' !== $payment_status && $stripe_intent )
 				|| ( 'paid' === $payment_status && ! $ledger && 'destination' === (string) get_post_meta( $payment_id, '_lnkup_settlement_mode', true ) ),
-			'application_fee_cents'            => (int) get_post_meta( $payment_id, '_lnkup_application_fee_cents', true ),
+			'application_fee_cents'          => $app_fee_cents,
+			'application_fee_dollars'        => round( $app_fee_cents / 100, 2 ),
+			'expected_application_fee'       => round( $expected_app_fee, 2 ),
+			'application_fee_matches_engine' => abs( ( $app_fee_cents / 100 ) - $expected_app_fee ) < 0.02,
 			'destination_account'            => (string) get_post_meta( $payment_id, '_lnkup_stripe_destination_account', true ),
-			'destination_amount'             => (float) get_post_meta( $payment_id, '_lnkup_stripe_destination_amount', true ),
-			'stripe_charge_cents'            => (int) get_post_meta( $payment_id, '_lnkup_stripe_charge_amount_cents', true ),
+			'destination_amount'             => $dest_amount,
+			'expected_destination_amount'    => $charge_cents > 0
+				? round( max( 0, $charge_cents - $app_fee_cents ) / 100, 2 )
+				: round( max( 0, $total_charged - $platform_fee ), 2 ),
+			'stripe_charge_cents'            => $charge_cents,
+			'stripe_dashboard'               => array(
+				'pi_amount_cents'           => $charge_cents,
+				'application_fee_cents'     => $app_fee_cents,
+				'transfer_data_destination' => (string) get_post_meta( $payment_id, '_lnkup_stripe_destination_account', true ),
+				'destination_gross_dollars' => $dest_amount,
+				'organizer_product_net'     => $expected_net,
+				'note'                      => 'Compare pi_amount_cents and application_fee_cents to the PaymentIntent in Stripe Dashboard. Destination gross includes estimated processing; organizer_product_net is booth minus commission.',
+			),
 			'ledger_connect_settlement'      => $ledger,
 			'payment_status'                 => $payment_status,
 			'fee_payer_mode'                 => (string) ( $settings['fee_payer_mode'] ?? 'vendor' ),

@@ -27,7 +27,7 @@ interface LNKup_Payment_Provider_Interface {
 
 	public function create_payment_intent( $payment_id, $args = array() );
 
-	public function create_checkout_session( $payment_id );
+	public function create_checkout_session( $payment_id, $args = array() );
 
 	public function confirm_payment_intent( $intent_id );
 

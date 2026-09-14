@@ -27,6 +27,7 @@ $lnkup_financial_files = array(
 	'class-escrow.php',
 	'class-reserves.php',
 	'class-referral-credits.php',
+	'class-organizer-recruit-referrals.php',
 	'class-sponsor-payments.php',
 	'class-subscriptions.php',
 	'class-premium-listings.php',
@@ -57,6 +58,12 @@ if ( class_exists( 'LNKup_Escrow' ) ) {
 if ( class_exists( 'LNKup_Referral_Credits' ) ) {
 	LNKup_Referral_Credits::init();
 }
+if ( class_exists( 'LNKup_Organizer_Recruit_Referrals' ) ) {
+	LNKup_Organizer_Recruit_Referrals::init();
+}
 if ( class_exists( 'LNKup_Financial_Health_Score' ) ) {
 	LNKup_Financial_Health_Score::init();
+}
+if ( class_exists( 'LNKup_Stripe_Connect' ) ) {
+	LNKup_Stripe_Connect::init();
 }

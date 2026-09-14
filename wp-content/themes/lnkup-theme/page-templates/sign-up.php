@@ -6,8 +6,9 @@
  */
 
 get_header();
-$launch_label = lnkup_theme_launch_label();
-$login_url    = wp_login_url( lnkup_theme_registration_url() );
+$launch_label     = lnkup_theme_launch_label();
+$marketplace_open = lnkup_theme_marketplace_open();
+$login_url        = wp_login_url( lnkup_theme_registration_url() );
 ?>
 <div class="lnkup-site lnkup-site--signup">
 	<?php get_template_part( 'template-parts/landing/site-header' ); ?>
@@ -15,12 +16,26 @@ $login_url    = wp_login_url( lnkup_theme_registration_url() );
 		<section class="lnkup-signup-page">
 			<div class="lnkup-container lnkup-signup-page__grid">
 				<div class="lnkup-signup-page__intro">
-					<span class="lnkup-pill lnkup-pill--launch">
+					<span class="lnkup-pill<?php echo $marketplace_open ? '' : ' lnkup-pill--launch'; ?>">
 						<span class="lnkup-pill__dot"></span>
-						<?php echo esc_html( $launch_label ? sprintf( __( 'Launching %s', 'lnkup-theme' ), $launch_label ) : __( 'Early access', 'lnkup-theme' ) ); ?>
+						<?php
+						if ( $marketplace_open ) {
+							esc_html_e( 'Join LNKup', 'lnkup-theme' );
+						} elseif ( $launch_label ) {
+							echo esc_html( sprintf( __( 'Launching %s', 'lnkup-theme' ), $launch_label ) );
+						} else {
+							esc_html_e( 'Early access', 'lnkup-theme' );
+						}
+						?>
 					</span>
 					<h1 class="lnkup-heading lnkup-heading--page"><?php esc_html_e( 'Create your LNKup account', 'lnkup-theme' ); ?></h1>
-					<p class="lnkup-signup-page__lead"><?php esc_html_e( 'Join the opportunity network for live events. Vendors build profiles now and apply at launch. Organizers can prep events today.', 'lnkup-theme' ); ?></p>
+					<p class="lnkup-signup-page__lead">
+						<?php
+						echo $marketplace_open
+							? esc_html__( 'Join the opportunity network for live events. Vendors browse and apply today. Organizers can list opportunities now.', 'lnkup-theme' )
+							: esc_html__( 'Join the opportunity network for live events. Vendors build profiles now and apply at launch. Organizers can prep events today.', 'lnkup-theme' );
+						?>
+					</p>
 					<ul class="lnkup-signup-page__benefits">
 						<li><?php esc_html_e( 'Free to join — no credit card required', 'lnkup-theme' ); ?></li>
 						<li><?php esc_html_e( 'Vendor or organizer — choose your path', 'lnkup-theme' ); ?></li>

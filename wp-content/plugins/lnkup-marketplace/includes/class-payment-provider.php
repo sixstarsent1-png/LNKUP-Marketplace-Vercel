@@ -17,7 +17,8 @@ abstract class LNKup_Payment_Provider implements LNKup_Payment_Provider_Interfac
 
 	abstract public function refund( $payment_id, $amount );
 
-	public function create_checkout_session( $payment_id ) {
+	public function create_checkout_session( $payment_id, $args = array() ) {
+		unset( $args );
 		return $this->create_checkout( $payment_id );
 	}
 

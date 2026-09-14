@@ -49,6 +49,7 @@ class LNKup_Connector_Tables {
 				approved_at datetime DEFAULT NULL,
 				admin_notes text,
 				payout_preference varchar(32) NOT NULL DEFAULT '',
+				bio text,
 				created_at datetime NOT NULL,
 				updated_at datetime NOT NULL,
 				PRIMARY KEY (id),
@@ -76,7 +77,74 @@ class LNKup_Connector_Tables {
 			) {$charset};"
 		);
 
+		$attr = self::booking_attr_table();
+		dbDelta(
+			"CREATE TABLE {$attr} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				payment_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				connector_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				referral_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				reason varchar(16) NOT NULL DEFAULT '',
+				gmv decimal(14,2) NOT NULL DEFAULT 0.00,
+				opportunity_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				market_slug varchar(64) NOT NULL DEFAULT '',
+				status varchar(16) NOT NULL DEFAULT 'counted',
+				counted_at datetime DEFAULT NULL,
+				available_at datetime DEFAULT NULL,
+				updated_at datetime NOT NULL,
+				PRIMARY KEY (id),
+				UNIQUE KEY payment_id (payment_id),
+				KEY connector_id (connector_id),
+				KEY status (status)
+			) {$charset};"
+		);
+
 		self::migrate_referral_columns();
+		self::migrate_connector_columns();
+	}
+
+	/**
+	 * Idempotent booking attribution ledger.
+	 */
+	public static function booking_attr_table() {
+		global $wpdb;
+		return $wpdb->prefix . 'lnkup_connector_booking_attr';
+	}
+
+	/**
+	 * Add optional connector profile columns.
+	 */
+	public static function migrate_connector_columns() {
+		global $wpdb;
+		$table = self::connectors_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return;
+		}
+		$cols = array(
+			'bio'                        => 'text',
+			'current_rank'               => "varchar(32) NOT NULL DEFAULT ''",
+			'highest_rank'               => "varchar(32) NOT NULL DEFAULT ''",
+			'rank_earned_at'             => 'datetime DEFAULT NULL',
+			'rank_calculated_at'         => 'datetime DEFAULT NULL',
+			'founding_partner'           => 'tinyint(1) NOT NULL DEFAULT 0',
+			'leaderboard_opt_in'         => 'tinyint(1) NOT NULL DEFAULT 0',
+			'activated_organizer_count'  => 'int(11) NOT NULL DEFAULT 0',
+			'recurring_organizer_count'  => 'int(11) NOT NULL DEFAULT 0',
+			'qualifying_booking_count'   => 'int(11) NOT NULL DEFAULT 0',
+			'qualifying_gmv'             => 'decimal(14,2) NOT NULL DEFAULT 0.00',
+			'approved_city_count'        => 'int(11) NOT NULL DEFAULT 0',
+			'rank_celebration_pending'   => "varchar(32) NOT NULL DEFAULT ''",
+			'rank_celebration_ack'       => "varchar(32) NOT NULL DEFAULT ''",
+			'growth_styles'              => "varchar(191) NOT NULL DEFAULT ''",
+		);
+		foreach ( $cols as $col => $def ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$exists = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM `' . $table . '` LIKE %s', $col ) );
+			if ( empty( $exists ) ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `{$col}` {$def}" );
+			}
+		}
 	}
 
 	/**
@@ -136,6 +204,10 @@ class LNKup_Connector_Tables {
 			'approved_at'   => 'datetime DEFAULT NULL',
 			'paid_at'       => 'datetime DEFAULT NULL',
 			'connector_id'  => 'bigint(20) unsigned NOT NULL DEFAULT 0',
+			'payment_id'    => 'bigint(20) unsigned NOT NULL DEFAULT 0',
+			'available_at'  => 'datetime DEFAULT NULL',
+			'program'          => "varchar(32) NOT NULL DEFAULT ''",
+			'idempotency_key'  => "varchar(191) NOT NULL DEFAULT ''",
 		);
 		foreach ( $reward_cols as $col => $def ) {
 			if ( ! LNKup_Financial_Tables::table_exists( $rewards ) ) {

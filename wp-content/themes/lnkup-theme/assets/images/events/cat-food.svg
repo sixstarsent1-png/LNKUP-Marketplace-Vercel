@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Food vendor booth at an event">
+  <defs>
+    <linearGradient id="cf-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a2e1a"/>
+      <stop offset="100%" stop-color="#0e180e"/>
+    </linearGradient>
+    <radialGradient id="cf-glow" cx="50%" cy="38%" r="50%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#cf-sky)"/>
+  <rect width="720" height="560" fill="url(#cf-glow)"/>
+  <rect x="0" y="420" width="720" height="140" fill="#0c140c"/>
+  <rect x="150" y="210" width="420" height="230" rx="8" fill="#142014" stroke="#c8f542" stroke-width="2"/>
+  <path d="M140 210h440l-30-70H170z" fill="#1a2818" stroke="#c8f542" stroke-width="1.5"/>
+  <rect x="170" y="240" width="380" height="110" rx="4" fill="#0a120a" stroke="#c8f542" stroke-width="1.5" opacity="0.85"/>
+  <rect x="185" y="255" width="90" height="14" rx="2" fill="#c8f542" opacity="0.35"/>
+  <rect x="185" y="280" width="70" height="14" rx="2" fill="#c8f542" opacity="0.2"/>
+  <ellipse cx="250" cy="360" rx="28" ry="10" fill="#1a2818"/>
+  <rect x="232" y="330" width="36" height="28" rx="4" fill="#c8f542" opacity="0.45"/>
+  <ellipse cx="340" cy="358" rx="26" ry="9" fill="#1a2818"/>
+  <rect x="324" y="328" width="32" height="26" rx="4" fill="#c8f542" opacity="0.35"/>
+  <ellipse cx="430" cy="360" rx="24" ry="9" fill="#1a2818"/>
+  <rect x="416" y="332" width="28" height="24" rx="3" fill="#c8f542" opacity="0.3"/>
+  <rect x="200" y="175" width="8" height="40" fill="#2a3828"/>
+  <rect x="512" y="175" width="8" height="40" fill="#2a3828"/>
+  <rect x="208" y="168" width="304" height="28" rx="3" fill="#c8f542" opacity="0.22" stroke="#c8f542"/>
+</svg>

@@ -289,7 +289,14 @@ class LNKup_Vendor_CRM_Profile {
 			</div>
 			<div class="lnkup-vendor-card__meta lnkup-crm-card__meta">
 				<span><?php echo esc_html( $profile['city'] . ( $profile['state'] ? ', ' . $profile['state'] : '' ) ); ?></span>
-				<span><?php echo esc_html( (string) ( $profile['reliability']['completed_events'] ?? $profile['completed_events'] ) ); ?> <?php esc_html_e( 'events', 'lnkup-marketplace' ); ?></span>
+				<?php
+				$completed_events = (int) ( $profile['reliability']['completed_events'] ?? $profile['completed_events'] ?? 0 );
+				if ( $completed_events > 0 ) :
+					?>
+					<span><?php echo esc_html( (string) $completed_events ); ?> <?php echo esc_html( _n( 'event', 'events', $completed_events, 'lnkup-marketplace' ) ); ?></span>
+				<?php else : ?>
+					<span class="lnkup-muted lnkup-vendor-card__meta--empty"><?php esc_html_e( 'No events yet', 'lnkup-marketplace' ); ?></span>
+				<?php endif; ?>
 				<?php if ( ! empty( $profile['avg_rating'] ) ) : ?>
 					<?php echo LNKup_Reputation_Render::star_rating( $profile['avg_rating'], $profile['review_count'] ?? 0 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 				<?php endif; ?>

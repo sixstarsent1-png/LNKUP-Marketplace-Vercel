@@ -75,6 +75,26 @@ class LNKup_Verification_REST {
 				'permission_callback' => array( __CLASS__, 'admin_permission' ),
 			)
 		);
+
+		register_rest_route(
+			self::NS,
+			'/verification/admin/summary',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'admin_summary' ),
+				'permission_callback' => array( __CLASS__, 'admin_permission' ),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
+			'/verification/admin/queue',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'admin_queue' ),
+				'permission_callback' => array( __CLASS__, 'admin_permission' ),
+			)
+		);
 	}
 
 	/**
@@ -235,6 +255,119 @@ class LNKup_Verification_REST {
 		}
 		$context = array( 'public' => ! LNKup_Capabilities::user_has_manage_all() );
 		return rest_ensure_response( LNKup_Verification::get_organizer_verification_status( $organizer_id, $context ) );
+	}
+
+	/**
+	 * Pending document queue summary for Admin Lite.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public static function admin_summary( $request ) {
+		unset( $request );
+		$pending = self::query_pending_documents( 1 );
+		$queue_count = self::count_pending_documents();
+		$approved_24h = self::count_documents_by_status_since( 'approved', DAY_IN_SECONDS );
+		return rest_ensure_response(
+			array(
+				'queue_count'  => $queue_count,
+				'approved_24h' => $approved_24h,
+				'has_items'    => ! empty( $pending ),
+			)
+		);
+	}
+
+	/**
+	 * Pending document queue items for Admin Lite.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public static function admin_queue( $request ) {
+		unset( $request );
+		$docs  = self::query_pending_documents( 50 );
+		$types = class_exists( 'LNKup_Documents' ) ? LNKup_Documents::document_types() : array();
+		$items = array();
+		foreach ( $docs as $doc ) {
+			$vendor_id  = (int) get_post_meta( $doc->ID, '_lnkup_vendor_user_id', true );
+			$profile_id = (int) get_post_meta( $doc->ID, '_lnkup_vendor_profile_id', true );
+			$vendor     = $vendor_id ? get_userdata( $vendor_id ) : false;
+			$type       = (string) get_post_meta( $doc->ID, '_lnkup_document_type', true );
+			$items[]    = array(
+				'id'               => (int) $doc->ID,
+				'document_id'      => (int) $doc->ID,
+				'vendor_user_id'   => $vendor_id,
+				'vendor_profile_id'=> $profile_id,
+				'vendor_name'      => $vendor ? (string) $vendor->display_name : ( $vendor_id ? '#' . $vendor_id : '' ),
+				'document_type'    => $type,
+				'document_type_label' => (string) ( $types[ $type ] ?? $type ),
+				'status'           => (string) get_post_meta( $doc->ID, '_lnkup_verification_status', true ),
+				'uploaded_at'      => get_the_date( 'c', $doc ),
+			);
+		}
+		return rest_ensure_response(
+			array(
+				'items' => $items,
+				'total' => count( $items ),
+			)
+		);
+	}
+
+	/**
+	 * @param int $limit Max posts.
+	 * @return WP_Post[]
+	 */
+	private static function query_pending_documents( int $limit ): array {
+		$posts = get_posts(
+			array(
+				'post_type'      => 'lnkup_document',
+				'posts_per_page' => max( 1, $limit ),
+				'meta_key'       => '_lnkup_verification_status',
+				'meta_value'     => 'pending',
+				'orderby'        => 'date',
+				'order'          => 'DESC',
+			)
+		);
+		return is_array( $posts ) ? $posts : array();
+	}
+
+	private static function count_pending_documents(): int {
+		$query = new WP_Query(
+			array(
+				'post_type'      => 'lnkup_document',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'meta_key'       => '_lnkup_verification_status',
+				'meta_value'     => 'pending',
+				'no_found_rows'  => false,
+			)
+		);
+		return (int) $query->found_posts;
+	}
+
+	/**
+	 * @param string $status Document verification status.
+	 * @param int    $seconds Lookback window.
+	 */
+	private static function count_documents_by_status_since( string $status, int $seconds ): int {
+		$query = new WP_Query(
+			array(
+				'post_type'      => 'lnkup_document',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'meta_key'       => '_lnkup_verification_status',
+				'meta_value'     => sanitize_key( $status ),
+				'date_query'     => array(
+					array(
+						'after'     => gmdate( 'Y-m-d H:i:s', time() - max( 60, $seconds ) ),
+						'inclusive' => true,
+						'column'    => 'post_modified_gmt',
+					),
+				),
+				'no_found_rows'  => false,
+			)
+		);
+		return (int) $query->found_posts;
 	}
 
 	/**

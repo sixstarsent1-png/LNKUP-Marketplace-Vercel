@@ -16,6 +16,21 @@
     return copy[key] || fallback || key;
   }
 
+  function looksLikeCardImageUrl(url) {
+    if (!url) {
+      return false;
+    }
+    var value = String(url);
+    var lower = value.toLowerCase();
+    if (lower.indexOf('_next/image') !== -1) {
+      return false;
+    }
+    if (/\.(jpg|jpeg|png|gif|webp|avif)(\?|$)/i.test(value)) {
+      return true;
+    }
+    return /(uploads|images|media|assets|cdn\.evbuc\.com)/i.test(value);
+  }
+
   /**
    * Safe JSON fetch with content-type validation.
    */
@@ -158,13 +173,17 @@
     var fee = opp.fee_label || (opp.vendor_fee != null ? '$' + Number(opp.vendor_fee).toFixed(0) : '');
     var location = opp.location_label || [opp.city, opp.state].filter(Boolean).join(', ');
     var title = opp.event_name || opp.name || opp.title || '';
-    var img = opp.featured_image || opp.image || opp.image_url || '';
+    var img = looksLikeCardImageUrl(opp.featured_image || opp.image || opp.image_url || '')
+      ? (opp.featured_image || opp.image || opp.image_url || '')
+      : (opp.category_fallback_url || '');
     var dateLabel = opp.date_label || opp.date || opp.event_date || '';
     var applyUrl = opp.apply_url || (opp.opportunity_id ? '/opportunities/?apply=' + opp.opportunity_id : '#');
     var compact = opts.compact ? ' lnkup-event-card--compact' : '';
-    var alt = opp.image_alt || title || 'Vendor event';
+    var city = String(opp.city || '').trim();
+    var alt = (title || 'Vendor event') + (city ? ' in ' + city : '');
+    var fallback = opp.category_fallback_url || '';
     var media = img
-      ? '<img src="' + escapeHtml(img) + '" alt="' + escapeHtml(alt) + '" width="1280" height="800" loading="lazy" onerror="if(!this.dataset.tried){this.dataset.tried=\'1\';this.removeAttribute(\'src\');var p=document.createElement(\'div\');p.className=\'lnkup-event-card__placeholder\';p.setAttribute(\'aria-hidden\',\'true\');p.innerHTML=\'<span>LNKup</span>\';if(this.parentNode){this.parentNode.replaceChild(p,this);}}" />'
+      ? '<img src="' + escapeHtml(img) + '" alt="' + escapeHtml(alt) + '" width="1280" height="800" loading="lazy"' + (fallback ? ' data-fallback-src="' + escapeHtml(fallback) + '"' : '') + ' onerror="if(!this.dataset.tried){this.dataset.tried=\'1\';var f=this.getAttribute(\'data-fallback-src\');if(f&&f!==this.src){this.src=f;return;}}this.onerror=null;this.removeAttribute(\'src\');var p=document.createElement(\'div\');p.className=\'lnkup-event-card__placeholder\';p.setAttribute(\'aria-hidden\',\'true\');p.innerHTML=\'<span>LNKup</span>\';if(this.parentNode){this.parentNode.replaceChild(p,this);}" />'
       : '<div class="lnkup-event-card__placeholder" aria-hidden="true"><span>LNKup</span></div>';
     var meta = '';
     if (dateLabel) {

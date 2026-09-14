@@ -33,8 +33,16 @@ class LNKup_Apply_With_Profile_View {
 		$docs_url     = add_query_arg( 'view', 'documents', lnkup_page_url_helper( 'vendor-dashboard' ) );
 		$profile_url  = lnkup_page_url_helper( 'vendor-profile' );
 		$apps_url     = add_query_arg( 'view', 'applications', lnkup_page_url_helper( 'vendor-dashboard' ) );
-		$login_url    = wp_login_url( add_query_arg( 'apply', $opportunity_id, lnkup_page_url_helper( 'opportunities' ) ) );
-		$register_url = wp_registration_url();
+		$apply_return = add_query_arg( 'apply', $opportunity_id, lnkup_page_url_helper( 'opportunities' ) );
+		$login_url    = wp_login_url( $apply_return );
+		$register_url = add_query_arg(
+			array(
+				'role'     => 'vendor',
+				'apply'    => $opportunity_id,
+				'redirect' => $apply_return,
+			),
+			lnkup_registration_url()
+		);
 
 		ob_start();
 		?>
@@ -88,20 +96,32 @@ class LNKup_Apply_With_Profile_View {
 				<?php if ( $warnings ) : ?>
 					<div class="lnkup-apply-warnings" role="status">
 						<?php foreach ( $warnings as $warning ) : ?>
-							<p class="lnkup-apply-warnings__item">
-								<?php echo esc_html( $warning['message'] ?? '' ); ?>
+							<div class="lnkup-apply-warnings__item">
+								<p><?php echo esc_html( $warning['message'] ?? '' ); ?></p>
 								<?php
 								$code = $warning['code'] ?? '';
 								$action_url = $warning['action_url'] ?? '';
-								if ( ! $action_url && in_array( $code, array( 'category_mismatch', 'profile_incomplete' ), true ) ) {
+								if ( ! $action_url && 'category_mismatch' === $code ) {
+									$action_url = $profile_url . '#categories';
+								} elseif ( ! $action_url && 'profile_incomplete' === $code ) {
 									$action_url = $profile_url;
 								}
 								$action_label = $warning['action_label'] ?? ( 'category_mismatch' === $code ? __( 'Update profile categories', 'lnkup-marketplace' ) : __( 'Update profile', 'lnkup-marketplace' ) );
-								if ( $action_url && in_array( $code, array( 'category_mismatch', 'profile_incomplete' ), true ) ) :
-									?>
-									<a href="<?php echo esc_url( $action_url ); ?>" class="lnkup-apply-warnings__fix"><?php echo esc_html( $action_label ); ?></a>
+								if ( 'category_mismatch' === $code ) :
+									$event_cats   = array_filter( (array) ( $warning['event_categories'] ?? array() ) );
+									$profile_cats = array_filter( (array) ( $warning['profile_categories'] ?? array() ) );
+									if ( $event_cats ) :
+										?>
+										<p class="lnkup-muted"><?php echo esc_html( sprintf( lnkup_copy( 'apply_category_event_seeks' ), implode( ', ', $event_cats ) ) ); ?></p>
+									<?php endif; ?>
+									<?php if ( $profile_cats ) : ?>
+										<p class="lnkup-muted"><?php echo esc_html( sprintf( lnkup_copy( 'apply_category_your_profile' ), implode( ', ', $profile_cats ) ) ); ?></p>
+									<?php endif; ?>
 								<?php endif; ?>
-							</p>
+								<?php if ( $action_url && in_array( $code, array( 'category_mismatch', 'profile_incomplete' ), true ) ) : ?>
+									<p><a href="<?php echo esc_url( $action_url ); ?>" class="lnkup-apply-warnings__fix"><?php echo esc_html( $action_label ); ?></a></p>
+								<?php endif; ?>
+							</div>
 						<?php endforeach; ?>
 					</div>
 				<?php endif; ?>

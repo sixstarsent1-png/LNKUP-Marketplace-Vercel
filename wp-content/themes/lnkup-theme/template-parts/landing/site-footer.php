@@ -8,14 +8,18 @@
 $signup_url       = lnkup_theme_registration_url();
 $marketplace_open = lnkup_theme_marketplace_open();
 $launch_label     = lnkup_theme_launch_label();
+$footer_title     = (string) lnkup_landing_get( 'footer_title', '' );
+$footer_blurb     = (string) lnkup_landing_get( 'footer_blurb', '' );
+$footer_cta       = (string) lnkup_landing_get( 'footer_cta', __( 'Get started free', 'lnkup-theme' ) );
+$cta_label        = is_user_logged_in() ? __( 'Complete profile', 'lnkup-theme' ) : $footer_cta;
 ?>
 <footer class="lnkup-footer">
 	<div class="lnkup-container">
 		<div class="lnkup-footer__grid">
 			<div>
-				<h2 class="lnkup-heading lnkup-heading--footer"><?php esc_html_e( 'Find Your Next Opportunity.', 'lnkup-theme' ); ?></h2>
-				<p><?php esc_html_e( 'Join thousands of vendors growing their business at the best live events in the country.', 'lnkup-theme' ); ?></p>
-				<a href="<?php echo esc_url( is_user_logged_in() ? lnkup_page_url( 'vendor-profile' ) : $signup_url ); ?>" class="lnkup-btn lnkup-btn--accent lnkup-btn--lg"><?php echo is_user_logged_in() ? esc_html__( 'Complete profile', 'lnkup-theme' ) : esc_html__( 'Get started free', 'lnkup-theme' ); ?></a>
+				<h2 class="lnkup-heading lnkup-heading--footer"><?php echo esc_html( $footer_title ); ?></h2>
+				<p><?php echo esc_html( $footer_blurb ); ?></p>
+				<a href="<?php echo esc_url( is_user_logged_in() ? lnkup_page_url( 'vendor-profile' ) : $signup_url ); ?>" class="lnkup-btn lnkup-btn--accent lnkup-btn--lg"><?php echo esc_html( $cta_label ); ?></a>
 			</div>
 			<div class="lnkup-footer__cols">
 				<div>
@@ -37,9 +41,9 @@ $launch_label     = lnkup_theme_launch_label();
 				<div>
 					<h3><?php esc_html_e( 'Company', 'lnkup-theme' ); ?></h3>
 					<ul>
-						<li><a href="<?php echo esc_url( admin_url( 'admin.php?page=lnkup-marketplace' ) ); ?>"><?php esc_html_e( 'Admin', 'lnkup-theme' ); ?></a></li>
-						<li><a href="#"><?php esc_html_e( 'About', 'lnkup-theme' ); ?></a></li>
-						<li><a href="#"><?php esc_html_e( 'Contact', 'lnkup-theme' ); ?></a></li>
+						<li><a href="<?php echo esc_url( home_url( '/privacy/' ) ); ?>"><?php esc_html_e( 'Privacy', 'lnkup-theme' ); ?></a></li>
+						<li><a href="<?php echo esc_url( home_url( '/terms/' ) ); ?>"><?php esc_html_e( 'Terms', 'lnkup-theme' ); ?></a></li>
+						<li><a href="<?php echo esc_url( home_url( '/contact/' ) ); ?>"><?php esc_html_e( 'Contact', 'lnkup-theme' ); ?></a></li>
 					</ul>
 				</div>
 			</div>

@@ -144,6 +144,14 @@ class LNKup_Organizer_CRM_REST {
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'invite_options' ),
 			'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+			'args'     => array(
+				'include_all' => array(
+					'description'       => 'When true, include events without open opportunities (mobile Events list).',
+					'type'              => 'boolean',
+					'default'           => false,
+					'sanitize_callback' => 'rest_sanitize_boolean',
+				),
+			),
 		) );
 
 		register_rest_route( self::NS, '/crm/events/(?P<id>\d+)/roster', array(
@@ -493,9 +501,17 @@ class LNKup_Organizer_CRM_REST {
 
 	/**
 	 * Organizer events/opportunities for invite picker.
+	 *
+	 * Query: include_all=1 returns every organizer event (including closed / no open opps) for mobile Events.
 	 */
 	public static function invite_options( WP_REST_Request $request ) {
-		return rest_ensure_response( LNKup_Vendor_Invites::get_invite_options_for_organizer( get_current_user_id() ) );
+		$include_all = (bool) $request->get_param( 'include_all' );
+		return rest_ensure_response(
+			LNKup_Vendor_Invites::get_invite_options_for_organizer(
+				get_current_user_id(),
+				array( 'include_all' => $include_all )
+			)
+		);
 	}
 
 	public static function application_intel( WP_REST_Request $request ) {
@@ -613,8 +629,9 @@ class LNKup_Organizer_CRM_REST {
 		}
 		$activity = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT activity_type, created_at, vendor_user_id FROM " . LNKup_Organizer_CRM_Tables::activity_table() . " WHERE organizer_user_id = %d ORDER BY created_at DESC LIMIT 10",
-				$org
+				"SELECT activity_type, created_at, vendor_user_id FROM " . LNKup_Organizer_CRM_Tables::activity_table() . " WHERE organizer_user_id = %d AND activity_type = %s ORDER BY created_at DESC LIMIT 10",
+				$org,
+				'applied'
 			),
 			ARRAY_A
 		);

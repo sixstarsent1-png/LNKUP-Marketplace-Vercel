@@ -120,10 +120,34 @@ class LNKup_Vendor_Readiness {
 		if ( in_array( $status, array( 'paid', 'completed' ), true ) ) {
 			return true;
 		}
+		if ( self::linked_payment_is_paid( $app_id ) ) {
+			return true;
+		}
 		if ( ! in_array( $status, array( 'approved', 'payment_required' ), true ) ) {
 			return false;
 		}
 		return self::opportunity_fee_is_zero( $app_id );
+	}
+
+	/**
+	 * Whether a linked lnkup_payment CPT is already paid.
+	 *
+	 * @param int $app_id Application ID.
+	 */
+	private static function linked_payment_is_paid( $app_id ) {
+		$payment = null;
+		if ( class_exists( 'LNKup_Payments' ) ) {
+			$payment = LNKup_Payments::get_for_application( $app_id );
+		}
+		if ( ! $payment ) {
+			$payment_id = (int) get_post_meta( $app_id, '_lnkup_payment_id', true );
+			$payment    = $payment_id ? get_post( $payment_id ) : null;
+		}
+		if ( ! $payment || 'lnkup_payment' !== $payment->post_type ) {
+			return false;
+		}
+		$pay_status = (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true );
+		return in_array( $pay_status, array( 'paid', 'completed', 'succeeded' ), true );
 	}
 
 	/**

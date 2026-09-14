@@ -1,9 +1,6 @@
 /* City market landing pages */
-.lnkup-site--market .lnkup-market-hero__image {
-  width: min(100%, 420px);
-  height: auto;
-  margin-inline: auto;
-  display: block;
+.lnkup-site--market .lnkup-market-hero.lnkup-hero--cinematic {
+  min-height: min(92vh, 52rem);
 }
 
 .lnkup-market-status__card,
@@ -80,10 +77,6 @@
   background: transparent;
   color: var(--foreground);
   border: 1px solid var(--border);
-}
-
-.lnkup-market-cta__card--connector {
-  border-style: dashed;
 }
 
 .lnkup-market-faq__list {

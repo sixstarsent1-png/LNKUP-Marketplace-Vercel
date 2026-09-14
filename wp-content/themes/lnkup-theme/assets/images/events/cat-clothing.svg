@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Clothing vendor booth at an event">
+  <defs>
+    <linearGradient id="cc-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a2e1a"/>
+      <stop offset="100%" stop-color="#0e180e"/>
+    </linearGradient>
+    <radialGradient id="cc-glow" cx="50%" cy="36%" r="50%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.26"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#cc-sky)"/>
+  <rect width="720" height="560" fill="url(#cc-glow)"/>
+  <rect x="0" y="430" width="720" height="130" fill="#0c140c"/>
+  <rect x="150" y="280" width="420" height="160" rx="6" fill="#142014" stroke="#c8f542" stroke-width="2"/>
+  <path d="M140 280h440l-24-54H164z" fill="#1a2818" stroke="#c8f542" stroke-width="1.5"/>
+  <line x1="190" y1="200" x2="530" y2="200" stroke="#c8f542" stroke-width="4" opacity="0.55"/>
+  <rect x="188" y="188" width="8" height="92" fill="#2a3828"/>
+  <rect x="524" y="188" width="8" height="92" fill="#2a3828"/>
+  <path d="M220 200v90h40V210z" fill="#c8f542" opacity="0.22" stroke="#c8f542"/>
+  <path d="M280 200v100h44V208z" fill="#c8f542" opacity="0.32" stroke="#c8f542"/>
+  <path d="M345 200v86h40V212z" fill="#c8f542" opacity="0.2" stroke="#c8f542"/>
+  <path d="M405 200v96h44V206z" fill="#c8f542" opacity="0.3" stroke="#c8f542"/>
+  <path d="M470 200v88h40V214z" fill="#c8f542" opacity="0.18" stroke="#c8f542"/>
+</svg>

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Beverage cart at an event">
+  <defs>
+    <linearGradient id="cdr-sky" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1a2e1a"/>
+      <stop offset="100%" stop-color="#0e180e"/>
+    </linearGradient>
+    <radialGradient id="cdr-glow" cx="48%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#c8f542" stop-opacity="0.26"/>
+      <stop offset="100%" stop-color="#c8f542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="720" height="560" fill="url(#cdr-sky)"/>
+  <rect width="720" height="560" fill="url(#cdr-glow)"/>
+  <rect x="0" y="430" width="720" height="130" fill="#0c140c"/>
+  <rect x="200" y="250" width="320" height="190" rx="10" fill="#142014" stroke="#c8f542" stroke-width="2"/>
+  <rect x="220" y="270" width="280" height="70" rx="4" fill="#0a120a" stroke="#c8f542" opacity="0.7"/>
+  <rect x="245" y="285" width="28" height="42" rx="4" fill="#c8f542" opacity="0.35"/>
+  <rect x="290" y="278" width="28" height="49" rx="4" fill="#c8f542" opacity="0.45"/>
+  <rect x="335" y="288" width="28" height="39" rx="4" fill="#c8f542" opacity="0.3"/>
+  <rect x="380" y="280" width="28" height="47" rx="4" fill="#c8f542" opacity="0.4"/>
+  <rect x="425" y="286" width="28" height="41" rx="4" fill="#c8f542" opacity="0.28"/>
+  <ellipse cx="259" cy="285" rx="10" ry="4" fill="#c8f542" opacity="0.5"/>
+  <ellipse cx="349" cy="288" rx="10" ry="4" fill="#c8f542" opacity="0.4"/>
+  <rect x="230" y="360" width="80" height="10" rx="2" fill="#c8f542" opacity="0.2"/>
+  <circle cx="240" cy="450" r="22" fill="#081008" stroke="#c8f542" stroke-width="2"/>
+  <circle cx="480" cy="450" r="22" fill="#081008" stroke="#c8f542" stroke-width="2"/>
+  <rect x="190" y="250" width="14" height="80" rx="2" fill="#2a3828"/>
+</svg>

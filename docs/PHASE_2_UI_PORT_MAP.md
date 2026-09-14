@@ -31,6 +31,46 @@ Maps the **Next.js mock** (`lnk-up-marketplace-ui/`) to **WordPress production**
 
 **Nav grouping (routes unchanged):** Documents, Growth, Reviews, Favorites, Event Operations → sidebar **More**. Favorites also surfaced in Find Events UI.
 
+### Vendor nav tiers (Phase 2a)
+
+| Tier | Label | Route | Old label |
+|------|-------|-------|-----------|
+| primary | Home | `/vendor-dashboard/` | Home |
+| primary | Find Events | `/opportunities/` | Find Events |
+| primary | Requests | `?view=applications` | Vendor requests |
+| primary | Wallet | `?view=payments` | Payments |
+| primary | Profile | `/vendor-profile/` | Business Profile |
+| more | Documents | `?view=documents` | Documents |
+| more | Event Operations | `?view=operations` | Event Operations |
+| more | Growth | `?view=growth` | Growth |
+| more | Reviews | `?view=reviews` | Reviews |
+| more | Favorites | `/favorites/` | Favorites |
+
+### Organizer nav tiers (Phase 2a)
+
+| Tier | Label | Hash | Old label |
+|------|-------|------|-----------|
+| primary | Home | `#overview` | Overview |
+| primary | Events | `#events` | Events |
+| primary | Vendors | `#vendors` | Discover vendors (+ highlights on `#applications`) |
+| primary | Money | `#financial` | Financial center |
+| more | Vendor requests | `#applications` | Vendor requests |
+| more | Launch event | `#create` | Launch event |
+| more | Vendor Lists | `#lists` | Vendor Lists |
+| more | Invites | `#invites` | Invites |
+| more | Operations | `#operations` | Operations |
+| more | Intelligence | `#intelligence` | Intelligence |
+
+### Admin wp-admin grouping (Phase 2b)
+
+| Mock nav | wp-admin targets |
+|----------|------------------|
+| Overview | `lnkup-marketplace` |
+| Users | Verification, Connectors, Outreach (vendor/organizer records) |
+| Events | External Events, City Markets, Opportunities |
+| Money | Financial, Stripe Connect |
+| More | Settings, Analytics, Maps, Intelligence, Operations, Reputation, Growth |
+
 ---
 
 ## Organizer routes

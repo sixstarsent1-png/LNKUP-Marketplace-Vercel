@@ -1,5 +1,11 @@
 #lnkup-marketplace {
-  overflow-x: hidden;
+  overflow-x: clip;
+  min-width: 0;
+  max-width: 100%;
+}
+.lnkup-dashboard__content #lnkup-marketplace,
+.lnkup-dashboard__content-inner #lnkup-marketplace {
+  overflow-x: clip;
   min-width: 0;
   max-width: 100%;
 }
@@ -98,13 +104,13 @@ body.lnkup-apply-open { overflow: hidden; }
 }
 
 @media (min-width: 640px) {
-  #lnkup-results-grid.lnkup-event-grid {
+  #lnkup-results-grid.lnkup-event-grid:not(.lnkup-event-grid--list) {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (min-width: 1024px) {
-  #lnkup-results-grid.lnkup-event-grid {
+  #lnkup-results-grid.lnkup-event-grid:not(.lnkup-event-grid--list) {
     grid-template-columns: repeat(3, 1fr);
   }
 }
@@ -369,15 +375,14 @@ body.lnkup-compare-open { overflow: hidden; }
 .lnkup-mp-v2__pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin: 1.5rem 0; flex-wrap: wrap; }
 .lnkup-mp-v2__empty, .lnkup-mp-v2__error { text-align: center; padding: 2.5rem 1rem; border: 1px dashed var(--border); border-radius: 1rem; margin: 1.5rem 0; }
 .lnkup-mp-v2__error .lnkup-btn { margin: 0.25rem; }
-.lnkup-event-grid--list { display: flex; flex-direction: column; gap: 1rem; }
+.lnkup-event-grid--list { display: grid; grid-template-columns: 1fr; gap: 1rem; }
 #lnkup-results-grid.lnkup-event-grid.lnkup-event-grid--list {
-  display: flex;
-  flex-direction: column;
-  grid-template-columns: none;
+  display: grid;
+  grid-template-columns: 1fr;
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 #lnkup-results-grid.lnkup-event-grid.lnkup-event-grid--list .lnkup-event-card--v2 {
   display: grid;
@@ -498,6 +503,14 @@ body.lnkup-modal-open { overflow: hidden; }
   justify-content: space-between;
   gap: 0.75rem;
   padding-top: 0.75rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.lnkup-event-card--v2 .lnkup-event-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  min-width: 0;
 }
 
 #lnkup-results-grid.lnkup-event-grid {

@@ -49,31 +49,52 @@ class LNKup_Connector_Tracking {
 	}
 
 	/**
+	 * Resolve connector program attribution for a user.
+	 *
+	 * @param int $user_id User ID.
+	 * @return array|null { user_id, referral, connector_id } or null.
+	 */
+	private static function attribution_for_user( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( ! $user_id ) {
+			return null;
+		}
+		$referral = LNKup_Connector::get_referral_for_user( $user_id );
+		if ( ! $referral ) {
+			return null;
+		}
+		$connector_id = (int) get_user_meta( $user_id, '_lnkup_referred_by_connector_id', true );
+		if ( ! $connector_id && ! empty( $referral['referral_code_id'] ) ) {
+			global $wpdb;
+			$codes = LNKup_Treasury_Tables::referral_codes_table();
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$connector_id = (int) $wpdb->get_var(
+				$wpdb->prepare( "SELECT connector_id FROM {$codes} WHERE id = %d", (int) $referral['referral_code_id'] )
+			);
+		}
+		if ( ! $connector_id ) {
+			return null;
+		}
+		return array(
+			'user_id'      => $user_id,
+			'referral'     => $referral,
+			'connector_id' => $connector_id,
+		);
+	}
+
+	/**
 	 * Track for referred user.
 	 *
 	 * @param int    $user_id    User ID.
 	 * @param string $event_type Event type.
 	 */
 	private static function track_user( $user_id, $event_type ) {
-		$referral = LNKup_Connector::get_referral_for_user( $user_id );
-		if ( ! $referral ) {
+		$attr = self::attribution_for_user( $user_id );
+		if ( ! $attr ) {
 			return;
 		}
-		$connector_id = (int) get_user_meta( $user_id, '_lnkup_referred_by_connector_id', true );
-		if ( ! $connector_id ) {
-			$code_row = LNKup_Connector::get_code_for_connector( 0 );
-			unset( $code_row );
-			global $wpdb;
-			$codes = LNKup_Treasury_Tables::referral_codes_table();
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$code_row = $wpdb->get_row(
-				$wpdb->prepare( "SELECT connector_id FROM {$codes} WHERE id = %d", (int) $referral['referral_code_id'] ),
-				ARRAY_A
-			);
-			$connector_id = (int) ( $code_row['connector_id'] ?? 0 );
-		}
-		LNKup_Connector::record_event( $connector_id, (int) $referral['id'], $user_id, $event_type );
-		return $referral;
+		LNKup_Connector::record_event( (int) $attr['connector_id'], (int) $attr['referral']['id'], (int) $attr['user_id'], $event_type );
+		return $attr['referral'];
 	}
 
 	/**
@@ -133,36 +154,60 @@ class LNKup_Connector_Tracking {
 	}
 
 	/**
-	 * Payment completed — attribute revenue.
+	 * Payment completed — attribute booth GMV once (organizer-first).
+	 *
+	 * Organizer-referred connector wins. If the organizer was not referred, fall
+	 * back to the vendor-referred connector. Same connector on both sides pays once.
 	 *
 	 * @param int $payment_id Payment ID.
 	 */
 	public static function on_payment_completed( $payment_id ) {
-		$vendor_id = (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true );
+		$payment_id   = absint( $payment_id );
+		$vendor_id    = (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true );
 		$organizer_id = (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true );
-		$lnkup_fee = (float) get_post_meta( $payment_id, '_lnkup_lnkup_fee', true );
+		$booth_gmv    = LNKup_Connector_Rewards::booth_gmv( $payment_id );
+
+		$vendor_attr = self::attribution_for_user( $vendor_id );
+		$org_attr    = self::attribution_for_user( $organizer_id );
 
 		foreach ( array_filter( array( $vendor_id, $organizer_id ) ) as $uid ) {
 			$referral = self::track_user( (int) $uid, 'paid' );
-			if ( ! $referral ) {
-				continue;
+			if ( $referral ) {
+				self::touch_milestone( (int) $referral['id'], 'first_payment_at' );
 			}
-			self::touch_milestone( (int) $referral['id'], 'first_payment_at' );
-			if ( $lnkup_fee > 0 ) {
-				global $wpdb;
-				$wpdb->query(
-					$wpdb->prepare(
-						'UPDATE ' . LNKup_Treasury_Tables::referrals_table() . ' SET attributed_revenue = attributed_revenue + %f WHERE id = %d',
-						$lnkup_fee,
-						(int) $referral['id']
-					)
-				);
-			}
-			LNKup_Connector_Rewards::maybe_queue_paid_booking_reward(
-				(int) get_user_meta( $uid, '_lnkup_referred_by_connector_id', true ),
-				(int) $referral['id'],
-				$payment_id
+		}
+
+		$winner = $org_attr ? $org_attr : $vendor_attr;
+		if ( ! $winner ) {
+			return;
+		}
+
+		if ( $booth_gmv > 0 ) {
+			global $wpdb;
+			$wpdb->query(
+				$wpdb->prepare(
+					'UPDATE ' . LNKup_Treasury_Tables::referrals_table() . ' SET attributed_revenue = attributed_revenue + %f WHERE id = %d',
+					$booth_gmv,
+					(int) $winner['referral']['id']
+				)
 			);
+		}
+
+		$is_organizer = (bool) $org_attr && (int) $winner['user_id'] === (int) $org_attr['user_id'];
+		LNKup_Connector_Rewards::maybe_queue_paid_booking_reward(
+			(int) $winner['connector_id'],
+			(int) $winner['referral']['id'],
+			$payment_id,
+			$is_organizer
+		);
+		if ( class_exists( 'LNKup_Connector_Ranks' ) ) {
+			LNKup_Connector_Ranks::record_payment(
+				$payment_id,
+				(int) $winner['connector_id'],
+				(int) $winner['referral']['id'],
+				$is_organizer ? 'organizer' : 'vendor'
+			);
+			LNKup_Connector_Ranks::recalculate( (int) $winner['connector_id'], 'payment' );
 		}
 	}
 
@@ -183,6 +228,10 @@ class LNKup_Connector_Tracking {
 		$referral = self::track_user( $user_id, 'event_created' );
 		if ( $referral ) {
 			self::touch_milestone( (int) $referral['id'], 'first_event_at' );
+			$cid = (int) get_user_meta( $user_id, '_lnkup_referred_by_connector_id', true );
+			if ( $cid && class_exists( 'LNKup_Connector_Ranks' ) ) {
+				LNKup_Connector_Ranks::recalculate( $cid, 'event' );
+			}
 		}
 	}
 
@@ -201,10 +250,11 @@ class LNKup_Connector_Tracking {
 		$referral = self::track_user( $user_id, 'opportunity_created' );
 		if ( $referral ) {
 			self::touch_milestone( (int) $referral['id'], 'first_opportunity_at' );
-			LNKup_Connector_Rewards::maybe_queue_organizer_opportunity_reward(
-				(int) get_user_meta( $user_id, '_lnkup_referred_by_connector_id', true ),
-				(int) $referral['id']
-			);
+			$cid = (int) get_user_meta( $user_id, '_lnkup_referred_by_connector_id', true );
+			LNKup_Connector_Rewards::maybe_queue_organizer_opportunity_reward( $cid, (int) $referral['id'] );
+			if ( $cid && class_exists( 'LNKup_Connector_Ranks' ) ) {
+				LNKup_Connector_Ranks::recalculate( $cid, 'opportunity' );
+			}
 		}
 	}
 }

@@ -115,9 +115,12 @@
   function hydrateOrganizerTrustStrip(strip) {
     fetchVerification('/organizer').then(function (data) {
       if (!data || !data.level) {
-        strip.innerHTML = '<span class="lnkup-muted">Verification unavailable</span>';
+        strip.hidden = true;
+        strip.innerHTML = '';
         return;
       }
+      strip.hidden = false;
+      strip.removeAttribute('hidden');
       const badges = (data.badges || []).slice(0, 3).map(function (b) {
         return badgeHtml(b, true);
       }).join('');
@@ -125,6 +128,9 @@
         '<span class="lnkup-organizer-trust-strip__label">' + escapeHtml(data.label) + ' · ' + Number(data.percent_complete || 0) + '%</span>' +
         '<span class="lnkup-organizer-trust-strip__meta">' + escapeHtml(data.public_summary || '') + '</span>' +
         '<span class="lnkup-trust-badges-inline">' + badges + '</span>';
+    }).catch(function () {
+      strip.hidden = true;
+      strip.innerHTML = '';
     });
   }
 

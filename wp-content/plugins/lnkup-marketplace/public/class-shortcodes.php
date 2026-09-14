@@ -4220,11 +4220,14 @@ class LNKup_Shortcodes {
 				: array();
 			$doc_code   = $doc_context['code'] ?? '';
 			$docs_ok    = in_array( $doc_code, array( 'none_required', 'ready' ), true );
+			$is_paid    = class_exists( 'LNKup_Vendor_Readiness' )
+				? LNKup_Vendor_Readiness::application_payment_satisfied( (int) $app->ID, $status )
+				: in_array( $status, array( 'paid', 'completed' ), true );
 			$filter_pending = in_array( $status, array( 'submitted', 'under_review' ), true ) ? 'pending' : '';
 			$filter_approved = in_array( $status, array( 'approved', 'payment_required' ), true ) ? 'approved' : '';
-			$filter_paid = in_array( $status, array( 'paid', 'completed' ), true ) ? 'paid' : '';
-			$filter_unpaid = in_array( $status, array( 'approved', 'payment_required' ), true ) ? 'unpaid' : '';
-			$filter_docs = in_array( $doc_code, array( 'pending', 'missing' ), true ) ? 'missing_docs' : '';
+			$filter_paid = $is_paid ? 'paid' : '';
+			$filter_unpaid = in_array( $status, array( 'approved', 'payment_required' ), true ) && ! $is_paid ? 'unpaid' : '';
+			$filter_docs = ( 'none_required' !== $doc_code && in_array( $doc_code, array( 'pending', 'missing' ), true ) ) ? 'missing_docs' : '';
 			$filter_key = $filter_pending ?: ( 'waitlisted' === $status ? 'waitlisted' : ( 'rejected' === $status ? 'rejected' : ( $filter_unpaid ?: ( $filter_paid ?: ( $filter_approved ?: $filter_docs ) ) ) ) );
 			$profile_url = $profile_id ? add_query_arg( 'vendor', $profile_id, lnkup_page_url_helper( 'organizer-dashboard' ) ) : '#';
 			$initials    = '';
@@ -4239,7 +4242,6 @@ class LNKup_Shortcodes {
 			$category_label = $profile && ! empty( $profile['category'] ) ? implode( ', ', array_slice( $profile['category'], 0, 2 ) ) : '—';
 			$rating         = $profile && ! empty( $profile['avg_rating'] ) ? (string) $profile['avg_rating'] : '';
 			$events_count   = $profile ? (string) ( $profile['reliability']['completed_events'] ?? $profile['completed_events'] ?? 0 ) : '0';
-			$is_paid       = in_array( $status, array( 'paid', 'completed' ), true );
 			$status_label  = LNKup_Vendor_Dashboard_Data::application_status_label( $status );
 			$snapshot      = LNKup_Applications::get_profile_snapshot( $app->ID );
 			$doc_snapshot  = LNKup_Applications::get_documents_snapshot( $app->ID );
@@ -4308,7 +4310,7 @@ class LNKup_Shortcodes {
 							)
 						);
 						$has_intel_details = count( $trust_badges ) > 3
-							|| ! empty( $doc_context['summary'] )
+							|| ( ! empty( $doc_context['summary'] ) && 'none_required' !== $doc_code )
 							|| $setup_bits
 							|| $setup_notes
 							|| ! empty( $snapshot['setup_needs'] )
@@ -4325,7 +4327,7 @@ class LNKup_Shortcodes {
 										<?php endforeach; ?>
 									</div>
 								<?php endif; ?>
-								<?php if ( ! empty( $doc_context['summary'] ) ) : ?>
+								<?php if ( ! empty( $doc_context['summary'] ) && 'none_required' !== $doc_code ) : ?>
 									<p class="lnkup-crm-app-card__docs-context lnkup-muted" data-testid="lnkup-app-docs-context"><?php echo esc_html( $doc_context['summary'] ); ?></p>
 								<?php endif; ?>
 								<?php if ( $setup_bits ) : ?>
@@ -4345,7 +4347,11 @@ class LNKup_Shortcodes {
 						<?php elseif ( ! empty( $doc_context['summary'] ) ) : ?>
 							<p class="lnkup-crm-app-card__docs-context lnkup-muted" data-testid="lnkup-app-docs-context"><?php echo esc_html( $doc_context['summary'] ); ?></p>
 						<?php endif; ?>
-						<?php if ( $docs_total ) : ?>
+						<?php if ( 'none_required' === $doc_code ) : ?>
+							<p class="lnkup-crm-app-card__docs-summary lnkup-muted" data-testid="lnkup-app-docs-summary">
+								<?php esc_html_e( 'No documents required for this event.', 'lnkup-marketplace' ); ?>
+							</p>
+						<?php elseif ( $docs_total ) : ?>
 							<p class="lnkup-crm-app-card__docs-summary lnkup-muted" data-testid="lnkup-app-docs-summary">
 								<?php
 								printf(
@@ -4699,7 +4705,11 @@ class LNKup_Shortcodes {
 	 * @param WP_Post $application Application post.
 	 */
 	public static function is_paid_application( $application ) {
-		return 'paid' === get_post_meta( $application->ID, '_lnkup_application_status', true );
+		$app_id = is_object( $application ) ? (int) $application->ID : absint( $application );
+		if ( class_exists( 'LNKup_Vendor_Readiness' ) ) {
+			return LNKup_Vendor_Readiness::application_payment_satisfied( $app_id );
+		}
+		return in_array( get_post_meta( $app_id, '_lnkup_application_status', true ), array( 'paid', 'completed' ), true );
 	}
 
 	/**

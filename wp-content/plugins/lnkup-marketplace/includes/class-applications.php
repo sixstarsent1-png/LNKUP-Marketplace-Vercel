@@ -411,10 +411,12 @@ class LNKup_Applications {
 
 		if ( $opp_cats && $vendor_cats && ! array_intersect( $vendor_cats, $opp_cats ) ) {
 			$warnings[] = array(
-				'code'         => 'category_mismatch',
-				'message'      => __( 'Your profile category may not match what this event is seeking.', 'lnkup-marketplace' ),
-				'action_url'   => lnkup_page_url_helper( 'vendor-profile' ),
-				'action_label' => __( 'Update profile categories', 'lnkup-marketplace' ),
+				'code'                => 'category_mismatch',
+				'message'             => lnkup_copy( 'apply_category_mismatch' ),
+				'action_url'          => lnkup_page_url_helper( 'vendor-profile' ) . '#categories',
+				'action_label'        => __( 'Update profile categories', 'lnkup-marketplace' ),
+				'event_categories'    => array_values( $opp_cats ),
+				'profile_categories'  => array_values( $vendor_cats ),
 			);
 		}
 

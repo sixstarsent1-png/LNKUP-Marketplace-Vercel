@@ -22,7 +22,7 @@ class LNKup_Organizer_Payouts {
 		$user_id = absint( $user_id );
 		$amount  = round( (float) $amount, 2 );
 		if ( $amount <= 0 ) {
-			return new WP_Error( 'invalid_amount', __( 'Invalid cashout amount.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'invalid_amount', __( 'Invalid cashout amount.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 
 		$settlement_mode = class_exists( 'LNKup_Stripe_Connect' )
@@ -31,16 +31,25 @@ class LNKup_Organizer_Payouts {
 
 		if ( 'destination' === $settlement_mode ) {
 			if ( ! LNKup_Stripe_Connect::is_connect_ready( $user_id ) ) {
-				return new WP_Error( 'connect_not_ready', __( 'Complete Stripe Connect setup before cashing out.', 'lnkup-marketplace' ) );
+				return new WP_Error( 'connect_not_ready', __( 'Complete Stripe Connect setup before cashing out.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 			}
 			if ( LNKup_Stripe_Connect::has_past_due_requirements( $user_id ) ) {
-				return new WP_Error( 'requirements_past_due', __( 'Resolve Stripe verification requirements before cashing out.', 'lnkup-marketplace' ) );
+				return new WP_Error( 'requirements_past_due', __( 'Resolve Stripe verification requirements before cashing out.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 			}
 		}
 
-		$balances = LNKup_Organizer_Wallet::get_balances( $user_id );
-		if ( $amount > (float) $balances['available'] ) {
-			return new WP_Error( 'insufficient_balance', __( 'Insufficient available balance.', 'lnkup-marketplace' ) );
+		$available = class_exists( 'LNKup_Financial_Service' )
+			? LNKup_Financial_Service::organizer_cashout_available( $user_id )
+			: (float) ( LNKup_Organizer_Wallet::get_balances( $user_id )['available'] ?? 0 );
+		if ( is_wp_error( $available ) ) {
+			$data = $available->get_error_data();
+			if ( ! is_array( $data ) || empty( $data['status'] ) ) {
+				$available->add_data( array( 'status' => 400 ) );
+			}
+			return $available;
+		}
+		if ( $amount > (float) $available ) {
+			return new WP_Error( 'insufficient_balance', __( 'Insufficient available balance.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 
 		if ( class_exists( 'LNKup_Approval_Workflows' ) ) {
@@ -89,8 +98,30 @@ class LNKup_Organizer_Payouts {
 			'note'        => __( 'Cashout requested', 'lnkup-marketplace' ),
 		) );
 
-		self::process_payout( $payout_id );
+		$ok = self::process_payout( $payout_id );
 		LNKup_Financial_Audit::log( 'organizer_cashout_requested', 'payout', $payout_id, array( 'amount' => $amount ) );
+		if ( is_wp_error( $ok ) ) {
+			$data = $ok->get_error_data();
+			if ( ! is_array( $data ) ) {
+				$data = array();
+			}
+			$data['status']    = ! empty( $data['status'] ) ? (int) $data['status'] : 400;
+			$data['payout_id'] = $payout_id;
+			$code              = $ok->get_error_code() ? $ok->get_error_code() : 'payout_failed';
+			$message           = trim( (string) $ok->get_error_message() );
+			if ( '' === $message ) {
+				$message = __( 'Cashout failed. Please try again or contact support.', 'lnkup-marketplace' );
+				$code    = 'payout_failed';
+			}
+			return new WP_Error( $code, $message, $data );
+		}
+		if ( ! $ok ) {
+			return new WP_Error(
+				'payout_failed',
+				__( 'Cashout failed. Please try again or contact support.', 'lnkup-marketplace' ),
+				array( 'status' => 400, 'payout_id' => $payout_id )
+			);
+		}
 		return $payout_id;
 	}
 
@@ -98,13 +129,29 @@ class LNKup_Organizer_Payouts {
 	 * Execute payout via Connect or manual queue.
 	 *
 	 * @param int $payout_id Payout row ID.
+	 * @return true|WP_Error True on success; WP_Error with the live failure message on failure.
 	 */
 	public static function process_payout( $payout_id ) {
 		global $wpdb;
 		$table  = LNKup_Treasury_Tables::organizer_payouts_table();
 		$payout = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", absint( $payout_id ) ), ARRAY_A );
-		if ( ! $payout || ! in_array( $payout['status'], array( 'requested', 'approved' ), true ) ) {
-			return false;
+		if ( ! $payout ) {
+			return new WP_Error(
+				'payout_not_found',
+				__( 'Cashout request was not found.', 'lnkup-marketplace' ),
+				array( 'status' => 400, 'payout_id' => absint( $payout_id ) )
+			);
+		}
+		if ( ! in_array( $payout['status'], array( 'requested', 'approved' ), true ) ) {
+			return new WP_Error(
+				'payout_invalid_status',
+				sprintf(
+					/* translators: %s: payout status slug */
+					__( 'Cashout cannot be processed from status “%s”.', 'lnkup-marketplace' ),
+					(string) $payout['status']
+				),
+				array( 'status' => 400, 'payout_id' => absint( $payout_id ), 'payout_status' => (string) $payout['status'] )
+			);
 		}
 
 		$wpdb->update( $table, array( 'status' => 'processing', 'updated_at' => current_time( 'mysql' ) ), array( 'id' => $payout_id ) );
@@ -117,13 +164,9 @@ class LNKup_Organizer_Payouts {
 				array( 'payout_id' => (string) $payout_id )
 			);
 			if ( is_wp_error( $result ) ) {
-				$wpdb->update(
-					$table,
-					array( 'status' => 'failed', 'failure_reason' => $result->get_error_message(), 'updated_at' => current_time( 'mysql' ) ),
-					array( 'id' => $payout_id )
-				);
+				self::mark_payout_failed( $payout_id, $result );
 				self::restore_failed_cashout( (int) $payout['user_id'], (float) $payout['amount'], $payout_id );
-				return false;
+				return $result;
 			}
 			if ( ! empty( $result['payout_id'] ) ) {
 				$wpdb->update(
@@ -138,21 +181,72 @@ class LNKup_Organizer_Payouts {
 		if ( 'stripe_connect' === $payout['provider'] && class_exists( 'LNKup_Stripe_Connect' ) ) {
 			$result = LNKup_Stripe_Connect::schedule_transfer( (int) $payout['user_id'], (float) $payout['net_amount'], array( 'payout_id' => $payout_id ) );
 			if ( is_wp_error( $result ) ) {
-				$wpdb->update(
-					$table,
-					array( 'status' => 'failed', 'failure_reason' => $result->get_error_message(), 'updated_at' => current_time( 'mysql' ) ),
-					array( 'id' => $payout_id )
-				);
-				return false;
+				self::mark_payout_failed( $payout_id, $result );
+				return $result;
 			}
 			if ( ! empty( $result['transfer_id'] ) ) {
 				self::mark_paid( $payout_id, $result['transfer_id'] );
 				return true;
 			}
+			$err = new WP_Error(
+				'transfer_incomplete',
+				__( 'Payout transfer did not return a transfer ID. Please try again or contact support.', 'lnkup-marketplace' ),
+				array( 'status' => 400, 'payout_id' => absint( $payout_id ) )
+			);
+			self::mark_payout_failed( $payout_id, $err );
+			return $err;
 		}
 
 		$wpdb->update( $table, array( 'status' => 'approved', 'updated_at' => current_time( 'mysql' ) ), array( 'id' => $payout_id ) );
 		return true;
+	}
+
+	/**
+	 * Persist failed payout status + full failure_reason (+ metadata hints).
+	 *
+	 * @param int      $payout_id Payout row ID.
+	 * @param WP_Error $error     Failure.
+	 */
+	private static function mark_payout_failed( $payout_id, $error ) {
+		global $wpdb;
+		$table   = LNKup_Treasury_Tables::organizer_payouts_table();
+		$message = is_wp_error( $error ) ? (string) $error->get_error_message() : '';
+		if ( '' === trim( $message ) ) {
+			$message = __( 'Cashout failed. Please try again or contact support.', 'lnkup-marketplace' );
+		}
+
+		$data     = is_wp_error( $error ) ? $error->get_error_data() : array();
+		$meta     = array();
+		$existing = $wpdb->get_var( $wpdb->prepare( "SELECT metadata FROM {$table} WHERE id = %d", absint( $payout_id ) ) );
+		if ( $existing ) {
+			$decoded = json_decode( (string) $existing, true );
+			if ( is_array( $decoded ) ) {
+				$meta = $decoded;
+			}
+		}
+		$meta['failure_code'] = is_wp_error( $error ) ? (string) $error->get_error_code() : 'payout_failed';
+		if ( is_array( $data ) ) {
+			if ( ! empty( $data['attempted'] ) ) {
+				$meta['attempted'] = $data['attempted'];
+			}
+			if ( ! empty( $data['source_types'] ) ) {
+				$meta['source_types'] = $data['source_types'];
+			}
+			if ( ! empty( $data['stripe_code'] ) ) {
+				$meta['stripe_code'] = $data['stripe_code'];
+			}
+		}
+
+		$wpdb->update(
+			$table,
+			array(
+				'status'         => 'failed',
+				'failure_reason' => $message,
+				'metadata'       => wp_json_encode( $meta ),
+				'updated_at'     => current_time( 'mysql' ),
+			),
+			array( 'id' => absint( $payout_id ) )
+		);
 	}
 
 	/**
@@ -309,16 +403,17 @@ class LNKup_Organizer_Payouts {
 	 */
 	public static function format( $row ) {
 		return array(
-			'id'           => (int) $row['id'],
-			'amount'       => (float) $row['amount'],
-			'fee_amount'   => (float) $row['fee_amount'],
-			'net_amount'   => (float) $row['net_amount'],
-			'payout_type'  => $row['payout_type'],
-			'status'       => $row['status'],
-			'provider'     => $row['provider'],
-			'provider_ref' => $row['provider_ref'] ?? '',
-			'paid_at'      => $row['paid_at'] ?? null,
-			'created_at'   => $row['created_at'],
+			'id'             => (int) $row['id'],
+			'amount'         => (float) $row['amount'],
+			'fee_amount'     => (float) $row['fee_amount'],
+			'net_amount'     => (float) $row['net_amount'],
+			'payout_type'    => $row['payout_type'],
+			'status'         => $row['status'],
+			'provider'       => $row['provider'],
+			'provider_ref'   => $row['provider_ref'] ?? '',
+			'failure_reason' => isset( $row['failure_reason'] ) ? (string) $row['failure_reason'] : '',
+			'paid_at'        => $row['paid_at'] ?? null,
+			'created_at'     => $row['created_at'],
 		);
 	}
 }

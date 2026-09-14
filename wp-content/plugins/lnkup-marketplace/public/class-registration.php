@@ -12,12 +12,44 @@ defined( 'ABSPATH' ) || exit;
 class LNKup_Registration {
 
 	/**
+	 * Allowed WP page slugs for post-signup redirects.
+	 *
+	 * @var array<int, string>
+	 */
+	private static $safe_page_slugs = array(
+		'vendor-dashboard',
+		'vendor-profile',
+		'organizer-dashboard',
+		'opportunities',
+		'find-events',
+		'sign-up',
+	);
+
+	/**
 	 * Init hooks.
 	 */
 	public static function init(): void {
 		add_shortcode( 'lnkup_register_form', array( __CLASS__, 'render_form' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_handle_submission' ), 5 );
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_handle_claim_submission' ), 6 );
+		add_action( 'login_init', array( __CLASS__, 'redirect_core_register' ), 1 );
+	}
+
+	/**
+	 * Send WP core /wp-login.php?action=register to branded signup.
+	 */
+	public static function redirect_core_register(): void {
+		$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( (string) $_REQUEST['action'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( 'register' !== $action ) {
+			return;
+		}
+		$url = function_exists( 'lnkup_registration_url' ) ? lnkup_registration_url() : home_url( '/sign-up/' );
+		$role = isset( $_GET['role'] ) ? sanitize_key( wp_unslash( (string) $_GET['role'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( in_array( $role, array( 'vendor', 'organizer' ), true ) ) {
+			$url = add_query_arg( 'role', $role, $url );
+		}
+		wp_safe_redirect( $url );
+		exit;
 	}
 
 	/**
@@ -41,14 +73,15 @@ class LNKup_Registration {
 		}
 
 		$role = isset( $_POST['lnkup_role'] ) ? sanitize_text_field( wp_unslash( $_POST['lnkup_role'] ) ) : 'lnkup_vendor'; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( ! in_array( $role, array( 'lnkup_vendor', 'lnkup_organizer' ), true ) ) {
+			$role = 'lnkup_vendor';
+		}
 		$claim_token = isset( $_POST['lnkup_claim_external_event_token'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['lnkup_claim_external_event_token'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 
 		if ( 'lnkup_organizer' === $role && $claim_token ) {
 			$redirect = add_query_arg( 'claim_external_event', $claim_token, lnkup_registration_url() );
 		} else {
-			$redirect = 'lnkup_organizer' === $role
-				? lnkup_page_url_helper( 'organizer-dashboard' )
-				: lnkup_page_url_helper( 'vendor-profile' );
+			$redirect = self::resolve_post_signup_redirect( $role );
 		}
 
 		wp_safe_redirect( $redirect );
@@ -80,50 +113,84 @@ class LNKup_Registration {
 	}
 
 	/**
-	 * Create user from POST data.
+	 * Create user from POST data (web sign-up form).
 	 *
 	 * @return true|WP_Error
 	 */
 	public static function register_user_from_post() {
-		if ( ! get_option( 'users_can_register' ) ) {
-			return new WP_Error( 'registration_disabled', __( 'Registration is currently disabled.', 'lnkup-marketplace' ) );
+		$result = self::register_user(
+			array(
+				'email'            => isset( $_POST['user_email'] ) ? sanitize_email( wp_unslash( $_POST['user_email'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'password'         => isset( $_POST['user_pass'] ) ? (string) wp_unslash( $_POST['user_pass'] ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'password_confirm' => isset( $_POST['user_pass_confirm'] ) ? (string) wp_unslash( $_POST['user_pass_confirm'] ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'role'             => isset( $_POST['lnkup_role'] ) ? sanitize_text_field( wp_unslash( $_POST['lnkup_role'] ) ) : 'lnkup_vendor', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'terms'            => ! empty( $_POST['lnkup_terms'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'full_name'        => isset( $_POST['lnkup_full_name'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['lnkup_full_name'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'outreach_token'   => isset( $_POST['lnkup_outreach_token'] ) ? sanitize_text_field( wp_unslash( $_POST['lnkup_outreach_token'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'claim_token'      => isset( $_POST['lnkup_claim_external_event_token'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['lnkup_claim_external_event_token'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			)
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
 		}
 
-		$email    = isset( $_POST['user_email'] ) ? sanitize_email( wp_unslash( $_POST['user_email'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
-		$password = isset( $_POST['user_pass'] ) ? (string) wp_unslash( $_POST['user_pass'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
-		$confirm  = isset( $_POST['user_pass_confirm'] ) ? (string) wp_unslash( $_POST['user_pass_confirm'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
-		$role     = isset( $_POST['lnkup_role'] ) ? sanitize_text_field( wp_unslash( $_POST['lnkup_role'] ) ) : 'lnkup_vendor'; // phpcs:ignore WordPress.Security.NonceVerification.Missing
-		$terms    = ! empty( $_POST['lnkup_terms'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		wp_set_current_user( $result );
+		wp_set_auth_cookie( $result, true );
 
-		if ( ! in_array( $role, array( 'lnkup_vendor', 'lnkup_organizer' ), true ) ) {
+		return true;
+	}
+
+	/**
+	 * Create a vendor or organizer account from sanitized input.
+	 *
+	 * @param array<string, mixed> $input Registration fields.
+	 * @return int|WP_Error User ID on success.
+	 */
+	public static function register_user( array $input ) {
+		if ( ! get_option( 'users_can_register' ) ) {
+			return new WP_Error( 'registration_disabled', __( 'Registration is currently disabled.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+
+		$email    = isset( $input['email'] ) ? sanitize_email( (string) $input['email'] ) : '';
+		$password = isset( $input['password'] ) ? (string) $input['password'] : '';
+		$confirm  = isset( $input['password_confirm'] ) ? (string) $input['password_confirm'] : '';
+		$role     = isset( $input['role'] ) ? sanitize_text_field( (string) $input['role'] ) : 'lnkup_vendor';
+		$terms    = ! empty( $input['terms'] );
+		$full_name = isset( $input['full_name'] ) ? sanitize_text_field( (string) $input['full_name'] ) : '';
+
+		if ( in_array( $role, array( 'vendor', 'lnkup_vendor' ), true ) ) {
+			$role = 'lnkup_vendor';
+		} elseif ( in_array( $role, array( 'organizer', 'lnkup_organizer' ), true ) ) {
+			$role = 'lnkup_organizer';
+		} else {
 			$role = 'lnkup_vendor';
 		}
 
 		if ( ! $email || ! is_email( $email ) ) {
-			return new WP_Error( 'invalid_email', __( 'Please enter a valid email address.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'invalid_email', __( 'Please enter a valid email address.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 		if ( email_exists( $email ) ) {
-			return new WP_Error( 'email_exists', __( 'An account with this email already exists.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'email_exists', __( 'An account with this email already exists.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 		if ( strlen( $password ) < 8 ) {
-			return new WP_Error( 'weak_password', __( 'Password must be at least 8 characters.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'weak_password', __( 'Password must be at least 8 characters.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 		if ( $password !== $confirm ) {
-			return new WP_Error( 'password_mismatch', __( 'Passwords do not match.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'password_mismatch', __( 'Passwords do not match.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 		if ( ! $terms ) {
-			return new WP_Error( 'terms_required', __( 'Please accept the terms to continue.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'terms_required', __( 'Please accept the terms to continue.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 
-		$outreach_token = isset( $_POST['lnkup_outreach_token'] ) ? sanitize_text_field( wp_unslash( $_POST['lnkup_outreach_token'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
-		$claim_token    = isset( $_POST['lnkup_claim_external_event_token'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['lnkup_claim_external_event_token'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$outreach_token = isset( $input['outreach_token'] ) ? sanitize_text_field( (string) $input['outreach_token'] ) : '';
+		$claim_token    = isset( $input['claim_token'] ) ? sanitize_text_field( (string) $input['claim_token'] ) : '';
 		if ( $outreach_token && class_exists( 'LNKup_Outreach' ) ) {
 			$outreach_ctx = LNKup_Outreach::get_signup_context( $outreach_token );
 			if ( ! $outreach_ctx ) {
-				return new WP_Error( 'invalid_outreach', __( 'This invitation link is invalid or has expired.', 'lnkup-marketplace' ) );
+				return new WP_Error( 'invalid_outreach', __( 'This invitation link is invalid or has expired.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 			}
 			if ( strtolower( $email ) !== strtolower( $outreach_ctx['email'] ) ) {
-				return new WP_Error( 'email_mismatch', __( 'Please sign up with the email address that received the invitation.', 'lnkup-marketplace' ) );
+				return new WP_Error( 'email_mismatch', __( 'Please sign up with the email address that received the invitation.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 			}
 			if ( ! empty( $outreach_ctx['target_role'] ) ) {
 				$role = $outreach_ctx['target_role'];
@@ -133,10 +200,10 @@ class LNKup_Registration {
 		if ( $claim_token && class_exists( 'LNKup_External_Events' ) ) {
 			$claim_ctx = LNKup_External_Events::get_claim_signup_context( $claim_token );
 			if ( ! $claim_ctx ) {
-				return new WP_Error( 'invalid_claim', __( 'This event claim link is invalid or has expired.', 'lnkup-marketplace' ) );
+				return new WP_Error( 'invalid_claim', __( 'This event claim link is invalid or has expired.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 			}
 			if ( strtolower( $email ) !== strtolower( (string) $claim_ctx['email'] ) ) {
-				return new WP_Error( 'email_mismatch', __( 'Please sign up with the email address that received the vendor interest notification.', 'lnkup-marketplace' ) );
+				return new WP_Error( 'email_mismatch', __( 'Please sign up with the email address that received the vendor interest notification.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 			}
 			$role = 'lnkup_organizer';
 		}
@@ -150,12 +217,167 @@ class LNKup_Registration {
 		$user = new WP_User( $user_id );
 		$user->set_role( $role );
 
-		self::store_market_signup_meta( $user_id );
+		if ( class_exists( 'LNKup_Organizer_Recruit_Referrals' ) ) {
+			$granted = 'lnkup_organizer' === $role ? 'organizer' : ( 'lnkup_vendor' === $role ? 'vendor' : '' );
+			LNKup_Organizer_Recruit_Referrals::try_attribute_from_pending( (int) $user_id, $granted );
+		}
 
-		wp_set_current_user( $user_id );
-		wp_set_auth_cookie( $user_id, true );
+		if ( $full_name ) {
+			wp_update_user(
+				array(
+					'ID'           => $user_id,
+					'display_name' => $full_name,
+					'first_name'   => $full_name,
+				)
+			);
+		}
 
-		return true;
+		self::store_market_signup_meta( (int) $user_id, $input );
+
+		if ( 'lnkup_vendor' === $role ) {
+			self::ensure_vendor_profile_stub( (int) $user_id, $full_name );
+		}
+
+		return (int) $user_id;
+	}
+
+	/**
+	 * Default + safe custom post-signup destination.
+	 *
+	 * @param string $role lnkup_vendor|lnkup_organizer.
+	 */
+	private static function resolve_post_signup_redirect( string $role ): string {
+		$default = 'lnkup_organizer' === $role
+			? lnkup_page_url_helper( 'organizer-dashboard' ) . '#overview'
+			: lnkup_page_url_helper( 'vendor-dashboard' );
+
+		$requested = '';
+		if ( ! empty( $_POST['lnkup_redirect'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$requested = (string) wp_unslash( $_POST['lnkup_redirect'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		} elseif ( ! empty( $_GET['redirect'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$requested = (string) wp_unslash( $_GET['redirect'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+
+		$safe = self::sanitize_redirect_target( $requested, $role );
+		return $safe ? $safe : $default;
+	}
+
+	/**
+	 * Map app/WP redirect hints to same-site LNKup pages only.
+	 *
+	 * @param string $redirect Raw redirect.
+	 * @param string $role     Role key.
+	 */
+	private static function sanitize_redirect_target( string $redirect, string $role ): string {
+		$redirect = trim( $redirect );
+		if ( '' === $redirect ) {
+			return '';
+		}
+
+		// App path aliases → WP dashboards.
+		$path = $redirect;
+		if ( preg_match( '#^https?://#i', $redirect ) ) {
+			$parts = wp_parse_url( $redirect );
+			$host  = isset( $parts['host'] ) ? strtolower( (string) $parts['host'] ) : '';
+			$home  = wp_parse_url( home_url( '/' ) );
+			$home_host = isset( $home['host'] ) ? strtolower( (string) $home['host'] ) : '';
+			if ( ! $host || ! $home_host || $host !== $home_host ) {
+				return '';
+			}
+			$path = ( isset( $parts['path'] ) ? (string) $parts['path'] : '/' )
+				. ( ! empty( $parts['fragment'] ) ? '#' . $parts['fragment'] : '' );
+		}
+
+		$path_only = strtok( $path, '?' );
+		$path_only = $path_only ? $path_only : '/';
+		$fragment  = '';
+		if ( false !== strpos( $path, '#' ) ) {
+			$bits     = explode( '#', $path, 2 );
+			$path_only = $bits[0];
+			$fragment  = $bits[1] ?? '';
+		}
+		$path_only = '/' . ltrim( (string) $path_only, '/' );
+		$path_only = untrailingslashit( $path_only ) ?: '/';
+
+		$app_map = array(
+			'/vendor/onboarding'     => 'vendor-dashboard',
+			'/vendor'                => 'vendor-dashboard',
+			'/vendor/find'           => 'vendor-dashboard',
+			'/organizer/onboarding'  => 'organizer-dashboard',
+			'/organizer'             => 'organizer-dashboard',
+		);
+		if ( isset( $app_map[ $path_only ] ) ) {
+			$slug = $app_map[ $path_only ];
+			$url  = lnkup_page_url_helper( $slug );
+			if ( 'organizer-dashboard' === $slug ) {
+				$url .= '#overview';
+			}
+			return $url;
+		}
+
+		$slug = trim( $path_only, '/' );
+		$slug = $slug ? strtok( $slug, '/' ) : '';
+		if ( ! $slug || ! in_array( $slug, self::$safe_page_slugs, true ) ) {
+			return '';
+		}
+
+		// Role mismatch guard.
+		if ( 'lnkup_vendor' === $role && false !== strpos( $slug, 'organizer' ) ) {
+			return '';
+		}
+		if ( 'lnkup_organizer' === $role && false !== strpos( $slug, 'vendor' ) ) {
+			return '';
+		}
+
+		$url = lnkup_page_url_helper( $slug );
+		$apply_id = 0;
+		if ( preg_match( '/[?&]apply=(\d+)/', $redirect, $apply_match ) ) {
+			$apply_id = (int) $apply_match[1];
+		}
+		if ( $apply_id > 0 && in_array( $slug, array( 'opportunities', 'find-events' ), true ) ) {
+			$url = add_query_arg( 'apply', $apply_id, $url );
+		}
+		if ( $fragment && preg_match( '/^[a-z0-9_-]+$/i', $fragment ) ) {
+			$url .= '#' . $fragment;
+		} elseif ( 'organizer-dashboard' === $slug ) {
+			$url .= '#overview';
+		}
+		return $url;
+	}
+
+	/**
+	 * Create a minimal vendor profile so apply flows have a profile ID.
+	 *
+	 * @param int    $user_id     User ID.
+	 * @param string $full_name   Optional display name.
+	 */
+	private static function ensure_vendor_profile_stub( int $user_id, string $full_name = '' ): void {
+		$user_id = absint( $user_id );
+		if ( $user_id <= 0 ) {
+			return;
+		}
+		if ( function_exists( 'lnkup_get_vendor_profile_id' ) && lnkup_get_vendor_profile_id( $user_id ) ) {
+			return;
+		}
+
+		$title = $full_name ? $full_name : __( 'My Business', 'lnkup-marketplace' );
+		$profile_id = wp_insert_post(
+			array(
+				'post_title'  => $title,
+				'post_type'   => 'lnkup_vendor_profile',
+				'post_status' => 'publish',
+			),
+			true
+		);
+		if ( is_wp_error( $profile_id ) || ! $profile_id ) {
+			return;
+		}
+		update_post_meta( (int) $profile_id, '_lnkup_owner_user_id', $user_id );
+		update_post_meta( (int) $profile_id, '_lnkup_verification_status', 'pending' );
+		if ( $full_name ) {
+			update_post_meta( (int) $profile_id, '_lnkup_owner_name', $full_name );
+			update_post_meta( (int) $profile_id, '_lnkup_business_name', $title );
+		}
 	}
 
 	/**
@@ -180,11 +402,12 @@ class LNKup_Registration {
 	/**
 	 * Persist city market attribution from sign-up form.
 	 *
-	 * @param int $user_id User ID.
+	 * @param int                  $user_id User ID.
+	 * @param array<string, mixed> $input   Optional register() fields.
 	 */
-	private static function store_market_signup_meta( int $user_id ): void {
-		$market_slug = '';
-		if ( ! empty( $_POST['lnkup_market'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+	private static function store_market_signup_meta( int $user_id, array $input = array() ): void {
+		$market_slug = isset( $input['market'] ) ? sanitize_title( (string) $input['market'] ) : '';
+		if ( ! $market_slug && ! empty( $_POST['lnkup_market'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			$market_slug = sanitize_title( wp_unslash( (string) $_POST['lnkup_market'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		}
 		if ( ! $market_slug && ! empty( $_GET['market'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -262,6 +485,25 @@ class LNKup_Registration {
 	}
 
 	/**
+	 * Resolve redirect hint from request for form hidden field.
+	 */
+	private static function get_request_redirect(): string {
+		if ( ! empty( $_POST['lnkup_redirect'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			return sanitize_text_field( wp_unslash( (string) $_POST['lnkup_redirect'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		}
+		if ( ! empty( $_GET['redirect'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return sanitize_text_field( wp_unslash( (string) $_GET['redirect'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+		if ( ! empty( $_GET['apply'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$apply_id = absint( wp_unslash( (string) $_GET['apply'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( $apply_id > 0 ) {
+				return add_query_arg( 'apply', $apply_id, lnkup_page_url_helper( 'opportunities' ) );
+			}
+		}
+		return '';
+	}
+
+	/**
 	 * Render registration form shortcode.
 	 *
 	 * @param array $atts Attributes.
@@ -322,6 +564,13 @@ class LNKup_Registration {
 			} elseif ( 'vendor' === $role_param ) {
 				$selected_role = 'lnkup_vendor';
 			}
+		} elseif ( ! empty( $_GET['interest'] ) && empty( $_POST['lnkup_role'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$interest_param = sanitize_key( wp_unslash( (string) $_GET['interest'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( 'organizer' === $interest_param ) {
+				$selected_role = 'lnkup_organizer';
+			} elseif ( 'vendor' === $interest_param ) {
+				$selected_role = 'lnkup_vendor';
+			}
 		}
 		if ( ! in_array( $selected_role, array( 'lnkup_vendor', 'lnkup_organizer' ), true ) ) {
 			$selected_role = 'lnkup_vendor';
@@ -335,11 +584,30 @@ class LNKup_Registration {
 			$posted_email = sanitize_email( (string) $claim_ctx['email'] );
 		}
 
+		$posted_name = isset( $_POST['lnkup_full_name'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['lnkup_full_name'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
 		$role_locked  = (bool) ( $outreach_ctx || $claim_ctx );
 		$email_locked = (bool) ( ( $outreach_ctx && ! empty( $outreach_ctx['email'] ) ) || ( $claim_ctx && ! empty( $claim_ctx['email'] ) ) );
 		$market_slug  = self::get_request_market_slug();
 		$signup_interest = self::get_request_signup_interest();
 		$ref_code     = self::get_request_ref_code();
+		$org_ref_code = '';
+		if ( class_exists( 'LNKup_Organizer_Recruit_Referrals' ) ) {
+			$org_ref_code = LNKup_Organizer_Recruit_Referrals::current_invite_code();
+			if ( $org_ref_code && ! $signup_interest ) {
+				$signup_interest = LNKup_Organizer_Recruit_Referrals::current_invite_interest() ?: 'organizer';
+			}
+		}
+		$redirect_hint = self::get_request_redirect();
+		$org_inviter_name = '';
+		if ( $org_ref_code && class_exists( 'LNKup_Organizer_Recruit_Referrals' ) ) {
+			$resolved = LNKup_Organizer_Recruit_Referrals::resolve_code_public( $org_ref_code );
+			$org_inviter_name = is_array( $resolved ) ? (string) ( $resolved['referrer_name'] ?? '' ) : '';
+		}
+		$org_invite_interest = in_array( $signup_interest, array( 'organizer', 'vendor' ), true ) ? $signup_interest : 'organizer';
+		if ( $org_ref_code && empty( $_POST['lnkup_role'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$selected_role = 'organizer' === $org_invite_interest ? 'lnkup_organizer' : 'lnkup_vendor';
+		}
 
 		ob_start();
 		?>
@@ -368,6 +636,35 @@ class LNKup_Registration {
 				<?php if ( $ref_code ) : ?>
 					<input type="hidden" name="lnkup_ref" value="<?php echo esc_attr( $ref_code ); ?>" data-testid="lnkup-signup-ref" />
 				<?php endif; ?>
+				<?php if ( $org_ref_code ) : ?>
+					<input type="hidden" name="lnkup_org_ref" value="<?php echo esc_attr( $org_ref_code ); ?>" data-testid="lnkup-signup-org-ref" />
+					<input type="hidden" name="lnkup_signup_interest" value="<?php echo esc_attr( $org_invite_interest ); ?>" />
+				<?php endif; ?>
+				<?php if ( $redirect_hint ) : ?>
+					<input type="hidden" name="lnkup_redirect" value="<?php echo esc_attr( $redirect_hint ); ?>" />
+				<?php endif; ?>
+
+				<?php if ( $org_inviter_name ) : ?>
+					<div class="lnkup-alert lnkup-alert--info" data-testid="lnkup-org-recruit-invited-by">
+						<p>
+							<?php
+							if ( 'vendor' === $org_invite_interest ) {
+								printf(
+									/* translators: %s: inviter display name */
+									esc_html__( 'Invited by %s — create a vendor account to find events on LNKup.', 'lnkup-marketplace' ),
+									esc_html( $org_inviter_name )
+								);
+							} else {
+								printf(
+									/* translators: %s: inviter display name */
+									esc_html__( 'Invited by %s — create an organizer account to run events on LNKup.', 'lnkup-marketplace' ),
+									esc_html( $org_inviter_name )
+								);
+							}
+							?>
+						</p>
+					</div>
+				<?php endif; ?>
 
 				<?php if ( $outreach_ctx && ! empty( $outreach_ctx['message'] ) ) : ?>
 					<div class="lnkup-alert lnkup-alert--info" role="status" data-testid="lnkup-outreach-message">
@@ -386,15 +683,23 @@ class LNKup_Registration {
 						<label class="lnkup-signup-form__role-option<?php echo 'lnkup_vendor' === $selected_role ? ' is-active' : ''; ?>">
 							<input type="radio" name="lnkup_role" value="lnkup_vendor"<?php checked( $selected_role, 'lnkup_vendor' ); ?><?php disabled( $role_locked && 'lnkup_vendor' !== $selected_role ); ?> />
 							<span class="lnkup-signup-form__role-title"><?php esc_html_e( 'Vendor', 'lnkup-marketplace' ); ?></span>
-							<span class="lnkup-signup-form__role-desc"><?php esc_html_e( 'Find booth opportunities', 'lnkup-marketplace' ); ?></span>
+							<span class="lnkup-signup-form__role-desc"><?php esc_html_e( 'Find events and apply for booths', 'lnkup-marketplace' ); ?></span>
 						</label>
 						<label class="lnkup-signup-form__role-option<?php echo 'lnkup_organizer' === $selected_role ? ' is-active' : ''; ?>">
 							<input type="radio" name="lnkup_role" value="lnkup_organizer"<?php checked( $selected_role, 'lnkup_organizer' ); ?><?php disabled( $role_locked && 'lnkup_organizer' !== $selected_role ); ?> />
 							<span class="lnkup-signup-form__role-title"><?php esc_html_e( 'Organizer', 'lnkup-marketplace' ); ?></span>
-							<span class="lnkup-signup-form__role-desc"><?php esc_html_e( 'List events & book vendors', 'lnkup-marketplace' ); ?></span>
+							<span class="lnkup-signup-form__role-desc"><?php esc_html_e( 'Launch events and book vendors', 'lnkup-marketplace' ); ?></span>
 						</label>
 					</div>
+					<p class="lnkup-signup-form__hint lnkup-signup-form__role-hint">
+						<?php esc_html_e( 'Vendors discover opportunities and pay only when accepted. Organizers publish events, review applications, and collect booth fees.', 'lnkup-marketplace' ); ?>
+					</p>
 				</fieldset>
+
+				<p class="lnkup-signup-form__field">
+					<label class="lnkup-signup-form__label" for="lnkup_full_name"><?php esc_html_e( 'Full name', 'lnkup-marketplace' ); ?> <span class="lnkup-signup-form__optional"><?php esc_html_e( '(optional)', 'lnkup-marketplace' ); ?></span></label>
+					<input type="text" class="lnkup-signup-form__input" id="lnkup_full_name" name="lnkup_full_name" autocomplete="name" value="<?php echo esc_attr( $posted_name ); ?>" />
+				</p>
 
 				<p class="lnkup-signup-form__field">
 					<label class="lnkup-signup-form__label" for="lnkup_user_email"><?php esc_html_e( 'Email', 'lnkup-marketplace' ); ?></label>
@@ -415,7 +720,7 @@ class LNKup_Registration {
 				<p class="lnkup-signup-form__field lnkup-signup-form__field--checkbox">
 					<label>
 						<input type="checkbox" name="lnkup_terms" value="1" required />
-						<?php esc_html_e( 'I agree to the LNKup terms and understand marketplace browsing opens on the public launch date.', 'lnkup-marketplace' ); ?>
+						<?php esc_html_e( 'I agree to the LNKup terms of use.', 'lnkup-marketplace' ); ?>
 					</label>
 				</p>
 

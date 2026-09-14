@@ -1,0 +1,172 @@
+.lnkup-org-recruit {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.lnkup-org-recruit__hero {
+  padding: 1.25rem 1.35rem;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 55%, #243015 100%);
+  color: #fff;
+}
+
+.lnkup-org-recruit__eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #c8f56a;
+  font-weight: 700;
+}
+
+.lnkup-org-recruit__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.35rem;
+  line-height: 1.25;
+  color: #fff;
+}
+
+.lnkup-org-recruit__body {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.lnkup-org-recruit__share,
+.lnkup-org-recruit__list {
+  border: 1px solid #e5e5e5;
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  background: #fff;
+}
+
+.lnkup-org-recruit__headline {
+  margin: 0 0 0.4rem;
+  font-weight: 700;
+}
+
+.lnkup-org-recruit__code-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin: 0.85rem 0 0.5rem;
+}
+
+.lnkup-org-recruit__code {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 0.45rem 0.7rem;
+  border-radius: 8px;
+  background: #f5f5f5;
+}
+
+.lnkup-org-recruit__url {
+  margin: 0.35rem 0 0;
+  word-break: break-all;
+  font-size: 0.85rem;
+}
+
+.lnkup-org-recruit__dual {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 0.75rem;
+}
+
+.lnkup-org-recruit__link-block {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.lnkup-org-recruit__link-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.lnkup-org-recruit__earnings {
+  margin: 0.85rem 0 0;
+}
+
+.lnkup-org-recruit__list-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.lnkup-org-recruit__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lnkup-org-recruit__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.lnkup-org-recruit__item:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.lnkup-org-recruit__badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+}
+
+.lnkup-org-recruit__badge--active {
+  background: #ecfccb;
+  color: #3f6212;
+}
+
+.lnkup-org-recruit__badge--expired {
+  background: #f5f5f5;
+  color: #737373;
+}
+
+.lnkup-org-recruit-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  border: 1px solid #d4e8a0;
+  background: #f7fee7;
+  text-decoration: none;
+  color: inherit;
+}
+
+.lnkup-org-recruit-cta:hover {
+  border-color: #a3e635;
+}
+
+.lnkup-org-recruit-cta__title {
+  font-weight: 800;
+  font-size: 1rem;
+}
+
+.lnkup-org-recruit-cta__body {
+  font-size: 0.9rem;
+  color: #525252;
+}
+
+.lnkup-org-recruit-cta__action {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #3f6212;
+}

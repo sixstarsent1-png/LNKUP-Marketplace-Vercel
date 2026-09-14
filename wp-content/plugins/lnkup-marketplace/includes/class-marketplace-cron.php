@@ -55,6 +55,9 @@ class LNKup_Marketplace_Cron {
 		self::check_deadline_reminders();
 		self::check_almost_full();
 		self::mark_post_event_reviewable();
+		if ( class_exists( 'LNKup_Activation_Emails' ) ) {
+			LNKup_Activation_Emails::run_daily();
+		}
 		LNKup_Marketplace_Index::rebuild_all();
 		if ( class_exists( 'LNKup_Vendor_Import' ) ) {
 			LNKup_Vendor_Import::cleanup_expired_jobs();

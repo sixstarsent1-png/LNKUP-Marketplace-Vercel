@@ -105,12 +105,18 @@
   background: #fff;
 }
 
-.lnkup-rep-review-card header {
+.lnkup-rep-review-card header,
+.lnkup-rep-review-card__header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.35rem;
+}
+
+.lnkup-rep-review-card__body {
+  margin: 0;
+  line-height: 1.5;
 }
 
 .lnkup-rep-timeline {
@@ -272,3 +278,4 @@
 .lnkup-review-list { display: grid; gap: 1rem; }
 .lnkup-rep-review-card { padding: 1.25rem; border-radius: var(--lnkup-radius-lg, 1.125rem); border: 1px solid var(--border, var(--lnkup-border)); background: var(--card, var(--lnkup-card)); transition: transform 0.18s ease, box-shadow 0.18s ease; }
 .lnkup-rep-review-card:hover { transform: translateY(-2px); box-shadow: var(--lnkup-shadow-elevated, 0 8px 28px rgba(0,0,0,.06)); }
+.lnkup-rep-review-card.lnkup-surface--primary { box-shadow: var(--lnkup-shadow-card, 0 1px 3px rgba(0,0,0,.04)); }

@@ -88,6 +88,36 @@ class LNKup_Connector_Admin {
 			LNKup_Connector::generate_code( $id, $custom );
 			self::redirect_notice( __( 'Referral code updated.', 'lnkup-marketplace' ), 'success', 'active' );
 		}
+		if ( 'rank_recalculate' === $action && $id && class_exists( 'LNKup_Connector_Ranks' ) ) {
+			LNKup_Connector_Ranks::recalculate( $id, 'admin' );
+			LNKup_Connector_Ranks::record_rank_event( $id, 'rank_corrected', array( 'source' => 'admin_recalculate', 'admin_id' => get_current_user_id() ) );
+			self::redirect_notice( __( 'Rank recalculated.', 'lnkup-marketplace' ), 'success', 'active' );
+		}
+		if ( 'rank_override' === $action && $id && class_exists( 'LNKup_Connector_Ranks' ) ) {
+			$rank = sanitize_key( wp_unslash( $_POST['rank_key'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$result = LNKup_Connector_Ranks::override_rank( $id, $rank, get_current_user_id() );
+			self::redirect_notice(
+				is_wp_error( $result ) ? $result->get_error_message() : __( 'Rank overridden.', 'lnkup-marketplace' ),
+				is_wp_error( $result ) ? 'error' : 'success',
+				'active'
+			);
+		}
+		if ( 'rank_bonus_reverse' === $action && $id && class_exists( 'LNKup_Connector_Ranks' ) ) {
+			$reward_id = absint( $_POST['reward_id'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$result    = LNKup_Connector_Ranks::reverse_bonus( $id, $reward_id );
+			self::redirect_notice(
+				is_wp_error( $result ) ? $result->get_error_message() : __( 'Rank bonus reversed.', 'lnkup-marketplace' ),
+				is_wp_error( $result ) ? 'error' : 'success',
+				'active'
+			);
+		}
+		if ( 'attribution_resolve' === $action && class_exists( 'LNKup_Connector_Ranks' ) ) {
+			$payment_id   = absint( $_POST['payment_id'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$connector_id = absint( $_POST['resolve_connector_id'] ?? $id ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$status       = sanitize_key( wp_unslash( $_POST['attr_status'] ?? 'reversed' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			LNKup_Connector_Ranks::resolve_attribution( $payment_id, $connector_id, $status );
+			self::redirect_notice( __( 'Attribution updated.', 'lnkup-marketplace' ), 'success', 'disputes' );
+		}
 	}
 
 	/**
@@ -120,7 +150,7 @@ class LNKup_Connector_Admin {
 			wp_die( esc_html__( 'Permission denied.', 'lnkup-marketplace' ), 403 );
 		}
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'pending'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( ! in_array( $tab, array( 'pending', 'active', 'rewards' ), true ) ) {
+		if ( ! in_array( $tab, array( 'pending', 'active', 'rewards', 'disputes' ), true ) ) {
 			$tab = 'pending';
 		}
 		$metrics = LNKup_Connector::admin_metrics();
@@ -170,8 +200,49 @@ class LNKup_Connector_Admin {
 				<a href="<?php echo esc_url( admin_url( 'admin.php?page=lnkup-connectors&tab=pending' ) ); ?>" class="nav-tab<?php echo 'pending' === $tab ? ' nav-tab-active' : ''; ?>"><?php esc_html_e( 'Pending', 'lnkup-marketplace' ); ?></a>
 				<a href="<?php echo esc_url( admin_url( 'admin.php?page=lnkup-connectors&tab=active' ) ); ?>" class="nav-tab<?php echo 'active' === $tab ? ' nav-tab-active' : ''; ?>"><?php esc_html_e( 'Active', 'lnkup-marketplace' ); ?></a>
 				<a href="<?php echo esc_url( admin_url( 'admin.php?page=lnkup-connectors&tab=rewards' ) ); ?>" class="nav-tab<?php echo 'rewards' === $tab ? ' nav-tab-active' : ''; ?>"><?php esc_html_e( 'Rewards', 'lnkup-marketplace' ); ?></a>
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=lnkup-connectors&tab=disputes' ) ); ?>" class="nav-tab<?php echo 'disputes' === $tab ? ' nav-tab-active' : ''; ?>"><?php esc_html_e( 'Attribution disputes', 'lnkup-marketplace' ); ?></a>
 			</h2>
-			<?php if ( 'rewards' === $tab ) : ?>
+			<?php if ( 'disputes' === $tab ) : ?>
+				<?php
+				$disputes = class_exists( 'LNKup_Connector_Ranks' ) ? LNKup_Connector_Ranks::disputed_attributions() : array();
+				?>
+				<table class="widefat striped" style="margin-top:1rem;">
+					<thead><tr>
+						<th><?php esc_html_e( 'Payment', 'lnkup-marketplace' ); ?></th>
+						<th><?php esc_html_e( 'Connector', 'lnkup-marketplace' ); ?></th>
+						<th><?php esc_html_e( 'Reason', 'lnkup-marketplace' ); ?></th>
+						<th><?php esc_html_e( 'GMV', 'lnkup-marketplace' ); ?></th>
+						<th><?php esc_html_e( 'Status', 'lnkup-marketplace' ); ?></th>
+						<th></th>
+					</tr></thead>
+					<tbody>
+					<?php foreach ( (array) $disputes as $dispute ) : ?>
+						<tr>
+							<td><?php echo esc_html( (string) ( $dispute['payment_id'] ?? '' ) ); ?></td>
+							<td><?php echo esc_html( (string) ( $dispute['connector_id'] ?? '' ) ); ?></td>
+							<td><?php echo esc_html( (string) ( $dispute['reason'] ?? '' ) ); ?></td>
+							<td>$<?php echo esc_html( number_format( (float) ( $dispute['gmv'] ?? 0 ), 2 ) ); ?></td>
+							<td><?php echo esc_html( (string) ( $dispute['status'] ?? '' ) ); ?></td>
+							<td>
+								<form method="post" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><?php wp_nonce_field( 'lnkup_connector_admin' ); ?>
+									<input type="hidden" name="lnkup_connector_action" value="attribution_resolve" />
+									<input type="hidden" name="payment_id" value="<?php echo esc_attr( (string) ( $dispute['payment_id'] ?? '' ) ); ?>" />
+									<input type="number" name="resolve_connector_id" value="<?php echo esc_attr( (string) ( $dispute['connector_id'] ?? '' ) ); ?>" class="small-text" />
+									<select name="attr_status">
+										<option value="counted"><?php esc_html_e( 'Counted', 'lnkup-marketplace' ); ?></option>
+										<option value="reversed"><?php esc_html_e( 'Reversed', 'lnkup-marketplace' ); ?></option>
+									</select>
+									<button type="submit" class="button button-small"><?php esc_html_e( 'Resolve', 'lnkup-marketplace' ); ?></button>
+								</form>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+					<?php if ( ! $disputes ) : ?>
+						<tr><td colspan="6"><?php esc_html_e( 'No disputed booking attributions.', 'lnkup-marketplace' ); ?></td></tr>
+					<?php endif; ?>
+					</tbody>
+				</table>
+			<?php elseif ( 'rewards' === $tab ) : ?>
 				<table class="widefat striped" style="margin-top:1rem;">
 					<thead><tr><th>ID</th><th><?php esc_html_e( 'Connector', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'Event', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'Amount', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'Status', 'lnkup-marketplace' ); ?></th><th></th></tr></thead>
 					<tbody>
@@ -204,7 +275,21 @@ class LNKup_Connector_Admin {
 				</table>
 			<?php else : ?>
 				<table class="widefat striped" style="margin-top:1rem;">
-					<thead><tr><th><?php esc_html_e( 'Name', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'Email', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'Market', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'Status', 'lnkup-marketplace' ); ?></th><th></th></tr></thead>
+					<thead><tr>
+						<th><?php esc_html_e( 'Name', 'lnkup-marketplace' ); ?></th>
+						<th><?php esc_html_e( 'Email', 'lnkup-marketplace' ); ?></th>
+						<th><?php esc_html_e( 'Market', 'lnkup-marketplace' ); ?></th>
+						<th><?php esc_html_e( 'Status', 'lnkup-marketplace' ); ?></th>
+						<?php if ( 'active' === $tab ) : ?>
+							<th><?php esc_html_e( 'Rank', 'lnkup-marketplace' ); ?></th>
+							<th><?php esc_html_e( 'Founding', 'lnkup-marketplace' ); ?></th>
+							<th><?php esc_html_e( 'Bookings', 'lnkup-marketplace' ); ?></th>
+							<th><?php esc_html_e( 'GMV', 'lnkup-marketplace' ); ?></th>
+							<th><?php esc_html_e( 'Activated', 'lnkup-marketplace' ); ?></th>
+							<th><?php esc_html_e( 'Pending bonus', 'lnkup-marketplace' ); ?></th>
+						<?php endif; ?>
+						<th></th>
+					</tr></thead>
 					<tbody>
 					<?php foreach ( (array) $connectors as $row ) : ?>
 						<?php $code = LNKup_Connector::get_code_for_connector( (int) $row['id'] ); ?>
@@ -213,6 +298,22 @@ class LNKup_Connector_Admin {
 							<td><?php echo esc_html( $row['email'] ?? '' ); ?></td>
 							<td><?php echo esc_html( $row['market_slug'] ?? '' ); ?></td>
 							<td><?php echo esc_html( $row['status'] ?? '' ); ?><?php if ( $code ) : ?> · <code><?php echo esc_html( $code['code'] ?? '' ); ?></code><?php endif; ?></td>
+							<?php if ( 'active' === $tab ) : ?>
+								<?php $bonus = class_exists( 'LNKup_Connector_Ranks' ) ? LNKup_Connector_Ranks::pending_bonus( (int) $row['id'] ) : null; ?>
+								<td><?php echo esc_html( (string) ( $row['current_rank'] ?? '' ) ); ?><?php if ( ! empty( $row['highest_rank'] ) && ( $row['highest_rank'] ?? '' ) !== ( $row['current_rank'] ?? '' ) ) : ?> <span class="description">(<?php echo esc_html( (string) $row['highest_rank'] ); ?>)</span><?php endif; ?></td>
+								<td><?php echo ! empty( $row['founding_partner'] ) ? esc_html__( 'Yes', 'lnkup-marketplace' ) : '—'; ?></td>
+								<td><?php echo esc_html( (string) ( $row['qualifying_booking_count'] ?? 0 ) ); ?></td>
+								<td>$<?php echo esc_html( number_format( (float) ( $row['qualifying_gmv'] ?? 0 ), 2 ) ); ?></td>
+								<td><?php echo esc_html( (string) ( $row['activated_organizer_count'] ?? 0 ) ); ?></td>
+								<td>
+									<?php if ( $bonus ) : ?>
+										$<?php echo esc_html( number_format( (float) ( $bonus['amount'] ?? 0 ), 2 ) ); ?>
+										(<?php echo esc_html( (string) ( $bonus['reward_status'] ?? '' ) ); ?>)
+									<?php else : ?>
+										—
+									<?php endif; ?>
+								</td>
+							<?php endif; ?>
 							<td>
 								<?php if ( 'pending' === ( $row['status'] ?? '' ) ) : ?>
 									<form method="post" style="display:inline;"><?php wp_nonce_field( 'lnkup_connector_admin' ); ?>
@@ -237,6 +338,32 @@ class LNKup_Connector_Admin {
 										<input type="text" name="custom_code" placeholder="<?php esc_attr_e( 'Custom code', 'lnkup-marketplace' ); ?>" class="regular-text" style="width:120px;" />
 										<button type="submit" class="button button-small"><?php esc_html_e( 'Set code', 'lnkup-marketplace' ); ?></button>
 									</form>
+									<?php if ( class_exists( 'LNKup_Connector_Ranks' ) ) : ?>
+										<form method="post" style="display:inline;"><?php wp_nonce_field( 'lnkup_connector_admin' ); ?>
+											<input type="hidden" name="lnkup_connector_action" value="rank_recalculate" />
+											<input type="hidden" name="connector_id" value="<?php echo esc_attr( (string) $row['id'] ); ?>" />
+											<button type="submit" class="button button-small"><?php esc_html_e( 'Recalculate', 'lnkup-marketplace' ); ?></button>
+										</form>
+										<form method="post" style="display:inline-flex;gap:4px;align-items:center;"><?php wp_nonce_field( 'lnkup_connector_admin' ); ?>
+											<input type="hidden" name="lnkup_connector_action" value="rank_override" />
+											<input type="hidden" name="connector_id" value="<?php echo esc_attr( (string) $row['id'] ); ?>" />
+											<select name="rank_key">
+												<option value=""><?php esc_html_e( 'Unranked', 'lnkup-marketplace' ); ?></option>
+												<?php foreach ( LNKup_Connector_Ranks::KEYS as $rank_key ) : ?>
+													<option value="<?php echo esc_attr( $rank_key ); ?>" <?php selected( $row['current_rank'] ?? '', $rank_key ); ?>><?php echo esc_html( $rank_key ); ?></option>
+												<?php endforeach; ?>
+											</select>
+											<button type="submit" class="button button-small"><?php esc_html_e( 'Override', 'lnkup-marketplace' ); ?></button>
+										</form>
+										<?php if ( ! empty( $bonus['id'] ) ) : ?>
+											<form method="post" style="display:inline;"><?php wp_nonce_field( 'lnkup_connector_admin' ); ?>
+												<input type="hidden" name="lnkup_connector_action" value="rank_bonus_reverse" />
+												<input type="hidden" name="connector_id" value="<?php echo esc_attr( (string) $row['id'] ); ?>" />
+												<input type="hidden" name="reward_id" value="<?php echo esc_attr( (string) $bonus['id'] ); ?>" />
+												<button type="submit" class="button button-small"><?php esc_html_e( 'Reverse bonus', 'lnkup-marketplace' ); ?></button>
+											</form>
+										<?php endif; ?>
+									<?php endif; ?>
 								<?php endif; ?>
 							</td>
 						</tr>
