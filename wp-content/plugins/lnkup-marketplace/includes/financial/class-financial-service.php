@@ -48,7 +48,7 @@ class LNKup_Financial_Service {
 		LNKup_Payments::refresh_pending_fees( $payment_id );
 		$mode = $args['mode'] ?? 'embedded';
 		if ( 'redirect' === $mode ) {
-			return self::provider()->create_checkout_session( $payment_id );
+			return self::provider()->create_checkout_session( $payment_id, $args );
 		}
 		return LNKup_Checkout::prepare( $payment_id, $args );
 	}
@@ -83,6 +83,39 @@ class LNKup_Financial_Service {
 	 * @param string $intent_id  Stripe intent ID.
 	 * @param array  $context    Extra context.
 	 */
+	/**
+	 * Mark payment processing (ACH / delayed settlement) without unlocking packets.
+	 *
+	 * @param int    $payment_id Payment ID.
+	 * @param string $intent_id  Stripe intent ID.
+	 * @param array  $context    Extra context.
+	 */
+	public static function mark_payment_processing( $payment_id, $intent_id = '', $context = array() ) {
+		$payment_id = absint( $payment_id );
+		if ( ! $payment_id ) {
+			return new WP_Error( 'invalid_payment', __( 'Invalid payment.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+
+		$status = get_post_meta( $payment_id, '_lnkup_payment_status', true );
+		if ( 'paid' === $status ) {
+			return array( 'already_paid' => true );
+		}
+
+		if ( $intent_id ) {
+			self::backfill_stripe_payment_meta( $payment_id, $intent_id );
+		}
+
+		LNKup_Payments::mark_processing( $payment_id, $intent_id );
+
+		if ( class_exists( 'LNKup_Financial_Audit' ) ) {
+			LNKup_Financial_Audit::log( 'payment_processing', 'payment', $payment_id, array_merge( $context, array(
+				'intent_id' => (string) $intent_id,
+			) ) );
+		}
+
+		return array( 'success' => true, 'status' => 'processing', 'payment_id' => $payment_id );
+	}
+
 	public static function finalize_payment( $payment_id, $intent_id = '', $context = array() ) {
 		$status = get_post_meta( $payment_id, '_lnkup_payment_status', true );
 		if ( 'paid' === $status ) {
@@ -129,12 +162,23 @@ class LNKup_Financial_Service {
 		$status = get_post_meta( $payment_id, '_lnkup_payment_status', true );
 		if ( 'paid' !== $status ) {
 			$intent_id = $intent_id ?: (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
-			if ( $intent_id && 0 === strpos( $intent_id, 'pi_' ) && ! self::stripe_intent_is_paid( $intent_id ) ) {
-				return new WP_Error(
-					'payment_incomplete',
-					__( 'Stripe payment is not complete yet.', 'lnkup-marketplace' ),
-					array( 'status' => 400 )
-				);
+			if ( $intent_id && 0 === strpos( $intent_id, 'pi_' ) ) {
+				$si_status = self::stripe_intent_status( $intent_id );
+				if ( 'processing' === $si_status ) {
+					self::mark_payment_processing( $payment_id, $intent_id, array( 'source' => 'reconcile' ) );
+					return new WP_Error(
+						'payment_processing',
+						__( 'Bank payment is still processing. Packet unlocks when funds clear.', 'lnkup-marketplace' ),
+						array( 'status' => 409 )
+					);
+				}
+				if ( 'succeeded' !== $si_status ) {
+					return new WP_Error(
+						'payment_incomplete',
+						__( 'Stripe payment is not complete yet.', 'lnkup-marketplace' ),
+						array( 'status' => 400 )
+					);
+				}
 			}
 			return self::finalize_payment( $payment_id, $intent_id, array( 'source' => 'reconcile' ) );
 		}
@@ -169,13 +213,30 @@ class LNKup_Financial_Service {
 			$intent_id  = (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
 
 			if ( 'paid' === $status ) {
-				$mode = (string) get_post_meta( $payment_id, '_lnkup_settlement_mode', true );
-				if ( 'destination' !== $mode || ! class_exists( 'LNKup_Organizer_Wallet' ) ) {
+				$mode     = (string) get_post_meta( $payment_id, '_lnkup_settlement_mode', true );
+				$dest     = (string) get_post_meta( $payment_id, '_lnkup_stripe_destination_account', true );
+				$has_cs   = class_exists( 'LNKup_Organizer_Wallet' ) && LNKup_Organizer_Wallet::has_connect_settlement_for_payment( $payment_id );
+				$has_row  = class_exists( 'LNKup_Organizer_Wallet' ) && LNKup_Organizer_Wallet::has_wallet_entry_for_payment( $payment_id );
+
+				if ( $has_cs ) {
 					continue;
 				}
-				if ( LNKup_Organizer_Wallet::has_connect_settlement_for_payment( $payment_id ) ) {
+
+				// Destination charge missing connect_settlement mirror.
+				if ( ( 'destination' === $mode || '' !== $dest ) && '' !== $dest && ! $has_cs ) {
+					$result = self::reconcile_payment( $payment_id, $intent_id );
+					if ( ! is_wp_error( $result ) ) {
+						$reconciled++;
+					}
 					continue;
 				}
+
+				// Platform charge (no destination) missing any ledger — settle treasury credit.
+				if ( '' === $dest && ! $has_row ) {
+					self::settle_treasury( $payment_id );
+					$reconciled++;
+				}
+				continue;
 			} elseif ( ! $intent_id ) {
 				continue;
 			}
@@ -184,6 +245,12 @@ class LNKup_Financial_Service {
 			if ( ! is_wp_error( $result ) ) {
 				$reconciled++;
 			}
+		}
+
+		// After settle credits, migrate/backfill into connect_settlement for destination-ready organizers.
+		if ( class_exists( 'LNKup_Organizer_Wallet' ) ) {
+			LNKup_Organizer_Wallet::migrate_treasury_balance_to_connect_settlement( $user_id );
+			LNKup_Organizer_Wallet::backfill_platform_payments_to_connect_settlement( $user_id );
 		}
 
 		return $reconciled;
@@ -271,7 +338,7 @@ class LNKup_Financial_Service {
 		$organizer_id = (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true );
 		$breakdown    = LNKup_Fee_Engine::calculate_for_payment( $payment_id );
 		if ( class_exists( 'LNKup_Stripe_Connect' ) ) {
-			LNKup_Stripe_Connect::persist_payment_settlement_meta( $payment_id, $organizer_id, $breakdown );
+			LNKup_Stripe_Connect::persist_payment_settlement_meta( $payment_id, $organizer_id, $breakdown, 'settle' );
 		}
 		$mode = get_post_meta( $payment_id, '_lnkup_settlement_mode', true ) ?: 'platform_treasury';
 		if ( class_exists( 'LNKup_Transactions' ) ) {
@@ -296,16 +363,19 @@ class LNKup_Financial_Service {
 			LNKup_Payment_Timeline::record( $payment_id, 'settled', array( 'notes' => $note ) );
 		}
 		if ( class_exists( 'LNKup_Financial_Activity' ) ) {
+			$organizer_net = (float) ( $breakdown['organizer_net'] ?? 0 );
+			$event_id      = (int) get_post_meta( $payment_id, '_lnkup_event_id', true );
 			LNKup_Financial_Activity::record( 'payment_settled', array(
 				'user_id'     => $organizer_id,
 				'role'        => 'organizer',
 				'entity_type' => 'payment',
 				'entity_id'   => $payment_id,
-				'message'     => sprintf(
-					/* translators: 1: settlement mode 2: amount */
-					__( 'Payment settled (%1$s) — organizer net $%2$s', 'lnkup-marketplace' ),
-					$mode,
-					number_format( (float) ( $breakdown['organizer_net'] ?? 0 ), 2 )
+				'amount'      => $organizer_net,
+				'message'     => __( 'Booth payment settled', 'lnkup-marketplace' ),
+				'metadata'    => array(
+					'status'          => 'completed',
+					'settlement_mode' => $mode,
+					'event_id'        => $event_id,
 				),
 			) );
 		}
@@ -366,6 +436,24 @@ class LNKup_Financial_Service {
 	 */
 	public static function organizer_balance_payload( $user_id = 0 ) {
 		$user_id = $user_id ?: get_current_user_id();
+
+		// Ensure platform-settled booth payments get ledger claims before balance reads.
+		$lock = 'lnkup_org_wallet_reconcile_' . absint( $user_id );
+		if ( $user_id && ! get_transient( $lock ) ) {
+			try {
+				self::reconcile_organizer_payments( $user_id );
+				if ( class_exists( 'LNKup_Transactions' ) ) {
+					LNKup_Transactions::backfill_amounts_from_payments( $user_id );
+				}
+			} catch ( Throwable $e ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					error_log( 'LNKup reconcile on organizer wallet: ' . $e->getMessage() );
+				}
+			}
+			set_transient( $lock, 1, MINUTE_IN_SECONDS );
+		}
+
 		$wallet  = array();
 		if ( class_exists( 'LNKup_Organizer_Wallet' ) ) {
 			try {
@@ -396,7 +484,41 @@ class LNKup_Financial_Service {
 	}
 
 	/**
+	 * Cashout ceiling shared by Money UI and POST /organizer-wallet/cashout.
+	 *
+	 * Destination mode uses live Stripe Connect available plus ledger-capped
+	 * platform recovery (same as display_balances). Platform treasury uses ledger
+	 * available. Returns WP_Error when destination Stripe balance cannot be synced.
+	 *
+	 * @param int $user_id Organizer user ID.
+	 * @return float|WP_Error
+	 */
+	public static function organizer_cashout_available( $user_id = 0 ) {
+		$user_id = $user_id ? absint( $user_id ) : get_current_user_id();
+		$wallet  = class_exists( 'LNKup_Organizer_Wallet' ) ? LNKup_Organizer_Wallet::get_balances( $user_id ) : array();
+		$mode    = (string) ( $wallet['settlement_mode'] ?? 'platform_treasury' );
+
+		if ( 'destination' === $mode ) {
+			$stripe_balance = self::organizer_stripe_balance( $user_id );
+			if ( empty( $stripe_balance['synced'] ) ) {
+				return new WP_Error(
+					'balance_unavailable',
+					__( 'Could not load your Stripe payout balance. Refresh and try again.', 'lnkup-marketplace' ),
+					array( 'status' => 400 )
+				);
+			}
+			$display = self::organizer_display_balances( $user_id, $wallet, $stripe_balance );
+			return round( (float) ( $display['available'] ?? 0 ), 2 );
+		}
+
+		return round( (float) ( $wallet['available'] ?? 0 ), 2 );
+	}
+
+	/**
 	 * Unified organizer balance figures for dashboard UI (ledger + Stripe Connect).
+	 *
+	 * Destination + synced: Available = Connect available + ledger-capped platform recovery.
+	 * Never exposes uncapped platform fees as Available.
 	 *
 	 * @param int        $user_id        Organizer user ID.
 	 * @param array|null $wallet         Optional wallet balances from LNKup_Organizer_Wallet::get_balances().
@@ -416,25 +538,50 @@ class LNKup_Financial_Service {
 		$pending   = (float) ( $wallet['pending'] ?? 0 );
 		$source    = 'ledger';
 
+		$connect_available    = 0.0;
+		$platform_recoverable = 0.0;
+		$ledger_claim         = round( (float) ( $wallet['available'] ?? 0 ), 2 );
+
 		if ( 'destination' === $mode && ! empty( $stripe_balance['synced'] ) ) {
-			$available = (float) ( $stripe_balance['available'] ?? 0 );
-			$pending   = (float) ( $stripe_balance['pending'] ?? 0 );
-			$source    = 'stripe_connect';
+			$connect_available = (float) ( $stripe_balance['available'] ?? 0 );
+			$pending           = (float) ( $stripe_balance['pending'] ?? 0 );
+			$source            = 'stripe_connect';
+
+			$connect_cents = isset( $stripe_balance['available_cents'] )
+				? (int) $stripe_balance['available_cents']
+				: (int) round( $connect_available * 100 );
+
+			if ( class_exists( 'LNKup_Stripe_Connect' ) ) {
+				$recoverable_cents    = LNKup_Stripe_Connect::organizer_recoverable_platform_cents( $user_id, $connect_cents );
+				$platform_recoverable = round( $recoverable_cents / 100, 2 );
+				$ledger_claim         = round( LNKup_Stripe_Connect::organizer_ledger_claim_cents( $user_id ) / 100, 2 );
+			}
+
+			$available = round( $connect_available + $platform_recoverable, 2 );
+			if ( $platform_recoverable > 0 ) {
+				$source = 'stripe_connect_plus_recovery';
+			}
 		} elseif ( 'destination' === $mode && (float) ( $wallet['connect_settlement'] ?? 0 ) > 0 ) {
-			$pending   = max( $pending, (float) $wallet['connect_settlement'] );
-			$available = 0;
+			$settled   = (float) $wallet['connect_settlement'];
+			$available = $ledger_claim > 0 ? $ledger_claim : $settled;
 			$source    = 'ledger_settlement';
 		}
 
 		return array(
-			'available'          => round( $available, 2 ),
-			'pending'            => round( $pending, 2 ),
-			'processing'         => round( (float) ( $wallet['processing'] ?? 0 ), 2 ),
-			'reserve_hold'       => round( (float) ( $wallet['reserve_hold'] ?? 0 ), 2 ),
-			'connect_settlement' => round( (float) ( $wallet['connect_settlement'] ?? 0 ), 2 ),
-			'settlement_mode'    => $mode,
-			'balance_source'     => $source,
-			'stripe_synced'      => ! empty( $stripe_balance['synced'] ),
+			'available'            => round( $available, 2 ),
+			'pending'              => round( $pending, 2 ),
+			'processing'           => round( (float) ( $wallet['processing'] ?? 0 ), 2 ),
+			'reserve_hold'         => round( (float) ( $wallet['reserve_hold'] ?? 0 ), 2 ),
+			'connect_settlement'   => round( (float) ( $wallet['connect_settlement'] ?? 0 ), 2 ),
+			'connect_available'    => round( $connect_available, 2 ),
+			'platform_recoverable' => round( $platform_recoverable, 2 ),
+			'ledger_claim'         => round( $ledger_claim, 2 ),
+			'settlement_mode'      => $mode,
+			'balance_source'       => $source,
+			'stripe_synced'        => ! empty( $stripe_balance['synced'] ),
+			'source_types'         => ( in_array( $source, array( 'stripe_connect', 'stripe_connect_plus_recovery' ), true ) && is_array( $stripe_balance['source_types'] ?? null ) )
+				? $stripe_balance['source_types']
+				: array(),
 		);
 	}
 
@@ -496,8 +643,8 @@ class LNKup_Financial_Service {
 	 * @param string $intent_id PaymentIntent ID.
 	 */
 	private static function stripe_intent_is_paid( $intent_id ) {
-		$status = self::stripe_intent_status( $intent_id );
-		return in_array( $status, array( 'succeeded', 'processing' ), true );
+		// ACH may be "processing" — that is not paid / packet-unlock eligible.
+		return 'succeeded' === self::stripe_intent_status( $intent_id );
 	}
 
 	/**
@@ -520,9 +667,15 @@ class LNKup_Financial_Service {
 		$payload  = $request->get_body();
 		$sig      = $request->get_header( 'stripe-signature' );
 		$client   = new LNKup_Stripe_Client();
-		$event    = $client->verify_webhook( $payload, $sig, $settings['stripe_webhook_secret'] ?? '' );
+		$secret   = trim( (string) ( $settings['stripe_webhook_secret'] ?? '' ) );
+		$event    = $client->verify_webhook( $payload, $sig, $secret );
 
 		if ( is_wp_error( $event ) ) {
+			// Signing secret configured ⇒ never accept unsigned payloads (even in test_mode).
+			if ( '' !== $secret ) {
+				return new WP_REST_Response( array( 'error' => $event->get_error_message() ), 400 );
+			}
+			// Dev-only: unsigned JSON allowed only when no secret AND test_mode is on.
 			if ( empty( $settings['test_mode'] ) ) {
 				return new WP_REST_Response( array( 'error' => $event->get_error_message() ), 400 );
 			}
@@ -648,9 +801,12 @@ class LNKup_Financial_Service {
 			}
 		}
 		return array_merge( $data, array(
-			'gross_revenue'       => $reports['gross_revenue'] ?? $data['vendor_revenue'],
+			'gross_revenue'       => max(
+				(float) ( $reports['gross_revenue'] ?? 0 ),
+				(float) ( $data['vendor_revenue'] ?? 0 )
+			),
 			'platform_fees'       => $reports['platform_fees'] ?? 0,
-			'collected'           => $data['vendor_revenue'],
+			'collected'           => (float) ( $data['vendor_revenue'] ?? 0 ),
 			'refunds'             => $reports['refunds'] ?? 0,
 			'outstanding'         => $reports['outstanding'] ?? 0,
 			'pending_balance'     => (float) ( $display_balances['pending'] ?? $wallet['pending'] ?? $data['wallet_pending'] ?? 0 ),

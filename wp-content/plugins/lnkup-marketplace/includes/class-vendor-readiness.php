@@ -49,11 +49,10 @@ class LNKup_Vendor_Readiness {
 			return self::STATUS_AT_RISK;
 		}
 
-		if ( in_array( $status, array( 'payment_required', 'approved' ), true ) ) {
-			return self::STATUS_NEEDS_PAYMENT;
-		}
-
-		if ( 'paid' === $status ) {
+		if ( in_array( $status, array( 'payment_required', 'approved', 'paid' ), true ) ) {
+			if ( ! self::application_payment_satisfied( $app_id, $status ) ) {
+				return self::STATUS_NEEDS_PAYMENT;
+			}
 			if ( ! self::documents_complete( $vendor_id, $app_id ) ) {
 				return self::STATUS_NEEDS_DOCUMENTS;
 			}
@@ -103,6 +102,41 @@ class LNKup_Vendor_Readiness {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Whether booth payment is satisfied (paid status or $0 opportunity fee).
+	 *
+	 * Preview-only checkout does not count. Missing opportunity is not treated as free.
+	 *
+	 * @param int    $app_id Application ID.
+	 * @param string $status Optional application status.
+	 */
+	public static function application_payment_satisfied( $app_id, $status = '' ) {
+		$app_id = absint( $app_id );
+		if ( ! $status ) {
+			$status = get_post_meta( $app_id, '_lnkup_application_status', true );
+		}
+		if ( in_array( $status, array( 'paid', 'completed' ), true ) ) {
+			return true;
+		}
+		if ( ! in_array( $status, array( 'approved', 'payment_required' ), true ) ) {
+			return false;
+		}
+		return self::opportunity_fee_is_zero( $app_id );
+	}
+
+	/**
+	 * Whether the linked opportunity has a $0 booth fee.
+	 *
+	 * @param int $app_id Application ID.
+	 */
+	private static function opportunity_fee_is_zero( $app_id ) {
+		$opp_id = (int) get_post_meta( $app_id, '_lnkup_opportunity_id', true );
+		if ( ! $opp_id ) {
+			return false;
+		}
+		return (float) get_post_meta( $opp_id, '_lnkup_vendor_fee', true ) <= 0;
 	}
 
 	/**
@@ -177,17 +211,23 @@ class LNKup_Vendor_Readiness {
 	 * @param bool   $done        Whether complete.
 	 * @param int    $weight      Scoring weight.
 	 * @param string $group       Group key.
-	 * @param string $cta_tab     Vendor ops tab for CTA.
-	 * @param string $cta_section Optional packet section.
+	 * @param string $cta_tab       Vendor ops tab for CTA.
+	 * @param string $cta_section   Optional packet section.
+	 * @param string $pending_label Label when the item is not done.
+	 * @param string $action_label  Organizer/vendor next-action copy.
 	 */
-	private static function make_item( $key, $label, $done, $weight, $group, $cta_tab = '', $cta_section = '' ) {
+	private static function make_item( $key, $label, $done, $weight, $group, $cta_tab = '', $cta_section = '', $pending_label = '', $action_label = '' ) {
 		$item_status = $done ? 'done' : 'pending';
 		if ( ! $done && in_array( $key, array( 'application_approved', 'payment_complete' ), true ) ) {
 			$item_status = 'blocked';
 		}
+		$display = $done ? $label : ( $pending_label ? $pending_label : $label );
 		return array(
 			'key'          => $key,
-			'label'        => $label,
+			'label'        => $display,
+			'done_label'   => $label,
+			'pending_label'=> $pending_label,
+			'action_label' => $action_label,
 			'done'         => $done,
 			'weight'       => $weight,
 			'group'        => $group,
@@ -244,12 +284,15 @@ class LNKup_Vendor_Readiness {
 				}
 				$url = add_query_arg( $args, $dashboard );
 			}
-			return array(
-				'label'   => sprintf(
+			$action_label = ! empty( $item['action_label'] )
+				? $item['action_label']
+				: sprintf(
 					/* translators: %s: checklist item label */
 					__( 'Complete: %s', 'lnkup-marketplace' ),
 					$item['label']
-				),
+				);
+			return array(
+				'label'   => $action_label,
 				'tab'     => $tab,
 				'section' => $item['cta_section'] ?? '',
 				'url'     => $url,
@@ -344,10 +387,13 @@ class LNKup_Vendor_Readiness {
 		$items[] = self::make_item(
 			'payment_complete',
 			__( 'Payment complete', 'lnkup-marketplace' ),
-			in_array( $status, array( 'paid', 'completed' ), true ),
+			self::application_payment_satisfied( $app_id, $status ),
 			15,
 			'application',
-			'overview'
+			'overview',
+			'',
+			__( 'Payment due', 'lnkup-marketplace' ),
+			__( 'Collect booth payment', 'lnkup-marketplace' )
 		);
 
 		foreach ( $required as $doc_type ) {

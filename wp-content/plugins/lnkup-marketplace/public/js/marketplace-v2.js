@@ -185,7 +185,13 @@
     root.querySelectorAll('[data-filter]').forEach(function (el) {
       var key = el.getAttribute('data-filter');
       if (el.type === 'checkbox') {
-        if (el.checked) state.filters[key] = true;
+        if (el.checked) {
+          if (key === 'lnkup_only') {
+            state.filters.include_external = false;
+          } else {
+            state.filters[key] = true;
+          }
+        }
         else if (key === 'has_spots') delete state.filters.has_spots;
         else if (key === 'include_external') state.filters[key] = false;
       } else if (el.value) {
@@ -294,6 +300,11 @@
     if (count && !append) count.textContent = 'Searching…';
     if (!append) renderActiveFilters(mergeSearchChip([]));
     showError(false);
+    if (!append && gridEl && window.LNKupUI && typeof LNKupUI.panelSkeleton === 'function') {
+      LNKupUI.panelSkeleton(gridEl, 6);
+    }
+    var empty = document.getElementById('lnkup-empty-state');
+    if (!append && empty) empty.hidden = true;
 
     var query = buildQuery();
     var fetcher = cfg.restUrl ? api('/search', { query: query }) : ajaxFilter(query);
@@ -816,6 +827,18 @@
     resetAndSearch();
   });
 
+  root.addEventListener('change', function (e) {
+    var key = e.target && e.target.getAttribute && e.target.getAttribute('data-filter');
+    if (key === 'lnkup_only' && e.target.checked) {
+      var inc = root.querySelector('[data-filter="include_external"]');
+      if (inc) inc.checked = false;
+    }
+    if (key === 'include_external' && e.target.checked) {
+      var only = root.querySelector('[data-filter="lnkup_only"]');
+      if (only) only.checked = false;
+    }
+  });
+
   var marketSelectEl = root.querySelector('[data-filter="market_select"]');
   if (marketSelectEl) {
     marketSelectEl.addEventListener('change', function () {
@@ -1086,11 +1109,13 @@
       if (gridView) gridView.hidden = true;
       if (mapView) mapView.hidden = false;
       if (window.lnkupInitMap) window.lnkupInitMap();
+      if (window.lnkupMapInvalidateSize) window.lnkupMapInvalidateSize();
     } else if (view === 'split' && phaseAtLeast('1b')) {
       if (splitLayout) splitLayout.classList.add('is-split');
       if (gridView) gridView.hidden = false;
       if (mapView) mapView.hidden = false;
       if (window.lnkupInitMap) window.lnkupInitMap();
+      if (window.lnkupMapInvalidateSize) window.lnkupMapInvalidateSize();
     } else {
       applyViewMode('grid', false);
       return;

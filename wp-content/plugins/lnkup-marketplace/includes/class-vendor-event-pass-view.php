@@ -164,7 +164,7 @@ class LNKup_Vendor_Event_Pass_View {
 
 				<section class="lnkup-vendor-pass__section">
 					<h3><?php echo esc_html( lnkup_copy( 'pass_section_booth' ) ); ?></h3>
-					<?php if ( $booth && ! empty( $booth['assignment'] ) ) : ?>
+					<?php if ( $booth && 'assigned' === ( $booth['status'] ?? '' ) && ! empty( $booth['assignment'] ) ) : ?>
 						<p><strong><?php echo esc_html( (string) $booth['assignment'] ); ?></strong></p>
 						<?php if ( ! empty( $booth['zone'] ) ) : ?>
 							<p class="lnkup-muted"><?php echo esc_html( (string) $booth['zone'] ); ?></p>
@@ -173,7 +173,21 @@ class LNKup_Vendor_Event_Pass_View {
 							<p class="lnkup-muted"><?php echo esc_html( (string) $booth['dimensions'] ); ?></p>
 						<?php endif; ?>
 					<?php else : ?>
-						<p class="lnkup-muted"><?php esc_html_e( 'Booth assignment pending.', 'lnkup-marketplace' ); ?></p>
+						<p class="lnkup-muted"><?php echo esc_html( lnkup_copy( 'pass_booth_pending' ) ); ?></p>
+						<p><?php echo esc_html( lnkup_copy( 'pass_booth_pending_body' ) ); ?></p>
+						<?php if ( ! empty( $booth['placeholder'] ) ) : ?>
+							<p><?php echo esc_html( sprintf( __( 'Placeholder: %s', 'lnkup-marketplace' ), (string) $booth['placeholder'] ) ); ?></p>
+						<?php endif; ?>
+						<?php if ( ! empty( $booth['expected_by'] ) ) : ?>
+							<p class="lnkup-muted"><?php echo esc_html( sprintf( __( 'Typically assigned %s.', 'lnkup-marketplace' ), (string) $booth['expected_by'] ) ); ?></p>
+						<?php endif; ?>
+						<p><?php echo esc_html( lnkup_copy( 'pass_booth_next_step' ) ); ?></p>
+						<?php if ( ! empty( $contacts['organizer']['name'] ) ) : ?>
+							<p><?php echo esc_html( sprintf( __( 'Organizer: %1$s%2$s', 'lnkup-marketplace' ), (string) $contacts['organizer']['name'], ! empty( $contacts['organizer']['email'] ) ? ' · ' . (string) $contacts['organizer']['email'] : '' ) ); ?></p>
+						<?php endif; ?>
+						<?php if ( $app_id ) : ?>
+							<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm lnkup-ops-support-open" data-app-id="<?php echo esc_attr( (string) $app_id ); ?>"><?php echo esc_html( lnkup_copy( 'pass_support_cta' ) ); ?></button>
+						<?php endif; ?>
 					<?php endif; ?>
 				</section>
 

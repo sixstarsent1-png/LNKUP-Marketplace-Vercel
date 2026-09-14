@@ -21,10 +21,20 @@ class LNKup_Map_Render {
 		$html .= self::toolbar( $mode );
 		$html .= '<div class="lnkup-map-shell__body">';
 		$html .= '<div class="lnkup-map-canvas-wrap" id="lnkup-map-canvas-wrap">';
-		if ( $map && ! empty( $map['image_url'] ) ) {
+		$has_image = $map && ! empty( $map['image_url'] );
+		if ( $has_image ) {
 			$html .= '<img src="' . esc_url( $map['image_url'] ) . '" alt="" class="lnkup-map-canvas__img" id="lnkup-map-canvas-img" />';
 		} else {
 			$html .= '<div class="lnkup-map-canvas__grid" id="lnkup-map-canvas-grid"></div>';
+			if ( in_array( $mode, array( 'builder', 'live' ), true ) ) {
+				$html .= self::empty_state(
+					__( 'No map data yet. Build your venue layout to get started.', 'lnkup-marketplace' ),
+					array(
+						'role'     => 'organizer',
+						'event_id' => $event_id,
+					)
+				);
+			}
 		}
 		$html .= '<div class="lnkup-map-elements" id="lnkup-map-elements"></div>';
 		$html .= '<svg class="lnkup-map-routes" id="lnkup-map-routes" aria-hidden="true"></svg>';
@@ -57,18 +67,44 @@ class LNKup_Map_Render {
 		return '<div class="lnkup-map-legend" id="lnkup-map-legend" aria-label="' . esc_attr__( 'Map legend', 'lnkup-marketplace' ) . '"></div>';
 	}
 
-	public static function empty_state( $message = '' ) {
-		$message = $message ?: __( 'No map data yet. Build your venue layout to get started.', 'lnkup-marketplace' );
-		return '<div class="lnkup-map-empty"><p class="lnkup-muted">' . esc_html( $message ) . '</p></div>';
+	public static function empty_state( $message = '', $args = array() ) {
+		$args     = is_array( $args ) ? $args : array();
+		$role     = $args['role'] ?? 'organizer';
+		$event_id = (int) ( $args['event_id'] ?? 0 );
+		$message  = $message ?: __( 'No map data yet. Build your venue layout to get started.', 'lnkup-marketplace' );
+		$html     = '<div class="lnkup-map-empty">';
+		$html    .= '<p class="lnkup-muted">' . esc_html( $message ) . '</p>';
+		$html    .= '<div class="lnkup-map-empty__actions">';
+		if ( 'vendor' === $role ) {
+			$html .= '<p>' . esc_html__( 'Map coming soon. The organizer will add a venue layout before load-in.', 'lnkup-marketplace' ) . '</p>';
+			$html .= '<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm lnkup-ops-goto-tab" data-ops-tab="support">' . esc_html__( 'Contact organizer', 'lnkup-marketplace' ) . '</button>';
+		} else {
+			$html .= '<button type="button" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm lnkup-ops-goto-tab" data-ops-tab="map-builder">' . esc_html__( 'Open Map Builder', 'lnkup-marketplace' ) . '</button>';
+			if ( $event_id ) {
+				$html .= '<label class="lnkup-btn lnkup-btn--outline lnkup-btn--sm">' . esc_html__( 'Upload map', 'lnkup-marketplace' );
+				$html .= '<input type="file" accept="image/*" class="lnkup-map-upload-input" data-event-id="' . esc_attr( (string) $event_id ) . '" hidden /></label>';
+			}
+		}
+		$html .= '</div></div>';
+		return $html;
 	}
 
 	/**
 	 * Legacy venue map with booth pins (fixed coords).
 	 */
-	public static function venue_map( $event_id, $booths = null ) {
+	public static function venue_map( $event_id, $booths = null, $role = 'organizer' ) {
 		$map_id = (int) get_post_meta( absint( $event_id ), '_lnkup_venue_map_attachment_id', true );
 		if ( ! $map_id ) {
-			return self::empty_state( __( 'Upload a venue map or use the Map Builder to create a schematic layout.', 'lnkup-marketplace' ) );
+			$msg = 'vendor' === $role
+				? __( 'No venue map yet.', 'lnkup-marketplace' )
+				: __( 'Upload a venue map or use the Map Builder to create a schematic layout.', 'lnkup-marketplace' );
+			return self::empty_state(
+				$msg,
+				array(
+					'role'     => $role,
+					'event_id' => $event_id,
+				)
+			);
 		}
 		$url = wp_get_attachment_url( $map_id );
 		if ( ! $url ) {

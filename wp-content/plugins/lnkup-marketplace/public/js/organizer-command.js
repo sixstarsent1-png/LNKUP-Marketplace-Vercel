@@ -2,8 +2,9 @@
   'use strict';
 
   var EXPAND_PANEL_IDS = ['vendors', 'lists', 'invites', 'intelligence', 'financial'];
-  var SECTION_IDS = ['overview', 'events', 'applications', 'vendors', 'lists', 'invites', 'intelligence', 'create', 'financial'];
+  var SECTION_IDS = ['overview', 'events', 'applications', 'vendors', 'lists', 'invites', 'intelligence', 'create', 'financial', 'referrals'];
   var vendorSearchTimer = null;
+  var ignoreObserverUntil = 0;
 
   function escapeHtml(str) {
     if (!str) {
@@ -40,10 +41,16 @@
       document.dispatchEvent(new CustomEvent('lnkup-financial-expand'));
     }
     if (panelId === 'lists') {
+      if (typeof window.lnkupCrmLoadLists === 'function') {
+        window.lnkupCrmLoadLists();
+      }
       var nameInput = document.getElementById('lnkup-crm-new-list-name');
       if (nameInput && document.activeElement && document.activeElement.id === 'lnkup-crm-new-list-compact') {
         nameInput.focus();
       }
+    }
+    if (panelId === 'invites' && typeof window.lnkupCrmLoadInvites === 'function') {
+      window.lnkupCrmLoadInvites();
     }
   }
 
@@ -66,13 +73,33 @@
     }
   }
 
+  function collapsePanel(panelId) {
+    if (!panelId) {
+      return;
+    }
+    var panel = getExpandPanel(panelId);
+    if (panel) {
+      panel.hidden = true;
+      panel.classList.remove('is-open');
+    }
+    var hash = (window.location.hash || '').replace(/^#/, '').split('&')[0];
+    if (hash === panelId && window.history.replaceState) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }
+
   function scrollToSection(id) {
     if (!id) {
       return;
     }
-    window.location.hash = id;
+    var current = (window.location.hash || '').replace(/^#/, '');
+    var currentSection = current.split('&')[0];
+    if (currentSection !== id) {
+      window.location.hash = id;
+    }
     var target = document.getElementById(id);
     if (target) {
+      ignoreObserverUntil = Date.now() + 1000;
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
@@ -92,6 +119,12 @@
 
   function bindExpandCtAs() {
     document.addEventListener('click', function (e) {
+      var collapseBtn = e.target.closest('[data-collapse-panel]');
+      if (collapseBtn && collapseBtn.tagName === 'BUTTON') {
+        e.preventDefault();
+        collapsePanel(collapseBtn.getAttribute('data-collapse-panel'));
+        return;
+      }
       var expandPanelBtn = e.target.closest('[data-expand-panel]');
       if (expandPanelBtn && expandPanelBtn.tagName === 'BUTTON') {
         e.preventDefault();
@@ -108,18 +141,33 @@
       if (createBtn) {
         e.preventDefault();
         openCreateWizard();
+        return;
+      }
+      var hashLink = e.target.closest('.lnkup-dashboard__nav-link[data-hash], .lnkup-organizer-section-nav__link[data-hash]');
+      if (hashLink) {
+        var hash = hashLink.getAttribute('data-hash');
+        if (!hash) {
+          return;
+        }
+        e.preventDefault();
+        if (EXPAND_PANEL_IDS.indexOf(hash) !== -1) {
+          expandPanel(hash, false);
+        }
+        scrollToSection(hash);
+        syncSectionNav(hash);
       }
     });
   }
 
   function syncSectionNav(hash) {
     hash = hash || (window.location.hash || '').replace(/^#/, '') || 'overview';
-    if (hash === 'operations' || hash === 'applications') {
-      hash = 'events';
+    var section = hash.split('&')[0];
+    if (section === 'operations') {
+      section = 'events';
     }
     document.querySelectorAll('.lnkup-organizer-section-nav__link').forEach(function (link) {
       var id = link.getAttribute('data-hash');
-      var active = id === hash;
+      var active = id === section;
       link.classList.toggle('is-active', active);
       if (active) {
         link.setAttribute('aria-current', 'true');
@@ -136,6 +184,9 @@
     }
     var visible = {};
     var observer = new IntersectionObserver(function (entries) {
+      if (Date.now() < ignoreObserverUntil) {
+        return;
+      }
       entries.forEach(function (entry) {
         var id = entry.target.id || entry.target.getAttribute('data-section');
         if (!id) {
@@ -267,7 +318,11 @@
       return;
     }
     el.removeAttribute('data-ssr');
-    el.innerHTML = '<div class="lnkup-crm-skeleton" aria-hidden="true"></div>';
+    if (window.LNKupUI && typeof LNKupUI.panelSkeleton === 'function') {
+      LNKupUI.panelSkeleton(el, 3);
+    } else {
+      el.innerHTML = '<div class="lnkup-crm-skeleton" aria-hidden="true"></div>';
+    }
     var qs = '?scope=discover&view=card&sort=score&per_page=3';
     if (q) {
       qs += '&q=' + encodeURIComponent(q);
@@ -350,8 +405,32 @@
     if (!wizard) {
       return;
     }
-    var steps = ['lnkup-create-step-1', 'lnkup-create-step-2', 'lnkup-create-step-3'];
-    var stepNums = { 'lnkup-create-step-1': '1', 'lnkup-create-step-2': '2', 'lnkup-create-step-3': '3' };
+    var steps = ['lnkup-create-step-1', 'lnkup-create-step-2', 'lnkup-create-step-3', 'lnkup-create-step-4'];
+    var stepNums = {
+      'lnkup-create-step-1': '1',
+      'lnkup-create-step-2': '2',
+      'lnkup-create-step-3': '3',
+      'lnkup-create-step-4': '4'
+    };
+
+    function syncOpenVendorAppsFields() {
+      var openCb = document.getElementById('lnkup_open_vendor_applications');
+      var pricing = document.getElementById('lnkup-create-vendor-pricing');
+      var fee = document.getElementById('create_vendor_fee');
+      var spots = document.getElementById('create_spots_total');
+      var open = !openCb || openCb.checked;
+      if (pricing) {
+        pricing.hidden = !open;
+      }
+      if (fee) {
+        fee.disabled = !open;
+        fee.required = open;
+      }
+      if (spots) {
+        spots.disabled = !open;
+        spots.required = open;
+      }
+    }
 
     function setWizardStep(stepId) {
       var num = stepNums[stepId] || '1';
@@ -364,27 +443,87 @@
       var nextBtn = wizard.querySelector('[data-wizard-nav="next"]');
       var publishBtns = wizard.querySelectorAll('#lnkup-create-event-submit-footer, #lnkup-create-event-submit');
       if (prevBtn) prevBtn.hidden = stepId === 'lnkup-create-step-1';
-      if (nextBtn) nextBtn.hidden = stepId === 'lnkup-create-step-3';
-      publishBtns.forEach(function (b) { b.hidden = stepId !== 'lnkup-create-step-3'; });
+      if (nextBtn) nextBtn.hidden = stepId === 'lnkup-create-step-4';
+      publishBtns.forEach(function (b) { b.hidden = stepId !== 'lnkup-create-step-4'; });
+      if (typeof window.lnkupSyncPublishSummary === 'function') {
+        window.lnkupSyncPublishSummary();
+      }
+    }
+
+    function getCurrentStepId() {
+      return steps.find(function (id) {
+        return wizard.getAttribute('data-wizard-step') === stepNums[id];
+      }) || 'lnkup-create-step-1';
+    }
+
+    /**
+     * Validate required controls in a wizard step section (skip disabled).
+     * @param {string} stepId
+     * @return {HTMLElement|null} First invalid control, or null.
+     */
+    function firstInvalidInStep(stepId) {
+      var section = document.getElementById(stepId);
+      if (!section) {
+        return null;
+      }
+      var fields = section.querySelectorAll('input, select, textarea');
+      for (var i = 0; i < fields.length; i++) {
+        var el = fields[i];
+        if (el.disabled || el.type === 'hidden' || el.type === 'submit' || el.type === 'button') {
+          continue;
+        }
+        if (typeof el.checkValidity === 'function' && !el.checkValidity()) {
+          return el;
+        }
+      }
+      return null;
+    }
+
+    function validateStep(stepId) {
+      var bad = firstInvalidInStep(stepId);
+      if (!bad) {
+        return true;
+      }
+      if (typeof bad.reportValidity === 'function') {
+        bad.reportValidity();
+      }
+      try {
+        bad.focus();
+      } catch (e) {
+        // ignore
+      }
+      if (window.lnkupShowToast) {
+        window.lnkupShowToast('Please complete the required fields before continuing.', 'error');
+      }
+      return false;
     }
 
     document.querySelectorAll('.lnkup-organizer-wizard-steps [data-wizard-step]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var stepId = btn.getAttribute('data-wizard-step');
-        if (stepId) {
-          setWizardStep(stepId);
+        if (!stepId) {
+          return;
         }
+        var current = getCurrentStepId();
+        var currentIdx = steps.indexOf(current);
+        var targetIdx = steps.indexOf(stepId);
+        // Moving forward: require current step valid.
+        if (targetIdx > currentIdx && !validateStep(current)) {
+          return;
+        }
+        setWizardStep(stepId);
       });
     });
 
     wizard.querySelectorAll('[data-wizard-nav]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var dir = btn.getAttribute('data-wizard-nav');
-        var current = steps.find(function (id) {
-          return wizard.getAttribute('data-wizard-step') === stepNums[id];
-        }) || 'lnkup-create-step-1';
+        var current = getCurrentStepId();
         var idx = steps.indexOf(current);
         if (dir === 'next' && idx < steps.length - 1) {
+          if (!validateStep(current)) {
+            return;
+          }
           setWizardStep(steps[idx + 1]);
         } else if (dir === 'prev' && idx > 0) {
           setWizardStep(steps[idx - 1]);
@@ -392,27 +531,58 @@
       });
     });
 
+    var openAppsCb = document.getElementById('lnkup_open_vendor_applications');
+    if (openAppsCb) {
+      openAppsCb.addEventListener('change', function () {
+        syncOpenVendorAppsFields();
+        if (typeof window.lnkupSyncPublishSummary === 'function') {
+          window.lnkupSyncPublishSummary();
+        }
+      });
+    }
+    syncOpenVendorAppsFields();
+
     setWizardStep('lnkup-create-step-1');
+    window.lnkupOrganizerSetWizardStep = setWizardStep;
+    window.lnkupOrganizerValidateCreateStep = validateStep;
+    window.lnkupOrganizerFirstInvalidCreateField = function () {
+      for (var i = 0; i < steps.length; i++) {
+        var bad = firstInvalidInStep(steps[i]);
+        if (bad) {
+          return { field: bad, stepId: steps[i] };
+        }
+      }
+      return null;
+    };
   }
 
   function handleHashDeepLink() {
-    var hash = (window.location.hash || '').replace(/^#/, '');
-    if (!hash) {
+    var raw = (window.location.hash || '').replace(/^#/, '');
+    if (!raw) {
       return;
     }
-    if (hash === 'create') {
+    var section = raw.split('&')[0];
+    if (section === 'create') {
       openCreateWizard();
       return;
     }
-    if (EXPAND_PANEL_IDS.indexOf(hash) !== -1) {
-      expandPanel(hash, false);
-      scrollToSection(hash);
+    if (EXPAND_PANEL_IDS.indexOf(section) !== -1) {
+      expandPanel(section, false);
+      scrollToSection(section);
       return;
     }
-    if (hash === 'invites' || hash === 'lists') {
-      expandPanel(hash, false);
+    if (section === 'invites' || section === 'lists') {
+      expandPanel(section, false);
     }
-    scrollToSection(hash);
+    if (section === 'operations') {
+      scrollToSection('operations');
+      return;
+    }
+    if (section === 'applications') {
+      scrollToSection('applications');
+      return;
+    }
+    scrollToSection(section);
   }
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -435,5 +605,6 @@
 
   window.lnkupOrganizerOpenSection = scrollToSection;
   window.lnkupOrganizerExpandPanel = expandPanel;
+  window.lnkupOrganizerCollapsePanel = collapsePanel;
   window.lnkupRefreshVendorsPreview = refreshVendorsPreview;
 })();

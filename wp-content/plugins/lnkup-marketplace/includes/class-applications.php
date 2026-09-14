@@ -389,8 +389,10 @@ class LNKup_Applications {
 
 		if ( $score < 50 || in_array( $tier, array( 'Started', 'Needs Work' ), true ) ) {
 			$warnings[] = array(
-				'code'    => 'profile_incomplete',
-				'message' => lnkup_copy( 'apply_profile_warning' ),
+				'code'       => 'profile_incomplete',
+				'message'    => lnkup_copy( 'apply_profile_warning' ),
+				'action_url' => lnkup_page_url_helper( 'vendor-profile' ),
+				'action_label' => __( 'Update profile', 'lnkup-marketplace' ),
 			);
 		}
 
@@ -409,8 +411,10 @@ class LNKup_Applications {
 
 		if ( $opp_cats && $vendor_cats && ! array_intersect( $vendor_cats, $opp_cats ) ) {
 			$warnings[] = array(
-				'code'    => 'category_mismatch',
-				'message' => __( 'Your profile category may not match what this event is seeking.', 'lnkup-marketplace' ),
+				'code'         => 'category_mismatch',
+				'message'      => __( 'Your profile category may not match what this event is seeking.', 'lnkup-marketplace' ),
+				'action_url'   => lnkup_page_url_helper( 'vendor-profile' ),
+				'action_label' => __( 'Update profile categories', 'lnkup-marketplace' ),
 			);
 		}
 
@@ -605,7 +609,15 @@ class LNKup_Applications {
 	 *
 	 * @param string $action Action.
 	 */
-	public static function handle_organizer_action( $app_id, $action, $user_id ) {
+	/**
+	 * Organizer approve / reject / waitlist / review.
+	 *
+	 * @param int   $app_id  Application ID.
+	 * @param string $action Action key.
+	 * @param int   $user_id Acting organizer user ID.
+	 * @param array $extra   Optional extras (e.g. rejection_reason from REST roster bulk).
+	 */
+	public static function handle_organizer_action( $app_id, $action, $user_id, $extra = array() ) {
 		if ( ! LNKup_Capabilities::user_owns_post( $app_id, $user_id, '_lnkup_organizer_user_id' ) && ! LNKup_Capabilities::user_has_manage_all( $user_id ) ) {
 			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ) );
 		}
@@ -621,11 +633,15 @@ class LNKup_Applications {
 			return new WP_Error( 'invalid', __( 'Invalid action.', 'lnkup-marketplace' ) );
 		}
 
-		$extra = array();
-		if ( 'reject' === $action && ! empty( $_POST['rejection_reason'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
-			$extra['reason'] = sanitize_textarea_field( wp_unslash( $_POST['rejection_reason'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$payload = is_array( $extra ) ? $extra : array();
+		if ( 'reject' === $action ) {
+			if ( ! empty( $payload['rejection_reason'] ) ) {
+				$payload['reason'] = sanitize_textarea_field( (string) $payload['rejection_reason'] );
+			} elseif ( ! empty( $_POST['rejection_reason'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				$payload['reason'] = sanitize_textarea_field( wp_unslash( $_POST['rejection_reason'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			}
 		}
 
-		return self::transition( $app_id, $map[ $action ], $extra );
+		return self::transition( $app_id, $map[ $action ], $payload );
 	}
 }

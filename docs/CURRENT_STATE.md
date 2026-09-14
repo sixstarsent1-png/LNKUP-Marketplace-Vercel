@@ -2,27 +2,229 @@
 
 Complete inventory of the LNKup vendor opportunity marketplace monorepo.
 
-For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md). For design tokens, components, surfaces, and copy guidelines, see [UI_UX.md](UI_UX.md).
+For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md) (includes **App Roadmap Phases 1–26** in §14.2). For the connected organizer → vendor → money product narrative, see [E2E_MARKETPLACE_JOURNEY.md](E2E_MARKETPLACE_JOURNEY.md). For app vs WordPress parity gaps, see [APP_GAP_ANALYSIS.md](APP_GAP_ANALYSIS.md). For design tokens, components, surfaces, and copy guidelines, see [UI_UX.md](UI_UX.md).
 
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
-**Plugin version:** 12.17.0  
-**Theme version:** 1.4.5
+**Plugin version:** 12.18.43  
+**Theme version:** 1.4.19
 
-### Mock app UI (Phase 1 — `lnk-up-marketplace-ui/`)
+**WordPress deploy:** GitHub Action `deploy-wordpress.yml` rsyncs plugin + theme to SiteGround over SSH. Do not clone this monorepo into `public_html`. See [SITEGROUND_DEPLOY.md](SITEGROUND_DEPLOY.md).
 
-The canonical **Next.js design mock** for vendor/organizer/admin dashboards lives in [`lnk-up-marketplace-ui/`](../lnk-up-marketplace-ui/). Phase 1 polishes this app only; WordPress visual port is Phase 2.
+### v12.18.43 (P2/P3 QA)
+
+- Mobile: page overflow contained (Financial tables, compare bar, dashboard header wrap, dashboards / Find Events / profile). Dead card images fall back to category JPGs.
+- Organizer Financial: unsynced destination balances show ledger Available; dashboard-fail shows Retry instead of a sticky “Balance is syncing” block.
+- Map empty states: organizer Open Map Builder + Upload; vendor “coming soon”.
+- Event Pass pending booth: next step, organizer contact, optional event-date timing (no invented ETA).
+- Apply modal: category mismatch / incomplete profile link to Update profile.
+- Dashboard hashes `#events` / `#applications` / `#financial` scroll with `scroll-margin` and pause observer fight.
+- Find Events: stronger external cards, “Apply on LNKup” badge, **LNKup listings only** filter.
+
+### v12.18.42 (P1 QA: readiness / docs / list / find-events)
+
+- Event readiness: unpaid booth fee shows **Needs Payment** + blocker **Collect booth payment**. Checklist pending label is **Payment due**. $0 fee is treated as paid (not Needs Payment).
+- Vendor requests: docs chip/filter/Review docs follow document context. No **Docs pending** when none are required.
+- Find Events List: ID-level CSS forces a single column of full-width rows (no 2-col grid clip).
+- `/find-events/` 301s to the opportunities page (query string kept) unless a real `find-events` page exists.
+
+### v12.18.39 (In-app signup + privacy URL)
+
+- `POST /lnkup/v1/auth/register` creates the same vendor/organizer account as web `/sign-up/` and returns a mobile Bearer token. Web form still uses the shared `LNKup_Registration::register_user()`.
+- Native **Create free account** opens in-app signup (`app/signup.tsx`) instead of Safari. Sign in and Create account link Privacy / Terms at `https://thelnkup.com/privacy` and `/terms`.
+- Operator must set App Store Connect Privacy Policy URL to `https://thelnkup.com/privacy`.
+
+### v12.18.38 / theme 1.4.19 (Find Events category photos)
+
+- Cards still prefer organizer `_lnkup_featured_image_id` and Eventbrite `image_url`.
+- Missing photos use one realistic JPG per seeded `lnkup_vendor_category` (Food Truck is an actual food truck). Unknown categories use a general market photo. Dark `cat-*.svg` diagrams are no longer live fallbacks.
+- `lnkup_format_index_row()` puts the resolved URL on `featured_image` so JS rails match PHP cards. Alt is `{category} in {city}`.
+
+### v12.18.37 (Content Studio UI polish)
+
+- **Builder sheet:** Sticky header with duration/audience chips and a real Close button (`lnkup-btn--outline` + ×). Hook, script, caption, on-screen, and shot list are grouped rows with Copy on the heading. Footer: Open Referral Link, Download Shot List, Mark as Planned.
+- **Publish form:** Platform and audience `<select>`s (`instagram` / `tiktok` / `linkedin` / `facebook`; never `instagram_reels`). Link placeholder and hint follow the selected host; pasted URLs can set the platform. LinkedIn hosts allowed on the server; YouTube stays allowed but is not in the select.
+- **Performance:** Empty state with a “Submit a published link” cue. Four cards (Published posts, Tracked clicks, Registrations, Bookings) plus a muted attribution disclaimer. Mission and post rows use human labels (`Instagram · Organizers · 30s`, Planned).
+
+### v12.18.36 (Connector launch plan + Content Studio)
+
+- **Launch plan:** Get Started is a three-phase plan (Set Up / Promote / Activate). Rank 1 uses Phase 1 only. Legacy `reviewed_targets` migrates to `reviewed_earnings`. Growth styles (`relationship`, `video`, `community`, `event`) persist on the connector row and drive next-best-action.
+- **Content Studio:** Private CPTs `lnkup_cn_template` / `lnkup_cn_post`, seeded video + Story templates, REST `/connector/studio*`. Optional `cc=` on referral URLs logs `content_click` metadata only. Publishing a video never creates commission.
+- **UI:** Specific CTAs (no generic Continue), growth-style cards, Resources grouped by type, bottom nav Share → Create. Theme 1.4.18.
+- **Tests:** `node scripts/connector-studio-verify.mjs` + launch-plan / studio cases in `tests/e2e/connector-program.spec.ts`.
+
+### v12.18.35 (City Connector ranks)
+
+- **Ranks:** Five-tier City Connector → Regional Partner in `LNKup_Connector_Ranks`. Cached columns on `lnkup_connectors` plus idempotent `lnkup_connector_booking_attr` (`UNIQUE payment_id`). Qualifying booth GMV waits for the payout hold; refunds/chargebacks/test payments are excluded. Rank never raises the 10% commission and never auto-decreases.
+- **Bonuses:** One-time pending `connector_rank_bonus_{rank}` rows in `lnkup_referral_rewards` with `idempotency_key`. Admin approve / mark-paid / reverse only — never auto-paid.
+- **Dashboard:** Overview rank card + progress rows, `?view=ranks` roadmap, one-time celebration, opt-in city leaderboard (no dollars). Theme 1.4.17 adds Ranks to the connector sidebar.
+- **REST:** `GET /connector/rank`, `/rank/roadmap`, `/rank/history`, `POST /rank/acknowledge`, `GET /connector/leaderboard`; admin recalc/override/reverse + attribution disputes.
+- **Tests:** `node scripts/connector-ranks-verify.mjs` + unauth 401s in `tests/e2e/connector-program.spec.ts`.
+
+### v12.18.34 (City Connector command center)
+
+- **SPA dashboard:** In-dashboard `?view=` switching via `history.pushState` (no full reload). Desktop keeps sidebar + in-page tabs. Mobile (≤767px) uses a connector bottom nav: Home, Referrals, Share (opens sheet), Earnings, More.
+- **Share sheet:** Organizer and vendor links, QR, copy / native share, Instagram deep link, outreach scripts, live-region “Referral link copied.” Marks `copied_link` / `copied_vendor_link` / `sent_intro`.
+- **Overview:** Compact “Grow LNKup in [City]” hero, unmixed KPIs, backend `next_best_action()`, funnel conversion % only when the from-step count ≥ 5, activity timeline from `GET /connector/referrals`.
+- **Referrals / Earnings / Profile:** Client-side referral search and filters; ledger status filter + organizer display name; optional `bio` column; WordPress avatar; next payout is earliest `available_at` or “After LNKup approval.” Cap copy still appears only when `share_cap > 0`.
+- **Tests:** `tests/e2e/connector-program.spec.ts` share sheet, filters, calculator POST, viewports 320/375/768/1024/1440.
+
+### v12.18.33 (City Connector Onboarding and Earnings Education)
+
+- **Rewards:** Organizer-primary share of booth GMV (`_lnkup_vendor_spot_fee` × `connector_booking_share_percent`, default 10%). Term starts at the organizer’s first completed booking. 30-day hold via `available_at`. Refunds reverse unpaid rewards (`lnkup_refund_completed`). Per-transaction cap setting defaults to 0 (off). Manual approve / mark-paid unchanged. No Stripe payout from dashboard JS.
+- **Dashboard IA:** Overview, Get Started, My Referrals, Earnings, Resources, Profile. New connectors default to Get Started. Legacy `?view=` aliases kept.
+- **REST:** `/connector/onboarding`, `/onboarding/step`, `/funnel`, `/earnings`, `/resources`, `/terms`, `POST /calculator`, `POST /profile`.
+- **Settings:** share %, cap, term months, hold days, minimum payout, vendor-referral reward flag, terms/support URLs.
+- **Tests:** `tests/e2e/connector-program.spec.ts` + `node scripts/connector-earnings-verify.mjs`.
+
+### Launch day (2026-08-02)
+
+- **Marketplace open:** `platform_prelaunch_mode` default `false`; `platform_launch_date` `2026-08-02`; one-time option `lnkup_launch_day_20260802_applied` flips existing installs on deploy.
+- **Mobile app release:** `app_release_datetime` `2026-08-16 12:00:00` + `app_release_tz` `America/New_York` — homepage app-release bar until that moment (does not gate web browse/apply).
+- **Editable homepage:** Appearance → Landing Page (`lnkup_landing`); post-launch CTA defaults; featured rails removed from home.
+
+### Mock app UI (App Phases 1–6 — `lnk-up-marketplace-ui/`)
+
+The canonical **Next.js app** for vendor/organizer/admin dashboards lives in [`lnk-up-marketplace-ui/`](../lnk-up-marketplace-ui/). **App Phase 2+ is app-only** — vendor More hub, secondary routes, live BFF integration. WordPress visual port is **deferred** (production website UI is considered done).
+
+**Roadmap:** [SYSTEM_OVERVIEW.md §14.2](SYSTEM_OVERVIEW.md#142-app-roadmap-phases-126) · **Queued 22–26:** [PHASES_22_26_ROADMAP.md](PHASES_22_26_ROADMAP.md) · **Next:** [PHASE_22_PRODUCTION_LAUNCH_HARDENING.md](PHASE_22_PRODUCTION_LAUNCH_HARDENING.md) · **E2E journey:** [E2E_MARKETPLACE_JOURNEY.md](E2E_MARKETPLACE_JOURNEY.md) · **Gaps:** [APP_GAP_ANALYSIS.md](APP_GAP_ANALYSIS.md)
 
 ```bash
 cd lnk-up-marketplace-ui
-pnpm install
-pnpm dev    # http://localhost:3000 — role picker (Vendor / Organizer / Admin)
+pnpm install   # or npm install
+pnpm dev       # http://localhost:3000 — role picker (Vendor / Organizer / Admin)
+npx next build
 ```
 
-- **10 core screens** with mock data in `lib/data.ts`
-- **5-item nav** per role (`lib/nav.ts` + `components/app-shell.tsx`)
-- **Panel states:** append `?empty=1` or `?error=1` on core routes for QA
+- **24 app routes** (vendor/organizer/admin + secondary vendor screens)
+- **5-item nav** per role (`lib/nav.ts` + `components/app-shell.tsx`); vendor mobile uses **More** as 5th slot
+- **Panel states:** append `?empty=1` or `?error=1` on core routes for QA — see [`docs/PHASE_2_APP_QA.md`](PHASE_2_APP_QA.md)
+- **Production mock:** https://lnkup-marketplace-ui.vercel.app
 - **Do not use** root `pnpm dev` — that serves the legacy `app/` template
+
+### Native mobile (Expo — Native Phases 1–10)
+
+Canonical **iOS/Android** app: [`lnk-up-marketplace-mobile/`](../lnk-up-marketplace-mobile/). Design IA from [`lnkup-app-reference/`](../lnkup-app-reference/) (web mock only). Calls WordPress REST directly with Application Passwords in SecureStore — **not** the Next.js cookie BFF.
+
+```bash
+cd lnk-up-marketplace-mobile
+npm install
+cp .env.example .env
+npx expo start
+```
+
+- **Native Phase 1 built:** login, vendor Home / Find / Requests
+- **Native Phase 2 built:** read-only Wallet + Pay handoff (`Linking`), Event Pass (locked/unlocked), Apply from Find
+- **Native Phase 3 built:** organizer lite — Home / Events / Vendors requests (approve/waitlist/reject) / Money (read-only) / More; role routing + dual-role switch
+- **Native Phase 4 built:** Expo push device register + prefs; WP Expo Push on key events; EAS profiles/scripts (operator runs `eas init` / build / submit). Depth inventory: [PUSH_NOTIFICATIONS_DEPTH.md](PUSH_NOTIFICATIONS_DEPTH.md)
+- **Activation drip (Phase 2):** welcome + finish-profile / find-events / apply (vendors) and create-event / review-vendors (organizers), including pre-tutorial backfill — [PHASE_ACTIVATION_EMAILS.md](PHASE_ACTIVATION_EMAILS.md)
+- **Retention push (Phase 3):** saved search, favorites, invites, deadlines, profile match — [PHASE_RETENTION_PUSH.md](PHASE_RETENTION_PUSH.md)
+- **Push prefs + badge (Phase 4):** category toggles + app icon unread badge — [PHASE_PUSH_PREFS_BADGE.md](PHASE_PUSH_PREFS_BADGE.md)
+- **Native Phase 5 built:** vendor Profile readiness + Documents list/upload via WP REST; profile field edits remain WP handoff
+- **Native Phase 6 built:** vendor More hub — Favorites, Growth lite, Reviews lite, Operations → Pass
+- **Native Phase 7 built:** composed notification center (vendor + organizer); SecureStore mark-read; Home unread bell + More entry
+- **Native Phase 8 built:** Find discovery polish — filters, sort, near-me (`expo-location`), saved-search CRUD; map view deferred
+- **Native Phase 9 built:** organizer Launch lite — 3-step publish via `POST /organizer/launch/publish`, AsyncStorage draft, Home/Events/More CTAs
+- **Native Phase 10 built:** store release hardening — privacy/support URLs, encryption flag, EAS submit scaffolding, [`STORE_RELEASE.md`](../lnk-up-marketplace-mobile/STORE_RELEASE.md); submit remains operator-run
+- **App Store readiness:** Theme seeds `/privacy`, `/terms`, `/contact`; in-app account deletion (Guideline 5.1.1(v)) via `POST /lnkup/v1/account/delete` + More → Delete account; ASC paste pack [`ASC_APP_REVIEW_PACKAGE.md`](ASC_APP_REVIEW_PACKAGE.md); verify `node scripts/app-store-readiness-verify.mjs`
+- **Referral Invites (organizer recruit):** Program `organizer_recruit` — vendors/organizers invite outside organizers; **20% of LNKup platform fees for 12 months** from attribution; REST `/referrals/organizer-recruit*`; WP hubs + Expo/Next hard-push CTAs; docs [`PHASE_REFERRAL_INVITES.md`](PHASE_REFERRAL_INVITES.md); verify `node scripts/referral-invites-verify.mjs`
+- **Brand assets:** Official LNKup logo (`lnk-up-marketplace-mobile/assets/brand/lnkup-logo.png`) → store icons via `npm run icons`
+- **Architecture:** [SYSTEM_OVERVIEW.md §14.3](SYSTEM_OVERVIEW.md#143-native-mobile-architecture)
+- **No Stripe SDK** in mobile; payments and deep organizer ops open WP URLs in the browser
+- **WP inbox REST** — `GET/POST /lnkup/v1/notifications/inbox*` persists push events and shared mark-read; clients still compose live domain items and merge `readIds`. Push vs inbox depth: [PUSH_NOTIFICATIONS_DEPTH.md](PUSH_NOTIFICATIONS_DEPTH.md)
+- **Plugin:** v12.18.25 — marketplace open (launch day) + app release settings (`app_release_datetime` / `app_release_tz`); push + account deletion + organizer recruit referrals (organizer or vendor invites via sign-up) + organizer UX routes
+- **Theme:** v1.4.9 — app-release bar, editable landing defaults post-launch
+- **EAS:** linked as `@darkero12/lnkup-marketplace`
+
+### Phase 14 stabilization snapshot (Jul 2026)
+
+- Phase 14A/14B/14C feature work is implemented and two-week stabilization execution is complete.
+- New specs added and passing:
+  - `tests/e2e/lnkup-app-phase14a-journey-handoffs.spec.ts`
+  - `tests/e2e/lnkup-app-phase14b-organizer-loop.spec.ts`
+  - `tests/e2e/lnkup-app-phase14c-wallet-polish.spec.ts`
+  - `tests/e2e/lnkup-app-phase14-analytics.spec.ts`
+- Focused regression sweep across Phases 9/13/vendor-phase3 is green after suite-drift selector alignment.
+- Phase 14 quality gate workflow added: `.github/workflows/phase14-quality-gate.yml`.
+- Execution record and go/no-go memo: [PHASE_14_TWO_WEEK_EXECUTION_LOG.md](PHASE_14_TWO_WEEK_EXECUTION_LOG.md).
+- Live Stripe sandbox end-to-end verification still requires authenticated WP + Stripe test credentials in operator environment.
+
+### App Phases 15–21 snapshot (Jul 2026)
+
+| Phase | Theme | Status |
+|-------|--------|--------|
+| 15 | Admin Lite / Internal Ops | Built |
+| 16 | Checkout return reliability | Built |
+| 17 | Organizer CRM depth | Built |
+| 18 | Vendor readiness / reliability | Built |
+| 19 | Intelligence / experimentation | Built |
+| 20 | Mobile organizer intelligence parity | Built |
+| 21 | QA gate hardening + web on-site tutorials | Built |
+
+- Consolidated gate: [PHASE_15_20_QA_GATE.md](PHASE_15_20_QA_GATE.md) · CI: `.github/workflows/phase15-20-quality-gate.yml`
+- Playbook: [PHASE_21_RELEASE_PLAYBOOK.md](PHASE_21_RELEASE_PLAYBOOK.md)
+- **Phase 22 Built:** [PHASE_22_PRODUCTION_LAUNCH_HARDENING.md](PHASE_22_PRODUCTION_LAUNCH_HARDENING.md) · audit [artifacts/phase22-live-api-audit.md](../artifacts/phase22-live-api-audit.md)
+- **Phase 23 Built:** [PHASE_23_MOBILE_TUTORIAL_PARITY.md](PHASE_23_MOBILE_TUTORIAL_PARITY.md) · verify `cd lnk-up-marketplace-mobile && npm run phase23:verify` · First-run **tutorial popups** (vendor + organizer) walk incomplete steps; checklist remains after `popupSeen`; Skip all dismisses both
+- **Phase 24 Built:** [PHASE_24_NATIVE_MAP_DISCOVERY.md](PHASE_24_NATIVE_MAP_DISCOVERY.md) · verify `cd lnk-up-marketplace-mobile && npm run phase24:verify`
+- **Phase 25 Built:** [PHASE_25_ADMIN_LITE_DEPTH.md](PHASE_25_ADMIN_LITE_DEPTH.md) · verify `cd lnk-up-marketplace-ui && npm run phase25:verify`
+- **Phase 26 Built:** [PHASE_26_FINANCIAL_OS_EXPANSION.md](PHASE_26_FINANCIAL_OS_EXPANSION.md) · verify `node scripts/phase26-verify.mjs` + `cd lnk-up-marketplace-mobile && npm run phase26:verify` · Session ACH finalize gate + webhook signature harden (secret set ⇒ no test_mode bypass)
+- **Organizer event import Built:** [PHASE_EXTERNAL_EVENT_IMPORT.md](PHASE_EXTERNAL_EVENT_IMPORT.md) · verify `node scripts/phase-external-event-import-verify.mjs`
+- **Organizer vendor profile enrichment Built:** [ORGANIZER_VENDOR_PROFILE_ENRICHMENT.md](ORGANIZER_VENDOR_PROFILE_ENRICHMENT.md) · verify `node scripts/organizer-vendor-profile-enrichment-verify.mjs`
+- **Find / Launch media / Wallet invoices:** Marketplace search no longer fatals on typed `q` (analytics + history hardened). Optional event gallery (`_lnkup_gallery_ids`) on Create Event → WP/app detail. Invoice list includes `pdf_url` + View links. Verify `node scripts/find-media-wallet-verify.mjs`
+- **Organizer UX wave Built:** Edit event after create (WP + apps); booth pricing by vendor type (multi-opportunity fee rows); Expo Home polish; Discover city/category/verified/sort filters; in-app Cash out + Stripe Express login-link (replaces primary “Manage on LNKup”); packet weather rain/heat merge + recommendations. Verify `node scripts/organizer-ux-wave-verify.mjs`
+- **Queued 22–26:** Complete — [PHASES_22_26_ROADMAP.md](PHASES_22_26_ROADMAP.md)
+
+### v12.18.19 (Getting Started + Knowledge Base)
+- **Organizer welcome:** One first-run welcome modal (parity with vendor); Launch checklist “Getting started” eyebrow + optional dismiss.
+- **Knowledge Base:** Static Help panels for vendor (`?view=help`) and organizer (`#help`); More nav Help entry; “Show getting started checklist again” resets dismiss without reopening welcome.
+- **Theme 1.4.6:** Help icon + More nav links for vendor and organizer.
+
+### v12.18.7 (Backfill platform payments when Available stays $0)
+- **Root cause:** 12.18.6 migrate only moves wallet `available_balance`. If the booth payment never created a ledger row (UI had shown platform Stripe by mistake), claim stayed $0.
+- **Backfill:** `backfill_platform_payments_to_connect_settlement()` creates `connect_settlement` for paid platform charges (no destination account) missing ledger.
+- **Reconcile:** Organizer wallet/Money load runs reconcile + migrate + backfill (1-minute lock).
+- **Admin Recover / Cash Out:** Should show organizer-owed after deploy when paid `lnkup_payment` posts exist for that organizer.
+
+### v12.18.6 (Connect $0 after Connect onboarding)
+- **Treasury → Connect settlement migrate:** When an organizer becomes destination-ready, stranded wallet `available_balance` is converted to `connect_settlement` so Cash Out / admin Recover can Transfer master → Connect.
+- **Settlement truth on settle:** `persist_payment_settlement_meta( …, 'settle' )` does not flip `platform_treasury` → `destination` just because Connect is ready now; destination only if `_lnkup_stripe_destination_account` was stamped at create.
+
+### v12.18.5 (Mixed platform balance split)
+- **Financial Center:** Live main Stripe Available/Pending split into organizer-owed (ledger stranded) vs LNKup fee remainder.
+- **Recover stranded:** Admin Transfer platform → organizer Connect for destination ledger claims.
+- **Platform payout:** Admin Standard payout capped at fee remainder only (cannot invade organizer-owed).
+- **Cash Out copy:** When Available is $0, clarify main Stripe mix is not withdrawable there.
+
+### v12.18.4 (Platform stranded funds recovery)
+- **Available = Connect + recovery:** Destination cashout Available is Connect available plus ledger-capped platform recoverable (`min(ledger_claim − connect, platform_available)`). Never shows uncapped platform fees.
+- **Transfer-then-Payout:** When Connect cannot cover cashout but ledger-owed platform funds can, `transfer_platform_to_connect` moves the shortfall then Connect payout proceeds.
+- **Cash Out UI:** Notes when Available includes LNKup-held funds that move on cash out.
+
+### v12.18.3 (Connect vs platform Balance read)
+- **Balance::retrieve fix:** Stripe PHP `Balance::retrieve( $opts )` takes one argument; prior `retrieve( [], $opts )` ignored `stripe_account` and showed **platform** Available while Connect payouts failed (“card balance too low”).
+- **Platform/Connect guard:** If Connect available cannot cover cashout but platform balance can, return `funds_on_platform` with a clear message (do not call doomed Connect payout).
+
+### v12.18.2 (Instant available + manual schedule cashout)
+- **Instant preflight:** Connect balance parse includes `instant_available` / `instant_source_types`; Instant cashout gates on Instant balance and tells organizers to use Standard when Instant is $0.
+- **Force manual schedule:** On-demand cashout always sets Connect payout interval to `manual`, then re-fetches balance before `Payout::create`.
+- **Richer failures:** Requested + Available + Instant + source splits + Connect account suffix.
+- **Cash Out UI:** Shows Instant available when Instant is enabled.
+
+### v12.18.1 (Opaque cashout reason fix)
+- **Live WP_Error:** `process_payout` returns `true|WP_Error`; `request_cashout` surfaces the Stripe/Connect message directly (no longer depends on re-reading an empty `failure_reason`).
+- **failure_reason TEXT:** `lnkup_organizer_payouts.failure_reason` widened from `varchar(255)` so long Card/Bank + “tried sources” messages persist; failure metadata stores `failure_code` / `attempted` / `source_types`.
+
+### v12.17.2 (Connect payout source_type harden)
+- **Accumulate source_types:** `retrieve_connect_balance` sums Card/Bank cents across preferred-currency available items.
+- **Never omit source_type:** When breakdown is empty but total available covers the amount, cashout probes `bank_account` then `card` (Instant: card then bank).
+- **Retry:** On Stripe insufficient / “too low” / `balance_insufficient`, retry the next balance bucket; failure messages include split + attempted sources; audit/error_log record attempts.
+
+### v12.17.1 (Cashout error surfacing)
+- **In-panel cashout errors:** Money → Cash Out shows REST `message` (+ code/status) above the form instead of opaque `alert('Cashout failed')`; form stays filled; DevTools gets full payload.
+- **financial.js/css cache-bust:** Enqueued with `lnkup_asset_version()` (`filemtime`) so deploys invalidate stale scripts.
+- **Fetch harden:** Parse JSON when body looks like JSON even if Content-Type is wrong; never empty error strings; `err.payload` attached.
+- **REST audit:** `organizer_cashout` guarantees non-empty `WP_Error` message, `error_log`, and `LNKup_Financial_Audit::log( 'organizer_cashout_failed', ... )`.
+- **Connect source_type:** Destination cashout picks a funded Stripe balance bucket (`bank_account` preferred for Standard, `card` for Instant) instead of omitting `source_type` (Stripe defaults to card → “card balance too low”). Cash Out shows Card/Bank split when multiple sources exist; insufficient errors include the split.
 
 ### v12.17.0 (Review Queue V2)
 - **Review tab triage:** Dedicated table with preview thumb + excerpt, vendor fit column (tier colors), readiness badges, matched vendor terms tooltip.
@@ -77,6 +279,20 @@ pnpm dev    # http://localhost:3000 — role picker (Vendor / Organizer / Admin)
 - **Sponsor payments:** `LNKup_Sponsor_Payments::total_revenue()` JOINs invoices (fixes `organizer_user_id` unknown column on `/financial/dashboard` JSON parse error).
 - **Sponsor schema alignment:** `create_invoice()` / `record_payment()` use treasury columns (`sponsor_invoice_id`, `total_amount`, `paid_at`).
 - **Organizer UI:** Event card v4 media column layout; intelligence expand panel load (no duplicate hero); hero title dedupe.
+
+### Vendor Premium UI/UX Catch-up (Jul 2026)
+- **Vendor home:** Decluttered command center — wallet/due strip, single upcoming hero, trust slot (profile ring lives in executive hero), compact quick actions, discovery rails without duplicate Upcoming subnav.
+- **Operations:** Mission header surface, readiness ring shell, overview cards on secondary surfaces, support history via `LNKupUI` empty/error (no infinite “Loading…”).
+- **Documents / Reviews:** Visible compliance hero + elevated doc cards; review score primary surface; dual-CTA empty states; review cards use surface + micro-lift.
+- **Design system:** `.lnkup-vendor-section` rhythm, vendor hero title dedupe, due-strip styles in `vendor-dashboard.css` / theme `components.css`.
+
+### Organizer UI catch-up (Next IA reference) (Jul 2026)
+- **Overview `#overview`:** Next-like rhythm — hero → launch checklist → attention/priority first → payout strip → **6 focused KPIs** (live events, requests, approved, paid, payment due, open opportunities) → compact actions → apps snapshot / activity. Favorites/preferred/disputes demoted to quiet secondary chips. Trust strip deferred until hydrated (no permanent “Loading trust…”).
+- **Nav IA:** Primary shell = Home (`#overview`) · Events (`#events`) · Vendors (`#applications`, also-active `#vendors`) · Money (`#financial`) · More. Discover vendors moved under More.
+- **Sections:** Events / applications / vendors dual-CTA empties; event + request + vendor preview cards on primary surfaces; Approve / Waitlist / Decline hierarchy preserved.
+- **Activity:** `LNKupUI.panelEmpty` / `panelError` on CRM activity body (no infinite loading).
+- **Files:** `class-shortcodes.php`, `organizer-crm.js`, `verification.js`, `organizer-crm.css`, theme `inc/dashboard.php` + `components.css`.
+- **Cashout fix:** Destination cashout uses Stripe Connect available (`organizer_cashout_available`) — see v12.2.2.
 
 ### v12.11.0 (Organizer Premium UI/UX Overhaul)
 - **Command center:** Executive hero with checklist ring, 10 KPI strip, payout strip, quick-action row, apps snapshot, activity feed, readiness mini-cards.
@@ -158,6 +374,9 @@ pnpm dev    # http://localhost:3000 — role picker (Vendor / Organizer / Admin)
 - **Dashboard:** `/financial/dashboard` no longer zeroes balances when reports layer throws; always attaches Stripe Connect + `display_balances`.
 - **Balances:** Shared `organizer_balance_payload()` for dashboard, wallet, and fallback states.
 - **Frontend:** Balance hero and Overview merge `/organizer-wallet` (live Stripe) with dashboard; destination Connect pending/available shown consistently.
+- **Cashout (destination):** `organizer_cashout_available()` gates POST `/financial/organizer-wallet/cashout` on **live Stripe Connect available** (same ceiling as Money UI). Ledger no longer forces destination `available` to $0; cashout errors return HTTP 400 with message; UI disables form when max is $0 / settling / Stripe unsynced.
+- **Cashout execution:** `request_cashout` returns `payout_failed` (HTTP 400) when Stripe `Payout::create` fails — no false “Cashout requested”. `connect_payout_schedule` applied on Connect account create; default **manual** for in-app cashout; `ensure_payout_schedule()` on refresh/cashout. Instant option hidden unless `connect_instant_payouts_enabled`.
+- **Cashout preflight:** Live balance + currency (settings, not hardcoded USD), external bank/debit check, Instant eligibility, optional `source_type`. Failed payouts expose `failure_reason` in REST + Money Payouts UI.
 - **Payments:** Auto-reconcile on dashboard load; `payment_intent.processing` webhook; Sync payment button for stuck pending transactions.
 - **Fees:** Vendor checkout fee $5.99 settings-first model; pending payment fee refresh at checkout (v12.1.7 carryover).
 
@@ -516,7 +735,7 @@ These exist in the Next.js reference but have no WordPress equivalent yet (or ar
 - Admin analytics dashboard (beyond basic LNKup overview stats and Financial Center)
 - Live Stripe Connect onboarding (payout abstraction + manual mark-paid exists)
 - Vendor reviews system (reputation reviews exist; separate from payment disputes)
-- Event import flow (AJAX stub exists; no full import UI)
+- Event import (Eventbrite / Posh / RSS) — **Built** for organizer Create Event + admin URL import; see [PHASE_EXTERNAL_EVENT_IMPORT.md](PHASE_EXTERNAL_EVENT_IMPORT.md)
 - Attendee ticketing
 - Block theme / FSE support
 - WP nav menu integration in theme header/footer
@@ -539,7 +758,7 @@ These exist in the Next.js reference but have no WordPress equivalent yet (or ar
 | REST API | `lnkup/v1/financial/*` |
 | E2E tests | `vendor-financial.spec.ts`, `organizer-financial.spec.ts` |
 
-Placeholder-only: 1099/W-9 PDF generation, Apple/Google Pay, ACH, email receipts, fraud ML.
+W-9 / 1099 **summary PDFs** are built (`GET /financial/tax-center/w9/pdf` and `/1099/pdf` via Dompdf; not official IRS forms). Placeholder-only: email receipts, fraud ML. Apple/Google Pay are **operator flags** (Dashboard domains). ACH is **built** on PI + Checkout Session (processing ≠ unlock; Session finalizes only when `payment_status=paid`) — see [PHASE_26_FINANCIAL_OS_EXPANSION.md](PHASE_26_FINANCIAL_OS_EXPANSION.md) / [FINANCIAL.md](../wp-content/plugins/lnkup-marketplace/FINANCIAL.md).
 
 ### Phase 10 Vendor Growth Platform (v10.0.0) — Built
 

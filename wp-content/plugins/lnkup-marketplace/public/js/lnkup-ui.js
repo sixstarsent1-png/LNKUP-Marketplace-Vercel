@@ -158,19 +158,28 @@
     var fee = opp.fee_label || (opp.vendor_fee != null ? '$' + Number(opp.vendor_fee).toFixed(0) : '');
     var location = opp.location_label || [opp.city, opp.state].filter(Boolean).join(', ');
     var title = opp.event_name || opp.name || opp.title || '';
-    var img = opp.image || opp.image_url || '';
+    var img = opp.featured_image || opp.image || opp.image_url || '';
+    var dateLabel = opp.date_label || opp.date || opp.event_date || '';
     var applyUrl = opp.apply_url || (opp.opportunity_id ? '/opportunities/?apply=' + opp.opportunity_id : '#');
     var compact = opts.compact ? ' lnkup-event-card--compact' : '';
+    var alt = opp.image_alt || title || 'Vendor event';
     var media = img
-      ? '<img src="' + escapeHtml(img) + '" alt="" loading="lazy" />'
+      ? '<img src="' + escapeHtml(img) + '" alt="' + escapeHtml(alt) + '" width="1280" height="800" loading="lazy" onerror="if(!this.dataset.tried){this.dataset.tried=\'1\';this.removeAttribute(\'src\');var p=document.createElement(\'div\');p.className=\'lnkup-event-card__placeholder\';p.setAttribute(\'aria-hidden\',\'true\');p.innerHTML=\'<span>LNKup</span>\';if(this.parentNode){this.parentNode.replaceChild(p,this);}}" />'
       : '<div class="lnkup-event-card__placeholder" aria-hidden="true"><span>LNKup</span></div>';
+    var meta = '';
+    if (dateLabel) {
+      meta += '<p class="lnkup-event-card__date">' + escapeHtml(dateLabel) + '</p>';
+    }
+    if (location) {
+      meta += '<p class="lnkup-event-card__location">' + escapeHtml(location) + '</p>';
+    }
     return '<article class="lnkup-event-card lnkup-event-card--v2 lnkup-surface--primary lnkup-micro-lift' + compact + '" data-opportunity-id="' + escapeHtml(String(opp.opportunity_id || '')) + '">' +
       '<div class="lnkup-event-card__media">' + media +
       '<div class="lnkup-event-card__media-gradient" aria-hidden="true"></div>' +
       '<div class="lnkup-event-card__badges-top"><span class="lnkup-badge lnkup-badge--accent">' + escapeHtml(fee) + '</span></div></div>' +
       '<div class="lnkup-event-card__body">' +
       '<h3 class="lnkup-event-card__title">' + escapeHtml(title) + '</h3>' +
-      (location ? '<p class="lnkup-event-card__location">' + escapeHtml(location) + '</p>' : '') +
+      meta +
       (opts.showCta !== false ? '<a href="' + escapeHtml(applyUrl) + '" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm">' + escapeHtml(opts.ctaLabel || 'View') + '</a>' : '') +
       '</div></article>';
   }

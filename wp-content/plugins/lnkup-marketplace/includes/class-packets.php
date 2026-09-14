@@ -232,6 +232,49 @@ class LNKup_Packets {
 	}
 
 	/**
+	 * Booth block for the vendor event pass.
+	 *
+	 * @param array|null $booth     Booth row from LNKup_Booths.
+	 * @param int        $packet_id Packet post ID.
+	 * @param int        $event_id  Event ID.
+	 * @return array<string, mixed>
+	 */
+	private static function format_pass_booth( $booth, $packet_id, $event_id ) {
+		$placeholder = $packet_id ? (string) get_post_meta( $packet_id, '_lnkup_booth_placeholder', true ) : '';
+		$assignment  = '';
+		$zone        = '';
+		$dimensions  = '';
+		if ( is_array( $booth ) ) {
+			$assignment = (string) ( $booth['booth_number'] ?? '' );
+			$zone       = (string) ( $booth['booth_type_label'] ?? ( $booth['booth_type'] ?? '' ) );
+			$dimensions = (string) ( $booth['booth_size'] ?? '' );
+		}
+		if ( ! $assignment && $packet_id ) {
+			$assignment = (string) get_post_meta( $packet_id, '_lnkup_booth_assignment', true );
+		}
+		$assigned    = '' !== $assignment;
+		$event_date  = $event_id ? (string) get_post_meta( $event_id, '_lnkup_event_date', true ) : '';
+		$expected_by = '';
+		if ( $event_date && strtotime( $event_date ) ) {
+			$expected_by = sprintf(
+				/* translators: %s: event date */
+				__( 'before %s', 'lnkup-marketplace' ),
+				date_i18n( get_option( 'date_format' ), strtotime( $event_date ) )
+			);
+		}
+		return array(
+			'assignment'  => $assigned ? $assignment : $placeholder,
+			'zone'        => $zone,
+			'dimensions'  => $dimensions,
+			'has_power'   => is_array( $booth ) && ! empty( $booth['has_power'] ),
+			'has_water'   => is_array( $booth ) && ! empty( $booth['has_water'] ),
+			'status'      => $assigned ? 'assigned' : 'pending',
+			'placeholder' => $placeholder,
+			'expected_by' => $expected_by,
+		);
+	}
+
+	/**
 	 * Build vendor event pass DTO.
 	 *
 	 * @param int  $application_id Application ID.
@@ -279,6 +322,7 @@ class LNKup_Packets {
 				'label'  => LNKup_Vendor_Dashboard_Data::application_status_label( $app_status ),
 			),
 			'payment'        => array(
+				'payment_id' => $payment instanceof WP_Post ? (int) $payment->ID : 0,
 				'status'     => $payment_status,
 				'amount_due' => $amount_due,
 				'formatted'  => $amount_due > 0 ? lnkup_currency( $amount_due ) : '',
@@ -388,17 +432,7 @@ class LNKup_Packets {
 					'power_needs'   => $profile['power_needs'] ?? '',
 					'water_needs'   => $profile['water_needs'] ?? '',
 				),
-				'booth'        => $booth ? array(
-					'assignment' => $booth['booth_number'] ?? '',
-					'zone'       => $booth['booth_type_label'] ?? ( $booth['booth_type'] ?? '' ),
-					'dimensions' => $booth['booth_size'] ?? '',
-					'has_power'  => ! empty( $booth['has_power'] ),
-					'has_water'  => ! empty( $booth['has_water'] ),
-				) : ( $packet_id && get_post_meta( $packet_id, '_lnkup_booth_assignment', true ) ? array(
-					'assignment' => get_post_meta( $packet_id, '_lnkup_booth_assignment', true ),
-					'zone'       => '',
-					'dimensions' => '',
-				) : null ),
+				'booth'        => self::format_pass_booth( $booth, $packet_id, $event_id ),
 				'load_in'      => array(
 					'window'  => $loadin ? ( $loadin['label'] ?? '' ) : ( $packet_id ? get_post_meta( $packet_id, '_lnkup_load_in_time', true ) : '' ),
 					'gate'    => $loadin ? ( $loadin['gate'] ?? '' ) : ( $event_id ? get_post_meta( $event_id, '_lnkup_vendor_gate', true ) : '' ),
@@ -433,11 +467,25 @@ class LNKup_Packets {
 					'prohibited_items'   => $packet_id ? get_post_meta( $packet_id, '_lnkup_prohibited_items', true ) : '',
 				),
 				'documents'    => $documents,
-				'weather'      => is_array( $weather ) ? $weather : array(
-					'summary'     => $event_id ? get_post_meta( $event_id, '_lnkup_weather_placeholder', true ) : '',
-					'rain_plan'   => $packet_id ? get_post_meta( $packet_id, '_lnkup_rain_plan', true ) : '',
-					'heat_plan'   => $packet_id ? get_post_meta( $packet_id, '_lnkup_heat_plan', true ) : '',
-				),
+				'weather'      => ( function () use ( $weather, $event_id, $packet_id ) {
+					$rain = $packet_id ? (string) get_post_meta( $packet_id, '_lnkup_rain_plan', true ) : '';
+					$heat = $packet_id ? (string) get_post_meta( $packet_id, '_lnkup_heat_plan', true ) : '';
+					if ( is_array( $weather ) ) {
+						$note = $weather;
+						if ( ! isset( $note['rain_plan'] ) || '' === (string) $note['rain_plan'] ) {
+							$note['rain_plan'] = $rain;
+						}
+						if ( ! isset( $note['heat_plan'] ) || '' === (string) $note['heat_plan'] ) {
+							$note['heat_plan'] = $heat;
+						}
+						return $note;
+					}
+					return array(
+						'summary'   => $event_id ? get_post_meta( $event_id, '_lnkup_weather_placeholder', true ) : '',
+						'rain_plan' => $rain,
+						'heat_plan' => $heat,
+					);
+				} )(),
 				'refund_policy'=> $packet_id ? get_post_meta( $packet_id, '_lnkup_refund_policy', true ) : '',
 				'qr_pass'      => array(
 					'enabled' => (bool) $qr_token,

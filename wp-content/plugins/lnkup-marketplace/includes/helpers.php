@@ -137,6 +137,84 @@ function lnkup_get_launch_datetime_iso() {
 }
 
 /**
+ * App store release timezone (default America/New_York).
+ *
+ * @return string
+ */
+function lnkup_get_app_release_timezone() {
+	$settings = lnkup_get_settings();
+	$tz       = isset( $settings['app_release_tz'] ) ? trim( (string) $settings['app_release_tz'] ) : '';
+	if ( '' === $tz ) {
+		$tz = 'America/New_York';
+	}
+	try {
+		new DateTimeZone( $tz );
+	} catch ( Exception $e ) {
+		return 'America/New_York';
+	}
+	return $tz;
+}
+
+/**
+ * Mobile app public release datetime.
+ *
+ * @return DateTimeImmutable|null
+ */
+function lnkup_get_app_release_datetime() {
+	$settings = lnkup_get_settings();
+	$raw      = isset( $settings['app_release_datetime'] ) ? trim( (string) $settings['app_release_datetime'] ) : '';
+	if ( '' === $raw ) {
+		$raw = '2026-08-16 12:00:00';
+	}
+	// Accept HTML datetime-local (T separator) or "Y-m-d H:i:s".
+	$raw = str_replace( 'T', ' ', $raw );
+	if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $raw ) ) {
+		$raw .= ' 12:00:00';
+	}
+	try {
+		return new DateTimeImmutable( $raw, new DateTimeZone( lnkup_get_app_release_timezone() ) );
+	} catch ( Exception $e ) {
+		try {
+			return new DateTimeImmutable( '2026-08-16 12:00:00', new DateTimeZone( 'America/New_York' ) );
+		} catch ( Exception $e2 ) {
+			return null;
+		}
+	}
+}
+
+/**
+ * Whether the mobile app public release moment has passed.
+ */
+function lnkup_is_app_released() {
+	$dt = lnkup_get_app_release_datetime();
+	if ( ! $dt ) {
+		return true;
+	}
+	return time() >= $dt->getTimestamp();
+}
+
+/**
+ * Human-readable app release label (e.g. August 16, 2026 · 12:00 PM EST).
+ *
+ * @return string
+ */
+function lnkup_get_app_release_label() {
+	$dt = lnkup_get_app_release_datetime();
+	if ( ! $dt ) {
+		return '';
+	}
+	$tz_abbr = $dt->format( 'T' );
+	$label   = $dt->format( 'F j, Y' ) . ' · ' . $dt->format( 'g:i A' ) . ' ' . $tz_abbr;
+	/**
+	 * Filter the public app release label.
+	 *
+	 * @param string            $label Formatted label.
+	 * @param DateTimeImmutable $dt    Release datetime.
+	 */
+	return (string) apply_filters( 'lnkup_app_release_label', $label, $dt );
+}
+
+/**
  * Whether an opportunity row passes homepage curation rules.
  *
  * @param array $opp Opportunity row.
@@ -237,6 +315,23 @@ function lnkup_get_marketplace_public_stats() {
  */
 function lnkup_currency( $amount ) {
 	return '$' . number_format( (float) $amount, 2 );
+}
+
+/**
+ * Asset version for cache-busting (filemtime, fallback LNKUP_VERSION).
+ *
+ * @param string $relative_path Path under plugin dir (e.g. public/js/financial.js).
+ * @return string
+ */
+function lnkup_asset_version( $relative_path ) {
+	$path = LNKUP_PLUGIN_DIR . ltrim( (string) $relative_path, '/\\' );
+	if ( is_readable( $path ) ) {
+		$mtime = filemtime( $path );
+		if ( false !== $mtime ) {
+			return (string) $mtime;
+		}
+	}
+	return defined( 'LNKUP_VERSION' ) ? LNKUP_VERSION : '0';
 }
 
 /**
@@ -346,38 +441,198 @@ function lnkup_format_opportunity( $opp ) {
 }
 
 /**
+ * Parse gallery attachment IDs from meta (JSON array or comma list).
+ *
+ * @param mixed $raw Meta value.
+ * @return int[]
+ */
+function lnkup_parse_gallery_ids( $raw ) {
+	if ( is_array( $raw ) ) {
+		return array_values( array_filter( array_map( 'absint', $raw ) ) );
+	}
+	if ( ! is_string( $raw ) || '' === trim( $raw ) ) {
+		return array();
+	}
+	$trimmed = trim( $raw );
+	if ( '[' === $trimmed[0] ) {
+		$decoded = json_decode( $trimmed, true );
+		if ( is_array( $decoded ) ) {
+			return array_values( array_filter( array_map( 'absint', $decoded ) ) );
+		}
+	}
+	$parts = preg_split( '/[\s,]+/', $trimmed );
+	return array_values( array_filter( array_map( 'absint', (array) $parts ) ) );
+}
+
+/**
+ * Format gallery items for API/UI.
+ *
+ * @param int[] $ids Attachment IDs.
+ * @return array<int, array{id:int,url:string,mime:string,type:string,thumb:string}>
+ */
+function lnkup_format_gallery_items( array $ids ) {
+	$items = array();
+	foreach ( array_slice( $ids, 0, 24 ) as $id ) {
+		$id = absint( $id );
+		if ( ! $id ) {
+			continue;
+		}
+		$url = wp_get_attachment_url( $id );
+		if ( ! $url ) {
+			continue;
+		}
+		$mime  = (string) get_post_mime_type( $id );
+		$type  = 0 === strpos( $mime, 'video/' ) ? 'video' : 'image';
+		$thumb = 'image' === $type
+			? (string) ( wp_get_attachment_image_url( $id, 'medium' ) ?: $url )
+			: (string) ( wp_get_attachment_image_url( $id, 'medium' ) ?: $url );
+		$items[] = array(
+			'id'    => $id,
+			'url'   => $url,
+			'mime'  => $mime,
+			'type'  => $type,
+			'thumb' => $thumb,
+		);
+	}
+	return $items;
+}
+
+/**
+ * Save event/opportunity gallery IDs; set featured image from first image when missing.
+ *
+ * @param int   $post_id Post ID.
+ * @param mixed $raw_ids IDs from request.
+ * @return int[] Saved IDs.
+ */
+function lnkup_save_post_gallery( $post_id, $raw_ids ) {
+	$post_id = absint( $post_id );
+	if ( ! $post_id ) {
+		return array();
+	}
+	if ( is_string( $raw_ids ) && '' !== $raw_ids && '[' !== $raw_ids[0] ) {
+		$raw_ids = preg_split( '/[\s,]+/', $raw_ids );
+	}
+	$ids = lnkup_parse_gallery_ids( $raw_ids );
+	$ids = array_values(
+		array_filter(
+			$ids,
+			function ( $id ) {
+				$mime = (string) get_post_mime_type( $id );
+				return $id && ( 0 === strpos( $mime, 'image/' ) || 0 === strpos( $mime, 'video/' ) );
+			}
+		)
+	);
+	update_post_meta( $post_id, '_lnkup_gallery_ids', wp_json_encode( $ids ) );
+	$featured = (int) get_post_meta( $post_id, '_lnkup_featured_image_id', true );
+	if ( ! $featured && $ids ) {
+		foreach ( $ids as $id ) {
+			if ( 0 === strpos( (string) get_post_mime_type( $id ), 'image/' ) ) {
+				update_post_meta( $post_id, '_lnkup_featured_image_id', $id );
+				break;
+			}
+		}
+	}
+	return $ids;
+}
+
+/**
+ * Gallery for an opportunity (falls back to linked event).
+ *
+ * @param int $opportunity_id Opportunity ID.
+ * @param int $event_id       Event ID.
+ * @return array<int, array{id:int,url:string,mime:string,type:string,thumb:string}>
+ */
+function lnkup_get_opportunity_gallery( $opportunity_id, $event_id = 0 ) {
+	$ids = lnkup_parse_gallery_ids( get_post_meta( absint( $opportunity_id ), '_lnkup_gallery_ids', true ) );
+	if ( ! $ids && $event_id ) {
+		$ids = lnkup_parse_gallery_ids( get_post_meta( absint( $event_id ), '_lnkup_gallery_ids', true ) );
+	}
+	return lnkup_format_gallery_items( $ids );
+}
+
+/**
+ * Map a vendor category label to a theme illustration filename.
+ *
+ * @param string $label Category name.
+ * @return string Empty when unmatched.
+ */
+function lnkup_opportunity_illustration_from_category( $label ) {
+	$key = strtolower( trim( (string) $label ) );
+	$key = str_replace( '-', ' ', $key );
+	$key = preg_replace( '/\s+vendor$/', '', $key );
+	$key = preg_replace( '/\s+/', ' ', $key );
+	$map = array(
+		'food'            => 'cat-food.jpg',
+		'food truck'      => 'cat-food-truck.jpg',
+		'dessert'         => 'cat-desserts.jpg',
+		'desserts'        => 'cat-desserts.jpg',
+		'drink'           => 'cat-drinks.jpg',
+		'drinks'          => 'cat-drinks.jpg',
+		'beverage'        => 'cat-drinks.jpg',
+		'retail'          => 'cat-retail.jpg',
+		'clothing'        => 'cat-clothing.jpg',
+		'clothing brand'  => 'cat-clothing.jpg',
+		'beauty'          => 'cat-beauty.jpg',
+		'jewelry'         => 'cat-jewelry.jpg',
+		'art'             => 'cat-art.jpg',
+		'photo booth'     => 'cat-photo-booth.jpg',
+		'service'         => 'cat-services.jpg',
+		'services'        => 'cat-services.jpg',
+		'wellness'        => 'cat-wellness.jpg',
+		'merchandise'     => 'cat-merchandise.jpg',
+		'merch'           => 'cat-merchandise.jpg',
+		'mobile business' => 'cat-booth.jpg',
+	);
+	return isset( $map[ $key ] ) ? $map[ $key ] : '';
+}
+
+/**
  * Pick theme illustration filename for an opportunity row.
  *
  * @param array $opp Opportunity data.
  */
 function lnkup_opportunity_illustration_filename( $opp ) {
-	$haystack = strtolower(
-		trim(
-			( $opp['name'] ?? '' ) . ' ' .
-			( $opp['event_name'] ?? '' ) . ' ' .
-			( $opp['city'] ?? '' ) . ' ' .
-			( $opp['opportunity_title'] ?? '' ) . ' ' .
-			( $opp['event_type_label'] ?? '' ) . ' ' .
-			( $opp['event_type'] ?? '' )
-		)
-	);
-	if ( false !== strpos( $haystack, 'rodeo' ) ) {
-		return 'rodeo.svg';
+	$categories = isset( $opp['categories'] ) && is_array( $opp['categories'] ) ? $opp['categories'] : array();
+	foreach ( $categories as $category ) {
+		$file = lnkup_opportunity_illustration_from_category( $category );
+		if ( '' !== $file ) {
+			return $file;
+		}
 	}
-	if ( false !== strpos( $haystack, 'miami' ) || false !== strpos( $haystack, 'sunset' ) ) {
-		return 'sunset-miami.svg';
-	}
-	if ( false !== strpos( $haystack, 'greek' ) || false !== strpos( $haystack, 'picnic' ) || false !== strpos( $haystack, 'homecoming' ) ) {
-		return 'greek-picnic.svg';
-	}
-	if ( false !== strpos( $haystack, 'ghoe' ) || false !== strpos( $haystack, 'market' ) ) {
-		return 'ghoe-market.svg';
-	}
-	return 'block-party.svg';
+
+	return 'cat-booth.jpg';
 }
 
 /**
- * Card image URL: attachment or themed SVG illustration.
+ * Human alt for a Find Events card image. Never empty, never "image of".
+ *
+ * @param array $opp Opportunity or external-event data.
+ */
+function lnkup_opportunity_card_alt( $opp ) {
+	$opp        = is_array( $opp ) ? $opp : array();
+	$scene      = '';
+	$categories = isset( $opp['categories'] ) && is_array( $opp['categories'] ) ? $opp['categories'] : array();
+	foreach ( $categories as $category ) {
+		if ( lnkup_opportunity_illustration_from_category( $category ) ) {
+			$scene = trim( (string) preg_replace( '/\s+vendor$/i', '', (string) $category ) );
+			break;
+		}
+	}
+	if ( ! $scene && ! empty( $opp['event_type_label'] ) ) {
+		$scene = (string) $opp['event_type_label'];
+	}
+	if ( ! $scene ) {
+		$scene = __( 'Vendor event', 'lnkup-marketplace' );
+	}
+	$city = trim( (string) ( $opp['city'] ?? '' ) );
+	if ( $city ) {
+		return $scene . ' in ' . $city;
+	}
+	return $scene;
+}
+
+/**
+ * Card image URL: uploaded photo or category fallback JPG.
  *
  * @param array $opp Opportunity data.
  */
@@ -385,10 +640,40 @@ function lnkup_opportunity_illustration_url( $opp ) {
 	if ( ! empty( $opp['featured_image'] ) ) {
 		return (string) $opp['featured_image'];
 	}
-	$file = lnkup_opportunity_illustration_filename( $opp );
+	return lnkup_opportunity_category_fallback_url( $opp );
+}
+
+/**
+ * Theme category JPG used when a featured/remote image 404s.
+ *
+ * @param array $opp Opportunity or category-bearing row.
+ */
+function lnkup_opportunity_category_fallback_url( $opp = array() ) {
+	$file = lnkup_opportunity_illustration_filename( is_array( $opp ) ? $opp : array() );
 	$ver  = defined( 'LNKUP_THEME_VERSION' ) ? LNKUP_THEME_VERSION : LNKUP_VERSION;
 	$url  = get_theme_file_uri( 'assets/images/events/' . $file );
 	return add_query_arg( 'ver', $ver, $url );
+}
+
+/**
+ * Card media img with category fallback on load error.
+ *
+ * @param string $src      Primary image URL.
+ * @param string $alt      Alt text.
+ * @param string $fallback Fallback URL (defaults to category JPG).
+ */
+function lnkup_event_card_img_html( $src, $alt, $fallback = '' ) {
+	$src      = (string) $src;
+	$fallback = $fallback ? (string) $fallback : lnkup_opportunity_category_fallback_url();
+	if ( '' === $src ) {
+		return '<div class="lnkup-event-card__placeholder" aria-hidden="true"><span>LNKup</span></div>';
+	}
+	return sprintf(
+		'<img src="%1$s" alt="%2$s" width="1280" height="800" loading="lazy" data-fallback-src="%3$s" onerror="if(!this.dataset.tried){this.dataset.tried=\'1\';var f=this.getAttribute(\'data-fallback-src\');if(f&&f!==this.src){this.src=f;return;}}this.onerror=null;this.removeAttribute(\'src\');var p=document.createElement(\'div\');p.className=\'lnkup-event-card__placeholder\';p.setAttribute(\'aria-hidden\',\'true\');p.innerHTML=\'<span>LNKup</span>\';if(this.parentNode){this.parentNode.replaceChild(p,this);}" />',
+		esc_url( $src ),
+		esc_attr( $alt ),
+		esc_url( $fallback )
+	);
 }
 
 /**
@@ -413,9 +698,91 @@ function lnkup_external_event_illustration_url( $row ) {
 			'name'             => $row['title'] ?? '',
 			'event_name'       => $row['title'] ?? '',
 			'city'             => $row['city'] ?? '',
+			'categories'       => $row['recommended_categories'] ?? array(),
 			'event_type_label' => $row['event_type_label'] ?? $row['event_type'] ?? '',
 		)
 	);
+}
+
+/**
+ * Configured Next.js app base URL (no trailing slash).
+ */
+function lnkup_get_app_url() {
+	$url = defined( 'LNKUP_APP_URL' ) ? LNKUP_APP_URL : '';
+	if ( ! $url ) {
+		$settings = function_exists( 'lnkup_get_settings' ) ? lnkup_get_settings() : array();
+		$url      = isset( $settings['app_url'] ) ? (string) $settings['app_url'] : '';
+	}
+	return untrailingslashit( esc_url_raw( $url ) );
+}
+
+/**
+ * Allowed hostnames for app return URLs.
+ *
+ * @return string[]
+ */
+function lnkup_app_url_allowed_hosts() {
+	$hosts  = array();
+	$suffix = lnkup_get_app_url();
+	if ( $suffix ) {
+		$host = wp_parse_url( $suffix, PHP_URL_HOST );
+		if ( $host ) {
+			$hosts[] = strtolower( (string) $host );
+		}
+	}
+	/**
+	 * Filter extra allowed app hosts (e.g. Vercel preview).
+	 *
+	 * @param string[] $hosts Hostnames.
+	 */
+	$extra = apply_filters( 'lnkup_app_url_allowed_hosts', array() );
+	foreach ( (array) $extra as $host ) {
+		$host = strtolower( sanitize_text_field( (string) $host ) );
+		if ( $host ) {
+			$hosts[] = $host;
+		}
+	}
+	return array_values( array_unique( array_filter( $hosts ) ) );
+}
+
+/**
+ * Resolve app base URL for checkout return (allowlist enforced).
+ *
+ * @param string $requested URL from BFF.
+ */
+function lnkup_resolve_app_base_url( $requested = '' ) {
+	$requested = untrailingslashit( esc_url_raw( (string) $requested ) );
+	$allowed   = lnkup_app_url_allowed_hosts();
+	if ( $requested ) {
+		$host = wp_parse_url( $requested, PHP_URL_HOST );
+		if ( $host && in_array( strtolower( (string) $host ), $allowed, true ) ) {
+			return $requested;
+		}
+	}
+	$configured = lnkup_get_app_url();
+	return $configured ?: '';
+}
+
+/**
+ * Build vendor payment return URL for the Next.js app.
+ *
+ * @param int    $payment_id     Payment post ID.
+ * @param string $payment_state  success|cancelled|processing.
+ * @param array  $args           return_to, app_base_url, application_id.
+ */
+function lnkup_vendor_app_payment_return_url( $payment_id, $payment_state, $args = array() ) {
+	$app_base = lnkup_resolve_app_base_url( $args['app_base_url'] ?? '' );
+	if ( ! $app_base ) {
+		return '';
+	}
+	$application_id = absint( $args['application_id'] ?? get_post_meta( $payment_id, '_lnkup_application_id', true ) );
+	$query          = array(
+		'payment' => sanitize_key( $payment_state ),
+	);
+	if ( $application_id ) {
+		$query['applicationId'] = $application_id;
+	}
+	return $app_base . '/vendor/requests?' . http_build_query( $query, '', '&', PHP_QUERY_RFC3986 );
 }
 
 /**
@@ -430,6 +797,37 @@ function lnkup_page_url_helper( $slug ) {
 	}
 	$page = get_page_by_path( $slug );
 	return $page ? get_permalink( $page ) : home_url( '/' . $slug . '/' );
+}
+
+/**
+ * 301 /find-events/ to the live opportunities page. Skip if a real find-events page exists.
+ */
+function lnkup_redirect_find_events_alias() {
+	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+		return;
+	}
+	global $wp;
+	$request = isset( $wp->request ) ? trim( (string) $wp->request, '/' ) : '';
+	if ( ! $request && ! empty( $_SERVER['REQUEST_URI'] ) ) {
+		$path    = (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH );
+		$home    = untrailingslashit( (string) ( wp_parse_url( home_url( '/' ), PHP_URL_PATH ) ?: '' ) );
+		if ( $home && 0 === strpos( $path, $home ) ) {
+			$path = substr( $path, strlen( $home ) );
+		}
+		$request = trim( $path, '/' );
+	}
+	if ( 'find-events' !== $request ) {
+		return;
+	}
+	if ( get_page_by_path( 'find-events' ) ) {
+		return;
+	}
+	$target = lnkup_page_url_helper( 'opportunities' );
+	if ( ! empty( $_GET ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$target = add_query_arg( wp_unslash( $_GET ), $target ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	}
+	wp_safe_redirect( $target, 301 );
+	exit;
 }
 
 /**
@@ -901,6 +1299,13 @@ function lnkup_render_external_event_card( $row ) {
 	}
 
 	$img       = lnkup_external_event_illustration_url( $row );
+	$img_alt   = lnkup_opportunity_card_alt(
+		array(
+			'categories'       => $row['recommended_categories'] ?? array(),
+			'event_type_label' => $row['event_type_label'] ?? $row['event_type'] ?? '',
+			'city'             => $row['city'] ?? '',
+		)
+	);
 	$interest  = (int) ( $row['vendor_interest_count'] ?? 0 );
 	$interest_label = $interest > 0
 		? sprintf( lnkup_copy( 'external_event_interest_count' ), $interest )
@@ -918,9 +1323,20 @@ function lnkup_render_external_event_card( $row ) {
 
 	ob_start();
 	?>
-	<article class="lnkup-event-card lnkup-event-card--v2 lnkup-event-card--external<?php echo $demand_score >= 50 ? ' lnkup-event-card--external-hot' : ''; ?>" data-external-event-id="<?php echo esc_attr( (string) $id ); ?>" data-has-interest="<?php echo $has_interest ? '1' : '0'; ?>" data-demand-score="<?php echo esc_attr( (string) $demand_score ); ?>" data-testid="lnkup-external-event-card">
+	<article class="lnkup-event-card lnkup-event-card--v2 lnkup-event-card--external<?php echo $demand_score >= 50 ? ' lnkup-event-card--external-hot' : ''; ?>" data-listing-type="external" data-external-event-id="<?php echo esc_attr( (string) $id ); ?>" data-has-interest="<?php echo $has_interest ? '1' : '0'; ?>" data-demand-score="<?php echo esc_attr( (string) $demand_score ); ?>" data-testid="lnkup-external-event-card">
 		<div class="lnkup-event-card__media">
-			<img src="<?php echo esc_url( $img ); ?>" alt="" loading="lazy" />
+			<?php
+			echo lnkup_event_card_img_html(
+				$img,
+				$img_alt,
+				lnkup_opportunity_category_fallback_url(
+					array(
+						'categories'       => $row['recommended_categories'] ?? array(),
+						'event_type_label' => $row['event_type_label'] ?? $row['event_type'] ?? '',
+					)
+				)
+			); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			?>
 			<div class="lnkup-event-card__badges-top">
 				<span class="lnkup-badge lnkup-badge--accent"><?php echo esc_html( (string) ( $row['event_type_label'] ?? __( 'Event Opportunity', 'lnkup-marketplace' ) ) ); ?></span>
 				<span class="lnkup-badge lnkup-badge--external"><?php echo esc_html( lnkup_copy( 'external_event_badge' ) ); ?></span>
@@ -1132,6 +1548,8 @@ function lnkup_format_index_row( $row, $compare = false ) {
 		'event_id'          => (int) $row['event_id'],
 		'id'                => (int) $row['opportunity_id'],
 		'name'              => $row['title'],
+		'excerpt'           => isset( $row['excerpt'] ) ? (string) $row['excerpt'] : '',
+		'description'       => isset( $row['excerpt'] ) ? (string) $row['excerpt'] : '',
 		'city'              => $row['city'],
 		'state'             => $row['state'],
 		'venue_name'        => $row['venue_name'],
@@ -1147,6 +1565,7 @@ function lnkup_format_index_row( $row, $compare = false ) {
 		'lng'               => $row['lng'] ? (float) $row['lng'] : null,
 		'featured_image_id' => (int) ( $row['featured_image_id'] ?? 0 ),
 		'featured_image'    => ! empty( $row['featured_image_id'] ) ? wp_get_attachment_image_url( (int) $row['featured_image_id'], 'medium_large' ) : '',
+		'gallery'           => lnkup_get_opportunity_gallery( (int) $row['opportunity_id'], (int) ( $row['event_id'] ?? 0 ) ),
 		'organizer_id'      => (int) $row['organizer_user_id'],
 		'organizer_name'    => $organizer ? $organizer->display_name : '',
 		'organizer_verified'=> (bool) ( $row['organizer_verified'] ?? false ),
@@ -1169,7 +1588,28 @@ function lnkup_format_index_row( $row, $compare = false ) {
 		$item['free_parking']        = (bool) ( $row['free_parking'] ?? false );
 		$item['load_in_time']        = $row['load_in_time'] ?? '';
 		$item['required_documents']  = $row['required_documents'] ?? '';
+
+		$opp_post   = get_post( (int) $row['opportunity_id'] );
+		$event_post = ! empty( $row['event_id'] ) ? get_post( (int) $row['event_id'] ) : null;
+		$full_text  = '';
+		if ( $opp_post && $opp_post->post_content ) {
+			$full_text = (string) $opp_post->post_content;
+		} elseif ( $event_post && $event_post->post_content ) {
+			$full_text = (string) $event_post->post_content;
+		}
+		$full_text = trim( wp_strip_all_tags( $full_text ) );
+		if ( $full_text ) {
+			$item['description'] = $full_text;
+			if ( empty( $item['excerpt'] ) ) {
+				$item['excerpt'] = wp_trim_words( $full_text, 40 );
+			}
+		}
 	}
+
+	if ( empty( $item['featured_image'] ) ) {
+		$item['featured_image'] = lnkup_opportunity_illustration_url( $item );
+	}
+	$item['image_alt'] = lnkup_opportunity_card_alt( $item );
 
 	return $item;
 }
@@ -1240,6 +1680,7 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 	}
 	$location = $opp['location_label'] ?? trim( ( $opp['city'] ?? '' ) . ( ! empty( $opp['state'] ) ? ', ' . $opp['state'] : '' ) );
 	$img       = lnkup_opportunity_illustration_url( $opp );
+	$img_alt   = lnkup_opportunity_card_alt( $opp );
 	$badge_labels = array(
 		'trending'       => __( 'Trending', 'lnkup-marketplace' ),
 		'closing_soon'   => __( 'Closing Soon', 'lnkup-marketplace' ),
@@ -1262,15 +1703,12 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 
 	ob_start();
 	?>
-	<article class="lnkup-event-card lnkup-event-card--v2<?php echo $is_closed ? ' lnkup-event-card--closed' : ''; ?>" data-opportunity-id="<?php echo esc_attr( (string) $opp['opportunity_id'] ); ?>" data-lat="<?php echo esc_attr( (string) ( $opp['lat'] ?? '' ) ); ?>" data-lng="<?php echo esc_attr( (string) ( $opp['lng'] ?? '' ) ); ?>">
+	<article class="lnkup-event-card lnkup-event-card--v2<?php echo $is_closed ? ' lnkup-event-card--closed' : ''; ?>" data-listing-type="managed" data-opportunity-id="<?php echo esc_attr( (string) $opp['opportunity_id'] ); ?>" data-lat="<?php echo esc_attr( (string) ( $opp['lat'] ?? '' ) ); ?>" data-lng="<?php echo esc_attr( (string) ( $opp['lng'] ?? '' ) ); ?>">
 		<div class="lnkup-event-card__media">
-			<?php if ( $img ) : ?>
-				<img src="<?php echo esc_url( $img ); ?>" alt="" loading="lazy" />
-			<?php else : ?>
-				<div class="lnkup-event-card__placeholder" aria-hidden="true"><span>LNKup</span></div>
-			<?php endif; ?>
+			<?php echo lnkup_event_card_img_html( $img, $img_alt, lnkup_opportunity_category_fallback_url( $opp ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<div class="lnkup-event-card__badges-top">
 				<span class="lnkup-badge lnkup-badge--accent"><?php echo esc_html( $opp['event_type_label'] ?? __( 'Event Opportunity', 'lnkup-marketplace' ) ); ?></span>
+				<span class="lnkup-badge lnkup-badge--managed"><?php esc_html_e( 'Apply on LNKup', 'lnkup-marketplace' ); ?></span>
 				<span class="lnkup-badge"><?php echo esc_html( $opp['fee_label'] ?? lnkup_currency( $opp['vendor_fee'] ?? 0 ) ); ?></span>
 				<?php if ( $low_spots ) : ?>
 					<span class="lnkup-badge lnkup-badge--destructive"><?php echo esc_html( (string) $opp['spots_remaining'] ); ?> <?php esc_html_e( 'left', 'lnkup-marketplace' ); ?></span>

@@ -124,6 +124,13 @@
   padding: 2rem;
   text-align: center;
 }
+.lnkup-map-empty__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
 
 .lnkup-map-search {
   flex: 1;
@@ -131,24 +138,6 @@
   padding: 0.4rem 0.6rem;
   border: 1px solid #ccc;
   border-radius: 8px;
-}
-
-.lnkup-mp-v2__split-layout {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-}
-
-@media (min-width: 900px) {
-  .lnkup-mp-v2__split-layout.is-split {
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
-  }
-  .lnkup-mp-v2__split-layout.is-split .lnkup-mp-v2__map-view {
-    position: sticky;
-    top: 1rem;
-    min-height: 60vh;
-  }
 }
 
 .lnkup-map-pin-drawer {

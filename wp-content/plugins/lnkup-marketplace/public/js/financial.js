@@ -33,6 +33,21 @@
     return path + (path.indexOf('?') >= 0 ? '&' : '?') + 'role=' + encodeURIComponent(role);
   }
 
+  function taxPdfLinks(data) {
+    var w9 = (data && data.w9_pdf_url) || (base + '/tax-center/w9/pdf');
+    var nec = (data && data.form_1099_pdf_url) || (base + '/tax-center/1099/pdf');
+    function withNonce(url) {
+      if (!nonce || url.indexOf('_wpnonce=') >= 0) {
+        return url;
+      }
+      return url + (url.indexOf('?') >= 0 ? '&' : '?') + '_wpnonce=' + encodeURIComponent(nonce);
+    }
+    return '<p class="lnkup-fin-tax-pdfs">' +
+      '<a class="lnkup-btn lnkup-btn--sm" href="' + withNonce(w9) + '" target="_blank" rel="noopener">Download W-9 summary PDF</a> ' +
+      '<a class="lnkup-btn lnkup-btn--sm" href="' + withNonce(nec) + '" target="_blank" rel="noopener">Download 1099 summary PDF</a>' +
+      '</p><p class="lnkup-muted">LNKup summaries for your records — not official IRS forms.</p>';
+  }
+
   var ORGANIZER_DASH_ZERO = {
     gross_revenue: 0,
     available_balance: 0,
@@ -61,11 +76,30 @@
     var pending = Number(display.pending != null ? display.pending : (wallet.pending || payload.pending_balance || payload.wallet_pending || 0));
     var processing = Number(display.processing != null ? display.processing : (wallet.processing || payload.processing_balance || 0));
     var reserve = Number(display.reserve_hold != null ? display.reserve_hold : (wallet.reserve_hold || payload.reserve_hold || 0));
+    var sourceTypes = display.source_types || stripeBal.source_types || {};
+    var connectAvailable = Number(display.connect_available != null ? display.connect_available : (stripeBal.available || 0));
+    var platformRecoverable = Number(display.platform_recoverable != null ? display.platform_recoverable : 0);
+    var ledgerClaim = Number(display.ledger_claim != null ? display.ledger_claim : (wallet.available || 0));
 
     if (isDest && stripeSynced) {
-      available = Number(stripeBal.available != null ? stripeBal.available : available);
-      pending = Number(stripeBal.pending != null ? stripeBal.pending : pending);
-      balanceSource = 'stripe_connect';
+      // Prefer server display_balances (Connect + ledger-capped platform recovery).
+      if (display.available == null) {
+        available = Number(stripeBal.available != null ? stripeBal.available : available) + platformRecoverable;
+      }
+      if (display.pending == null) {
+        pending = Number(stripeBal.pending != null ? stripeBal.pending : pending);
+      }
+      if (display.connect_available == null && stripeBal.available != null) {
+        connectAvailable = Number(stripeBal.available);
+      }
+      if (platformRecoverable > 0) {
+        balanceSource = 'stripe_connect_plus_recovery';
+      } else {
+        balanceSource = display.balance_source || 'stripe_connect';
+      }
+      if (stripeBal.source_types) {
+        sourceTypes = display.source_types || stripeBal.source_types;
+      }
     }
 
     return {
@@ -76,10 +110,30 @@
       settlement: settlement,
       isDest: isDest,
       ledgerSettled: ledgerSettled,
+      ledgerClaim: ledgerClaim,
+      connectAvailable: connectAvailable,
+      platformRecoverable: platformRecoverable,
       stripeBal: stripeBal,
       stripeSynced: stripeSynced,
-      balanceSource: balanceSource
+      balanceSource: balanceSource,
+      sourceTypes: sourceTypes
     };
+  }
+
+  function formatSourceTypesBreakdown(sourceTypes) {
+    if (!sourceTypes || typeof sourceTypes !== 'object') {
+      return '';
+    }
+    var labels = { card: 'Card', bank_account: 'Bank', fpx: 'FPX' };
+    var keys = Object.keys(sourceTypes);
+    if (keys.length < 2) {
+      return '';
+    }
+    return keys.map(function (key) {
+      var cents = Number(sourceTypes[key]) || 0;
+      var label = labels[key] || String(key).replace(/_/g, ' ');
+      return label + ' $' + (cents / 100).toFixed(2);
+    }).join(' · ');
   }
 
   function mergeOrganizerMoneyPayload(dash, walletData) {
@@ -128,6 +182,27 @@
    * @param {object} options Fetch options.
    * @return {Promise<{ok:boolean,data?:*,error?:string,status?:number}>}
    */
+  function looksLikeJsonBody(body) {
+    var trimmed = String(body || '').replace(/^\uFEFF/, '').trim();
+    return trimmed.charAt(0) === '{' || trimmed.charAt(0) === '[';
+  }
+
+  function resolveFinancialErrorMessage(parsed, status) {
+    if (parsed && typeof parsed.message === 'string' && parsed.message.trim()) {
+      return parsed.message.trim();
+    }
+    if (parsed && parsed.data && typeof parsed.data.message === 'string' && parsed.data.message.trim()) {
+      return parsed.data.message.trim();
+    }
+    if (parsed && typeof parsed.code === 'string' && parsed.code.trim()) {
+      return parsed.code.trim();
+    }
+    if (status) {
+      return 'Request failed (HTTP ' + status + ')';
+    }
+    return API_ERROR_MSG;
+  }
+
   function fetchFinancialJson(path, options) {
     options = options || {};
     var headers = Object.assign({ 'X-WP-Nonce': nonce }, options.headers || {});
@@ -138,19 +213,26 @@
     return fetch(base + appendRoleParam(path), Object.assign({ credentials: 'same-origin', headers: headers }, options))
       .then(function (r) {
         var ct = r.headers.get('content-type') || '';
-        if (!r.ok || ct.indexOf('application/json') === -1) {
-          return r.text().then(function (body) {
-            console.error('Financial API error', r.status, body.slice(0, 300));
-            return { ok: false, error: API_ERROR_MSG, status: r.status };
-          });
-        }
         return r.text().then(function (body) {
-          try {
-            return { ok: true, data: JSON.parse(body) };
-          } catch (parseErr) {
-            console.error('Financial API JSON parse error', path, body.slice(0, 300));
+          var parsed = null;
+          var shouldParse = body && (ct.indexOf('application/json') !== -1 || looksLikeJsonBody(body));
+          if (shouldParse) {
+            try {
+              parsed = JSON.parse(body);
+            } catch (parseErr) {
+              console.error('Financial API JSON parse error', path, body.slice(0, 300));
+            }
+          }
+          if (!r.ok) {
+            console.error('Financial API error', r.status, (body || '').slice(0, 300));
+            var msg = resolveFinancialErrorMessage(parsed, r.status);
+            return { ok: false, error: msg, code: parsed && parsed.code, data: parsed, status: r.status };
+          }
+          if (!parsed) {
+            console.error('Financial API JSON parse error', path, (body || '').slice(0, 300));
             return { ok: false, error: API_ERROR_MSG, status: r.status };
           }
+          return { ok: true, data: parsed };
         });
       })
       .catch(function (err) {
@@ -162,7 +244,11 @@
   function finFetch(path, options) {
     return fetchFinancialJson(path, options).then(function (result) {
       if (!result.ok) {
-        throw new Error(result.error || 'api_error');
+        var err = new Error(result.error || resolveFinancialErrorMessage(result.data, result.status));
+        err.code = result.code;
+        err.status = result.status;
+        err.payload = result.data || null;
+        throw err;
       }
       return result.data;
     });
@@ -235,6 +321,10 @@
     var html = '<div class="lnkup-fin-invoice-cards">';
     rows.forEach(function (r) {
       var due = (r.due_date || '').slice(0, 10);
+      var pdf = r.pdf_url || '';
+      var viewLink = pdf
+        ? '<a class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" href="' + escapeHtml(pdf) + '" target="_blank" rel="noopener" data-testid="lnkup-invoice-view">View</a>'
+        : '';
       html += '<article class="lnkup-fin-invoice-card lnkup-surface--primary lnkup-micro-lift">' +
         '<div class="lnkup-fin-invoice-card__main">' +
         '<p class="lnkup-type-label">' + escapeHtml(r.invoice_number || 'Invoice') + '</p>' +
@@ -244,14 +334,19 @@
         '<div class="lnkup-fin-invoice-card__side">' +
         '<p class="lnkup-type-display">$' + Number(r.total_amount || 0).toFixed(2) + '</p>' +
         statusChip(r.status) +
+        viewLink +
         '</div></article>';
     });
     html += '</div>';
     html += '<div class="lnkup-fin-table-wrap lnkup-fin-table-wrap--desktop-only"><table class="lnkup-fin-table"><thead><tr>' +
-      '<th>Invoice</th><th>Event</th><th>Due</th><th>Total</th><th>Status</th></tr></thead><tbody>';
+      '<th>Invoice</th><th>Event</th><th>Due</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>';
     rows.forEach(function (r) {
+      var pdf = r.pdf_url || '';
+      var viewCell = pdf
+        ? '<a href="' + escapeHtml(pdf) + '" target="_blank" rel="noopener" data-testid="lnkup-invoice-view">View</a>'
+        : '';
       html += '<tr class="lnkup-fin-row-hover"><td>' + escapeHtml(r.invoice_number) + '</td><td>' + escapeHtml(r.event_title) +
-        '</td><td>' + escapeHtml((r.due_date || '').slice(0, 10)) + '</td><td>$' + Number(r.total_amount).toFixed(2) + '</td><td>' + statusChip(r.status) + '</td></tr>';
+        '</td><td>' + escapeHtml((r.due_date || '').slice(0, 10)) + '</td><td>$' + Number(r.total_amount).toFixed(2) + '</td><td>' + statusChip(r.status) + '</td><td>' + viewCell + '</td></tr>';
     });
     html += '</tbody></table></div>';
     return html;
@@ -376,6 +471,7 @@
   function refundRequestForm() {
     return '<form class="lnkup-fin-refund-form" id="lnkup-refund-form">' +
       '<h3>Request refund</h3>' +
+      '<p class="lnkup-muted">Contested charges: use the Disputes tab instead.</p>' +
       '<label>Payment ID <input type="number" name="payment_id" required></label>' +
       '<label>Amount <input type="number" step="0.01" name="amount" required></label>' +
       '<label>Type <select name="refund_type"><option value="full">Full</option><option value="partial">Partial</option><option value="credit">Marketplace credit</option></select></label>' +
@@ -408,6 +504,113 @@
         } else {
           alert(res.message || 'Could not submit refund');
         }
+      });
+    });
+  }
+
+  function disputeRequestForm(prefillPaymentId) {
+    var pid = prefillPaymentId ? String(prefillPaymentId) : '';
+    return '<form class="lnkup-fin-dispute-form" id="lnkup-dispute-form">' +
+      '<h3>Dispute a charge</h3>' +
+      '<p class="lnkup-muted">Open a case for a paid charge. The organizer reviews and may refund or issue credit.</p>' +
+      '<label>Payment ID <input type="number" name="payment_id" required value="' + escapeHtml(pid) + '"></label>' +
+      '<label>Reason <textarea name="reason" rows="4" minlength="10" required placeholder="Why is this charge incorrect?"></textarea></label>' +
+      '<button type="submit" class="lnkup-btn lnkup-btn--primary">Open dispute</button>' +
+      '</form>';
+  }
+
+  function bindDisputeForm(panel) {
+    var form = panel.querySelector('#lnkup-dispute-form');
+    if (!form || form.dataset.bound) {
+      return;
+    }
+    form.dataset.bound = '1';
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var fd = new FormData(form);
+      finFetch('/disputes', {
+        method: 'POST',
+        body: {
+          payment_id: Number(fd.get('payment_id') || 0),
+          reason: String(fd.get('reason') || '')
+        }
+      }).then(function (res) {
+        if (res && (res.code || (!res.id && !res.dispute))) {
+          alert(res.message || 'Could not open dispute');
+          return;
+        }
+        panel.dataset.loaded = '';
+        panel.dispatchEvent(new CustomEvent('lnkup-fin-panel-open', { bubbles: true }));
+      }).catch(function () {
+        alert('Could not open dispute');
+      });
+    });
+  }
+
+  function renderDisputeEvidence(list) {
+    if (!list || !list.length) {
+      return '<p class="lnkup-muted">No evidence notes yet.</p>';
+    }
+    var html = '<ul class="lnkup-fin-dispute-evidence">';
+    list.forEach(function (item) {
+      html += '<li><span class="lnkup-muted">' + escapeHtml((item.at || '').slice(0, 16)) + '</span> — ' + escapeHtml(item.message || '') + '</li>';
+    });
+    html += '</ul>';
+    return html;
+  }
+
+  function bindVendorDisputeRespond(panel) {
+    panel.querySelectorAll('.lnkup-dispute-respond').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-id');
+        var note = window.prompt('Add a note for the organizer');
+        if (!note) return;
+        finFetch('/disputes/' + id + '/respond', { method: 'POST', body: { evidence: note } }).then(function (res) {
+          if (res && res.code) {
+            alert(res.message || 'Could not add note');
+            return;
+          }
+          panel.dataset.loaded = '';
+          panel.dispatchEvent(new CustomEvent('lnkup-fin-panel-open', { bubbles: true }));
+        });
+      });
+    });
+  }
+
+  function bindOrganizerDisputeResolve(panel) {
+    panel.querySelectorAll('[data-dispute-resolve]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-id');
+        var outcome = btn.getAttribute('data-dispute-resolve');
+        var note = '';
+        if (outcome === 'denied') {
+          note = window.prompt('Denial note (required)') || '';
+          if (!note) return;
+        } else {
+          note = window.prompt('Optional note for the vendor') || '';
+        }
+        finFetch('/disputes/' + id + '/resolve', {
+          method: 'POST',
+          body: { outcome: outcome, note: note }
+        }).then(function (res) {
+          if (res && res.code) {
+            alert(res.message || 'Could not resolve dispute');
+            return;
+          }
+          panel.dataset.loaded = '';
+          panel.dispatchEvent(new CustomEvent('lnkup-fin-panel-open', { bubbles: true }));
+        });
+      });
+    });
+    panel.querySelectorAll('.lnkup-dispute-respond').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-id');
+        var note = window.prompt('Add evidence or a reply');
+        if (!note) return;
+        finFetch('/disputes/' + id + '/respond', { method: 'POST', body: { evidence: note } }).then(function () {
+          panel.dataset.loaded = '';
+          panel.dispatchEvent(new CustomEvent('lnkup-fin-panel-open', { bubbles: true }));
+        });
       });
     });
   }
@@ -453,6 +656,8 @@
         var action = '';
         if (t.status === 'pending' && t.id) {
           action = '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--primary lnkup-pay-btn" data-payment-id="' + (t.payment_post_id || t.id) + '">Pay now</button>';
+        } else if ((t.status === 'paid' || t.status === 'completed') && (t.payment_post_id || t.id)) {
+          action = '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost lnkup-dispute-charge-btn" data-payment-id="' + (t.payment_post_id || t.id) + '">Dispute charge</button>';
         }
         return [
           escapeHtml(t.event_title || t.public_id),
@@ -485,6 +690,9 @@
       html += '<p class="lnkup-muted">' + escapeHtml((t.created_at || '').slice(0, 10)) + '</p>';
       if (t.status === 'pending' && t.payment_post_id) {
         html += '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--primary lnkup-pay-btn" data-payment-id="' + t.payment_post_id + '">Pay now</button>';
+      }
+      if ((t.status === 'paid' || t.status === 'completed') && t.payment_post_id) {
+        html += '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost lnkup-dispute-charge-btn" data-payment-id="' + t.payment_post_id + '">Dispute charge</button>';
       }
       html += '</article>';
     });
@@ -550,8 +758,8 @@
       }));
       html += '</section><section id="lnkup-fin-settings-tax"><h3>Tax documents</h3>';
       html += '<p>W-9 on file: ' + (tax && tax.w9_on_file ? 'Yes' : 'No') + '</p>';
-      html += '<p>1099 eligible: ' + (tax && tax.form_1099_eligible ? 'Yes' : 'Placeholder') + '</p>';
-      html += '<p class="lnkup-muted">Tax form generation is not yet available.</p></section>';
+      html += '<p>1099 eligible: ' + (tax && tax.form_1099_eligible ? 'Yes' : 'No') + '</p>';
+      html += taxPdfLinks(tax) + '</section>';
       panel.innerHTML = html;
       var addCard = panel.querySelector('#lnkup-add-card');
       if (addCard) {
@@ -615,14 +823,18 @@
 
     var html = '<div class="lnkup-fin-balance-hero__grid">';
     html += '<div class="lnkup-fin-balance-hero__primary"><p class="lnkup-fin-balance-hero__label">' + escapeHtml(primaryLabel) + '</p>';
-    html += '<p class="lnkup-fin-balance-hero__value">$' + balances.available.toFixed(2) + '</p>';
+    var primaryAmt = balances.available;
+    if (balances.isDest && !balances.stripeSynced && primaryAmt <= 0) {
+      primaryAmt = balances.ledgerClaim || balances.ledgerSettled || 0;
+    }
+    html += '<p class="lnkup-fin-balance-hero__value">$' + primaryAmt.toFixed(2) + '</p>';
     if (balances.isDest && balances.stripeSynced) {
       html += '<p class="lnkup-fin-balance-hero__sub">Settled in LNKup: $' + balances.ledgerSettled.toFixed(2) + '</p>';
       if (balances.pending > 0 && balances.available <= 0) {
         html += '<p class="lnkup-fin-balance-hero__sub">Card payments can take a few days to become available for payout.</p>';
       }
-    } else if (balances.isDest && balances.ledgerSettled > 0) {
-      html += '<p class="lnkup-fin-balance-hero__sub">Tracked in LNKup while payout setup finishes syncing.</p>';
+    } else if (balances.isDest && !balances.stripeSynced && (primaryAmt > 0 || balances.ledgerSettled > 0)) {
+      html += '<p class="lnkup-fin-balance-hero__sub">Tracked in LNKup</p>';
     } else if (awaitingCheckout > 0) {
       html += '<p class="lnkup-fin-balance-hero__sub">$' + awaitingCheckout.toFixed(2) + ' awaiting vendor checkout completion.</p>';
     }
@@ -792,11 +1004,14 @@
       loadOrganizerBalanceHero(dash);
       renderConnectTopBanner(connect);
       var balances = resolveOrganizerBalances(dash);
-      var gross = Number(dash.gross_revenue || dash.vendor_revenue || 0);
-      var hasRevenue = gross > 0 || Number(dash.collected || 0) > 0;
+      var collectedAmt = Number(dash.collected || dash.vendor_revenue || 0);
+      var wallet = dash.wallet || {};
+      var grossRaw = Number(dash.gross_revenue || 0);
+      var gross = (grossRaw > 0 ? grossRaw : collectedAmt) || Number(dash.vendor_revenue || wallet.lifetime_paid || 0);
+      var hasRevenue = gross > 0 || collectedAmt > 0;
       var html = '<div class="lnkup-fin-tab-panel">';
       if (!dashRes.ok && balanceRes.ok) {
-        html += infoCard('Revenue summary', '<p class="lnkup-muted">Balance is syncing. Revenue charts are temporarily unavailable — refresh in a moment.</p>', 'warn');
+        html += infoCard('Revenue summary', '<p class="lnkup-muted">Revenue charts could not load. Your tracked balance is still shown.</p><p><button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" data-fin-retry-overview>Retry</button></p>', 'warn');
       }
       html += kpiGrid([
         { label: 'Gross Revenue', value: '$' + gross.toFixed(2) },
@@ -826,6 +1041,13 @@
       }
       html += '</div>';
       panel.innerHTML = html;
+      var retryBtn = panel.querySelector('[data-fin-retry-overview]');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', function () {
+          panel.dataset.loaded = '';
+          loadOrganizerOverview(panel);
+        });
+      }
       if (window.LNKupUI && typeof LNKupUI.animateKpiCards === 'function') {
         LNKupUI.animateKpiCards(panel);
       }
@@ -1154,6 +1376,48 @@
     return '<p class="lnkup-fin-connect-banner lnkup-muted" id="lnkup-connect-notice">' + escapeHtml(msg) + '</p>';
   }
 
+  function formatCashoutErrorHtml(err) {
+    var payload = (err && err.payload) || {};
+    var message = (err && err.message) || resolveFinancialErrorMessage(payload, err && err.status) || 'Cashout could not be completed.';
+    var code = (err && err.code) || payload.code || '';
+    var status = (err && err.status) || (payload.data && payload.data.status) || '';
+    var meta = [];
+    if (code) {
+      meta.push(String(code));
+    }
+    if (status) {
+      meta.push(String(status));
+    }
+    var html = renderErrorCard(message);
+    if (meta.length) {
+      html = html.replace(
+        '</p></div>',
+        '</p><p class="lnkup-muted">' + escapeHtml(meta.join(' · ')) + '</p></div>'
+      );
+    }
+    return html;
+  }
+
+  function showCashoutInlineError(panel, err) {
+    if (!panel) {
+      return;
+    }
+    console.error('Cashout failed', err, err && err.payload);
+    var existing = panel.querySelector('.lnkup-cashout-inline-error');
+    if (existing) {
+      existing.remove();
+    }
+    var wrap = document.createElement('div');
+    wrap.className = 'lnkup-cashout-inline-error';
+    wrap.innerHTML = formatCashoutErrorHtml(err);
+    var form = panel.querySelector('#lnkup-cashout-form');
+    if (form && form.parentNode) {
+      form.parentNode.insertBefore(wrap, form);
+    } else {
+      panel.insertBefore(wrap, panel.firstChild);
+    }
+  }
+
   function loadCashoutPanel(panel) {
     if (!panel || panel.dataset.loaded) {
       return;
@@ -1163,20 +1427,53 @@
       panel.dataset.loaded = '1';
       var balances = resolveOrganizerBalances(data || {});
       var connect = data.connect || {};
-      var maxCashout = balances.available;
-      var canCashout = connect.status === 'active' || balances.settlement === 'platform_treasury';
+      var maxCashout = Math.max(0, Number(balances.available) || 0);
+      var setupReady = connect.status === 'active' || balances.settlement === 'platform_treasury';
+      var settling = balances.isDest && balances.stripeSynced && maxCashout <= 0 && Number(balances.pending) > 0;
+      var balanceBlocked = balances.isDest && !balances.stripeSynced;
+      var canCashout = setupReady && maxCashout > 0 && !balanceBlocked;
+      var instantEnabled = !!(connect.instant_payouts_enabled || (ajax.settings && ajax.settings.connect_instant_payouts_enabled));
       var html = '';
-      if (!canCashout && connect.available) {
+      if (!setupReady && connect.available) {
         html += '<p class="lnkup-fin-connect-banner">Finish payout setup before cashing out.</p>';
       }
-      if (balances.isDest && balances.stripeSynced) {
+      if (balanceBlocked) {
+        html += '<p class="lnkup-fin-connect-banner">Could not load your live Stripe payout balance. Refresh and try again.</p>';
+      } else if (settling) {
+        html += '<p class="lnkup-muted">Card payments can take a few days to become available for payout.</p>';
+      } else if (balances.isDest && balances.stripeSynced && Number(balances.platformRecoverable) > 0) {
+        html += '<p class="lnkup-muted">Includes $' + Number(balances.platformRecoverable).toFixed(2) + ' held on LNKup that will move to your payout account when you cash out.</p>';
+      } else if (balances.isDest && balances.stripeSynced && maxCashout <= 0) {
+        html += '<p class="lnkup-muted">Available is your Connect payout balance. Main Stripe may hold LNKup fees plus other organizers\' funds — not withdrawable here.</p>';
+      } else if (balances.isDest && balances.stripeSynced) {
         html += '<p class="lnkup-muted">Max cashout uses your live available balance in destination mode.</p>';
       }
+      var typeSelect = '<option value="standard">Standard</option>';
+      if (instantEnabled) {
+        typeSelect += '<option value="instant">Instant (1.5% fee)</option>';
+      }
       html += '<form class="lnkup-fin-cashout-form" id="lnkup-cashout-form">' +
-        '<p>Available: <strong>$' + maxCashout.toFixed(2) + '</strong></p>' +
-        '<label>Amount <input type="number" step="0.01" name="amount" required min="1" max="' + maxCashout + '"' + (canCashout ? '' : ' disabled') + '></label>' +
-        '<label>Type <select name="type"' + (canCashout ? '' : ' disabled') + '><option value="standard">Standard</option><option value="instant">Instant (1.5% fee)</option></select></label>' +
+        '<p>Available: <strong>$' + maxCashout.toFixed(2) + '</strong></p>';
+      var sourceBreakdown = formatSourceTypesBreakdown(balances.sourceTypes);
+      if (sourceBreakdown) {
+        html += '<p class="lnkup-muted">' + escapeHtml(sourceBreakdown) + '</p>';
+      }
+      if (instantEnabled) {
+        var stripeBal = balances.stripeBal || (data && data.stripe_balance) || {};
+        var instantAvail = stripeBal.instant_available;
+        if (instantAvail == null && data && data.display_balances) {
+          instantAvail = data.display_balances.instant_available;
+        }
+        if (instantAvail != null && instantAvail !== '') {
+          html += '<p class="lnkup-muted">Instant available: $' + Number(instantAvail).toFixed(2) + '</p>';
+        }
+      }
+      html += '<label>Amount <input type="number" step="0.01" name="amount" required min="0.01" max="' + maxCashout + '"' + (canCashout ? '' : ' disabled') + '></label>' +
+        '<label>Type <select name="type"' + (canCashout ? '' : ' disabled') + '>' + typeSelect + '</select></label>' +
         '<button type="submit" class="lnkup-btn lnkup-btn--primary"' + (canCashout ? '' : ' disabled') + '>Request cashout</button></form>';
+      if (!instantEnabled) {
+        html += '<p class="lnkup-muted">Standard payouts only. Instant payouts are not enabled for this marketplace.</p>';
+      }
       html += '<p class="lnkup-muted"><a href="#" class="lnkup-fin-goto-payouts">View payout history →</a></p>';
       panel.innerHTML = html;
       var payoutsLink = panel.querySelector('.lnkup-fin-goto-payouts');
@@ -1193,16 +1490,34 @@
       var form = panel.querySelector('#lnkup-cashout-form');
       form.addEventListener('submit', function (e) {
         e.preventDefault();
+        if (!canCashout) {
+          return;
+        }
         var fd = new FormData(form);
+        var submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+        }
         finFetch('/organizer-wallet/cashout', { method: 'POST', body: { amount: Number(fd.get('amount')), type: fd.get('type') } }).then(function (res) {
-          if (res.payout_id) {
+          if (res && res.payout_id) {
             panel.dataset.loaded = '';
             panel.innerHTML = '<p>Cashout requested. Payout #' + res.payout_id + '</p>';
-          } else {
-            alert((res.message || res.code) || 'Cashout failed');
+            return;
           }
-        }).catch(function () {
-          alert('Cashout failed');
+          showCashoutInlineError(panel, {
+            message: (res && (res.message || res.code)) || 'Cashout could not be completed.',
+            code: res && res.code,
+            status: res && res.status,
+            payload: res || null
+          });
+          if (submitBtn) {
+            submitBtn.disabled = false;
+          }
+        }).catch(function (err) {
+          showCashoutInlineError(panel, err || { message: 'Cashout could not be completed.' });
+          if (submitBtn) {
+            submitBtn.disabled = false;
+          }
         });
       });
     }).catch(function () {
@@ -1245,6 +1560,39 @@
     }
     bindTabs(shell);
     loadVendorOverview(document.getElementById('lnkup-fin-vendor-overview'));
+    shell.addEventListener('click', function (e) {
+      var disputeBtn = e.target.closest('.lnkup-dispute-charge-btn');
+      if (!disputeBtn) {
+        return;
+      }
+      e.preventDefault();
+      var pid = disputeBtn.getAttribute('data-payment-id') || '';
+      try {
+        sessionStorage.setItem('lnkup_dispute_payment', pid);
+      } catch (err) { /* ignore */ }
+      var walletSection = shell.querySelector('.lnkup-fin-section[data-section="wallet"]');
+      if (walletSection) {
+        walletSection.click();
+      }
+      var disputesTab = shell.querySelector('.lnkup-fin-tab[data-tab="disputes"]');
+      if (disputesTab) {
+        disputesTab.click();
+      }
+    });
+    (function openDisputesFromQuery() {
+      var params = new URLSearchParams(window.location.search);
+      if (params.get('fin_tab') !== 'disputes' && !params.get('dispute_payment')) {
+        return;
+      }
+      var walletSection = shell.querySelector('.lnkup-fin-section[data-section="wallet"]');
+      if (walletSection) {
+        walletSection.click();
+      }
+      var disputesTab = shell.querySelector('.lnkup-fin-tab[data-tab="disputes"]');
+      if (disputesTab) {
+        setTimeout(function () { disputesTab.click(); }, 0);
+      }
+    })();
     shell.addEventListener('lnkup-fin-panel-open', function (e) {
       var panel = e.target;
       if (!panel || !panel.id) {
@@ -1260,6 +1608,49 @@
           }));
         }).catch(function () {
           document.getElementById('lnkup-refund-list').innerHTML = '<p class="lnkup-muted">Could not load refunds.</p>';
+        });
+        panel.dataset.loaded = '1';
+        return;
+      }
+      if (panel.id === 'lnkup-fin-vendor-disputes') {
+        var params = new URLSearchParams(window.location.search);
+        var prefill = params.get('dispute_payment') || '';
+        if (!prefill) {
+          try {
+            prefill = sessionStorage.getItem('lnkup_dispute_payment') || '';
+            sessionStorage.removeItem('lnkup_dispute_payment');
+          } catch (err) { /* ignore */ }
+        }
+        panel.innerHTML = disputeRequestForm(prefill) + '<div id="lnkup-dispute-list"></div>';
+        bindDisputeForm(panel);
+        finFetch('/disputes').then(function (rows) {
+          var list = document.getElementById('lnkup-dispute-list');
+          if (!list) return;
+          if (!rows || !rows.length) {
+            list.innerHTML = '<p class="lnkup-muted">No disputes yet.</p>';
+            return;
+          }
+          var html = '<div class="lnkup-fin-dispute-cards">';
+          (rows || []).forEach(function (r) {
+            html += '<article class="lnkup-fin-info-card">';
+            html += '<h4 class="lnkup-fin-info-card__title">' + escapeHtml(r.event_title || ('Payment #' + r.payment_id)) + ' ' + statusChip(r.status) + '</h4>';
+            html += '<p>$' + Number(r.amount || 0).toFixed(2) + ' · ' + escapeHtml((r.created_at || '').slice(0, 10)) + '</p>';
+            html += '<p>' + escapeHtml(r.reason || '') + '</p>';
+            if (r.resolution_note) {
+              html += '<p class="lnkup-muted">Resolution: ' + escapeHtml(r.resolution_note) + '</p>';
+            }
+            html += renderDisputeEvidence(r.evidence);
+            if (r.is_open) {
+              html += '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-dispute-respond" data-id="' + r.id + '">Add note</button>';
+            }
+            html += '</article>';
+          });
+          html += '</div>';
+          list.innerHTML = html;
+          bindVendorDisputeRespond(panel);
+        }).catch(function () {
+          var list = document.getElementById('lnkup-dispute-list');
+          if (list) list.innerHTML = '<p class="lnkup-muted">Could not load disputes.</p>';
         });
         panel.dataset.loaded = '1';
         return;
@@ -1289,6 +1680,7 @@
             ? window.location.origin + '/?ref=' + encodeURIComponent(code)
             : '';
           var html = '<div class="lnkup-fin-referral-share">';
+          html += '<p class="lnkup-muted">Peer vendor credits (invite vendors). To recruit organizers for 12-month fee share, open Referral Invites.</p>';
           html += '<p>Your referral code: <strong id="lnkup-ref-code">' + escapeHtml(code || '—') + '</strong></p>';
           if (shareUrl) {
             html += '<p class="lnkup-muted lnkup-fin-referral-link">' + escapeHtml(shareUrl) + '</p>';
@@ -1335,7 +1727,7 @@
             { label: 'W-9 on file', value: data.w9_on_file ? 'Yes' : 'No' },
             { label: '1099 eligible', value: data.form_1099_eligible ? 'Yes' : 'No' },
             { label: 'Year gross', value: '$' + Number((data.yearly && data.yearly.gross) || (data.yearly && data.yearly.spent) || 0).toFixed(2) }
-          ]);
+          ]) + taxPdfLinks(data);
         });
         return;
       }
@@ -1398,7 +1790,10 @@
             { label: 'LNKup settled', value: '$' + balances.ledgerSettled.toFixed(2) }
           ]);
           if (balances.stripeSynced) {
-            html += infoCard(t('account_balance', 'Account balance'), '<p>Available: <strong>$' + Number(stripeBal.available || balances.available).toFixed(2) + '</strong> · Pending: <strong>$' + Number(stripeBal.pending || balances.pending).toFixed(2) + '</strong></p>', 'success');
+            html += infoCard(t('account_balance', 'Account balance'), '<p>Available: <strong>$' + balances.available.toFixed(2) + '</strong> · Pending: <strong>$' + Number(stripeBal.pending || balances.pending).toFixed(2) + '</strong></p>', 'success');
+            if (Number(balances.platformRecoverable) > 0) {
+              html += '<p class="lnkup-muted">Includes $' + Number(balances.platformRecoverable).toFixed(2) + ' held on LNKup (moves to your payout account on cash out).</p>';
+            }
           }
           var connect = data.connect || {};
           html += '<h3>Connect status</h3>';
@@ -1458,6 +1853,9 @@
             html += '<div class="lnkup-fin-payout-card__header"><h4>$' + Number(r.net_amount).toFixed(2) + ' · ' + escapeHtml(r.payout_type) + '</h4>' + statusChip(r.status) + '</div>';
             html += payoutTimeline(r.status);
             html += '<p class="lnkup-fin-payout-card__secondary lnkup-muted">' + escapeHtml((r.created_at || '').slice(0, 10)) + '</p>';
+            if (r.status === 'failed' && r.failure_reason) {
+              html += '<p class="lnkup-fin-payout-card__error lnkup-alert lnkup-alert--error" role="alert">' + escapeHtml(r.failure_reason) + '</p>';
+            }
             html += '</div>';
           });
           if (!rows || !rows.length) {
@@ -1499,7 +1897,7 @@
             { label: 'W-9 on file', value: data.w9_on_file ? 'Yes' : 'No' },
             { label: '1099 eligible', value: data.form_1099_eligible ? 'Yes' : 'No' },
             { label: 'Year net', value: '$' + Number((data.yearly && data.yearly.net) || 0).toFixed(2) }
-          ]);
+          ]) + taxPdfLinks(data);
         });
         return;
       }
@@ -1526,11 +1924,40 @@
         return;
       }
       if (panel && panel.id === 'lnkup-fin-org-disputes') {
-        loadList(panel, '/disputes', function (rows) {
-          return tableFromRows(['Status', 'Reason', 'Date'], rows.map(function (r) {
-            return [statusChip(r.status), escapeHtml(r.reason || ''), escapeHtml((r.created_at || '').slice(0, 10))];
-          }));
+        panel.innerHTML = '<div class="lnkup-fin-skeleton"></div>';
+        finFetch('/disputes').then(function (rows) {
+          if (!rows || !rows.length) {
+            panel.innerHTML = '<p class="lnkup-fin-empty">No disputes yet.</p>';
+            return;
+          }
+          var html = '<div class="lnkup-fin-dispute-cards">';
+          (rows || []).forEach(function (r) {
+            html += '<article class="lnkup-fin-info-card">';
+            html += '<h4 class="lnkup-fin-info-card__title">' + escapeHtml(r.event_title || ('Payment #' + r.payment_id)) + ' ' + statusChip(r.status) + '</h4>';
+            html += '<p>$' + Number(r.amount || 0).toFixed(2) + ' · ' + escapeHtml(r.source || 'vendor') + ' · ' + escapeHtml((r.created_at || '').slice(0, 10)) + '</p>';
+            html += '<p>' + escapeHtml(r.reason || '') + '</p>';
+            html += renderDisputeEvidence(r.evidence);
+            if (r.resolution_note) {
+              html += '<p class="lnkup-muted">Resolution: ' + escapeHtml(r.resolution_note) + '</p>';
+            }
+            if (r.is_open) {
+              html += '<div class="lnkup-fin-dispute-actions">';
+              html += '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-dispute-respond" data-id="' + r.id + '">Add evidence</button> ';
+              html += '<button type="button" class="lnkup-btn lnkup-btn--sm" data-dispute-resolve="approved_refund" data-id="' + r.id + '">Approve refund</button> ';
+              html += '<button type="button" class="lnkup-btn lnkup-btn--sm" data-dispute-resolve="approved_credit" data-id="' + r.id + '">Approve credit</button> ';
+              html += '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost" data-dispute-resolve="denied" data-id="' + r.id + '">Deny</button>';
+              html += '</div>';
+            }
+            html += '</article>';
+          });
+          html += '</div>';
+          panel.innerHTML = html;
+          bindOrganizerDisputeResolve(panel);
+        }).catch(function () {
+          panel.innerHTML = '<p class="lnkup-muted">Could not load disputes.</p>';
         });
+        panel.dataset.loaded = '1';
+        return;
       }
       if (panel && panel.id === 'lnkup-fin-org-reports') {
         loadList(panel, '/reports/organizer', function (data) {

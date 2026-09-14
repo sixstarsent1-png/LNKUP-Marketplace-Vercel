@@ -216,6 +216,12 @@
         if (!data || !elContainer) {
           return;
         }
+        if ((!data.elements || !data.elements.length) && !shell.querySelector('.lnkup-map-empty') && !shell.querySelector('#lnkup-map-canvas-img')) {
+          var wrap = shell.querySelector('#lnkup-map-canvas-wrap');
+          if (wrap) {
+            wrap.insertAdjacentHTML('afterbegin', '<div class="lnkup-map-empty"><p class="lnkup-muted">No map data yet. Build your venue layout to get started.</p><div class="lnkup-map-empty__actions"><button type="button" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm lnkup-ops-goto-tab" data-ops-tab="map-builder">Open Map Builder</button></div></div>');
+          }
+        }
         renderElements(elContainer, data.elements || [], {
           onSelect: function (el) {
             if (!drawer) {
@@ -323,7 +329,45 @@
       }
     });
     document.querySelectorAll('.lnkup-map-packet-wrap').forEach(initPacketMap);
+    bindMapUpload();
   }
+  function bindMapUpload() {
+    if (document.documentElement.dataset.lnkupMapUploadBound) {
+      return;
+    }
+    document.documentElement.dataset.lnkupMapUploadBound = '1';
+    document.addEventListener('change', function (e) {
+      var input = e.target && e.target.classList && e.target.classList.contains('lnkup-map-upload-input') ? e.target : null;
+      if (!input || !input.files || !input.files[0]) {
+        return;
+      }
+      var eventId = input.getAttribute('data-event-id');
+      if (!eventId) {
+        return;
+      }
+      var wpRoot = String(ajax.restUrl || '').replace(/lnkup\/v1\/?$/, '');
+      var fd = new FormData();
+      fd.append('file', input.files[0]);
+      fetch(wpRoot + 'wp/v2/media', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-WP-Nonce': nonce },
+        body: fd
+      }).then(function (r) {
+        return r.json().then(function (body) {
+          if (!r.ok || !body || !body.id) {
+            throw new Error((body && body.message) || 'Upload failed');
+          }
+          return mapFetch('/events/' + eventId, { method: 'POST', body: { attachment_id: body.id } });
+        });
+      }).then(function () {
+        window.location.reload();
+      }).catch(function () {
+        input.value = '';
+      });
+    });
+  }
+
   window.lnkupMapsInitShells = initShells;
 
   document.addEventListener('lnkup-ops-panel-open', function (e) {

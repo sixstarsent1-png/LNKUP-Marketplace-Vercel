@@ -1,13 +1,47 @@
 /* Public vendor storefront */
-.lnkup-pub-storefront { max-width: 72rem; margin-inline: auto; padding-inline: 1rem 1.5rem; padding-block: 0 3rem; }
+.lnkup-pub-storefront { max-width: 72rem; margin-inline: auto; padding-inline: 1rem 1.5rem; padding-block: 0 3rem; overflow-x: hidden; min-width: 0; }
 .lnkup-pub-hero { position: relative; margin-bottom: var(--lnkup-section-md, 2.75rem); }
-.lnkup-pub-hero__cover { height: clamp(12rem, 32vw, 18rem); border-radius: var(--lnkup-radius-lg); background-size: cover; background-position: center; }
+.lnkup-pub-hero__cover {
+  position: relative;
+  height: clamp(12rem, 32vw, 18rem);
+  border-radius: var(--lnkup-radius-lg);
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+}
+.lnkup-pub-hero__cover::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 55%;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.72) 0%,
+    rgba(0, 0, 0, 0.35) 45%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
 .lnkup-pub-hero__cover--placeholder { background: linear-gradient(135deg, color-mix(in oklch, var(--accent) 12%, var(--muted)), var(--muted)); }
-.lnkup-pub-hero__body { margin-top: -2.5rem; padding-inline: 0.5rem; }
+.lnkup-pub-hero__body { margin-top: -2.5rem; padding-inline: 0.5rem; position: relative; z-index: 1; }
 .lnkup-pub-hero__identity { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; }
 .lnkup-pub-hero__logo-wrap { flex-shrink: 0; }
 .lnkup-pub-hero__logo { width: 5.5rem; height: 5.5rem; object-fit: cover; border-radius: 999px; }
-.lnkup-pub-hero__category { margin: 0.25rem 0 0; font-size: 0.875rem; font-weight: 600; color: var(--accent-foreground); }
+.lnkup-pub-hero__titles .lnkup-type-display {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+.lnkup-pub-hero__titles .lnkup-type-meta {
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.lnkup-pub-hero__category {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
 .lnkup-pub-hero__rail { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 1rem; padding: 0.875rem 1rem; border-radius: var(--lnkup-radius-lg); border: 1px solid var(--border); background: var(--card); box-shadow: var(--lnkup-shadow-card); }
 .lnkup-pub-hero__ctas { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
 .lnkup-pub-gallery { margin-bottom: var(--lnkup-section-md, 2.75rem); }

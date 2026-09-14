@@ -88,7 +88,20 @@ class LNKup_Apply_With_Profile_View {
 				<?php if ( $warnings ) : ?>
 					<div class="lnkup-apply-warnings" role="status">
 						<?php foreach ( $warnings as $warning ) : ?>
-							<p class="lnkup-apply-warnings__item"><?php echo esc_html( $warning['message'] ?? '' ); ?></p>
+							<p class="lnkup-apply-warnings__item">
+								<?php echo esc_html( $warning['message'] ?? '' ); ?>
+								<?php
+								$code = $warning['code'] ?? '';
+								$action_url = $warning['action_url'] ?? '';
+								if ( ! $action_url && in_array( $code, array( 'category_mismatch', 'profile_incomplete' ), true ) ) {
+									$action_url = $profile_url;
+								}
+								$action_label = $warning['action_label'] ?? ( 'category_mismatch' === $code ? __( 'Update profile categories', 'lnkup-marketplace' ) : __( 'Update profile', 'lnkup-marketplace' ) );
+								if ( $action_url && in_array( $code, array( 'category_mismatch', 'profile_incomplete' ), true ) ) :
+									?>
+									<a href="<?php echo esc_url( $action_url ); ?>" class="lnkup-apply-warnings__fix"><?php echo esc_html( $action_label ); ?></a>
+								<?php endif; ?>
+							</p>
 						<?php endforeach; ?>
 					</div>
 				<?php endif; ?>
@@ -181,6 +194,26 @@ class LNKup_Apply_With_Profile_View {
 				<div class="lnkup-apply-profile__opp-docs">
 					<?php foreach ( $opp['document_badges'] as $badge ) : ?>
 						<span class="lnkup-badge"><?php echo esc_html( $badge ); ?></span>
+					<?php endforeach; ?>
+				</div>
+			<?php endif; ?>
+			<?php
+			$gallery = ! empty( $opp['gallery'] ) && is_array( $opp['gallery'] )
+				? $opp['gallery']
+				: ( ! empty( $opp['opportunity_id'] )
+					? lnkup_get_opportunity_gallery( (int) $opp['opportunity_id'], (int) ( $opp['event_id'] ?? 0 ) )
+					: array() );
+			?>
+			<?php if ( $gallery ) : ?>
+				<div class="lnkup-apply-profile__gallery" data-testid="lnkup-event-gallery-detail">
+					<?php foreach ( array_slice( $gallery, 0, 8 ) as $media ) : ?>
+						<figure class="lnkup-apply-profile__gallery-item lnkup-apply-profile__gallery-item--<?php echo esc_attr( $media['type'] ?? 'image' ); ?>">
+							<?php if ( 'video' === ( $media['type'] ?? '' ) ) : ?>
+								<video src="<?php echo esc_url( $media['url'] ); ?>" controls preload="metadata"></video>
+							<?php else : ?>
+								<img src="<?php echo esc_url( $media['thumb'] ?? $media['url'] ); ?>" alt="" loading="lazy" />
+							<?php endif; ?>
+						</figure>
 					<?php endforeach; ?>
 				</div>
 			<?php endif; ?>

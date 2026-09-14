@@ -367,9 +367,9 @@ class LNKup_Operations_Render {
 	 * @param int   $event_id Event ID.
 	 * @param array $booths   Booth rows.
 	 */
-	public static function venue_map( $event_id, $booths = null ) {
+	public static function venue_map( $event_id, $booths = null, $role = 'organizer' ) {
 		if ( class_exists( 'LNKup_Map_Render' ) ) {
-			return LNKup_Map_Render::venue_map( $event_id, $booths );
+			return LNKup_Map_Render::venue_map( $event_id, $booths, $role );
 		}
 		return '';
 	}

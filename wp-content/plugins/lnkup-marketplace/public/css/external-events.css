@@ -1,6 +1,8 @@
 .lnkup-event-card--external {
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: color-mix(in oklch, var(--muted-foreground, #71717a) 35%, var(--border));
   box-shadow: none;
+  border-left: 4px solid color-mix(in oklch, var(--muted-foreground, #71717a) 70%, transparent);
+  background: color-mix(in oklch, var(--muted, #f4f4f5) 35%, var(--card, #fff));
 }
 
 .lnkup-event-card--external .lnkup-event-card__media {

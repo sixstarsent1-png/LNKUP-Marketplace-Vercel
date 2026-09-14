@@ -3,7 +3,7 @@
  * Plugin Name: LNKup Marketplace
  * Plugin URI: https://lnkup.com
  * Description: Custom marketplace functionality for LNKup — vendor opportunities, applications, payments, and event management.
- * Version: 12.17.0
+ * Version: 12.18.43
  * Author: LNKup
  * Author URI: https://lnkup.com
  * License: GPL v2 or later
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'LNKUP_VERSION', '12.17.0' );
+define( 'LNKUP_VERSION', '12.18.43' );
 define( 'LNKUP_PLUGIN_FILE', __FILE__ );
 define( 'LNKUP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LNKUP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -79,9 +79,26 @@ $lnkup_core_files = array(
 	'includes/class-vendor-event-pass-view.php',
 	'includes/class-stripe.php',
 	'includes/class-documents.php',
+	'includes/class-documents-rest.php',
+	'includes/class-vendor-profile-rest.php',
 	'includes/class-notifications.php',
+	'includes/class-activation-emails.php',
+	'includes/class-push-tables.php',
+	'includes/class-push-service.php',
+	'includes/class-push-rest.php',
+	'includes/class-inbox-tables.php',
+	'includes/class-inbox-service.php',
+	'includes/class-inbox-rest.php',
+	'includes/class-mobile-auth.php',
+	'includes/class-auth-rest.php',
+	'includes/class-account-deletion.php',
+	'includes/class-account-rest.php',
 	'includes/class-organizer-onboarding.php',
+	'includes/class-organizer-launch-rest.php',
 	'includes/class-organizer-launch-checklist.php',
+	'includes/class-vendor-getting-started.php',
+	'includes/class-knowledge-base.php',
+	'includes/class-dashboard-tour.php',
 	'includes/class-ajax.php',
 	'includes/class-geocoder.php',
 	'includes/class-trending.php',
@@ -97,7 +114,12 @@ $lnkup_core_files = array(
 	'includes/class-connector-attribution.php',
 	'includes/class-connector-tracking.php',
 	'includes/class-connector-rewards.php',
+	'includes/class-connector-ranks.php',
+	'includes/class-connector-studio.php',
 	'includes/class-connector-rest.php',
+	'admin/class-connector-content-admin.php',
+	'includes/class-organizer-recruit-rest.php',
+	'includes/class-organizer-recruit-render.php',
 	'includes/class-marketplace-analytics.php',
 	'includes/class-marketplace-cron.php',
 	'includes/class-marketplace-rest.php',
@@ -117,6 +139,11 @@ $lnkup_core_files = array(
 	'includes/class-outreach-tables.php',
 	'includes/class-outreach.php',
 	'includes/class-external-events-tables.php',
+	'includes/class-search-ingest-tables.php',
+	'includes/class-search-client-interface.php',
+	'includes/class-search-client-google-cse.php',
+	'includes/class-search-query-combinator.php',
+	'includes/class-page-extractor.php',
 	'includes/class-external-events-timeline.php',
 	'includes/class-external-events-demand.php',
 	'includes/class-external-events-demand-score.php',
@@ -130,6 +157,9 @@ $lnkup_core_files = array(
 	'includes/external-sources/class-external-source-manual.php',
 	'includes/external-sources/class-external-source-csv.php',
 	'includes/external-sources/class-external-source-eventbrite.php',
+	'includes/external-sources/class-external-source-posh.php',
+	'includes/external-sources/class-external-source-rss.php',
+	'includes/external-sources/class-external-source-google.php',
 	'includes/external-sources/class-external-sources.php',
 	'includes/class-external-events.php',
 	'includes/class-external-events-import.php',
@@ -285,16 +315,32 @@ function lnkup_marketplace_init() {
 	LNKup_Marketplace_Index::init();
 	LNKup_Marketplace_Analytics::init();
 	LNKup_Marketplace_Cron::init();
+	LNKup_Activation_Emails::init();
 	LNKup_Market_Pages::init();
 	LNKup_Market_Pages::maybe_seed_markets();
 	LNKup_Connector::init();
+	LNKup_Connector_Ranks::init();
+	LNKup_Connector_Studio::init();
 	LNKup_Connector_REST::init();
+	if ( class_exists( 'LNKup_Connector_Content_Admin' ) ) {
+		LNKup_Connector_Content_Admin::init();
+	}
+	LNKup_Organizer_Recruit_REST::init();
 	LNKup_Connector_Admin::init();
 	LNKup_Marketplace_REST::init();
 	LNKup_Applications_REST::init();
+	LNKup_Documents_REST::init();
+	LNKup_Vendor_Profile_REST::init();
 	LNKup_Packets_REST::init();
+	LNKup_Push_REST::init();
+	LNKup_Inbox_REST::init();
+	LNKup_Mobile_Auth::init();
+	LNKup_Auth_REST::init();
+	LNKup_Account_Deletion::init();
+	LNKup_Account_REST::init();
 	LNKup_Organizer_CRM::init();
 	LNKup_Organizer_CRM_REST::init();
+	LNKup_Organizer_Launch_REST::init();
 	LNKup_Organizer_CRM_Admin::init();
 	LNKup_Vendor_Reputation::init();
 	LNKup_Reputation_REST::init();
@@ -341,6 +387,7 @@ function lnkup_marketplace_init() {
 	LNKup_SEO::init();
 	LNKup_Activator::maybe_repair_dashboard_pages();
 	add_action( 'admin_notices', array( 'LNKup_Activator', 'maybe_dashboard_template_notice' ) );
+	add_action( 'template_redirect', 'lnkup_redirect_find_events_alias', 1 );
 }
 add_action( 'plugins_loaded', 'lnkup_marketplace_init' );
 
@@ -365,8 +412,11 @@ function lnkup_maybe_upgrade_db() {
 		array( 'LNKup_Weather_Tables', 'create_tables' ),
 		array( 'LNKup_Outreach_Tables', 'create_tables' ),
 		array( 'LNKup_External_Events_Tables', 'create_tables' ),
+		array( 'LNKup_Search_Ingest_Tables', 'create_tables' ),
 		array( 'LNKup_Vendor_Import_Tables', 'create_tables' ),
 		array( 'LNKup_Connector_Tables', 'create_tables' ),
+		array( 'LNKup_Push_Tables', 'create_tables' ),
+		array( 'LNKup_Inbox_Tables', 'create_tables' ),
 	);
 
 	foreach ( $creators as $creator ) {
@@ -433,10 +483,46 @@ function lnkup_maybe_upgrade_db() {
 		error_log( 'LNKup role capability sync failed: ' . $role_error->getMessage() );
 	}
 
+	if ( class_exists( 'LNKup_Connector' ) ) {
+		try {
+			LNKup_Connector::restore_elevated_roles_stripped_by_approval();
+		} catch ( Throwable $connector_role_error ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( 'LNKup connector admin role restore failed: ' . $connector_role_error->getMessage() );
+		}
+	}
+
 	update_option( 'lnkup_db_version', LNKUP_VERSION );
 	update_option( 'lnkup_needs_deferred_upgrade', LNKUP_VERSION );
 }
 add_action( 'init', 'lnkup_maybe_upgrade_db', 4 );
+
+/**
+ * One-time: open marketplace for launch day 2026-08-02 + seed app release settings.
+ */
+function lnkup_maybe_apply_launch_day_20260802() {
+	if ( get_option( 'lnkup_launch_day_20260802_applied' ) ) {
+		return;
+	}
+
+	$settings = get_option( 'lnkup_settings', array() );
+	if ( ! is_array( $settings ) ) {
+		$settings = array();
+	}
+
+	$settings['platform_prelaunch_mode'] = false;
+	$settings['platform_launch_date']    = '2026-08-02';
+	if ( empty( $settings['app_release_datetime'] ) ) {
+		$settings['app_release_datetime'] = '2026-08-16 12:00:00';
+	}
+	if ( empty( $settings['app_release_tz'] ) ) {
+		$settings['app_release_tz'] = 'America/New_York';
+	}
+
+	update_option( 'lnkup_settings', $settings, false );
+	update_option( 'lnkup_launch_day_20260802_applied', '1', false );
+}
+add_action( 'init', 'lnkup_maybe_apply_launch_day_20260802', 5 );
 
 /**
  * Heavy migrations (index rebuild, backfills) run once in wp-admin.
@@ -493,6 +579,7 @@ function lnkup_get_settings() {
 		'notify_vendor'         => true,
 		'notify_organizer'      => true,
 		'notify_admin'          => true,
+		'expo_push_access_token'=> '',
 		'support_email'         => get_option( 'admin_email' ),
 		'marketplace_phase'     => '1a',
 		'map_provider'          => 'leaflet',
@@ -511,7 +598,7 @@ function lnkup_get_settings() {
 		'connect_express_enabled'      => true,
 		'connect_instant_payouts_enabled' => false,
 		'connect_manual_fallback'      => true,
-		'connect_payout_schedule'      => 'daily',
+		'connect_payout_schedule'      => 'manual',
 		'connect_return_url'           => '',
 		'connect_refresh_url'          => '',
 		'fee_payer_mode'               => 'vendor',
@@ -522,6 +609,8 @@ function lnkup_get_settings() {
 		'reserve_percent'       => 5,
 		'reserve_hold_days'     => 30,
 		'ach_enabled'                  => false,
+		'apple_pay_enabled'            => false,
+		'google_pay_enabled'           => false,
 		'weather_intelligence_enabled' => true,
 		'openweather_api_key'          => '',
 		'openweather_api_mode'         => 'current_forecast',
@@ -529,9 +618,11 @@ function lnkup_get_settings() {
 		'weather_refresh_minutes'      => 30,
 		'weather_historical_enabled'   => false,
 		'weather_vendor_packet_note'   => true,
-		'platform_launch_date'              => '2026-08-01',
-		'platform_prelaunch_mode'           => true,
+		'platform_launch_date'              => '2026-08-02',
+		'platform_prelaunch_mode'           => false,
 		'platform_prelaunch_admin_preview'  => true,
+		'app_release_datetime'              => '2026-08-16 12:00:00',
+		'app_release_tz'                    => 'America/New_York',
 		'launch_goal_vendors'          => 4000,
 		'launch_goal_organizers'       => 500,
 		'outreach_emails_enabled'      => true,
@@ -549,6 +640,8 @@ function lnkup_get_settings() {
 		'saved_search_default_frequency'    => 'daily',
 		'saved_search_max_matches_per_email'=> 5,
 		'deadline_reminder_favorites'       => true,
+		'activation_emails_enabled'         => true,
+		'activation_daily_batch'            => 100,
 		'crm_import_max_rows_organizer'     => 500,
 		'crm_import_max_file_size_mb'       => 5,
 		'crm_import_allow_invite'           => true,
@@ -559,6 +652,39 @@ function lnkup_get_settings() {
 		'connector_vendor_paid_booking_credit' => 10,
 		'connector_organizer_first_booking_credit' => 0,
 		'connector_organizer_10_booking_bonus' => 0,
+		'connector_booking_share_percent' => 10,
+		'connector_booking_share_cap'     => 0,
+		'connector_reward_term_months'    => 12,
+		'connector_payout_hold_days'      => 30,
+		'connector_minimum_payout'        => 50,
+		'connector_vendor_referrals_rewarded' => false,
+		'connector_terms_url'             => '',
+		'connector_support_url'           => '',
+		'connector_ranks_enabled'         => true,
+		'connector_leaderboard_enabled'   => true,
+		'connector_rank_celebration_enabled' => true,
+		'connector_rank_bonus_requires_approval' => true,
+		'connector_founding_cutoff'       => '',
+		'connector_rank_market_builder_activated' => 3,
+		'connector_rank_market_builder_bookings' => 15,
+		'connector_rank_market_builder_gmv' => 3000,
+		'connector_rank_market_builder_bonus' => 100,
+		'connector_rank_city_captain_activated' => 10,
+		'connector_rank_city_captain_bookings' => 60,
+		'connector_rank_city_captain_gmv' => 15000,
+		'connector_rank_city_captain_recurring' => 3,
+		'connector_rank_city_captain_bonus' => 250,
+		'connector_rank_city_director_activated' => 25,
+		'connector_rank_city_director_bookings' => 200,
+		'connector_rank_city_director_gmv' => 50000,
+		'connector_rank_city_director_recurring' => 8,
+		'connector_rank_city_director_bonus' => 500,
+		'connector_rank_regional_partner_activated' => 50,
+		'connector_rank_regional_partner_bookings' => 500,
+		'connector_rank_regional_partner_gmv' => 125000,
+		'connector_rank_regional_partner_recurring' => 15,
+		'connector_rank_regional_partner_cities' => 2,
+		'connector_rank_regional_partner_bonus' => 1000,
 		'external_sync_enabled'             => false,
 		'external_sync_frequency'           => 'daily',
 		'external_sync_market_slugs'        => array(),
@@ -570,6 +696,12 @@ function lnkup_get_settings() {
 		'external_sync_vendor_keywords'     => '',
 		'external_sync_max_fetch_seconds'   => 300,
 		'external_sync_max_candidates_per_market' => 35,
+		'external_sync_google_enabled'            => false,
+		'google_cse_api_key'                      => '',
+		'google_cse_cx'                           => '',
+		'google_search_templates'                 => '',
+		'google_search_daily_budget'              => 100,
+		'google_search_queries_per_run'           => 10,
 	);
 	return wp_parse_args( get_option( 'lnkup_settings', array() ), $defaults );
 }
