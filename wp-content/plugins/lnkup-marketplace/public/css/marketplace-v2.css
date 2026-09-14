@@ -378,7 +378,7 @@ body.lnkup-compare-open { overflow: hidden; }
 .lnkup-event-grid--list { display: grid; grid-template-columns: 1fr; gap: 1rem; }
 #lnkup-results-grid.lnkup-event-grid.lnkup-event-grid--list {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr !important;
   width: 100%;
   max-width: 100%;
   min-width: 0;

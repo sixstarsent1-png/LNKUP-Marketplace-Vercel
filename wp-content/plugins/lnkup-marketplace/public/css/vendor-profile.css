@@ -1,8 +1,17 @@
+#lnkup-vendor-profile-editor,
+.lnkup-vendor-profile-editor {
+  overflow-x: clip;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .lnkup-profile-layout--resume {
   display: grid;
-  grid-template-columns: minmax(240px, 300px) 1fr;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
   gap: 1.25rem;
   align-items: start;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .lnkup-profile-resume-banner { position: sticky; top: 1rem; box-shadow: var(--lnkup-shadow-card, 0 2px 12px rgba(0,0,0,.04)); }
@@ -173,5 +182,12 @@
   .lnkup-profile-section__header {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+@media (max-width: 400px) {
+  .lnkup-profile-preview__cover {
+    margin: 0 0 0.75rem;
+    border-radius: 0.75rem;
   }
 }

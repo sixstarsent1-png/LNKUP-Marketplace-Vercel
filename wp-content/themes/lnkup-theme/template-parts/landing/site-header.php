@@ -5,7 +5,7 @@
  * @package LNKup_Theme
  */
 
-$opportunities_url = lnkup_page_url( 'opportunities' );
+$opportunities_url = lnkup_theme_opportunities_url();
 $vendor_dash_url   = lnkup_page_url( 'vendor-dashboard' );
 $organizer_url     = lnkup_page_url( 'organizer-dashboard' );
 $signup_url        = lnkup_theme_registration_url();

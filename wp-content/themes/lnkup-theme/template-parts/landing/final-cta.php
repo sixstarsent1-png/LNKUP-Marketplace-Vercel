@@ -6,7 +6,7 @@
  */
 
 $signup_url        = lnkup_theme_registration_url();
-$opportunities_url = lnkup_page_url( 'opportunities' );
+$opportunities_url = lnkup_theme_opportunities_url();
 $profile_url       = lnkup_page_url( 'vendor-profile' );
 $marketplace_open  = lnkup_theme_marketplace_open();
 $launch_label      = lnkup_theme_launch_label();

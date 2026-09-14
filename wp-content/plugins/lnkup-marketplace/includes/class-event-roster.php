@@ -50,16 +50,25 @@ class LNKup_Event_Roster {
 				$groups['rejected'][] = $row;
 			} elseif ( 'waitlisted' === $status ) {
 				$groups['waitlisted'][] = $row;
-			} elseif ( in_array( $status, array( 'payment_required', 'approved' ), true ) ) {
-				$groups['missing_payment'][] = $row;
-			} elseif ( 'paid' === $status ) {
-				$readiness = LNKup_Vendor_Readiness::refresh( $app->ID );
-				if ( LNKup_Vendor_Readiness::STATUS_NEEDS_DOCUMENTS === $readiness ) {
-					$groups['missing_documents'][] = $row;
+			} elseif ( in_array( $status, array( 'payment_required', 'approved', 'paid', 'completed' ), true ) ) {
+				$paid = class_exists( 'LNKup_Vendor_Readiness' )
+					&& LNKup_Vendor_Readiness::application_payment_satisfied( (int) $app->ID, $status );
+				if ( ! $paid ) {
+					$groups['missing_payment'][] = $row;
 				} else {
-					$groups['paid'][] = $row;
+					$readiness = LNKup_Vendor_Readiness::refresh( $app->ID );
+					$doc_code  = '';
+					if ( class_exists( 'LNKup_Verification' ) ) {
+						$doc_ctx  = LNKup_Verification::get_application_document_context( (int) $app->ID );
+						$doc_code = (string) ( $doc_ctx['code'] ?? '' );
+					}
+					if ( in_array( $doc_code, array( 'pending', 'missing' ), true ) || LNKup_Vendor_Readiness::STATUS_NEEDS_DOCUMENTS === $readiness ) {
+						$groups['missing_documents'][] = $row;
+					} else {
+						$groups['paid'][] = $row;
+					}
+					$groups['approved'][] = $row;
 				}
-				$groups['approved'][] = $row;
 			} elseif ( in_array( $status, array( 'submitted', 'under_review' ), true ) ) {
 				$groups['applied'][] = $row;
 			}

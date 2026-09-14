@@ -1765,8 +1765,11 @@
 }
 
 /* Organizer command center */
-.lnkup-organizer-dash {
+.lnkup-organizer-dash,
+#lnkup-organizer-crm {
   overflow-x: clip;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .lnkup-organizer-section-card[id],
@@ -1774,7 +1777,7 @@
 .lnkup-organizer-dash #events,
 .lnkup-organizer-dash #applications,
 .lnkup-organizer-dash #financial {
-  scroll-margin-top: 5.5rem;
+  scroll-margin-top: 7rem;
 }
 
 .lnkup-dashboard:has(.lnkup-organizer-dash) .lnkup-dashboard__content-inner {
@@ -1795,9 +1798,16 @@
 
 .lnkup-organizer-dash #lnkup-organizer-financial,
 .lnkup-organizer-dash .lnkup-fin-shell {
-  overflow-x: auto;
+  overflow-x: clip;
   min-width: 0;
   max-width: 100%;
+}
+
+.lnkup-organizer-dash .lnkup-organizer-section-nav,
+.lnkup-organizer-dash .lnkup-crm-app-card__chips,
+.lnkup-organizer-dash .lnkup-organizer-event-card__stats {
+  max-width: 100%;
+  min-width: 0;
 }
 
 .lnkup-organizer-hero--command {

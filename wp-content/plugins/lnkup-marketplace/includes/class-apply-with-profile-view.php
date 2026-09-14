@@ -59,9 +59,7 @@ class LNKup_Apply_With_Profile_View {
 					<p><?php echo esc_html( lnkup_copy( 'apply_logged_out' ) ); ?></p>
 					<div class="lnkup-apply-profile__actions">
 						<a href="<?php echo esc_url( $login_url ); ?>" class="lnkup-btn lnkup-btn--primary"><?php esc_html_e( 'Log in', 'lnkup-marketplace' ); ?></a>
-						<?php if ( get_option( 'users_can_register' ) ) : ?>
-							<a href="<?php echo esc_url( $register_url ); ?>" class="lnkup-btn lnkup-btn--outline"><?php esc_html_e( 'Sign up', 'lnkup-marketplace' ); ?></a>
-						<?php endif; ?>
+						<a href="<?php echo esc_url( $register_url ); ?>" class="lnkup-btn lnkup-btn--outline"><?php esc_html_e( 'Sign up', 'lnkup-marketplace' ); ?></a>
 					</div>
 				</div>
 			<?php elseif ( 'no_profile' === $eligibility['block_reason'] ) : ?>
@@ -119,7 +117,11 @@ class LNKup_Apply_With_Profile_View {
 									<?php endif; ?>
 								<?php endif; ?>
 								<?php if ( $action_url && in_array( $code, array( 'category_mismatch', 'profile_incomplete' ), true ) ) : ?>
-									<p><a href="<?php echo esc_url( $action_url ); ?>" class="lnkup-apply-warnings__fix"><?php echo esc_html( $action_label ); ?></a></p>
+									<p>
+										<a href="<?php echo esc_url( $action_url ); ?>" class="lnkup-btn lnkup-btn--outline lnkup-apply-warnings__fix">
+											<?php echo esc_html( $action_label ); ?>
+										</a>
+									</p>
 								<?php endif; ?>
 							</div>
 						<?php endforeach; ?>

@@ -86,12 +86,14 @@
     if (!section) {
       return;
     }
-    document.querySelectorAll('.lnkup-organizer-section-nav [data-section]').forEach(function (link) {
-      link.classList.toggle('is-active', link.getAttribute('data-section') === section);
-    });
-    document.querySelectorAll('.lnkup-organizer-section-nav a[href^="#"]').forEach(function (link) {
-      var href = (link.getAttribute('href') || '').replace(/^#/, '').split('&')[0];
-      link.classList.toggle('is-active', href === section);
+    document.querySelectorAll('.lnkup-organizer-section-nav a[href], .lnkup-organizer-section-nav [data-hash], .lnkup-organizer-section-nav [data-section]').forEach(function (link) {
+      var hash = (link.getAttribute('data-section') || link.getAttribute('data-hash') || '').split('&')[0];
+      if (!hash) {
+        var href = link.getAttribute('href') || '';
+        var parts = href.split('#');
+        hash = (parts[1] || '').split('&')[0];
+      }
+      link.classList.toggle('is-active', hash === section);
     });
   }
 

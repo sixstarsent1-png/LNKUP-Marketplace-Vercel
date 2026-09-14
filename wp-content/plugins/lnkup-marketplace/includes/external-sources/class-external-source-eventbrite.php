@@ -243,6 +243,9 @@ class LNKup_External_Source_Eventbrite implements LNKup_External_Source_Provider
 					$url = rawurldecode( $params['url'] );
 				}
 			}
+			if ( str_contains( $url, '_next/image' ) && preg_match( '#[?&]url=([^&]+)#', $url, $m ) ) {
+				$url = rawurldecode( $m[1] );
+			}
 		}
 
 		if ( str_starts_with( $url, '//' ) ) {
@@ -286,8 +289,12 @@ class LNKup_External_Source_Eventbrite implements LNKup_External_Source_Provider
 		if ( '' === $clean || ! str_starts_with( strtolower( $clean ), 'https://' ) ) {
 			return '';
 		}
-		if ( str_contains( strtolower( $clean ), 'cdn.evbuc.com' ) ) {
-			return $clean;
+		$host = strtolower( (string) wp_parse_url( $clean, PHP_URL_HOST ) );
+		$cdn_hosts = array( 'cdn.evbuc.com', 'img.evbuc.com', 'evbstatic.com', 'cdn.eventbrite.com' );
+		foreach ( $cdn_hosts as $allowed ) {
+			if ( $host === $allowed || str_ends_with( $host, '.' . $allowed ) ) {
+				return $clean;
+			}
 		}
 		if ( preg_match( '#\.(jpg|jpeg|png|gif|webp|avif)(\?|$)#i', $clean ) ) {
 			return $clean;

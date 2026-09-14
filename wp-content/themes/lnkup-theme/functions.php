@@ -7,7 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'LNKUP_THEME_VERSION', '1.4.21' );
+define( 'LNKUP_THEME_VERSION', '1.4.22' );
 define( 'LNKUP_THEME_DIR', get_template_directory() );
 define( 'LNKUP_THEME_URI', get_template_directory_uri() );
 

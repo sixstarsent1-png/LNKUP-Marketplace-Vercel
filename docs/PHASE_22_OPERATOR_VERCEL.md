@@ -2,8 +2,11 @@
 
 Complete before promoting `lnk-up-marketplace-ui` to production.
 
+Set the Vercel project **Root Directory** to `lnk-up-marketplace-ui`. Do not set **Output Directory** to `.next` — that treats the App Router and `/api` BFF as static files.
+
 | Check | Required | Done |
 |-------|----------|------|
+| Root Directory = `lnk-up-marketplace-ui` (Output Directory empty) | Yes | [ ] |
 | `NEXT_PUBLIC_APP_URL` = production app URL (no trailing slash) | Yes | [ ] |
 | `NEXT_PUBLIC_LNKUP_LIVE_API=true` | Yes for live | [ ] |
 | `WORDPRESS_API_URL` points at production WP | Yes | [ ] |

@@ -1041,8 +1041,8 @@
       if (monthRows.length) {
         html += '<h3>Revenue by month</h3>' + chartBars(monthRows, 'revenue', 'month');
       } else {
-        var chartMsg = balances.stripeSynced
-          ? 'Charts unavailable'
+        var chartMsg = (balances.stripeSynced || balances.available > 0 || balances.pending > 0)
+          ? 'No chart data yet'
           : 'Balances syncing with Stripe';
         html += infoCard(
           'Revenue by month',

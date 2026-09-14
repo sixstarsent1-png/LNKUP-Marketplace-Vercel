@@ -289,6 +289,12 @@
     trackCards();
     showError(false);
     toggleDiscoveryRails();
+    try {
+      var saved = localStorage.getItem(VIEW_KEY);
+      if (saved) {
+        applyViewMode(saved, false);
+      }
+    } catch (e) { /* ignore */ }
   }
 
   function loadResults(append) {

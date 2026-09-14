@@ -6,12 +6,8 @@
  */
 
 $signup_url        = lnkup_theme_registration_url();
-$opportunities_url = lnkup_page_url( 'opportunities' );
+$opportunities_url = lnkup_theme_opportunities_url();
 $profile_url       = lnkup_page_url( 'vendor-profile' );
-$organizer_url     = lnkup_page_url( 'organizer-dashboard' );
-$organizer_signup  = function_exists( 'lnkup_theme_market_signup_url' )
-	? lnkup_theme_market_signup_url( 'organizer' )
-	: add_query_arg( 'role', 'organizer', $signup_url );
 $hero_image        = lnkup_landing_image_url( 'hero_image_id', 'images/marketing/hero-home.jpg' );
 $launch_label      = lnkup_theme_launch_label();
 $marketplace_open  = lnkup_theme_marketplace_open();
@@ -28,12 +24,9 @@ $event_badge       = (string) lnkup_landing_get( 'hero_event_badge', '' );
 $goal_override     = trim( (string) lnkup_landing_get( 'hero_goal_override', '' ) );
 
 $primary_url   = is_user_logged_in() ? $profile_url : $signup_url;
-$secondary_url = '#how-it-works';
+$secondary_url = lnkup_theme_nav_href( 'how-it-works' );
 if ( $marketplace_open ) {
-	$primary_url   = $opportunities_url;
-	$secondary_url = is_user_logged_in()
-		? $organizer_url . '#create'
-		: $organizer_signup;
+	$primary_url = $opportunities_url;
 }
 
 $vendor_goal_label = '' !== $goal_override ? $goal_override : number_format_i18n( $launch_goals['vendors'] ) . '+';

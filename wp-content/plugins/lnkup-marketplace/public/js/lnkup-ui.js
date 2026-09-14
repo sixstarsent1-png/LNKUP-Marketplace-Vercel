@@ -21,6 +21,18 @@
       return false;
     }
     var value = String(url);
+    if (value.toLowerCase().indexOf('_next/image') !== -1) {
+      var match = value.match(/[?&]url=([^&]+)/);
+      if (match && match[1]) {
+        try {
+          value = decodeURIComponent(match[1]);
+        } catch (e) {
+          return false;
+        }
+      } else {
+        return false;
+      }
+    }
     var lower = value.toLowerCase();
     if (lower.indexOf('_next/image') !== -1) {
       return false;
@@ -28,7 +40,7 @@
     if (/\.(jpg|jpeg|png|gif|webp|avif)(\?|$)/i.test(value)) {
       return true;
     }
-    return /(uploads|images|media|assets|cdn\.evbuc\.com)/i.test(value);
+    return /(uploads|images|media|assets|cdn\.evbuc\.com|img\.evbuc\.com|evbstatic\.com|cdn\.eventbrite\.com)/i.test(value);
   }
 
   /**

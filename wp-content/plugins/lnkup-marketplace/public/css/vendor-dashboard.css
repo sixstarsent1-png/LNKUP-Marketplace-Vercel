@@ -641,7 +641,9 @@
 }
 
 .lnkup-dashboard:has(.lnkup-vendor-dash) .lnkup-dashboard__content-inner,
-.lnkup-vendor-dash {
+.lnkup-dashboard:has(#lnkup-vendor-profile-editor) .lnkup-dashboard__content-inner,
+.lnkup-vendor-dash,
+#lnkup-vendor-profile-editor {
   overflow-x: clip;
   min-width: 0;
   max-width: 100%;

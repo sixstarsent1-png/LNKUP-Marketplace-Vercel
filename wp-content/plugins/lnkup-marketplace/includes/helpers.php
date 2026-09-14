@@ -828,19 +828,25 @@ function lnkup_page_url_helper( $slug ) {
 }
 
 /**
- * 301 /find-events/ to the live opportunities page. Skip if a real find-events page exists.
+ * Always 301 /find-events/ to the published opportunities page.
+ * A leftover find-events page (draft, trash, or broken template) must not win.
  */
 function lnkup_redirect_find_events_alias() {
 	if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
 		return;
 	}
-	if ( get_page_by_path( 'find-events' ) ) {
-		return;
-	}
 	if ( 'find-events' !== lnkup_current_request_slug() ) {
 		return;
 	}
-	$target = lnkup_page_url_helper( 'opportunities' );
+	$target_page = get_page_by_path( 'opportunities' );
+	if ( ! $target_page || 'publish' !== $target_page->post_status ) {
+		$target = lnkup_page_url_helper( 'opportunities' );
+	} else {
+		$target = get_permalink( $target_page );
+	}
+	if ( ! $target ) {
+		return;
+	}
 	if ( ! empty( $_GET ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$target = add_query_arg( wp_unslash( $_GET ), $target ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}

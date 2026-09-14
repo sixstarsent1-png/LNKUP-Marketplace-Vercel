@@ -293,9 +293,35 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  function scrollOrganizerHash() {
+    if (!document.querySelector('.lnkup-organizer-dash')) {
+      return;
+    }
+    var hash = (window.location.hash || '').replace(/^#/, '').split('&')[0];
+    if (!hash || ['applications', 'events', 'financial', 'create', 'operations'].indexOf(hash) === -1) {
+      return;
+    }
+    var go = function () {
+      if (typeof window.lnkupOrganizerOpenSection === 'function') {
+        window.lnkupOrganizerOpenSection(hash);
+        return;
+      }
+      var el = document.getElementById(hash);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
+    window.requestAnimationFrame(function () {
+      window.requestAnimationFrame(go);
+    });
+    window.setTimeout(go, 150);
+  }
+
   window.addEventListener('hashchange', syncHashNav);
+  window.addEventListener('hashchange', scrollOrganizerHash);
   syncHashNav();
   syncViewNav();
+  scrollOrganizerHash();
 
   /**
    * Vendor home subnav: show one section at a time (Overview / Upcoming / Recommendations).

@@ -44,11 +44,8 @@ class LNKup_Applications {
 			return new WP_Error( 'invalid', __( 'Invalid opportunity.', 'lnkup-marketplace' ) );
 		}
 
-		$card       = lnkup_get_opportunity_card_data( $opportunity_id );
-		$opp_terms  = wp_get_post_terms( $opportunity_id, 'lnkup_vendor_category', array( 'fields' => 'names' ) );
-		if ( is_wp_error( $opp_terms ) ) {
-			$opp_terms = array();
-		}
+		$card      = lnkup_get_opportunity_card_data( $opportunity_id );
+		$opp_terms = self::opportunity_category_labels( $opportunity_id, $card );
 
 		$required_docs = lnkup_get_opportunity_required_documents( $opportunity_id );
 		$doc_labels    = LNKup_Documents::document_types();
@@ -69,7 +66,7 @@ class LNKup_Applications {
 				? LNKup_Growth_Profile_Strength::calculate( $profile_id )
 				: array();
 
-			$vendor_cats = is_array( $profile['category'] ?? null ) ? $profile['category'] : array();
+			$vendor_cats = self::flatten_category_list( $profile['category'] ?? array() );
 			if ( $opp_terms ) {
 				$categories = $opp_terms;
 			} elseif ( $vendor_cats ) {
@@ -409,14 +406,14 @@ class LNKup_Applications {
 			);
 		}
 
-		if ( $opp_cats && $vendor_cats && ! array_intersect( $vendor_cats, $opp_cats ) ) {
+		if ( $opp_cats && ! self::categories_intersect( $vendor_cats, $opp_cats ) ) {
 			$warnings[] = array(
-				'code'                => 'category_mismatch',
-				'message'             => lnkup_copy( 'apply_category_mismatch' ),
-				'action_url'          => lnkup_page_url_helper( 'vendor-profile' ) . '#categories',
-				'action_label'        => __( 'Update profile categories', 'lnkup-marketplace' ),
-				'event_categories'    => array_values( $opp_cats ),
-				'profile_categories'  => array_values( $vendor_cats ),
+				'code'               => 'category_mismatch',
+				'message'            => lnkup_copy( 'apply_category_mismatch' ),
+				'action_url'         => lnkup_page_url_helper( 'vendor-profile' ) . '#categories',
+				'action_label'       => __( 'Update profile categories', 'lnkup-marketplace' ),
+				'event_categories'   => array_values( $opp_cats ),
+				'profile_categories' => array_values( $vendor_cats ),
 			);
 		}
 
@@ -428,6 +425,106 @@ class LNKup_Applications {
 		}
 
 		return $warnings;
+	}
+
+	/**
+	 * Flatten CRM / form category values into display labels.
+	 *
+	 * @param mixed $value Categories as array, string, or term-shaped rows.
+	 * @return array<int, string>
+	 */
+	private static function flatten_category_list( $value ): array {
+		if ( is_string( $value ) ) {
+			$value = preg_split( '/[,|]/', $value ) ?: array();
+		}
+		if ( ! is_array( $value ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $value as $item ) {
+			if ( is_array( $item ) ) {
+				$item = $item['name'] ?? $item['slug'] ?? '';
+			}
+			$item = trim( (string) $item );
+			if ( '' !== $item ) {
+				$out[] = $item;
+			}
+		}
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
+	 * Opportunity category labels from taxonomy plus card / fee-row fields.
+	 *
+	 * @param int   $opportunity_id Opportunity ID.
+	 * @param array $card           Card payload.
+	 * @return array<int, string>
+	 */
+	private static function opportunity_category_labels( $opportunity_id, $card = array() ): array {
+		$names = wp_get_post_terms( $opportunity_id, 'lnkup_vendor_category', array( 'fields' => 'names' ) );
+		if ( is_wp_error( $names ) ) {
+			$names = array();
+		}
+		$extra = array();
+		foreach ( array( 'category', 'categories', 'vendor_categories' ) as $key ) {
+			if ( ! empty( $card[ $key ] ) ) {
+				$extra = array_merge( $extra, self::flatten_category_list( $card[ $key ] ) );
+			}
+		}
+		$fee_rows = get_post_meta( $opportunity_id, '_lnkup_fee_rows', true );
+		if ( is_array( $fee_rows ) ) {
+			foreach ( $fee_rows as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+				$extra = array_merge(
+					$extra,
+					self::flatten_category_list( $row['categories'] ?? array() ),
+					self::flatten_category_list( $row['vendor_categories'] ?? array() ),
+					self::flatten_category_list( $row['vendor_category'] ?? '' ),
+					self::flatten_category_list( $row['category'] ?? '' )
+				);
+			}
+		}
+		return self::flatten_category_list( array_merge( $names, $extra ) );
+	}
+
+	/**
+	 * Compare vendor vs opportunity categories using names, slugs, and “Vendor” suffixes.
+	 *
+	 * @param array $left  Category labels.
+	 * @param array $right Category labels.
+	 */
+	private static function categories_intersect( array $left, array $right ): bool {
+		return (bool) array_intersect( self::normalize_category_keys( $left ), self::normalize_category_keys( $right ) );
+	}
+
+	/**
+	 * @param array $cats Category labels.
+	 * @return array<int, string>
+	 */
+	private static function normalize_category_keys( array $cats ): array {
+		$keys = array();
+		foreach ( self::flatten_category_list( $cats ) as $raw ) {
+			$lower    = strtolower( $raw );
+			$stripped = trim( (string) preg_replace( '/\s+vendor$/', '', $lower ) );
+			$compact  = (string) preg_replace( '/[\s_-]+/', '', $lower );
+			$keys[]   = $lower;
+			$keys[]   = $stripped;
+			$keys[]   = $compact;
+			$keys[]   = (string) preg_replace( '/[\s_-]+/', '', $stripped );
+			$term     = get_term_by( 'slug', sanitize_title( $raw ), 'lnkup_vendor_category' );
+			if ( ! $term ) {
+				$term = get_term_by( 'name', $raw, 'lnkup_vendor_category' );
+			}
+			if ( $term && ! is_wp_error( $term ) ) {
+				$name     = strtolower( $term->name );
+				$keys[]   = $name;
+				$keys[]   = trim( (string) preg_replace( '/\s+vendor$/', '', $name ) );
+				$keys[]   = $term->slug;
+			}
+		}
+		return array_values( array_unique( array_filter( $keys ) ) );
 	}
 
 	/**

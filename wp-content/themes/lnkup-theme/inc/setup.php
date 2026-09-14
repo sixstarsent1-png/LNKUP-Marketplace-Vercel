@@ -35,6 +35,7 @@ add_filter(
 		$templates['page-templates/organizer-dashboard.php'] = __( 'Organizer Dashboard', 'lnkup-theme' );
 		$templates['page-templates/full-width.php']            = __( 'Full Width', 'lnkup-theme' );
 		$templates['page-templates/sign-up.php']                 = __( 'Sign Up', 'lnkup-theme' );
+		$templates['page-templates/vendor-shell.php']            = __( 'Vendor Shell', 'lnkup-theme' );
 		$templates['page-templates/market-landing.php']          = __( 'City Market Landing', 'lnkup-theme' );
 		return $templates;
 	}

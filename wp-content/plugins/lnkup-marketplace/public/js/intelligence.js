@@ -669,14 +669,23 @@
       html += '</section>';
 
       html += '<section class="lnkup-intel-drawer__card"><h3>Documents</h3>';
-      if (data.readiness && data.readiness.items && data.readiness.items.length) {
+      var readinessItems = (data.readiness && data.readiness.items) ? data.readiness.items : [];
+      var docItems = readinessItems.filter(function (item) {
+        var key = String(item.key || item.id || item.slug || '').toLowerCase();
+        var label = String(item.label || '').toLowerCase();
+        return key.indexOf('payment') === -1 && label.indexOf('payment') === -1;
+      });
+      var pendingDocs = docItems.filter(function (item) { return !item.done; });
+      if (pendingDocs.length) {
         html += '<ul class="lnkup-intel-drawer__checklist">';
-        data.readiness.items.forEach(function (item) {
-          html += '<li class="' + (item.done ? 'is-done' : '') + '">' + (item.done ? '✓' : '○') + ' ' + escapeHtml(item.label) + '</li>';
+        pendingDocs.forEach(function (item) {
+          html += '<li>' + escapeHtml(item.label) + '</li>';
         });
         html += '</ul>';
+      } else if (docItems.length) {
+        html += '<p class="lnkup-muted">Documents complete.</p>';
       } else {
-        html += '<p class="lnkup-muted">Document readiness not available.</p>';
+        html += '<p class="lnkup-muted">No required documents for this opportunity.</p>';
       }
       html += '</section>';
 

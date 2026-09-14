@@ -688,7 +688,12 @@ class LNKup_Shortcodes {
 		$missing_docs = array_filter(
 			$apps,
 			function ( $a ) {
-				return 'ready' !== LNKup_Vendor_Readiness::refresh( $a->ID );
+				if ( ! class_exists( 'LNKup_Verification' ) ) {
+					return false;
+				}
+				$ctx  = LNKup_Verification::get_application_document_context( (int) $a->ID );
+				$code = (string) ( $ctx['code'] ?? '' );
+				return in_array( $code, array( 'pending', 'missing' ), true );
 			}
 		);
 		$upcoming_loadins = array_filter(
@@ -713,7 +718,12 @@ class LNKup_Shortcodes {
 		$opp_count   = count( $open_opps );
 		$dash_url    = lnkup_page_url_helper( 'organizer-dashboard' );
 		$pending_payout   = class_exists( 'LNKup_Payouts' ) ? LNKup_Payouts::pending_balance( $user_id ) : 0;
-		$available_payout = class_exists( 'LNKup_Payouts' ) ? LNKup_Payouts::available_balance( $user_id ) : 0;
+		$display_balances = class_exists( 'LNKup_Financial_Service' )
+			? LNKup_Financial_Service::organizer_display_balances( $user_id )
+			: array();
+		$available_payout = isset( $display_balances['available'] )
+			? (float) $display_balances['available']
+			: ( class_exists( 'LNKup_Payouts' ) ? LNKup_Payouts::available_balance( $user_id ) : 0 );
 		$payout_count     = class_exists( 'LNKup_Payouts' ) ? LNKup_Payouts::count_for_organizer( $user_id ) : 0;
 		$next_loadin      = '';
 		if ( $upcoming_loadins ) {
@@ -2774,7 +2784,12 @@ class LNKup_Shortcodes {
 					if ( ! in_array( $s, array( 'approved', 'payment_required', 'paid', 'completed' ), true ) ) {
 						return false;
 					}
-					return 'ready' !== LNKup_Vendor_Readiness::refresh( $a->ID );
+					if ( ! class_exists( 'LNKup_Verification' ) ) {
+						return false;
+					}
+					$ctx  = LNKup_Verification::get_application_document_context( (int) $a->ID );
+					$code = (string) ( $ctx['code'] ?? '' );
+					return in_array( $code, array( 'pending', 'missing' ), true );
 				}
 			)
 		);
@@ -4344,14 +4359,14 @@ class LNKup_Shortcodes {
 									<p class="lnkup-crm-app-card__intel lnkup-muted"><?php echo esc_html( wp_trim_words( $snapshot['products'], 18 ) ); ?></p>
 								<?php endif; ?>
 							</details>
-						<?php elseif ( ! empty( $doc_context['summary'] ) ) : ?>
+						<?php elseif ( ! empty( $doc_context['summary'] ) && 'none_required' !== $doc_code ) : ?>
 							<p class="lnkup-crm-app-card__docs-context lnkup-muted" data-testid="lnkup-app-docs-context"><?php echo esc_html( $doc_context['summary'] ); ?></p>
 						<?php endif; ?>
 						<?php if ( 'none_required' === $doc_code ) : ?>
 							<p class="lnkup-crm-app-card__docs-summary lnkup-muted" data-testid="lnkup-app-docs-summary">
 								<?php esc_html_e( 'No documents required for this event.', 'lnkup-marketplace' ); ?>
 							</p>
-						<?php elseif ( $docs_total ) : ?>
+						<?php elseif ( $docs_total && 'none_required' !== $doc_code ) : ?>
 							<p class="lnkup-crm-app-card__docs-summary lnkup-muted" data-testid="lnkup-app-docs-summary">
 								<?php
 								printf(
@@ -4368,15 +4383,13 @@ class LNKup_Shortcodes {
 					<span class="lnkup-status lnkup-status--<?php echo esc_attr( $status ); ?>"><?php echo esc_html( $status_label ); ?></span>
 					<span class="lnkup-crm-app-chip"><?php printf( esc_html__( 'Applied: %s', 'lnkup-marketplace' ), esc_html( $event ? $event->post_title : '—' ) ); ?></span>
 					<?php
-					if ( 'none_required' !== $doc_code ) {
+					if ( in_array( $doc_code, array( 'ready', 'pending', 'missing' ), true ) ) {
 						$docs_badge_map = array(
 							'ready'   => array( 'verified', __( 'Docs verified', 'lnkup-marketplace' ) ),
 							'pending' => array( 'docs_pending', __( 'Docs pending', 'lnkup-marketplace' ) ),
 							'missing' => array( 'docs_pending', __( 'Docs missing', 'lnkup-marketplace' ) ),
 						);
-						$docs_badge = $docs_badge_map[ $doc_code ] ?? ( $docs_ok
-							? array( 'verified', __( 'Docs verified', 'lnkup-marketplace' ) )
-							: array( 'docs_pending', __( 'Docs pending', 'lnkup-marketplace' ) ) );
+						$docs_badge = $docs_badge_map[ $doc_code ];
 						echo lnkup_status_badge( $docs_badge[0], $docs_badge[1] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					}
 					?>

@@ -48,13 +48,24 @@ function lnkup_page_url( $slug ) {
 }
 
 /**
+ * Published Find Events page, or homepage #opportunities when the page is missing.
+ */
+function lnkup_theme_opportunities_url() {
+	$page = get_page_by_path( 'opportunities' );
+	if ( $page && 'publish' === $page->post_status ) {
+		return get_permalink( $page );
+	}
+	return lnkup_theme_nav_href( 'opportunities' );
+}
+
+/**
  * Branded registration URL (plugin helper fallback).
  */
 function lnkup_theme_registration_url() {
 	if ( function_exists( 'lnkup_registration_url' ) ) {
 		return lnkup_registration_url();
 	}
-	return wp_registration_url();
+	return home_url( '/sign-up/' );
 }
 
 /**
