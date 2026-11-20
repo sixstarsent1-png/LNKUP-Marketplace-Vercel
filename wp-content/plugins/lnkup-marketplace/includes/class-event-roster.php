@@ -18,7 +18,7 @@ class LNKup_Event_Roster {
 	public static function get( $event_id, $organizer_id = 0 ) {
 		$organizer_id = $organizer_id ?: get_current_user_id();
 		if ( ! LNKup_Checkins::actor_can_operate( $event_id, $organizer_id ) ) {
-			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 		}
 		$apps = get_posts(
 			array(
@@ -221,7 +221,7 @@ class LNKup_Event_Roster {
 	 */
 	public static function bulk_action( $event_id, $organizer_id, $app_ids, $action, $extra = array() ) {
 		if ( ! LNKup_Checkins::actor_can_operate( $event_id, $organizer_id ) ) {
-			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 		}
 		$results = array();
 		foreach ( (array) $app_ids as $app_id ) {

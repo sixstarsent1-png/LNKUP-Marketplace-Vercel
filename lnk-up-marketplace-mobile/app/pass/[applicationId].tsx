@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context"
 
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { BackLink } from "@/components/ui/back-link"
+import { InlineBanner, type BannerTone } from "@/components/ui/banner"
 import { Button } from "@/components/ui/button"
 import { SectionTitle } from "@/components/ui/typography"
 import { PassBulletList, PassDetailRow, PassSectionCard } from "@/components/pass-section-card"
@@ -24,6 +25,7 @@ import { fetchVendorPass, type VendorEventPass } from "@/lib/api/vendor-pass"
 import type { VendorRequest } from "@/lib/api/vendor-requests"
 import { useAuth } from "@/lib/auth/auth-context"
 import { constrainedColumnStyle } from "@/lib/layout/use-breakpoint"
+import { formatShortDate } from "@/lib/format/date"
 import { openExternalUrl } from "@/lib/navigation/open-external-url"
 import { payBoothFee } from "@/lib/payments/stripe-checkout"
 import { colors, layout, radii, spacing, typeScale } from "@/lib/theme"
@@ -33,7 +35,8 @@ const CONFIRM_RETRY_MS = 3000
 const CONFIRM_MAX_ATTEMPTS = 5
 
 function eventMeta(pass: VendorEventPass): string {
-  return [pass.eventDate, pass.city, pass.state].filter(Boolean).join(" · ")
+  const place = [pass.city, pass.state].filter(Boolean).join(", ")
+  return [formatShortDate(pass.eventDate), place].filter(Boolean).join(" · ")
 }
 
 function extractPhone(raw?: string): string | undefined {
@@ -57,8 +60,12 @@ export default function EventPassScreen() {
   const [pass, setPass] = useState<VendorEventPass | null>(null)
   const [paying, setPaying] = useState(false)
   const [showStickyCheckIn, setShowStickyCheckIn] = useState(false)
-  const [paymentBanner, setPaymentBanner] = useState<string | null>(
-    payment === "success" ? CONFIRMING_COPY : null,
+  const [paymentBanner, setBanner] = useState<{ message: string; tone: BannerTone } | null>(
+    payment === "success" ? { message: CONFIRMING_COPY, tone: "info" } : null,
+  )
+  const setPaymentBanner = useCallback(
+    (message: string | null, tone: BannerTone = "info") => setBanner(message ? { message, tone } : null),
+    [],
   )
   const hasLoadedOnce = useRef(false)
   const awaitingPaymentReturn = useRef(payment === "success")
@@ -79,6 +86,7 @@ export default function EventPassScreen() {
       confirmAttempts.current = 0
       setPaymentBanner(
         "We haven’t received confirmation yet. Pull to refresh in a minute — you won’t be charged twice.",
+        "attention",
       )
       return
     }
@@ -100,7 +108,7 @@ export default function EventPassScreen() {
         setPass(data)
         hasLoadedOnce.current = true
         if (data.status === "unlocked" && awaitingPaymentReturn.current) {
-          setPaymentBanner("Payment received — your pass is ready")
+          setPaymentBanner("Payment received — your pass is ready", "success")
           awaitingPaymentReturn.current = false
           confirmAttempts.current = 0
         } else if (awaitingPaymentReturn.current) {
@@ -132,7 +140,7 @@ export default function EventPassScreen() {
       awaitingPaymentReturn.current = true
       setPaymentBanner(CONFIRMING_COPY)
     } else if (payment === "cancelled") {
-      setPaymentBanner("Payment cancelled — you can try again when ready.")
+      setPaymentBanner("Payment cancelled — you can try again when ready.", "attention")
     }
   }, [payment])
 
@@ -153,7 +161,7 @@ export default function EventPassScreen() {
   async function handlePay() {
     if (!pass || payingRef.current) return
     if (!pass.paymentId) {
-      setPaymentBanner("Payment isn’t ready yet. Pull to refresh and try again.")
+      setPaymentBanner("Payment isn’t ready yet. Pull to refresh and try again.", "attention")
       return
     }
     payingRef.current = true
@@ -176,10 +184,10 @@ export default function EventPassScreen() {
         await load("refresh")
         return
       }
-      setPaymentBanner(result.message || "Payment failed. Try again.")
+      setPaymentBanner(result.message || "Payment failed. Try again.", "error")
     } catch (err) {
       const shaped = appErrorFromWp(err)
-      setPaymentBanner(shaped.message)
+      setPaymentBanner(shaped.message, "error")
     } finally {
       payingRef.current = false
       setPaying(false)
@@ -241,17 +249,11 @@ export default function EventPassScreen() {
         {!showFullLoader && pass ? (
           <View style={styles.content}>
             {paymentBanner ? (
-              <View
-                style={[
-                  styles.attentionChip,
-                  payment === "cancelled" ? styles.attentionChipWarn : styles.attentionChipOk,
-                ]}
-              >
-                <Text style={styles.attentionText}>{paymentBanner}</Text>
-                <Pressable onPress={() => setPaymentBanner(null)} hitSlop={8}>
-                  <Text style={styles.dismiss}>Dismiss</Text>
-                </Pressable>
-              </View>
+              <InlineBanner
+                tone={paymentBanner.tone}
+                message={paymentBanner.message}
+                onDismiss={() => setPaymentBanner(null)}
+              />
             ) : null}
 
             {error ? <Text style={styles.inlineError}>{error.message}</Text> : null}
@@ -690,35 +692,6 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: spacing.lg,
-  },
-  attentionChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-  },
-  attentionChipOk: {
-    backgroundColor: colors.green50,
-    borderColor: colors.green200,
-  },
-  attentionChipWarn: {
-    backgroundColor: colors.amber50,
-    borderColor: colors.amber200,
-  },
-  attentionText: {
-    flex: 1,
-    fontSize: typeScale.footnote,
-    fontWeight: "700",
-    color: colors.black,
-  },
-  dismiss: {
-    fontSize: typeScale.footnote,
-    fontWeight: "600",
-    color: colors.gray700,
   },
   inlineError: {
     fontSize: typeScale.footnote,
