@@ -1,4 +1,5 @@
 import { isLiveApiEnabled } from "@/lib/api/config"
+import { cachedRequest, invalidateCache } from "@/lib/api/request-cache"
 import type { WpAuth } from "@/lib/api/wp-client"
 import { wpFetchJson } from "@/lib/api/wp-client"
 
@@ -50,15 +51,23 @@ export async function fetchPushPreferences(auth?: WpAuth): Promise<PushPreferenc
     return { pushEnabled: mockPushEnabled, categories: { ...mockCategories } }
   }
 
-  const data = await wpFetchJson<{
-    pushEnabled?: boolean
-    categories?: Partial<PushCategories>
-  }>("/push/preferences", { auth })
-  return {
-    pushEnabled: data.pushEnabled !== false,
-    categories: normalizeCategories(data.categories),
-  }
+  return cachedRequest(
+    `${PREFS_CACHE_PREFIX}${auth.username}`,
+    async () => {
+      const data = await wpFetchJson<{
+        pushEnabled?: boolean
+        categories?: Partial<PushCategories>
+      }>("/push/preferences", { auth })
+      return {
+        pushEnabled: data.pushEnabled !== false,
+        categories: normalizeCategories(data.categories),
+      }
+    },
+    { ttlMs: 60_000 },
+  )
 }
+
+const PREFS_CACHE_PREFIX = "push.preferences:"
 
 export async function updatePushPreferences(
   input: { pushEnabled?: boolean; categories?: Partial<PushCategories> },
@@ -89,7 +98,7 @@ export async function updatePushPreferences(
     method: "PATCH",
     auth,
     body,
-  })
+  }).finally(() => invalidateCache(PREFS_CACHE_PREFIX))
   return {
     pushEnabled: data.pushEnabled !== false,
     categories: normalizeCategories(data.categories),

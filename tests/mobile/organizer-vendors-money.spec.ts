@@ -107,6 +107,14 @@ test.describe('Organizer vendors, money and more', () => {
     await snap(page, 'vendors-invites', testInfo);
   });
 
+  test('requests under review show the booth fee, and only approved ones say due', async ({ page }) => {
+    await page.goto('/(organizer)/vendors?tab=requests&filter=review');
+    await expect(page.getByText(/booth fee$/).first()).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText(/ due$/)).toHaveCount(0);
+    await page.getByRole('button', { name: /^Awaiting payment/ }).click();
+    await expect(page.getByText(/ due$/).first()).toBeVisible({ timeout: 45_000 });
+  });
+
   test('Discover filters show as removable chips and the list ends honestly', async ({ page }) => {
     await page.goto('/(organizer)/vendors?tab=discover');
     await expect(page.getByRole('button', { name: /^View profile for / }).first()).toBeVisible({ timeout: 45_000 });

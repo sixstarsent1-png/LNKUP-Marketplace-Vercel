@@ -32,6 +32,8 @@ export function OrganizerRequestCard({
   const tone = organizerRequestStatusTone(item.status)
   const subtitle = [item.eventName, item.vendorCategory].filter(Boolean).join(" · ")
   const showActions = Boolean(onReview) && canReview(item.status)
+  // Nothing is owed until approval; before that the amount is just the slot's booth fee.
+  const owesNow = item.status === "approved" || item.status === "payment_required"
   // Same vendor can hold several requests on one event; the category tells screen-reader users which.
   const who = item.vendorCategory ? `${item.vendorBusinessName}, ${item.vendorCategory}` : item.vendorBusinessName
 
@@ -72,9 +74,11 @@ export function OrganizerRequestCard({
       </Pressable>
 
       {item.amountDue != null ? (
-        <View style={styles.amountPill}>
-          <Text style={styles.amountDue}>
-            {formatMoney(item.amountDue, item.currency ?? "USD")} due
+        <View style={[styles.amountPill, !owesNow && styles.feePill]}>
+          <Text style={[styles.amountDue, !owesNow && styles.feeText]}>
+            {owesNow
+              ? `${formatMoney(item.amountDue, item.currency ?? "USD")} due`
+              : `${formatMoney(item.amountDue, item.currency ?? "USD")} booth fee`}
           </Text>
         </View>
       ) : null}
@@ -196,6 +200,14 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyBold,
     fontSize: typeScale.body,
     color: colors.amber700,
+  },
+  feePill: {
+    borderColor: colors.gray200,
+    backgroundColor: colors.gray50,
+  },
+  feeText: {
+    fontFamily: fonts.bodySemi,
+    color: colors.gray700,
   },
   messageBox: {
     flexDirection: "row",
