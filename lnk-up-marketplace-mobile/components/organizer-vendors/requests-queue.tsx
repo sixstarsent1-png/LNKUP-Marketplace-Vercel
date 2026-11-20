@@ -1,53 +1,40 @@
 import { StyleSheet, View } from "react-native"
-import { router, type Href } from "expo-router"
 
-import { OrganizerRequestCard } from "@/components/organizer-vendors/organizer-request-card"
-import {
-  REQUEST_FILTERS,
-  vendorProfileHref,
-  type FilterKey,
-} from "@/components/organizer-vendors/vendor-queue"
+import { REQUEST_FILTERS, type FilterKey } from "@/components/organizer-vendors/vendor-queue"
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { InlineBanner } from "@/components/ui/banner"
 import { FilterChipRow } from "@/components/ui/chip"
 import type { AppErrorShape } from "@/lib/api/errors"
-import type { OrganizerReviewAction, OrganizerVendorRequest } from "@/lib/api/organizer-requests"
 import { spacing } from "@/lib/theme"
 
-type RequestsQueueProps = {
+type RequestsQueueHeaderProps = {
   loading: boolean
   error: AppErrorShape | null
   hasItems: boolean
-  visible: OrganizerVendorRequest[]
+  visibleCount: number
   filter: FilterKey
   filterCounts: Record<FilterKey, number>
   eventFiltered: boolean
-  actingId: string | null
   onFilterChange: (filter: FilterKey) => void
   onRetry: () => void
   onClearEventFilter: () => void
   onDiscover: () => void
-  onReview: (item: OrganizerVendorRequest, action: OrganizerReviewAction) => void
-  onRequestInfo?: (item: OrganizerVendorRequest) => void
 }
 
-/** Requests segment: status filters, review queue, and loading/empty/error states. */
-export function RequestsQueue({
+/** Requests segment above the rows: status filters and loading/empty/error states. Rows render in the screen list. */
+export function RequestsQueueHeader({
   loading,
   error,
   hasItems,
-  visible,
+  visibleCount,
   filter,
   filterCounts,
   eventFiltered,
-  actingId,
   onFilterChange,
   onRetry,
   onClearEventFilter,
   onDiscover,
-  onReview,
-  onRequestInfo,
-}: RequestsQueueProps) {
+}: RequestsQueueHeaderProps) {
   const options = REQUEST_FILTERS.map((item) => ({
     value: item.key,
     label: item.label,
@@ -73,7 +60,7 @@ export function RequestsQueue({
         <ErrorPanel title={error.title} message={error.message} onAction={onRetry} />
       ) : null}
 
-      {!loading && !(error && !hasItems) && visible.length === 0 ? (
+      {!loading && !(error && !hasItems) && visibleCount === 0 ? (
         <EmptyPanel
           icon="file-tray-outline"
           title={eventFiltered ? "No requests for this event" : "No requests here"}
@@ -88,34 +75,12 @@ export function RequestsQueue({
           onSecondaryAction={filter !== "all" ? () => onFilterChange("all") : undefined}
         />
       ) : null}
-
-      {!loading && visible.length > 0 ? (
-        <View style={styles.list}>
-          {visible.map((item) => (
-            <OrganizerRequestCard
-              key={item.id}
-              item={item}
-              acting={actingId === item.id}
-              onReview={onReview}
-              onRequestInfo={onRequestInfo}
-              onOpenProfile={
-                item.vendorProfileId
-                  ? () => router.push(vendorProfileHref(item.vendorProfileId!, item.id) as Href)
-                  : undefined
-              }
-            />
-          ))}
-        </View>
-      ) : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   stack: {
-    gap: spacing.md,
-  },
-  list: {
     gap: spacing.md,
   },
 })

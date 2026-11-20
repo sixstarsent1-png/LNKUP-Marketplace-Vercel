@@ -117,6 +117,64 @@ Columns: **Design** after 3.0 (A polished · B acceptable · C dated) · **Tests
 | Tab bar | Labels clipped on iPhone 15 | P2 | Height fix, no font scaling in tabs | Fixed (runtime) |
 | Dark mode, haptics | Not supported | P3 | Next native build | Deferred |
 
+## 3.1 audit (Nov 19, 2026)
+
+Source: fresh screenshots of every route (`scripts/e2e/reports/mobile-shots/v31-before/`), cold metrics (`mobile-v31-before-{vendor,organizer}.json`), and a new warm tab-switch pass (`mobile-v31-before-warm-*.json`). Status is updated as each stage lands.
+
+### Warm tab switching (in-app, cache warm), before 3.1
+
+| Switch | Calls | Notes |
+|---|---|---|
+| Vendor → Explore | 2 | favorites + search |
+| Vendor → Wallet | 6 | first visit; cached after |
+| Vendor → Profile | 2 | push preferences + profile edit, every visit |
+| Organizer → Home (return) | 6 | every focus forces intel, widgets, checklist, money |
+| Organizer → Money (return) | 4 | every focus forces balances, dashboard, activity, payouts |
+| Organizer → More | 1 | push preferences, every visit |
+
+### Findings
+
+| # | Screen | Finding | Sev | Stage | Status |
+|---|---|---|---|---|---|
+| A1 | Vendor Home | `/applications/vendor` requested twice (Home forces a refetch while the tab badge fetch is in flight) | P2 | 1 | Open |
+| A2 | Vendors inbox / Discover | Scroll views, manual "Load more", no stale-search cancel, no debounce | P2 | 1 | Open |
+| A3 | Pass, Apply | 28 and 21 raw font sizes; hand-rolled buttons and inputs | P2 | 1 | Open |
+| A4 | E2E | 18 skips: 14 are writes that run once per seed, 4 are metrics; the approval-failure and session tests write nothing yet skip on SE / Pro Max | P2 | 1 | Open |
+| A5 | Explore / Home rails | Cards show a placeholder although the server sends `featured_image`; the card only reads `gallery` | P1 | 3 | Open |
+| A6 | Explore | Search, filters, near me and view toggle take half the first screen before any result | P2 | 3 | Open |
+| A7 | Growth, Reviews, Documents, Operations, Referrals | Older styling: raw font sizes, spinner panels instead of skeletons, plain-text statuses, oversized stacked buttons | P2 | 2–3 | Open |
+| A8 | Documents | Status is plain text with no badge or expiry date | P2 | 3 | Open |
+| A9 | Organizer Home | Hero card repeats the first "Needs attention" item | P2 | 4 | Open |
+| A10 | Organizer Home, Money | Every return to the tab forces 4–6 requests | P2 | 7 | Open |
+| A11 | Events list | Dates shown raw (`2027-01-04`) | P2 | 4 | Open |
+| A12 | Vendors request card | "$125 due" shown on requests still under review; nothing is due before approval | P1 | 4 | Open |
+| A13 | Profile hubs (vendor and organizer More) | Push preferences reloaded on every visit | P3 | 7 | Open |
+| A14 | Opportunity detail | 23 raw font sizes | P2 | 2 | Open |
+
+### Interaction inventory (per screen: tap targets / domain calls in code)
+
+Counted from the code (`onPress` handlers and `fetch|submit|update|create|delete|cancel|invite|review|assign|check|pay|upload|save|publish|set*` calls). Stage 6 verifies each against WordPress.
+
+| Screen | Tap handlers | Domain calls | Raw font sizes |
+|---|---|---|---|
+| Organizer event workspace | 19 | 53 | 3 |
+| Organizer launch | 16 | 35 | 4 |
+| Organizer Home | 13 | 28 | 3 |
+| Explore (`find`) | 13 | 35 | 11 |
+| Pass | 10 | 23 | 28 |
+| Vendor profile editor | 9 | 27 | 3 |
+| Organizer vendor profile | 9 | 25 | 4 |
+| Apply | 8 | 23 | 21 |
+| Opportunity detail | 7 | 24 | 23 |
+| Organizer Money | 7 | 37 | 3 |
+| Wallet | 7 | 25 | 0 |
+| Vendor Home | 6 | 25 | 1 |
+| Organizer profile | 6 | 22 | 0 |
+| Check-in | 5 | 30 | 0 |
+| Documents | 5 | 26 | 12 |
+| Growth | 5 | 11 | 21 |
+| Vendors inbox (in components) | — | 55 | 7 (Discover) |
+
 ## Next native build (not possible over the air)
 
 `expo-camera` (QR scanning on the check-in screen; typed pass codes work now), `expo-image-picker` (camera roll + cropping for logos and event covers), `expo-haptics`, Sentry (`@sentry/react-native`), removing `@stripe/stripe-react-native` and its config plugin, dark mode (`userInterfaceStyle`), explicit iOS deployment target (`expo-build-properties`), and a server endpoint for event cover/gallery upload from the app.

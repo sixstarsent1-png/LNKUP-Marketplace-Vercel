@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { memo, useState } from "react"
 import { Pressable, StyleSheet, TextInput, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 import { router, type Href } from "expo-router"
@@ -17,51 +17,53 @@ import { FilterChip } from "@/components/ui/chip"
 import { StatusBadge } from "@/components/ui/status-badge"
 import type { AppErrorShape } from "@/lib/api/errors"
 import { LAUNCH_CATEGORIES } from "@/lib/api/organizer-launch"
-import type {
-  OrganizerDirectoryVendor,
-  OrganizerDiscoverFilters,
-} from "@/lib/api/organizer-vendor-directory"
+import type { OrganizerDirectoryVendor, OrganizerDiscoverFilters } from "@/lib/api/organizer-vendor-directory"
 import { colors, fonts, layout, radii, spacing, typography } from "@/lib/theme"
 
-type DiscoverDirectoryProps = {
+type DiscoverHeaderProps = {
   query: string
   onQueryChange: (query: string) => void
   filters: OrganizerDiscoverFilters
   onFiltersChange: (filters: OrganizerDiscoverFilters) => void
   activeFilterCount: number
   loading: boolean
-  loadingMore: boolean
   error: AppErrorShape | null
-  directory: OrganizerDirectoryVendor[]
+  count: number
   total: number
-  hasMore: boolean
-  invitingId: string | null
   onRetry: () => void
-  onLoadMore: () => void
-  onInvite: (vendor: OrganizerDirectoryVendor) => void
 }
 
-/** Discover segment: vendor directory search, filters sheet, results, and invite actions. */
-export function DiscoverDirectory({
+type AppliedChip = { key: keyof OrganizerDiscoverFilters; label: string }
+
+function appliedChips(filters: OrganizerDiscoverFilters): AppliedChip[] {
+  const chips: AppliedChip[] = []
+  if (filters.city?.trim()) chips.push({ key: "city", label: filters.city.trim() })
+  if (filters.category?.trim()) chips.push({ key: "category", label: filters.category.trim() })
+  if (filters.verified) chips.push({ key: "verified", label: "Verified only" })
+  if (filters.sort && filters.sort !== "score") {
+    const sort = DISCOVER_SORTS.find((item) => item.id === filters.sort)
+    if (sort) chips.push({ key: "sort", label: sort.label })
+  }
+  return chips
+}
+
+/** Discover segment above the rows: search, filter sheet, applied filters, and loading/empty/error states. */
+export function DiscoverHeader({
   query,
   onQueryChange,
   filters,
   onFiltersChange,
   activeFilterCount,
   loading,
-  loadingMore,
   error,
-  directory,
+  count,
   total,
-  hasMore,
-  invitingId,
   onRetry,
-  onLoadMore,
-  onInvite,
-}: DiscoverDirectoryProps) {
+}: DiscoverHeaderProps) {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [draft, setDraft] = useState<OrganizerDiscoverFilters>(EMPTY_DISCOVER_FILTERS)
   const hasSearch = query.trim().length > 0 || activeFilterCount > 0
+  const chips = appliedChips(filters)
 
   function clearAll() {
     onQueryChange("")
@@ -107,9 +109,7 @@ export function DiscoverDirectory({
             setSheetOpen(true)
           }}
           accessibilityRole="button"
-          accessibilityLabel={
-            activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : "Filters"
-          }
+          accessibilityLabel={activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : "Filters"}
         >
           <AppIcon name="options-outline" size={16} color={colors.black} />
           <Text style={styles.filterBtnText}>Filters</Text>
@@ -129,26 +129,42 @@ export function DiscoverDirectory({
           />
         ) : null}
         <View style={styles.flex} />
-        {directory.length > 0 || loading ? (
+        {count > 0 || loading ? (
           <Text style={styles.resultCount} accessibilityLiveRegion="polite">
-            {loading && directory.length === 0
+            {loading && count === 0
               ? "Searching…"
               : loading
-                ? `Updating · ${directory.length} of ${total}`
-                : `${directory.length} of ${total} vendor${total === 1 ? "" : "s"}`}
+                ? `Updating · ${count} of ${total}`
+                : `${count} of ${total} vendor${total === 1 ? "" : "s"}`}
           </Text>
         ) : null}
       </View>
 
-      {loading && directory.length === 0 ? (
-        <LoadingPanel label="Searching vendors…" variant="skeleton" />
+      {chips.length > 0 ? (
+        <View style={styles.chips} accessibilityLabel="Applied filters">
+          {chips.map((chip) => (
+            <Pressable
+              key={chip.key}
+              style={({ pressed }) => [styles.appliedChip, pressed && styles.pressed]}
+              onPress={() => onFiltersChange({ ...filters, [chip.key]: undefined })}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove filter ${chip.label}`}
+              hitSlop={{ top: 6, bottom: 6 }}
+            >
+              <Text style={styles.appliedChipText}>{chip.label}</Text>
+              <AppIcon name="close" size={14} color={colors.gray700} />
+            </Pressable>
+          ))}
+        </View>
       ) : null}
+
+      {loading && count === 0 ? <LoadingPanel label="Searching vendors…" variant="skeleton" /> : null}
 
       {!loading && error ? (
         <ErrorPanel title={error.title} message={error.message} onAction={onRetry} />
       ) : null}
 
-      {!loading && !error && directory.length === 0 ? (
+      {!loading && !error && count === 0 ? (
         <EmptyPanel
           icon="people-outline"
           title="No vendors found"
@@ -160,28 +176,6 @@ export function DiscoverDirectory({
           actionLabel={hasSearch ? "Clear filters" : undefined}
           onAction={hasSearch ? clearAll : undefined}
         />
-      ) : null}
-
-      {directory.length > 0 ? (
-        <View style={styles.list}>
-          {directory.map((vendor) => (
-            <DirectoryCard
-              key={vendor.id}
-              vendor={vendor}
-              inviting={invitingId === vendor.id}
-              onInvite={onInvite}
-            />
-          ))}
-          {hasMore ? (
-            <Button
-              label="Load more"
-              loadingLabel="Loading…"
-              variant="secondary"
-              loading={loadingMore}
-              onPress={onLoadMore}
-            />
-          ) : null}
-        </View>
       ) : null}
 
       <BottomSheet
@@ -229,9 +223,7 @@ export function DiscoverDirectory({
                 key={cat}
                 label={cat}
                 selected={active}
-                onPress={() =>
-                  setDraft((prev) => ({ ...prev, category: active ? undefined : cat }))
-                }
+                onPress={() => setDraft((prev) => ({ ...prev, category: active ? undefined : cat }))}
               />
             )
           })}
@@ -260,13 +252,38 @@ export function DiscoverDirectory({
   )
 }
 
-function DirectoryCard({
+/** Below the Discover rows: automatic paging shows a spinner; the button stays as a fallback. */
+export function DiscoverFooter({
+  count,
+  hasMore,
+  loadingMore,
+  onLoadMore,
+}: {
+  count: number
+  hasMore: boolean
+  loadingMore: boolean
+  onLoadMore: () => void
+}) {
+  if (count === 0) return null
+  if (!hasMore) {
+    return <Text style={styles.endText}>That’s every vendor matching your search.</Text>
+  }
+  return (
+    <Button
+      label="Load more"
+      loadingLabel="Loading more vendors…"
+      variant="secondary"
+      loading={loadingMore}
+      onPress={onLoadMore}
+    />
+  )
+}
+
+export const DirectoryCard = memo(function DirectoryCard({
   vendor,
-  inviting,
   onInvite,
 }: {
   vendor: OrganizerDirectoryVendor
-  inviting: boolean
   onInvite: (vendor: OrganizerDirectoryVendor) => void
 }) {
   const location = [vendor.city, vendor.state].filter(Boolean).join(", ")
@@ -325,7 +342,6 @@ function DirectoryCard({
             variant="accent"
             size="sm"
             style={styles.flex}
-            loading={inviting}
             onPress={() => onInvite(vendor)}
             accessibilityLabel={`Invite ${vendor.name} to apply`}
           />
@@ -333,7 +349,7 @@ function DirectoryCard({
       </View>
     </View>
   )
-}
+})
 
 const styles = StyleSheet.create({
   stack: {
@@ -407,9 +423,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: fonts.bodySemi,
   },
-  list: {
-    gap: spacing.md,
-  },
   card: {
     backgroundColor: colors.white,
     borderRadius: radii.lg,
@@ -474,5 +487,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm,
+  },
+  appliedChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    minHeight: 32,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    backgroundColor: colors.gray100,
+  },
+  appliedChipText: {
+    ...typography.meta,
+    fontFamily: fonts.bodySemi,
+    color: colors.black,
+  },
+  endText: {
+    ...typography.meta,
+    textAlign: "center",
+    paddingVertical: spacing.md,
   },
 })

@@ -1,33 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from "react-native"
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 import { Redirect, router, useLocalSearchParams, type Href } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { ErrorPanel, LoadingPanel } from "@/components/panel-states"
-import {
-  fetchApplyContext,
-  submitApplication,
-  type ApplyContext,
-} from "@/lib/api/apply"
+import { BackLink } from "@/components/ui/back-link"
+import { Button } from "@/components/ui/button"
+import { FormField } from "@/components/ui/form-field"
+import { SectionTitle } from "@/components/ui/typography"
+import { fetchApplyContext, submitApplication, type ApplyContext } from "@/lib/api/apply"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import { useAuth } from "@/lib/auth/auth-context"
-import { constrainedColumnStyle, useBreakpoint } from "@/lib/layout/use-breakpoint"
+import { constrainedColumnStyle } from "@/lib/layout/use-breakpoint"
 import { safeBack } from "@/lib/navigation/safe-back"
-import { colors, layout, radii, spacing } from "@/lib/theme"
+import { colors, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 export default function ApplyScreen() {
   const { opportunityId } = useLocalSearchParams<{ opportunityId: string }>()
   const { auth, isAuthenticated } = useAuth()
-  const { primaryButtonPaddingVertical } = useBreakpoint()
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const submittingRef = useRef(false)
@@ -106,7 +97,9 @@ export default function ApplyScreen() {
         },
         auth,
       )
-      setSubmittedMessage(result.message ?? "Check Requests for status.")
+      setSubmittedMessage(
+        result.message ?? "Track it under Bookings. You only pay if the organizer approves you.",
+      )
     } catch (err) {
       setError(appErrorFromWp(err))
     } finally {
@@ -116,19 +109,13 @@ export default function ApplyScreen() {
   }
 
   const canApplyForm = Boolean(context?.canApply && !context?.buttonDisabled)
-  const feeLabel =
-    context?.vendorFee != null && context.vendorFee > 0
-      ? `$${context.vendorFee}`
-      : "Fee TBD"
+  const feeLabel = context?.vendorFee != null && context.vendorFee > 0 ? `$${context.vendorFee}` : "Fee TBD"
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => safeBack("/(vendor)/find")} style={styles.back}>
-          <Text style={styles.backText}>Back</Text>
-        </Pressable>
-        <Text style={styles.headerTitle}>Apply</Text>
-        <View style={styles.backSpacer} />
+      <View style={[styles.header, constrainedColumnStyle(layout.contentMaxWidth)]}>
+        <BackLink label="Back" fallbackHref="/(vendor)/find" />
+        <SectionTitle accessibilityRole="header">Apply</SectionTitle>
       </View>
 
       {submittedMessage ? (
@@ -137,25 +124,22 @@ export default function ApplyScreen() {
             <Text style={styles.successEyebrow}>LNKup</Text>
             <Text style={styles.successTitle}>Application submitted</Text>
             <Text style={styles.successMessage}>{submittedMessage}</Text>
-            <Pressable
-              style={[styles.primary, { paddingVertical: primaryButtonPaddingVertical }]}
+            <Button
+              label="View bookings"
+              icon="ticket-outline"
+              fullWidth
               onPress={() => router.replace("/(vendor)/requests")}
-            >
-              <Text style={styles.primaryText}>View requests</Text>
-            </Pressable>
-            <Pressable
-              style={styles.secondaryBtn}
+            />
+            <Button
+              label="Find more events"
+              variant="secondary"
+              fullWidth
               onPress={() => router.replace("/(vendor)/find")}
-            >
-              <Text style={styles.secondaryBtnText}>Find more events</Text>
-            </Pressable>
+            />
           </View>
         </View>
       ) : (
-        <KeyboardAvoidingView
-          style={styles.flex}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
+        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <ScrollView
             contentContainerStyle={[
               styles.body,
@@ -167,11 +151,7 @@ export default function ApplyScreen() {
             {loading ? <LoadingPanel label="Loading application…" /> : null}
 
             {!loading && error && !context ? (
-              <ErrorPanel
-                title={error.title}
-                message={error.message}
-                onAction={() => void load()}
-              />
+              <ErrorPanel title={error.title} message={error.message} onAction={() => void load()} />
             ) : null}
 
             {!loading && context ? (
@@ -180,9 +160,7 @@ export default function ApplyScreen() {
                   <Text style={styles.brand}>LNKup</Text>
                   <Text style={styles.title}>{context.eventName}</Text>
                   <Text style={styles.meta}>
-                    {[context.eventDate, context.city, context.state]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {[context.eventDate, context.city, context.state].filter(Boolean).join(" · ")}
                   </Text>
                   {context.organizerName ? (
                     <Text style={styles.meta}>Organizer · {context.organizerName}</Text>
@@ -192,12 +170,10 @@ export default function ApplyScreen() {
                       {context.excerpt}
                     </Text>
                   ) : null}
-                    <Pressable
-                      onPress={() =>
-                        router.push(`/opportunity/${context.opportunityId}` as Href)
-                      }
-                      hitSlop={8}
-                    >
+                  <Pressable
+                    onPress={() => router.push(`/opportunity/${context.opportunityId}` as Href)}
+                    hitSlop={8}
+                  >
                     <Text style={styles.detailsLink}>View full details</Text>
                   </Pressable>
                   <View style={styles.feeRow}>
@@ -223,17 +199,14 @@ export default function ApplyScreen() {
                   <View style={styles.blockedWrap}>
                     <ErrorPanel
                       title="Applications unavailable"
-                      message={
-                        context.blockReason ??
-                        "Applications are not open for this opportunity yet."
-                      }
+                      message={context.blockReason ?? "Applications are not open for this opportunity yet."}
                     />
-                    <Pressable
-                      style={styles.secondaryBtn}
+                    <Button
+                      label="Back to Explore"
+                      variant="secondary"
+                      fullWidth
                       onPress={() => safeBack("/(vendor)/find")}
-                    >
-                      <Text style={styles.secondaryBtnText}>Back to Explore</Text>
-                    </Pressable>
+                    />
                   </View>
                 ) : (
                   <>
@@ -262,11 +235,7 @@ export default function ApplyScreen() {
                                 accessibilityState={{ selected: active }}
                                 aria-selected={active}
                               >
-                                <Text
-                                  style={[styles.chipText, active && styles.chipTextActive]}
-                                >
-                                  {item}
-                                </Text>
+                                <Text style={[styles.chipText, active && styles.chipTextActive]}>{item}</Text>
                               </Pressable>
                             )
                           })}
@@ -274,18 +243,14 @@ export default function ApplyScreen() {
                       </View>
                     ) : null}
 
-                    <View style={styles.field}>
-                      <Text style={styles.label}>Message</Text>
-                      <Text style={styles.helper}>Optional — helps organizers review you</Text>
-                      <TextInput
-                        value={message}
-                        onChangeText={setMessage}
-                        placeholder="Tell the organizer about your booth…"
-                        placeholderTextColor={colors.gray400}
-                        style={styles.input}
-                        multiline
-                      />
-                    </View>
+                    <FormField
+                      label="Message (optional)"
+                      hint="Helps the organizer review you faster."
+                      value={message}
+                      onChangeText={setMessage}
+                      placeholder="Tell the organizer about your booth…"
+                      multiline
+                    />
 
                     <Pressable
                       style={[styles.termsRow, termsError ? styles.termsRowError : null]}
@@ -313,21 +278,13 @@ export default function ApplyScreen() {
           {!loading && context && canApplyForm ? (
             <View style={styles.stickyFooter}>
               <View style={constrainedColumnStyle(layout.contentMaxWidth)}>
-                <Pressable
-                  style={[
-                    styles.primary,
-                    { paddingVertical: primaryButtonPaddingVertical },
-                    submitting && styles.disabled,
-                  ]}
-                  disabled={submitting}
+                <Button
+                  label={context.buttonLabel}
+                  loadingLabel="Submitting…"
+                  loading={submitting}
+                  fullWidth
                   onPress={() => void handleSubmit()}
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: submitting, busy: submitting }}
-                >
-                  <Text style={styles.primaryText}>
-                    {submitting ? "Submitting…" : context.buttonLabel}
-                  </Text>
-                </Pressable>
+                />
               </View>
             </View>
           ) : null}
@@ -348,27 +305,12 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.gray200,
-  },
-  back: {
-    minWidth: 56,
-  },
-  backSpacer: {
-    minWidth: 56,
-  },
-  backText: {
-    fontWeight: "600",
-    color: colors.gray700,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontWeight: "700",
-    fontSize: 16,
-    color: colors.black,
   },
   body: {
     padding: spacing.lg,
@@ -389,30 +331,30 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   brand: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "800",
     letterSpacing: 1.2,
     textTransform: "uppercase",
     color: colors.gray500,
   },
   title: {
-    fontSize: 24,
+    fontSize: typeScale.title,
     fontWeight: "800",
     color: colors.black,
   },
   meta: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.gray500,
   },
   excerpt: {
     marginTop: spacing.sm,
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.gray700,
     lineHeight: 20,
   },
   detailsLink: {
     marginTop: spacing.xs,
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontWeight: "700",
     color: colors.black,
     textDecorationLine: "underline",
@@ -430,12 +372,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
   },
   feeLabel: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "600",
     color: colors.gray500,
   },
   feeValue: {
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     fontWeight: "800",
     color: colors.black,
   },
@@ -448,12 +390,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   warningsTitle: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontWeight: "800",
     color: colors.amber700,
   },
   warningItem: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.amber700,
     lineHeight: 18,
   },
@@ -464,12 +406,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   label: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "700",
     color: colors.gray700,
   },
   helper: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     color: colors.gray500,
     marginTop: -4,
   },
@@ -493,23 +435,12 @@ const styles = StyleSheet.create({
     borderColor: colors.black,
   },
   chipText: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "700",
     color: colors.gray700,
   },
   chipTextActive: {
     color: colors.white,
-  },
-  input: {
-    minHeight: 96,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    fontSize: 15,
-    color: colors.black,
-    backgroundColor: colors.gray50,
-    textAlignVertical: "top",
   },
   termsRow: {
     flexDirection: "row",
@@ -539,12 +470,12 @@ const styles = StyleSheet.create({
   },
   termsText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.gray700,
     lineHeight: 20,
   },
   termsError: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.red600,
     fontWeight: "600",
     marginTop: -4,
@@ -555,33 +486,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     backgroundColor: colors.white,
-  },
-  primary: {
-    backgroundColor: colors.black,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-  },
-  primaryText: {
-    color: colors.white,
-    fontWeight: "700",
-    fontSize: 16,
-  },
-  secondaryBtn: {
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    backgroundColor: colors.white,
-  },
-  secondaryBtnText: {
-    fontWeight: "700",
-    fontSize: 15,
-    color: colors.black,
-  },
-  disabled: {
-    opacity: 0.6,
   },
   successWrap: {
     flex: 1,
@@ -597,19 +501,19 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   successEyebrow: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "800",
     letterSpacing: 1.2,
     textTransform: "uppercase",
     color: colors.green700,
   },
   successTitle: {
-    fontSize: 24,
+    fontSize: typeScale.title,
     fontWeight: "800",
     color: colors.black,
   },
   successMessage: {
-    fontSize: 15,
+    fontSize: typeScale.callout,
     color: colors.gray700,
     lineHeight: 22,
   },

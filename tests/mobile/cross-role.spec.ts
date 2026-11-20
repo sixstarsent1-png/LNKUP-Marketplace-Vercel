@@ -120,7 +120,9 @@ test.describe('Cross-role booking journey', () => {
       await expect(page.getByTestId(`organizer-request-${appId}`)).toBeVisible({ timeout: 45_000 });
     });
   });
+});
 
+test.describe('Cross-role failure and session handling', () => {
   test('a failed approval shows an error and never a false success', async ({ page }) => {
     await appLogin(page, organizerUser);
     await page.route('**/wp-json/lnkup/v1/crm/events/*/roster/bulk', (route) =>

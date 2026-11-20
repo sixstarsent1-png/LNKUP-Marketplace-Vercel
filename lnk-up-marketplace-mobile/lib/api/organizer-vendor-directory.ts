@@ -314,8 +314,9 @@ export async function fetchOrganizerVendorDirectory(options: {
   page?: number
   perPage?: number
   filters?: OrganizerDiscoverFilters
+  signal?: AbortSignal
 }): Promise<{ items: OrganizerDirectoryVendor[]; total: number; page: number; pages: number }> {
-  const { auth, query, scope = "discover", page = 1, perPage = 24, filters } = options
+  const { auth, query, scope = "discover", page = 1, perPage = 24, filters, signal } = options
 
   if (!isLiveApiEnabled()) {
     const q = (query ?? "").trim().toLowerCase()
@@ -371,6 +372,7 @@ export async function fetchOrganizerVendorDirectory(options: {
       per_page: perPage,
       page,
     },
+    signal,
   })
 
   const items = (Array.isArray(data.items) ? data.items : [])

@@ -171,7 +171,13 @@ export default function OpportunityDetailScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.header}>
-        <Pressable onPress={() => safeBack("/(vendor)/find")} style={styles.back}>
+        <Pressable
+          onPress={() => safeBack("/(vendor)/find")}
+          style={styles.back}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          hitSlop={8}
+        >
           <AppIcon name="chevron-back" size={22} color={colors.black} />
         </Pressable>
         <Text style={styles.headerTitle}>Event details</Text>
@@ -179,7 +185,8 @@ export default function OpportunityDetailScreen() {
           onPress={() => void handleToggleSave()}
           style={styles.saveBtn}
           accessibilityRole="button"
-          accessibilityLabel={saved ? "Unsave" : "Save"}
+          accessibilityLabel={`${saved ? "Unsave" : "Save"}${detail?.title ? ` ${detail.title}` : ""}`}
+          hitSlop={8}
         >
           <AppIcon
             name={saved ? "heart" : "heart-outline"}

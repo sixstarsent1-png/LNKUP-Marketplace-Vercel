@@ -291,6 +291,33 @@ if ( ! LNKup_Event_Staff::is_staff( $event_free, $staff['security'] ) ) {
 
 // Event-day state for the free booking starts clean on every seed so check-in specs are repeatable.
 global $wpdb;
+// Organizer B starts each seed with $25 available in the test-mode treasury wallet so the cash-out
+// spec can request and then cancel a payout. Manual provider only: no money moves.
+if ( class_exists( 'LNKup_Organizer_Wallet' ) ) {
+	$org_b_balances  = LNKup_Organizer_Wallet::get_balances( $org_b );
+	$org_b_available = is_array( $org_b_balances ) ? (float) ( $org_b_balances['available'] ?? 0 ) : 0;
+	if ( $org_b_available < 25 ) {
+		LNKup_Organizer_Wallet::add_entry(
+			$org_b,
+			round( 25 - $org_b_available, 2 ),
+			'available',
+			array(
+				'source_type' => 'e2e_seed',
+				'note'        => 'E2E test-mode balance',
+			)
+		);
+	}
+}
+
+// Saved searches left by earlier spec runs count toward the 10-search limit.
+if ( class_exists( 'LNKup_Saved_Searches' ) ) {
+	foreach ( (array) LNKup_Saved_Searches::get_for_user( $vendor_b ) as $saved_search ) {
+		if ( 0 === strpos( (string) ( $saved_search['name'] ?? '' ), 'E2E search' ) ) {
+			LNKup_Saved_Searches::delete( $vendor_b, $saved_search['id'] );
+		}
+	}
+}
+
 // Booth assignments on the main event start empty so the booth spec always has an open booth.
 if ( class_exists( 'LNKup_Operations_Tables' ) && method_exists( 'LNKup_Operations_Tables', 'booths_table' ) ) {
 	$wpdb->update( LNKup_Operations_Tables::booths_table(), array( 'application_id' => 0 ), array( 'event_id' => $event_main ), array( '%d' ), array( '%d' ) );

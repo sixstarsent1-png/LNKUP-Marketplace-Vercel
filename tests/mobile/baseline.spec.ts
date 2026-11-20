@@ -84,6 +84,23 @@ async function measure(page: import('@playwright/test').Page, routes: string[], 
   return metrics;
 }
 
+/**
+ * Switch tabs in-app (no reload, so the request cache is warm) and record calls and time per switch.
+ */
+async function measureTabs(page: import('@playwright/test').Page, tabs: string[]) {
+  const api = trackApiRequests(page);
+  await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => undefined);
+  const metrics: Array<{ tab: string; ms: number; apiCalls: number; calls: string[] }> = [];
+  for (const tab of tabs) {
+    api.reset();
+    const started = Date.now();
+    await page.getByRole('tab', { name: new RegExp(tab) }).click();
+    await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => undefined);
+    metrics.push({ tab, ms: Date.now() - started, apiCalls: api.requests.length, calls: [...api.requests] });
+  }
+  return metrics;
+}
+
 test.describe('Mobile baseline metrics', () => {
   test.setTimeout(600_000);
 
@@ -99,6 +116,22 @@ test.describe('Mobile baseline metrics', () => {
     fs.mkdirSync(reportDir, { recursive: true });
     fs.writeFileSync(path.join(reportDir, `mobile-${label}-vendor.json`), JSON.stringify({ loginMs, metrics }, null, 2));
     expect(metrics.length).toBe(vendorRoutes.length);
+  });
+
+  test('vendor tab switching (warm)', async ({ page }) => {
+    await appLogin(page, vendorUser);
+    const metrics = await measureTabs(page, ['Explore', 'Bookings', 'Wallet', 'Profile', 'Home', 'Explore', 'Bookings']);
+    fs.mkdirSync(reportDir, { recursive: true });
+    fs.writeFileSync(path.join(reportDir, `mobile-${label}-warm-vendor.json`), JSON.stringify({ metrics }, null, 2));
+    expect(metrics.length).toBe(7);
+  });
+
+  test('organizer tab switching (warm)', async ({ page }) => {
+    await appLogin(page, organizerUser);
+    const metrics = await measureTabs(page, ['Events', 'Vendors', 'Money', 'More', 'Home', 'Events', 'Money']);
+    fs.mkdirSync(reportDir, { recursive: true });
+    fs.writeFileSync(path.join(reportDir, `mobile-${label}-warm-organizer.json`), JSON.stringify({ metrics }, null, 2));
+    expect(metrics.length).toBe(7);
   });
 
   test('organizer routes', async ({ page }) => {

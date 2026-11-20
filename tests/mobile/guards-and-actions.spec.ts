@@ -9,26 +9,26 @@ const capacityOpportunityId = process.env.PLAYWRIGHT_CAPACITY_OPPORTUNITY_ID || 
  */
 async function serverFavorites(page: Page, user: string): Promise<number[]> {
   const { body } = await restAs(page, user, 'GET', '/marketplace/favorites');
-  const raw = body as { opportunities?: Array<{ id?: number; opportunity_id?: number }> ; ids?: number[] } | null;
-  if (Array.isArray(raw?.ids)) return raw!.ids!.map(Number);
-  return (raw?.opportunities ?? []).map((o) => Number(o.opportunity_id ?? o.id)).filter(Boolean);
+  const raw = body as { favorites?: { opportunities?: Array<number | string> } } | null;
+  return (raw?.favorites?.opportunities ?? []).map(Number).filter(Boolean);
 }
 
 test.describe('Vendor guards', () => {
   test('a double-tapped heart ends in one consistent saved state', async ({ page }) => {
+    const opportunityId = Number(capacityOpportunityId);
+    const wasSaved = (await serverFavorites(page, vendorUser)).includes(opportunityId);
     await appLogin(page, vendorUser);
-    await page.goto('/(vendor)/find');
-    const heart = page.getByRole('button', { name: /^(Save|Unsave) / }).first();
-    await expect(heart).toBeVisible();
-    const before = (await heart.getAttribute('aria-label')) ?? '';
+    await page.goto(`/opportunity/${opportunityId}`);
+    const heart = page.getByRole('button', { name: wasSaved ? /^Unsave / : /^Save / }).first();
+    await expect(heart).toBeVisible({ timeout: 45_000 });
     await heart.dblclick();
-    await expect(heart).toHaveAttribute('aria-label', before.startsWith('Save') ? /^Unsave / : /^Save /);
-    await page.waitForLoadState('networkidle');
-    const title = before.replace(/^(Save|Unsave) /, '');
-    const label = await heart.getAttribute('aria-label');
+    await expect.poll(async () => (await serverFavorites(page, vendorUser)).includes(opportunityId), { timeout: 45_000 }).toBe(!wasSaved);
     await page.reload();
-    await expect(page.getByRole('button', { name: label ?? '' }).first()).toBeVisible();
-    expect(title.length).toBeGreaterThan(0);
+    await expect(
+      page.getByRole('button', { name: !wasSaved ? /^Unsave / : /^Save / }).first(),
+    ).toBeVisible({ timeout: 45_000 });
+    await page.waitForTimeout(2_000);
+    expect((await serverFavorites(page, vendorUser)).includes(opportunityId)).toBe(!wasSaved);
   });
 
   test('deleting a saved search asks first and then removes it', async ({ page }) => {
@@ -50,6 +50,8 @@ test.describe('Vendor guards', () => {
     await page.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page.getByText('Saved search deleted.')).toBeVisible({ timeout: 45_000 });
     await expect(page.getByText(name)).toHaveCount(0);
+    const after = await restAs(page, vendorBUser, 'GET', '/marketplace/saved-searches');
+    expect(JSON.stringify(after.body), 'the delete persisted on the server').not.toContain(name);
   });
 
   test('sign out asks for confirmation', async ({ page }) => {

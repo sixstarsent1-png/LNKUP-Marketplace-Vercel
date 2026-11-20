@@ -74,7 +74,9 @@ export default function VendorHomeScreen() {
       else if (mode === "refresh") setRefreshing(true)
       setError(null)
       try {
-        const requestsResult = await fetchVendorRequests(auth, { force: mode !== "focus" })
+        // Writes and payment returns invalidate this cache, so only pull-to-refresh forces; first load
+        // shares the tab badge's in-flight request.
+        const requestsResult = await fetchVendorRequests(auth, { force: mode === "refresh" })
         setRequests(requestsResult.items)
         // The next step only needs bookings; rails, readiness and favorites fill in as they arrive.
         setLoading(false)

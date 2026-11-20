@@ -437,7 +437,8 @@ class LNKup_Saved_Searches {
 			}
 			if ( isset( $data['status'] ) ) {
 				$status = sanitize_key( (string) $data['status'] );
-				if ( in_array( $status, array( self::STATUS_ACTIVE, self::STATUS_PAUSED ), true ) ) {
+				// delete() soft-deletes through here; without STATUS_DELETED the row stayed active.
+				if ( in_array( $status, array( self::STATUS_ACTIVE, self::STATUS_PAUSED, self::STATUS_DELETED ), true ) ) {
 					$row['status'] = $status;
 				}
 			}

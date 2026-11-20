@@ -1,6 +1,6 @@
 import { test, expect, type Page, type TestInfo } from '@playwright/test';
 import path from 'node:path';
-import { appLogin, expectNoHorizontalOverflow, organizerUser, restAs, trackPageErrors } from './helpers/app-session';
+import { appLogin, appLogout, expectNoHorizontalOverflow, organizerUser, restAs, trackPageErrors } from './helpers/app-session';
 
 const shots = path.join(__dirname, '..', '..', 'scripts', 'e2e', 'reports', 'mobile-shots', 'after');
 
@@ -58,6 +58,33 @@ test.describe('Organizer vendors, money and more', () => {
     await expect(page.getByRole('button', { name: 'Cash out', exact: true })).toBeDisabled();
   });
 
+  test('a test-mode cash out is requested, listed, then cancelled with the balance restored', async ({ page }) => {
+    const orgB = process.env.PLAYWRIGHT_ORGANIZER_B_USER || 'e2e_org_b';
+    const before = await restAs(page, orgB, 'GET', '/financial/dashboard?role=organizer');
+    const available = Number((before.body as { available_balance?: number })?.available_balance ?? 0);
+    test.skip(available < 10, 'Seed did not give organizer B a test-mode balance');
+
+    await appLogout(page);
+    await appLogin(page, orgB);
+    await page.goto('/(organizer)/money');
+    await page.getByLabel('Cash out amount').fill('10');
+    await page.getByRole('button', { name: 'Cash out', exact: true }).click();
+    await page.getByRole('button', { name: 'Cash out', exact: true }).last().click();
+    await expect(page.getByText(/requested|cash ?out/i).first()).toBeVisible({ timeout: 45_000 });
+    const cancel = page.getByRole('button', { name: /^Cancel cash out of \$10/ });
+    await expect(cancel).toBeVisible({ timeout: 45_000 });
+
+    await cancel.click();
+    await page.getByRole('button', { name: 'Cancel cash out', exact: true }).click();
+    await expect(page.getByText('Cash out cancelled. Your balance was restored.')).toBeVisible({ timeout: 45_000 });
+    await expect
+      .poll(async () => {
+        const after = await restAs(page, orgB, 'GET', '/financial/dashboard?role=organizer');
+        return Number((after.body as { available_balance?: number })?.available_balance ?? 0);
+      }, { timeout: 45_000 })
+      .toBe(available);
+  });
+
   test('a Money deep link opens Vendors on the Awaiting payment filter', async ({ page }) => {
     await page.goto('/(organizer)/vendors?tab=requests&filter=awaiting_payment');
     const chip = page.getByRole('button', { name: /^Awaiting payment/ });
@@ -78,6 +105,20 @@ test.describe('Organizer vendors, money and more', () => {
       page.getByTestId('organizer-invites-list').or(page.getByText('No invites yet')),
     ).toBeVisible({ timeout: 45_000 });
     await snap(page, 'vendors-invites', testInfo);
+  });
+
+  test('Discover filters show as removable chips and the list ends honestly', async ({ page }) => {
+    await page.goto('/(organizer)/vendors?tab=discover');
+    await expect(page.getByRole('button', { name: /^View profile for / }).first()).toBeVisible({ timeout: 45_000 });
+    await page.getByRole('button', { name: /^Filters/ }).click();
+    await page.getByRole('button', { name: 'Verified only' }).click();
+    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    const chip = page.getByRole('button', { name: 'Remove filter Verified only' });
+    await expect(chip).toBeVisible();
+    await expect(page.getByText(/That’s every vendor matching your search|No vendors found/)).toBeVisible({ timeout: 45_000 });
+    await chip.click();
+    await expect(chip).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^View profile for / }).first()).toBeVisible({ timeout: 45_000 });
   });
 
   test('More is grouped and sign out asks before ending the session', async ({ page }, testInfo) => {

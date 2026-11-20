@@ -27,6 +27,17 @@ test.describe('Vendor experience', () => {
     await snap(page, 'home', testInfo);
   });
 
+  test('Home loads bookings once, sharing the tab badge request', async ({ page }) => {
+    const calls: string[] = [];
+    page.on('request', (r) => {
+      if (/\/applications\/vendor(\?|$)/.test(r.url())) calls.push(r.url());
+    });
+    await page.goto('/(vendor)');
+    await expect(page.getByTestId('vendor-next-step')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByRole('heading', { name: 'Recommended for you' })).toBeVisible({ timeout: 45_000 });
+    expect(calls, 'one bookings request on a cold Home load').toHaveLength(1);
+  });
+
   test('Explore cards show honest apply states', async ({ page }, testInfo) => {
     await page.goto('/(vendor)/find');
     await expect(page.getByRole('heading', { name: 'Explore' })).toBeVisible();

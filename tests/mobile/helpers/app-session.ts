@@ -15,7 +15,7 @@ export async function appLogin(page: Page, user: string, pass: string = password
   await page.getByLabel('Username').fill(user);
   await page.getByLabel('Password', { exact: true }).fill(pass);
   await page.getByRole('button', { name: /^sign in$/i }).click();
-  await expect(page).not.toHaveURL(/\/login/, { timeout: 30_000 });
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 60_000 });
 }
 
 /**

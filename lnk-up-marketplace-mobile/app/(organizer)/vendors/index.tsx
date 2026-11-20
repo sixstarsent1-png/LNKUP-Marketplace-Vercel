@@ -4,10 +4,15 @@ import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-ro
 import { ApproveIntelModal } from "@/components/organizer-vendors/approve-intel-modal"
 import { InvitesList } from "@/components/organizer-vendors/invites-list"
 import { fetchOrganizerInvites, type OrganizerInvite } from "@/lib/api/organizer-crm"
-import { DiscoverDirectory } from "@/components/organizer-vendors/discover-directory"
+import {
+  DirectoryCard,
+  DiscoverFooter,
+  DiscoverHeader,
+} from "@/components/organizer-vendors/discover-directory"
 import { InfoRequestSheet } from "@/components/organizer-vendors/info-request-sheet"
 import { InviteSheet } from "@/components/organizer-vendors/invite-sheet"
-import { RequestsQueue } from "@/components/organizer-vendors/requests-queue"
+import { OrganizerRequestCard } from "@/components/organizer-vendors/organizer-request-card"
+import { RequestsQueueHeader } from "@/components/organizer-vendors/requests-queue"
 import {
   EMPTY_DISCOVER_FILTERS,
   matchesFilter,
@@ -16,10 +21,11 @@ import {
   type FilterKey,
   type SegmentKey,
 } from "@/components/organizer-vendors/vendor-queue"
-import { Screen } from "@/components/screen"
+import { ScreenList } from "@/components/screen"
 import { InlineBanner } from "@/components/ui/banner"
 import { SegmentedControl, type ChipOption } from "@/components/ui/chip"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
+import { isAbortError } from "@/lib/api/wp-client"
 import {
   fetchApplicationIntel,
   fetchOrganizerRequests,
@@ -39,15 +45,18 @@ import { promptText, showToast } from "@/lib/feedback/feedback"
 
 export default function OrganizerVendorsScreen() {
   const { auth } = useAuth()
-  const { event: eventParam, tab: tabParam, filter: filterParam } = useLocalSearchParams<{
+  const {
+    event: eventParam,
+    tab: tabParam,
+    filter: filterParam,
+  } = useLocalSearchParams<{
     event?: string
     tab?: string
     filter?: string
   }>()
   const eventFilter = typeof eventParam === "string" && eventParam ? eventParam : null
 
-  const initialSegment: SegmentKey =
-    tabParam === "discover" || tabParam === "invites" ? tabParam : "requests"
+  const initialSegment: SegmentKey = tabParam === "discover" || tabParam === "invites" ? tabParam : "requests"
 
   const [segment, setSegment] = useState<SegmentKey>(initialSegment)
   const [filter, setFilter] = useState<FilterKey>(() => parseFilterKey(filterParam) ?? "review")
@@ -63,8 +72,7 @@ export default function OrganizerVendorsScreen() {
   const [items, setItems] = useState<OrganizerVendorRequest[]>([])
 
   const [discoverQuery, setDiscoverQuery] = useState("")
-  const [discoverFilters, setDiscoverFilters] =
-    useState<OrganizerDiscoverFilters>(EMPTY_DISCOVER_FILTERS)
+  const [discoverFilters, setDiscoverFilters] = useState<OrganizerDiscoverFilters>(EMPTY_DISCOVER_FILTERS)
   const [discoverLoading, setDiscoverLoading] = useState(false)
   const [discoverLoadingMore, setDiscoverLoadingMore] = useState(false)
   const [discoverError, setDiscoverError] = useState<AppErrorShape | null>(null)
@@ -77,6 +85,7 @@ export default function OrganizerVendorsScreen() {
   const [invitesLoading, setInvitesLoading] = useState(false)
   const [invitesError, setInvitesError] = useState<AppErrorShape | null>(null)
   const intelRequestRef = useRef<string | null>(null)
+  const discoverRef = useRef<AbortController | null>(null)
 
   const [intelItem, setIntelItem] = useState<OrganizerVendorRequest | null>(null)
   const [intel, setIntel] = useState<ApplicationIntel | null>(null)
@@ -106,6 +115,11 @@ export default function OrganizerVendorsScreen() {
 
   const loadDiscover = useCallback(
     async (query: string, page = 1, append = false, filters = discoverFilters) => {
+      // A new search cancels the one in flight so an older, slower page can't overwrite it.
+      discoverRef.current?.abort()
+      const controller = new AbortController()
+      discoverRef.current = controller
+      const isCurrent = () => discoverRef.current === controller
       if (append) setDiscoverLoadingMore(true)
       else setDiscoverLoading(true)
       setDiscoverError(null)
@@ -116,21 +130,37 @@ export default function OrganizerVendorsScreen() {
           scope: "discover",
           page,
           filters,
+          signal: controller.signal,
         })
-        setDirectory((prev) => (append ? [...prev, ...result.items] : result.items))
+        if (!isCurrent()) return
+        setDirectory((prev) => {
+          if (!append) return result.items
+          const seen = new Set(prev.map((vendor) => vendor.id))
+          return [...prev, ...result.items.filter((vendor) => !seen.has(vendor.id))]
+        })
         setDiscoverPage(result.page)
         setDiscoverPages(result.pages)
         setDiscoverTotal(result.total)
       } catch (err) {
-        setDiscoverError(appErrorFromWp(err))
-        if (!append) setDirectory([])
+        if (isAbortError(err) || !isCurrent()) return
+        if (append) {
+          showToast(`Couldn't load more vendors. ${appErrorFromWp(err).message}`, "error")
+        } else {
+          setDiscoverError(appErrorFromWp(err))
+          setDirectory([])
+        }
       } finally {
-        setDiscoverLoading(false)
-        setDiscoverLoadingMore(false)
+        if (isCurrent()) {
+          discoverRef.current = null
+          setDiscoverLoading(false)
+          setDiscoverLoadingMore(false)
+        }
       }
     },
     [auth, discoverFilters],
   )
+
+  useEffect(() => () => discoverRef.current?.abort(), [])
 
   useFocusEffect(
     useCallback(() => {
@@ -213,11 +243,7 @@ export default function OrganizerVendorsScreen() {
     if (segment === "invites") void loadInvites()
   }, [segment, loadInvites])
 
-  async function runReview(
-    item: OrganizerVendorRequest,
-    action: OrganizerReviewAction,
-    reason?: string,
-  ) {
+  async function runReview(item: OrganizerVendorRequest, action: OrganizerReviewAction, reason?: string) {
     if (reviewInFlight.current) return
     reviewInFlight.current = true
     setActingId(item.id)
@@ -317,87 +343,127 @@ export default function OrganizerVendorsScreen() {
   function onRefresh() {
     if (segment === "discover") {
       setRefreshing(true)
-      void loadDiscover(discoverQuery, 1, false, discoverFilters).finally(() =>
-        setRefreshing(false),
-      )
+      void loadDiscover(discoverQuery, 1, false, discoverFilters).finally(() => setRefreshing(false))
       return
     }
     void loadRequests("refresh")
   }
 
   const intelProfileId = intelItem?.vendorProfileId
+  const discoverHasMore = discoverPage < discoverPages
 
-  return (
-    <Screen
-      title="Vendors"
-      subtitle="Review requests and discover vendors"
-      keyboardAvoiding={segment === "discover"}
-      refreshing={refreshing}
-      onRefresh={onRefresh}
-    >
-      {eventFilter ? (
-        <InlineBanner
-          tone="attention"
-          title="Filtered to one event"
-          message={eventLabel ?? ""}
-          actionLabel="Clear"
-          onAction={clearEventFilter}
-        />
-      ) : null}
+  const rows = useMemo<VendorRow[]>(() => {
+    if (segment === "requests")
+      return loading && items.length === 0 ? [] : visible.map((item) => ({ kind: "request", item }))
+    if (segment === "discover") return directory.map((vendor) => ({ kind: "vendor", vendor }))
+    return []
+  }, [segment, loading, items.length, visible, directory])
 
-      <SegmentedControl options={segmentOptions} value={segment} onChange={setSegment} />
+  function loadMoreDiscover() {
+    if (segment !== "discover" || !discoverHasMore || discoverLoading || discoverLoadingMore) return
+    void loadDiscover(discoverQuery, discoverPage + 1, true, discoverFilters)
+  }
 
-      {segment === "requests" ? (
-        <RequestsQueue
-          loading={loading}
-          error={error}
-          hasItems={items.length > 0}
-          visible={visible}
-          filter={filter}
-          filterCounts={filterCounts}
-          eventFiltered={Boolean(eventFilter)}
-          actingId={actingId}
-          onFilterChange={setFilter}
-          onRetry={() => void loadRequests("refresh")}
-          onClearEventFilter={clearEventFilter}
-          onDiscover={() => setSegment("discover")}
+  function renderRow(row: VendorRow) {
+    if (row.kind === "request") {
+      const item = row.item
+      return (
+        <OrganizerRequestCard
+          item={item}
+          acting={actingId === item.id}
           onReview={handleReview}
           onRequestInfo={setInfoItem}
-        />
-      ) : null}
-
-      {segment === "discover" ? (
-        <DiscoverDirectory
-          query={discoverQuery}
-          onQueryChange={setDiscoverQuery}
-          filters={discoverFilters}
-          onFiltersChange={setDiscoverFilters}
-          activeFilterCount={activeFilterCount}
-          loading={discoverLoading}
-          loadingMore={discoverLoadingMore}
-          error={discoverError}
-          directory={directory}
-          total={discoverTotal}
-          hasMore={discoverPage < discoverPages}
-          invitingId={null}
-          onRetry={() => void loadDiscover(discoverQuery, 1, false, discoverFilters)}
-          onLoadMore={() =>
-            void loadDiscover(discoverQuery, discoverPage + 1, true, discoverFilters)
+          onOpenProfile={
+            item.vendorProfileId
+              ? () => router.push(vendorProfileHref(item.vendorProfileId!, item.id) as Href)
+              : undefined
           }
-          onInvite={handleInvite}
         />
-      ) : null}
+      )
+    }
+    return <DirectoryCard vendor={row.vendor} onInvite={handleInvite} />
+  }
 
-      {segment === "invites" ? (
-        <InvitesList
-          invites={invites}
-          loading={invitesLoading}
-          error={invitesError}
-          eventFilter={eventFilter}
-          onRetry={() => void loadInvites(true)}
-          onDiscover={() => setSegment("discover")}
-        />
-      ) : null}
+  return (
+    <>
+      <ScreenList
+        title="Vendors"
+        subtitle="Review requests and discover vendors"
+        keyboardAvoiding={segment === "discover"}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        data={rows}
+        keyExtractor={(row) => (row.kind === "request" ? `r-${row.item.id}` : `v-${row.vendor.id}`)}
+        renderItem={renderRow}
+        onEndReached={loadMoreDiscover}
+        listFooter={
+          segment === "discover" ? (
+            <DiscoverFooter
+              count={directory.length}
+              hasMore={discoverHasMore}
+              loadingMore={discoverLoadingMore}
+              onLoadMore={loadMoreDiscover}
+            />
+          ) : null
+        }
+        listHeader={
+          <>
+            {eventFilter ? (
+              <InlineBanner
+                tone="attention"
+                title="Filtered to one event"
+                message={eventLabel ?? ""}
+                actionLabel="Clear"
+                onAction={clearEventFilter}
+              />
+            ) : null}
+
+            <SegmentedControl options={segmentOptions} value={segment} onChange={setSegment} />
+
+            {segment === "requests" ? (
+              <RequestsQueueHeader
+                loading={loading}
+                error={error}
+                hasItems={items.length > 0}
+                visibleCount={visible.length}
+                filter={filter}
+                filterCounts={filterCounts}
+                eventFiltered={Boolean(eventFilter)}
+                onFilterChange={setFilter}
+                onRetry={() => void loadRequests("refresh")}
+                onClearEventFilter={clearEventFilter}
+                onDiscover={() => setSegment("discover")}
+              />
+            ) : null}
+
+            {segment === "discover" ? (
+              <DiscoverHeader
+                query={discoverQuery}
+                onQueryChange={setDiscoverQuery}
+                filters={discoverFilters}
+                onFiltersChange={setDiscoverFilters}
+                activeFilterCount={activeFilterCount}
+                loading={discoverLoading}
+                error={discoverError}
+                count={directory.length}
+                total={discoverTotal}
+                onRetry={() => void loadDiscover(discoverQuery, 1, false, discoverFilters)}
+              />
+            ) : null}
+
+            {segment === "invites" ? (
+              <InvitesList
+                invites={invites}
+                loading={invitesLoading}
+                error={invitesError}
+                eventFilter={eventFilter}
+                onRetry={() => void loadInvites(true)}
+                onDiscover={() => setSegment("discover")}
+              />
+            ) : null}
+          </>
+        }
+      />
 
       <ApproveIntelModal
         item={intelItem}
@@ -439,6 +505,9 @@ export default function OrganizerVendorsScreen() {
           void loadRequests("refresh")
         }}
       />
-    </Screen>
+    </>
   )
 }
+
+type VendorRow =
+  { kind: "request"; item: OrganizerVendorRequest } | { kind: "vendor"; vendor: OrganizerDirectoryVendor }

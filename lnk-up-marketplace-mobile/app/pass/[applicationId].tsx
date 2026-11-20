@@ -15,20 +15,18 @@ import QRCode from "react-native-qrcode-svg"
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
-import {
-  PassBulletList,
-  PassDetailRow,
-  PassSectionCard,
-} from "@/components/pass-section-card"
+import { BackLink } from "@/components/ui/back-link"
+import { Button } from "@/components/ui/button"
+import { SectionTitle } from "@/components/ui/typography"
+import { PassBulletList, PassDetailRow, PassSectionCard } from "@/components/pass-section-card"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import { fetchVendorPass, type VendorEventPass } from "@/lib/api/vendor-pass"
 import type { VendorRequest } from "@/lib/api/vendor-requests"
 import { useAuth } from "@/lib/auth/auth-context"
-import { constrainedColumnStyle, useBreakpoint } from "@/lib/layout/use-breakpoint"
+import { constrainedColumnStyle } from "@/lib/layout/use-breakpoint"
 import { openExternalUrl } from "@/lib/navigation/open-external-url"
-import { safeBack } from "@/lib/navigation/safe-back"
 import { payBoothFee } from "@/lib/payments/stripe-checkout"
-import { colors, layout, radii, spacing } from "@/lib/theme"
+import { colors, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 const CONFIRMING_COPY = "Confirming your payment…"
 const CONFIRM_RETRY_MS = 3000
@@ -191,17 +189,13 @@ export default function EventPassScreen() {
   const showFullLoader = initialLoad && !pass
 
   const checkInLabel = pass?.checkInCode || (pass?.qrCodeUrl ? "QR ready" : null)
-  const stickyVisible =
-    Boolean(pass && pass.status === "unlocked" && checkInLabel && showStickyCheckIn)
+  const stickyVisible = Boolean(pass && pass.status === "unlocked" && checkInLabel && showStickyCheckIn)
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => safeBack(backFallback)} style={styles.back}>
-          <Text style={styles.backText}>Back</Text>
-        </Pressable>
-        <Text style={styles.headerTitle}>Event pass</Text>
-        <View style={styles.backSpacer} />
+      <View style={[styles.header, constrainedColumnStyle(layout.contentMaxWidth)]}>
+        <BackLink label="Back" fallbackHref={backFallback} />
+        <SectionTitle accessibilityRole="header">Event pass</SectionTitle>
       </View>
 
       {stickyVisible ? (
@@ -215,10 +209,7 @@ export default function EventPassScreen() {
 
       <ScrollView
         style={styles.body}
-        contentContainerStyle={[
-          styles.bodyContent,
-          constrainedColumnStyle(layout.contentMaxWidth),
-        ]}
+        contentContainerStyle={[styles.bodyContent, constrainedColumnStyle(layout.contentMaxWidth)]}
         scrollEventThrottle={16}
         onScroll={(event) => {
           if (!pass || pass.status !== "unlocked" || !checkInLabel) {
@@ -237,7 +228,7 @@ export default function EventPassScreen() {
           />
         }
       >
-        {showFullLoader ? <LoadingPanel label="Loading pass…" /> : null}
+        {showFullLoader ? <LoadingPanel label="Loading pass…" variant="skeleton" /> : null}
 
         {!showFullLoader && error && !pass ? (
           <ErrorPanel title={error.title} message={error.message} onAction={() => void load("refresh")} />
@@ -266,11 +257,7 @@ export default function EventPassScreen() {
             {error ? <Text style={styles.inlineError}>{error.message}</Text> : null}
 
             {pass.status === "locked" ? (
-              <LockedPassBody
-                pass={pass}
-                paying={paying}
-                onPay={() => void handlePay()}
-              />
+              <LockedPassBody pass={pass} paying={paying} onPay={() => void handlePay()} />
             ) : (
               <UnlockedPassBody
                 pass={pass}
@@ -298,11 +285,7 @@ function PressableContactRow({
   last?: boolean
 }) {
   const emailMatch = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
-  const href = phone
-    ? `tel:${phone}`
-    : emailMatch
-      ? `mailto:${emailMatch[0]}`
-      : undefined
+  const href = phone ? `tel:${phone}` : emailMatch ? `mailto:${emailMatch[0]}` : undefined
 
   if (!href) {
     return <PassDetailRow label={label} value={value} last={last} />
@@ -327,9 +310,6 @@ function LockedPassBody({
   const meta = eventMeta(pass)
   const amount = pass.amountDueFormatted
   const canPay = Boolean(pass.paymentId)
-  const payDisabled = paying || !canPay
-  const { primaryButtonPaddingVertical } = useBreakpoint()
-
   return (
     <>
       <View style={styles.lockedHero}>
@@ -340,32 +320,27 @@ function LockedPassBody({
         {meta ? <Text style={styles.lockedMeta}>{meta}</Text> : null}
         {pass.message ? <Text style={styles.lockedMessage}>{pass.message}</Text> : null}
         {amount ? <Text style={styles.amountDue}>{amount} due</Text> : null}
-        <Pressable
-          style={[
-            styles.primaryBtn,
-            { paddingVertical: primaryButtonPaddingVertical },
-            payDisabled && styles.disabled,
-          ]}
-          disabled={payDisabled}
+        <Button
+          label={amount ? `Pay ${amount}` : "Pay now"}
+          loadingLabel="Opening checkout…"
+          icon="card-outline"
+          fullWidth
+          loading={paying}
+          disabled={!canPay}
           onPress={onPay}
-          accessibilityRole="button"
-        >
-          <Text style={styles.primaryBtnText}>
-            {paying ? "Paying…" : amount ? `Pay ${amount}` : "Pay now"}
-          </Text>
-        </Pressable>
+          style={styles.payButton}
+        />
         {!canPay ? (
           <Text style={styles.payHint}>
-            Payment isn’t ready yet. Pull to refresh, or check Wallet / Requests in a moment.
+            Payment isn’t ready yet. Pull to refresh, or check Wallet in a moment.
           </Text>
         ) : null}
-        <Pressable
+        <Button
+          label="View in Wallet"
+          variant="ghost"
+          size="sm"
           onPress={() => router.push("/(vendor)/wallet" as Href)}
-          accessibilityRole="link"
-          hitSlop={8}
-        >
-          <Text style={styles.walletLink}>View in Wallet</Text>
-        </Pressable>
+        />
       </View>
 
       {pass.unlocks.length > 0 ? (
@@ -401,11 +376,7 @@ function UnlockedPassBody({
     pass.loadInGate
 
   const hasBooth =
-    pass.boothAssignment ||
-    pass.boothZone ||
-    pass.boothDimensions ||
-    pass.powerDetails ||
-    pass.waterDetails
+    pass.boothAssignment || pass.boothZone || pass.boothDimensions || pass.powerDetails || pass.waterDetails
 
   const hasRules =
     pass.vendorRules.length > 0 ||
@@ -431,13 +402,10 @@ function UnlockedPassBody({
     pass.emergencyContact
 
   const hasReadiness =
-    pass.readinessPercent != null ||
-    pass.readinessLabel ||
-    pass.readinessMissing.length > 0
+    pass.readinessPercent != null || pass.readinessLabel || pass.readinessMissing.length > 0
 
   const readinessIncomplete =
-    (pass.readinessPercent != null && pass.readinessPercent < 100) ||
-    pass.readinessMissing.length > 0
+    (pass.readinessPercent != null && pass.readinessPercent < 100) || pass.readinessMissing.length > 0
 
   const canDirections = Boolean(pass.venueAddress || pass.mapUrl)
 
@@ -469,10 +437,7 @@ function UnlockedPassBody({
 
   return (
     <>
-      <View
-        style={styles.unlockedHero}
-        onLayout={(event) => onHeroLayout?.(event.nativeEvent.layout.height)}
-      >
+      <View style={styles.unlockedHero} onLayout={(event) => onHeroLayout?.(event.nativeEvent.layout.height)}>
         <View style={styles.readyBadge}>
           <Text style={styles.readyBadgeText}>Ready</Text>
         </View>
@@ -495,9 +460,7 @@ function UnlockedPassBody({
                 accessibilityLabel="Check-in QR code"
               />
             ) : null}
-            {pass.checkInCode ? (
-              <Text style={styles.checkInCode}>{pass.checkInCode}</Text>
-            ) : null}
+            {pass.checkInCode ? <Text style={styles.checkInCode}>{pass.checkInCode}</Text> : null}
             <Text style={styles.checkInHint}>Show this at check-in</Text>
           </View>
         ) : null}
@@ -506,34 +469,30 @@ function UnlockedPassBody({
       {canDirections || callPhone ? (
         <View style={styles.actionRow}>
           {canDirections ? (
-            <Pressable
-              style={[styles.actionBtn, styles.actionBtnLime, !callPhone && styles.actionBtnFlex]}
+            <Button
+              label="Get directions"
+              icon="navigate-outline"
+              variant="accent"
+              style={styles.actionBtnFlex}
               onPress={() => {
                 const url =
-                  pass.mapUrl ||
-                  `https://maps.google.com/?q=${encodeURIComponent(pass.venueAddress || "")}`
+                  pass.mapUrl || `https://maps.google.com/?q=${encodeURIComponent(pass.venueAddress || "")}`
                 void openExternalUrl(url, "directions")
               }}
-              accessibilityRole="button"
-            >
-              <Text style={styles.actionBtnTextDark}>Get directions</Text>
-            </Pressable>
+            />
           ) : null}
           {callPhone ? (
-            <Pressable
-              style={[styles.actionBtn, styles.actionBtnDark, !canDirections && styles.actionBtnFlex]}
+            <Button
+              label="Call day-of"
+              icon="call-outline"
+              style={styles.actionBtnFlex}
               onPress={() => void openExternalUrl(`tel:${callPhone}`, "phone")}
-              accessibilityRole="button"
-            >
-              <Text style={styles.actionBtnTextLight}>Call day-of</Text>
-            </Pressable>
+            />
           ) : null}
         </View>
       ) : null}
 
-      {pass.emptyMessage ? (
-        <Text style={styles.emptyHint}>{pass.emptyMessage}</Text>
-      ) : null}
+      {pass.emptyMessage ? <Text style={styles.emptyHint}>{pass.emptyMessage}</Text> : null}
 
       {hasArrival ? (
         <PassSectionCard title="Arrival">
@@ -626,22 +585,19 @@ function UnlockedPassBody({
             {pass.readinessPercent != null ? (
               <Text style={styles.readinessPct}>{pass.readinessPercent}%</Text>
             ) : null}
-            {pass.readinessLabel ? (
-              <Text style={styles.readinessLabel}>{pass.readinessLabel}</Text>
-            ) : null}
+            {pass.readinessLabel ? <Text style={styles.readinessLabel}>{pass.readinessLabel}</Text> : null}
             {pass.readinessRiskBucket ? (
               <Text style={styles.readinessBucket}>{pass.readinessRiskBucket.toUpperCase()}</Text>
             ) : null}
           </View>
           <PassBulletList items={pass.readinessMissing} />
           {readinessIncomplete ? (
-            <Pressable
-              style={styles.docsCta}
+            <Button
+              label="Upload documents"
+              icon="document-text-outline"
+              variant="secondary"
               onPress={() => router.push("/(vendor)/documents" as Href)}
-              accessibilityRole="button"
-            >
-              <Text style={styles.docsCtaText}>Upload documents</Text>
-            </Pressable>
+            />
           ) : null}
         </PassSectionCard>
       ) : null}
@@ -695,27 +651,12 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.gray200,
-  },
-  back: {
-    minWidth: 56,
-  },
-  backSpacer: {
-    minWidth: 56,
-  },
-  backText: {
-    fontWeight: "600",
-    color: colors.gray700,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontWeight: "700",
-    fontSize: 16,
-    color: colors.black,
   },
   stickyCheckIn: {
     flexDirection: "row",
@@ -730,13 +671,13 @@ const styles = StyleSheet.create({
   },
   stickyCode: {
     flex: 1,
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontWeight: "800",
     letterSpacing: 1.2,
     color: colors.white,
   },
   stickyHint: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "600",
     color: colors.gray400,
   },
@@ -770,17 +711,17 @@ const styles = StyleSheet.create({
   },
   attentionText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "700",
     color: colors.black,
   },
   dismiss: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "600",
     color: colors.gray700,
   },
   inlineError: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.red600,
   },
   lockedHero: {
@@ -792,55 +733,35 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   lockedEyebrow: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "800",
     letterSpacing: 0.8,
     textTransform: "uppercase",
     color: colors.amber700,
   },
   lockedTitle: {
-    fontSize: 22,
+    fontSize: typeScale.title,
     fontWeight: "800",
     color: colors.black,
   },
   lockedMeta: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.gray700,
   },
   lockedMessage: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.gray700,
     lineHeight: 20,
   },
   amountDue: {
     marginTop: spacing.xs,
-    fontSize: 22,
+    fontSize: typeScale.title,
     fontWeight: "800",
     color: colors.amber700,
   },
-  primaryBtn: {
-    marginTop: spacing.sm,
-    backgroundColor: colors.black,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-  },
-  primaryBtnText: {
-    color: colors.white,
-    fontWeight: "700",
-    fontSize: 15,
-  },
-  walletLink: {
-    marginTop: spacing.xs,
-    textAlign: "center",
-    fontSize: 14,
-    fontWeight: "600",
-    color: colors.gray700,
-    textDecorationLine: "underline",
-  },
   payHint: {
     marginTop: spacing.sm,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     lineHeight: 18,
     color: colors.gray700,
     textAlign: "center",
@@ -850,7 +771,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   unlocksTitle: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "700",
     color: colors.gray500,
     textTransform: "uppercase",
@@ -870,19 +791,19 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   readyBadgeText: {
-    fontSize: 11,
+    fontSize: typeScale.micro,
     fontWeight: "800",
     letterSpacing: 0.6,
     textTransform: "uppercase",
     color: colors.black,
   },
   unlockedTitle: {
-    fontSize: 22,
+    fontSize: typeScale.title,
     fontWeight: "800",
     color: colors.white,
   },
   unlockedMeta: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.gray400,
   },
   qrHero: {
@@ -902,13 +823,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   checkInCode: {
-    fontSize: 20,
+    fontSize: typeScale.headline,
     fontWeight: "800",
     letterSpacing: 2,
     color: colors.white,
   },
   checkInHint: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "600",
     color: colors.gray400,
   },
@@ -916,35 +837,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing.sm,
   },
-  actionBtn: {
-    flex: 1,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
+  payButton: {
+    marginTop: spacing.sm,
   },
   actionBtnFlex: {
     flex: 1,
   },
-  actionBtnLime: {
-    backgroundColor: colors.lime,
-  },
-  actionBtnDark: {
-    backgroundColor: colors.black,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-  },
-  actionBtnTextDark: {
-    color: colors.black,
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  actionBtnTextLight: {
-    color: colors.white,
-    fontWeight: "700",
-    fontSize: 14,
-  },
   emptyHint: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.gray500,
     lineHeight: 20,
   },
@@ -959,7 +859,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   subhead: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "700",
     color: colors.gray700,
     textTransform: "uppercase",
@@ -972,35 +872,19 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   readinessPct: {
-    fontSize: 28,
+    fontSize: typeScale.display,
     fontWeight: "800",
     color: colors.black,
   },
   readinessLabel: {
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontWeight: "600",
     color: colors.gray700,
   },
   readinessBucket: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "800",
     color: colors.gray500,
     letterSpacing: 0.6,
-  },
-  docsCta: {
-    marginTop: spacing.md,
-    alignSelf: "flex-start",
-    backgroundColor: colors.black,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  docsCtaText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  disabled: {
-    opacity: 0.6,
   },
 })
