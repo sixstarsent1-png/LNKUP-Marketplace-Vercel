@@ -72,9 +72,9 @@ export default function OrganizerMoneyScreen() {
   summaryRef.current = summary
 
   const load = useCallback(
-    async (mode: "initial" | "refresh" = "initial") => {
+    async (mode: "initial" | "focus" | "refresh" = "initial") => {
       if (mode === "refresh") setRefreshing(true)
-      else setLoading(true)
+      else if (mode === "initial") setLoading(true)
       setError(null)
       setRefreshError(null)
       const force = mode === "refresh"
@@ -93,7 +93,7 @@ export default function OrganizerMoneyScreen() {
         setEvents(eventMoney)
       } catch (err) {
         const shaped = appErrorFromWp(err)
-        if (mode === "refresh" && summaryRef.current) {
+        if (mode !== "initial" && summaryRef.current) {
           setRefreshError(shaped.message)
         } else {
           setError(shaped)
@@ -109,7 +109,7 @@ export default function OrganizerMoneyScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const mode = didFocusLoad.current ? "refresh" : "initial"
+      const mode = didFocusLoad.current ? "focus" : "initial"
       didFocusLoad.current = true
       void load(mode)
     }, [load]),

@@ -1,3 +1,4 @@
+import { memo } from "react"
 import { StyleSheet, View } from "react-native"
 import { router, type Href } from "expo-router"
 
@@ -34,7 +35,13 @@ function Metric({ value, label, attention }: { value: number; label: string; att
 }
 
 /** Organizer event card: image, listing state, where/when, and the counts that need action. */
-export function OrganizerEventCard({ event, showStatus = true }: { event: OrganizerEventLite; showStatus?: boolean }) {
+export const OrganizerEventCard = memo(function OrganizerEventCard({
+  event,
+  showStatus = true,
+}: {
+  event: OrganizerEventLite
+  showStatus?: boolean
+}) {
   const state = eventListingState(event)
   const toReview = event.toReviewCount ?? 0
   const due = event.paymentRequiredCount ?? 0
@@ -88,7 +95,7 @@ export function OrganizerEventCard({ event, showStatus = true }: { event: Organi
       </PressableScale>
     </Surface>
   )
-}
+})
 
 const styles = StyleSheet.create({
   card: { gap: spacing.md },

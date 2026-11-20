@@ -226,9 +226,9 @@ export default function OrganizerHomeScreen() {
   summaryRef.current = summary
 
   const load = useCallback(
-    async (mode: "initial" | "refresh" = "initial") => {
+    async (mode: "initial" | "focus" | "refresh" = "initial") => {
       if (mode === "refresh") setRefreshing(true)
-      else setLoading(true)
+      else if (mode === "initial") setLoading(true)
       setError(null)
       setRefreshError(null)
       setSecondaryNote(null)
@@ -305,7 +305,7 @@ export default function OrganizerHomeScreen() {
         }
       } catch (err) {
         const shaped = appErrorFromWp(err)
-        if (mode === "refresh" && summaryRef.current) {
+        if (mode !== "initial" && summaryRef.current) {
           setRefreshError(shaped.message)
         } else {
           setError(shaped)
@@ -320,7 +320,7 @@ export default function OrganizerHomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const mode = didFocusLoad.current ? "refresh" : "initial"
+      const mode = didFocusLoad.current ? "focus" : "initial"
       didFocusLoad.current = true
       void load(mode)
     }, [load]),
