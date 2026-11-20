@@ -1,18 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-} from "react-native"
-import { AppText as Text } from "@/components/ui/app-text"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { StyleSheet, View } from "react-native"
 import * as DocumentPicker from "expo-document-picker"
 
+import { IsoDatePickerField } from "@/components/iso-date-picker-field"
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { Screen } from "@/components/screen"
+import { AppIcon } from "@/components/ui/app-icon"
 import { BackLink } from "@/components/ui/back-link"
+import { InlineBanner } from "@/components/ui/banner"
+import { BottomSheet } from "@/components/ui/bottom-sheet"
+import { Button } from "@/components/ui/button"
+import { FilterChip } from "@/components/ui/chip"
+import { SectionHeader } from "@/components/ui/section-header"
+import { StatusBadge } from "@/components/ui/status-badge"
+import { Surface } from "@/components/ui/surface"
+import { Body, Eyebrow, Meta, SectionTitle } from "@/components/ui/typography"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import {
   DOCUMENT_TYPE_OPTIONS,
@@ -22,30 +24,28 @@ import {
   shareVendorDocument,
   uploadVendorDocument,
   type VendorDocumentRecord,
-  type VendorDocumentStatus,
 } from "@/lib/api/vendor-documents"
 import { useAuth } from "@/lib/auth/auth-context"
 import { showToast } from "@/lib/feedback/feedback"
+import { formatShortDate } from "@/lib/format/date"
+import {
+  canUploadDocument,
+  documentExpiry,
+  documentStatusTone,
+  requiredDocumentProgress,
+} from "@/lib/vendor/document-status"
 import { colors, radii, spacing, typeScale } from "@/lib/theme"
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
-
-function statusColor(status: VendorDocumentStatus): string {
-  switch (status) {
-    case "approved":
-      return colors.green700
-    case "pending":
-      return colors.amber700
-    case "rejected":
-    case "expired":
-      return colors.red600
-    default:
-      return colors.gray500
-  }
-}
 
 function hasFile(item: VendorDocumentRecord): boolean {
   return Boolean(item.id && !item.id.startsWith("type-") && item.status !== "missing")
+}
+
+type PendingUpload = {
+  documentType: string
+  label: string
+  uri: string
+  fileName: string
+  mimeType?: string
 }
 
 export default function VendorDocumentsScreen() {
@@ -59,45 +59,36 @@ export default function VendorDocumentsScreen() {
   const uploadInFlight = useRef(false)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
-  const [pendingUpload, setPendingUpload] = useState<{
-    documentType: string
-    uri: string
-    fileName: string
-    mimeType?: string
-  } | null>(null)
+  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null)
   const [expirationDate, setExpirationDate] = useState("")
+  const itemsRef = useRef<VendorDocumentRecord[]>([])
+  itemsRef.current = items
 
   const load = useCallback(
     async (mode: "initial" | "soft" = "initial") => {
-      const hasItems = items.length > 0
-      if (mode === "soft" && hasItems) {
-        setRefreshing(true)
-      } else {
-        setLoading(true)
-      }
+      const hasItems = itemsRef.current.length > 0
+      if (mode === "soft" && hasItems) setRefreshing(true)
+      else setLoading(true)
       setError(null)
       try {
         const result = await fetchVendorDocuments(auth)
         setItems(result.items)
       } catch (err) {
         setError(appErrorFromWp(err))
-        if (!(mode === "soft" && hasItems)) {
-          setItems([])
-        }
+        if (!(mode === "soft" && hasItems)) setItems([])
       } finally {
         setLoading(false)
         setRefreshing(false)
       }
     },
-    [auth, items.length],
+    [auth],
   )
 
   useEffect(() => {
     void load("initial")
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once; auth changes remount via load deps in practice
-  }, [auth])
+  }, [load])
 
-  async function pickAndUpload(documentType: string) {
+  async function pickAndUpload(documentType: string, label: string) {
     if (pickingRef.current || uploadingType || pendingUpload) return
     pickingRef.current = true
     setUploadMessage(null)
@@ -107,27 +98,22 @@ export default function VendorDocumentsScreen() {
         copyToCacheDirectory: true,
         multiple: false,
       })
-
-      if (picked.canceled || !picked.assets?.[0]) {
-        return
-      }
-
+      if (picked.canceled || !picked.assets?.[0]) return
       const asset = picked.assets[0]
       if (asset.size != null && asset.size > MAX_DOCUMENT_UPLOAD_BYTES) {
-        setUploadMessage("File must be 10MB or smaller.")
+        setUploadMessage("That file is over 10 MB. Choose a smaller PDF or photo.")
         return
       }
-
       setExpirationDate("")
       setPendingUpload({
         documentType,
+        label,
         uri: asset.uri,
         fileName: asset.name || `${documentType}.pdf`,
         mimeType: asset.mimeType || "application/pdf",
       })
     } catch (err) {
-      const shaped = appErrorFromWp(err)
-      setUploadMessage(shaped.message)
+      setUploadMessage(appErrorFromWp(err).message)
     } finally {
       pickingRef.current = false
     }
@@ -135,12 +121,6 @@ export default function VendorDocumentsScreen() {
 
   async function confirmUpload() {
     if (!pendingUpload || uploadInFlight.current) return
-    const exp = expirationDate.trim()
-    if (exp && !ISO_DATE.test(exp)) {
-      showToast("Use YYYY-MM-DD for the expiration date, or leave it blank.", "error")
-      return
-    }
-
     uploadInFlight.current = true
     setUploadingType(pendingUpload.documentType)
     try {
@@ -150,7 +130,7 @@ export default function VendorDocumentsScreen() {
           uri: pendingUpload.uri,
           fileName: pendingUpload.fileName,
           mimeType: pendingUpload.mimeType,
-          expirationDate: exp || undefined,
+          expirationDate: expirationDate.trim() || undefined,
         },
         auth,
       )
@@ -160,8 +140,7 @@ export default function VendorDocumentsScreen() {
       setExpirationDate("")
       await load("soft")
     } catch (err) {
-      const shaped = appErrorFromWp(err)
-      setUploadMessage(`Upload failed. ${shaped.message}`)
+      setUploadMessage(`Upload failed. ${appErrorFromWp(err).message}`)
     } finally {
       uploadInFlight.current = false
       setUploadingType(null)
@@ -181,7 +160,11 @@ export default function VendorDocumentsScreen() {
     }
   }
 
+  const progress = useMemo(() => requiredDocumentProgress(items), [items])
+  const listedTypes = useMemo(() => new Set(items.map((item) => item.type)), [items])
+  const otherTypes = DOCUMENT_TYPE_OPTIONS.filter((opt) => !listedTypes.has(opt.value)).slice(0, 8)
   const showInitialLoader = loading && items.length === 0
+  const allClear = progress.required > 0 && progress.approved === progress.required
 
   return (
     <Screen
@@ -189,9 +172,8 @@ export default function VendorDocumentsScreen() {
       subtitle="Upload once. Reuse across events."
       refreshing={refreshing}
       onRefresh={() => void load("soft")}
+      header={<BackLink label="Profile" fallbackHref="/(vendor)/more" />}
     >
-      <BackLink label="Profile" fallbackHref="/(vendor)/more" />
-
       {showInitialLoader ? <LoadingPanel label="Loading documents…" variant="skeleton" count={3} /> : null}
 
       {!showInitialLoader && error && items.length === 0 ? (
@@ -199,293 +181,259 @@ export default function VendorDocumentsScreen() {
       ) : null}
 
       {error && items.length > 0 ? (
-        <Text style={styles.refreshError}>Couldn't refresh. Pull to try again.</Text>
+        <InlineBanner
+          tone="error"
+          message={`Couldn't refresh documents. ${error.message}`}
+          actionLabel="Retry"
+          onAction={() => void load("soft")}
+        />
       ) : null}
 
-      {uploadMessage ? <Text style={styles.message}>{uploadMessage}</Text> : null}
+      {uploadMessage ? <InlineBanner tone="error" message={uploadMessage} /> : null}
+
+      {!showInitialLoader && progress.required > 0 ? (
+        <Surface variant={allClear ? "hero" : progress.attention > 0 ? "urgent" : "default"} style={styles.summary}>
+          <Eyebrow>Compliance</Eyebrow>
+          <SectionTitle>
+            {progress.approved} of {progress.required} required documents approved
+          </SectionTitle>
+          <View style={styles.track} accessibilityElementsHidden>
+            <View
+              style={[styles.fill, { width: `${Math.round((progress.approved / progress.required) * 100)}%` }]}
+            />
+          </View>
+          <Meta>
+            {allClear
+              ? "You're cleared for event check-in."
+              : progress.attention > 0
+                ? `${progress.attention} need${progress.attention === 1 ? "s" : ""} your attention. Organizers check these before event day.`
+                : "The rest are being reviewed."}
+          </Meta>
+        </Surface>
+      ) : null}
 
       {!showInitialLoader && !error && items.length === 0 ? (
         <EmptyPanel
+          icon="document-text-outline"
           title="No documents yet"
-          message="Upload compliance documents to get approved faster."
+          message="Upload insurance, permits and licenses once — they're reused for every event you apply to."
         />
       ) : null}
 
       {items.length > 0 ? (
         <View style={styles.list}>
           {items.map((item) => (
-            <View key={item.id} style={styles.card}>
-              <View style={styles.row}>
-                <Text style={styles.title}>{item.label}</Text>
-                {item.required ? <Text style={styles.required}>Required</Text> : null}
-              </View>
-              <Text style={[styles.status, { color: statusColor(item.status) }]}>
-                {documentStatusLabel(item.status)}
-              </Text>
-              {item.expiresAt ? <Text style={styles.meta}>Expires {item.expiresAt}</Text> : null}
-              {item.rejectionReason ? (
-                <Text style={styles.reject}>{item.rejectionReason}</Text>
-              ) : null}
-              <View style={styles.actions}>
-                {hasFile(item) ? (
-                  <Pressable
-                    style={styles.outlineBtn}
-                    disabled={downloadingId === item.id}
-                    onPress={() => void handleDownload(item)}
-                  >
-                    {downloadingId === item.id ? (
-                      <ActivityIndicator color={colors.black} />
-                    ) : (
-                      <Text style={styles.outlineText}>View / Share</Text>
-                    )}
-                  </Pressable>
-                ) : null}
-                {(item.status === "missing" ||
-                  item.status === "rejected" ||
-                  item.status === "expired" ||
-                  item.status === "pending") && (
-                  <Pressable
-                    style={[styles.uploadBtn, Boolean(uploadingType) && uploadingType !== item.type && styles.dimmed]}
-                    disabled={Boolean(uploadingType)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${item.status === "missing" ? "Upload" : "Replace"} ${item.label}`}
-                    onPress={() => void pickAndUpload(item.type)}
-                  >
-                    {uploadingType === item.type ? (
-                      <ActivityIndicator color={colors.black} />
-                    ) : (
-                      <Text style={styles.uploadText}>
-                        {item.status === "missing" ? "Upload" : "Replace"}
-                      </Text>
-                    )}
-                  </Pressable>
-                )}
-              </View>
-            </View>
-          ))}
-        </View>
-      ) : null}
-
-      {!showInitialLoader ? (
-        <View style={styles.addSection}>
-          <Text style={styles.addTitle}>Upload another type</Text>
-          {DOCUMENT_TYPE_OPTIONS.slice(0, 6).map((opt) => (
-            <Pressable
-              key={opt.value}
-              style={[styles.outline, Boolean(uploadingType) && uploadingType !== opt.value && styles.dimmed]}
-              disabled={Boolean(uploadingType)}
-              accessibilityRole="button"
-              accessibilityLabel={`Upload ${opt.label}`}
-              onPress={() => void pickAndUpload(opt.value)}
-            >
-              {uploadingType === opt.value ? (
-                <ActivityIndicator color={colors.black} />
-              ) : (
-                <Text style={styles.outlineText}>{opt.label}</Text>
-              )}
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
-
-      <Modal visible={Boolean(pendingUpload)} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Expiration date</Text>
-            <Text style={styles.modalBody}>
-              Optional. Use YYYY-MM-DD for permits and insurance that expire.
-            </Text>
-            <TextInput
-              value={expirationDate}
-              onChangeText={setExpirationDate}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.gray400}
-              autoCapitalize="none"
-              style={styles.modalInput}
+            <DocumentCard
+              key={item.id}
+              item={item}
+              downloading={downloadingId === item.id}
+              uploading={uploadingType === item.type}
+              uploadDisabled={Boolean(uploadingType) && uploadingType !== item.type}
+              onView={() => void handleDownload(item)}
+              onUpload={() => void pickAndUpload(item.type, item.label)}
             />
-            <View style={styles.modalActions}>
-              <Pressable
-                style={styles.modalCancel}
-                onPress={() => {
-                  setPendingUpload(null)
-                  setExpirationDate("")
-                }}
-              >
-                <Text style={styles.outlineText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={styles.uploadBtn}
-                disabled={Boolean(uploadingType)}
-                onPress={() => void confirmUpload()}
-              >
-                {uploadingType ? (
-                  <ActivityIndicator color={colors.black} />
-                ) : (
-                  <Text style={styles.uploadText}>Upload</Text>
-                )}
-              </Pressable>
-            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {!showInitialLoader && otherTypes.length > 0 ? (
+        <View style={styles.section}>
+          <SectionHeader title="Add another document" icon="add-circle-outline" />
+          <View style={styles.chips}>
+            {otherTypes.map((opt) => (
+              <FilterChip
+                key={opt.value}
+                label={opt.label}
+                onPress={() => void pickAndUpload(opt.value, opt.label)}
+                accessibilityLabel={`Upload ${opt.label}`}
+              />
+            ))}
           </View>
         </View>
-      </Modal>
+      ) : null}
+
+      <BottomSheet
+        visible={Boolean(pendingUpload)}
+        title={pendingUpload ? `Upload ${pendingUpload.label}` : "Upload document"}
+        onClose={() => {
+          if (uploadingType) return
+          setPendingUpload(null)
+          setExpirationDate("")
+        }}
+        footer={
+          <>
+            <Button
+              label="Cancel"
+              variant="secondary"
+              style={styles.flex}
+              disabled={Boolean(uploadingType)}
+              onPress={() => {
+                setPendingUpload(null)
+                setExpirationDate("")
+              }}
+            />
+            <Button
+              label="Upload"
+              loadingLabel="Uploading…"
+              style={styles.flex}
+              loading={Boolean(uploadingType)}
+              onPress={() => void confirmUpload()}
+            />
+          </>
+        }
+      >
+        <View style={styles.fileRow}>
+          <AppIcon name="document-attach-outline" size={20} color={colors.black} />
+          <Body numberOfLines={1} style={styles.flex}>
+            {pendingUpload?.fileName}
+          </Body>
+        </View>
+        <IsoDatePickerField label="Expiration date" value={expirationDate} onChange={setExpirationDate} optional />
+        <Meta>Add it for permits and insurance that expire, so we can remind you before they lapse.</Meta>
+      </BottomSheet>
     </Screen>
   )
 }
 
+function DocumentCard({
+  item,
+  downloading,
+  uploading,
+  uploadDisabled,
+  onView,
+  onUpload,
+}: {
+  item: VendorDocumentRecord
+  downloading: boolean
+  uploading: boolean
+  uploadDisabled: boolean
+  onView: () => void
+  onUpload: () => void
+}) {
+  const expiry = documentExpiry(item.expiresAt)
+  const expiresLabel = item.expiresAt ? formatShortDate(item.expiresAt) : undefined
+  return (
+    <Surface style={styles.card} testID={`document-${item.type}`}>
+      <View style={styles.cardHead}>
+        <View style={styles.iconWrap}>
+          <AppIcon name="document-text-outline" size={20} color={colors.black} />
+        </View>
+        <View style={styles.flex}>
+          <SectionTitle numberOfLines={2} style={styles.cardTitle}>
+            {item.label}
+          </SectionTitle>
+          <Meta>{item.required ? "Required by organizers" : "Optional"}</Meta>
+        </View>
+        <StatusBadge label={documentStatusLabel(item.status)} tone={documentStatusTone(item.status)} />
+      </View>
+
+      {expiresLabel ? (
+        <Meta style={expiry === "expired" ? styles.expired : expiry === "soon" ? styles.soon : undefined}>
+          {expiry === "expired" ? `Expired ${expiresLabel}` : `Expires ${expiresLabel}`}
+          {expiry === "soon" ? " · renew soon" : ""}
+        </Meta>
+      ) : null}
+      {item.rejectionReason ? <InlineBanner tone="error" message={item.rejectionReason} /> : null}
+
+      {hasFile(item) || canUploadDocument(item) ? (
+        <View style={styles.actions}>
+          {hasFile(item) ? (
+            <Button
+              label="View"
+              icon="eye-outline"
+              variant="secondary"
+              size="sm"
+              style={styles.flex}
+              loading={downloading}
+              loadingLabel="Opening…"
+              onPress={onView}
+              accessibilityLabel={`View ${item.label}`}
+            />
+          ) : null}
+          {canUploadDocument(item) ? (
+            <Button
+              label={item.status === "missing" ? "Upload" : "Replace"}
+              icon="cloud-upload-outline"
+              variant={item.status === "missing" || item.status === "rejected" || item.status === "expired" ? "accent" : "secondary"}
+              size="sm"
+              style={styles.flex}
+              loading={uploading}
+              loadingLabel="Uploading…"
+              disabled={uploadDisabled}
+              onPress={onUpload}
+              accessibilityLabel={`${item.status === "missing" ? "Upload" : "Replace"} ${item.label}`}
+            />
+          ) : null}
+        </View>
+      ) : null}
+    </Surface>
+  )
+}
+
 const styles = StyleSheet.create({
-  back: {
-    marginBottom: spacing.sm,
+  flex: {
+    flex: 1,
   },
-  backText: {
-    fontSize: typeScale.body,
-    fontWeight: "600",
-    color: colors.gray700,
+  summary: {
+    gap: spacing.sm,
   },
-  message: {
-    fontSize: typeScale.footnote,
-    color: colors.gray700,
-    marginBottom: spacing.sm,
+  track: {
+    height: 8,
+    borderRadius: radii.pill,
+    backgroundColor: colors.gray100,
+    overflow: "hidden",
   },
-  refreshError: {
-    fontSize: typeScale.footnote,
-    color: colors.amber700,
-    marginBottom: spacing.sm,
+  fill: {
+    height: "100%",
+    borderRadius: radii.pill,
+    backgroundColor: colors.lime,
   },
   list: {
     gap: spacing.md,
   },
   card: {
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    padding: spacing.lg,
-    gap: spacing.xs,
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
     gap: spacing.sm,
   },
-  title: {
-    flex: 1,
+  cardHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+  },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.md,
+    backgroundColor: colors.gray100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardTitle: {
     fontSize: typeScale.bodyLarge,
-    fontWeight: "700",
-    color: colors.black,
   },
-  required: {
-    fontSize: typeScale.micro,
-    fontWeight: "700",
-    color: colors.gray500,
-    textTransform: "uppercase",
-  },
-  status: {
-    fontSize: typeScale.footnote,
-    fontWeight: "600",
-  },
-  meta: {
-    fontSize: typeScale.footnote,
-    color: colors.gray500,
-  },
-  reject: {
-    fontSize: typeScale.footnote,
+  expired: {
     color: colors.red600,
   },
+  soon: {
+    color: colors.amber700,
+  },
   actions: {
-    marginTop: spacing.sm,
-    gap: spacing.sm,
-  },
-  uploadBtn: {
-    backgroundColor: colors.lime,
-    borderRadius: radii.md,
-    paddingVertical: spacing.sm,
-    alignItems: "center",
-    minHeight: 40,
-    justifyContent: "center",
-    flex: 1,
-  },
-  uploadText: {
-    fontWeight: "700",
-    color: colors.black,
-  },
-  outlineBtn: {
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    borderRadius: radii.md,
-    paddingVertical: spacing.sm,
-    alignItems: "center",
-    backgroundColor: colors.white,
-    minHeight: 40,
-    justifyContent: "center",
-  },
-  addSection: {
-    marginTop: spacing.xl,
-    gap: spacing.sm,
-  },
-  addTitle: {
-    fontSize: typeScale.body,
-    fontWeight: "700",
-    color: colors.black,
-  },
-  dimmed: {
-    opacity: 0.45,
-  },
-  outline: {
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    alignItems: "center",
-    backgroundColor: colors.white,
-  },
-  outlineText: {
-    fontWeight: "600",
-    color: colors.black,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    padding: spacing.xl,
-  },
-  modalCard: {
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    padding: spacing.xl,
-    gap: spacing.sm,
-  },
-  modalTitle: {
-    fontSize: typeScale.bodyLarge,
-    fontWeight: "800",
-    color: colors.black,
-  },
-  modalBody: {
-    fontSize: typeScale.body,
-    color: colors.gray700,
-    lineHeight: 20,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: typeScale.callout,
-    color: colors.black,
-  },
-  modalActions: {
     flexDirection: "row",
     gap: spacing.sm,
-    marginTop: spacing.sm,
   },
-  modalCancel: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    borderRadius: radii.md,
-    paddingVertical: spacing.sm,
+  section: {
+    gap: spacing.md,
+  },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  fileRow: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: colors.gray50,
   },
 })

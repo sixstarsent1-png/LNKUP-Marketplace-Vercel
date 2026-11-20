@@ -11,6 +11,7 @@ import {
   type VendorRequest,
 } from "@/lib/api/vendor-requests"
 import { formatMoney } from "@/lib/api/vendor-wallet"
+import { vendorStatusExplainer } from "@/lib/status/application-status"
 import { colors, fonts, radii, spacing, typography, typeScale } from "@/lib/theme"
 
 /** Vendor booking card: event image, status, when/where, fee, and the next action. */
@@ -32,6 +33,7 @@ export function RequestCard({
   const isDue = tone === "due"
   const fee = item.amountDue != null && item.amountDue > 0 ? formatMoney(item.amountDue, item.currency ?? "USD") : undefined
   const whenWhere = [item.eventDate, item.city].filter(Boolean).join(" · ")
+  const explainer = hint ?? vendorStatusExplainer(item.status)
 
   const body = (
     <View style={styles.row}>
@@ -81,7 +83,7 @@ export function RequestCard({
       ) : (
         body
       )}
-      {hint && !primaryLabel ? <Text style={styles.hint}>{hint}</Text> : null}
+      {explainer && !primaryLabel ? <Text style={styles.hint}>{explainer}</Text> : null}
       {onPrimaryAction && primaryLabel ? (
         <Button
           label={primaryLabel}

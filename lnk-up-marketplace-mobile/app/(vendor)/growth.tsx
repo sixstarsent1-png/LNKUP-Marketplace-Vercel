@@ -4,6 +4,9 @@ import { AppText as Text } from "@/components/ui/app-text"
 import { router, type Href } from "expo-router"
 
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
+import { Button } from "@/components/ui/button"
+import { StatGrid, StatTile } from "@/components/ui/stat-tile"
+import { Surface } from "@/components/ui/surface"
 import { Screen } from "@/components/screen"
 import { BackLink } from "@/components/ui/back-link"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
@@ -94,8 +97,8 @@ export default function VendorGrowthScreen() {
       subtitle="Score, profile strength, and next moves"
       refreshing={refreshing}
       onRefresh={() => void load("refresh")}
+      header={<BackLink label="Profile" fallbackHref="/(vendor)/more" />}
     >
-      <BackLink label="Profile" fallbackHref="/(vendor)/more" />
 
       <Pressable
         style={styles.recruitCard}
@@ -138,23 +141,17 @@ export default function VendorGrowthScreen() {
                 </Text>
               </View>
             </View>
-            <Pressable
-              style={styles.scoreCta}
-              onPress={() => router.push("/(vendor)/reviews" as Href)}
-              accessibilityRole="button"
-            >
-              <Text style={styles.scoreCtaText}>View reviews</Text>
-            </Pressable>
+            <Button label="View reviews" icon="star-outline" variant="secondary" size="sm" onPress={() => router.push("/(vendor)/reviews" as Href)} />
           </View>
 
-          <View style={styles.kpiRow}>
-            <Kpi label="Acceptance" value={`${Math.round(data.applicationSuccessRate)}%`} />
-            <Kpi label="Completed" value={String(data.completedEvents)} />
-          </View>
-          <View style={styles.kpiRow}>
-            <Kpi label="Applications" value={String(data.applicationsSubmitted)} />
-            <Kpi label="Cities" value={String(data.citiesServed)} />
-          </View>
+          <StatGrid>
+            <StatTile icon="checkmark-done-outline" label="Acceptance" value={`${Math.round(data.applicationSuccessRate)}%`} />
+            <StatTile icon="ribbon-outline" label="Completed" value={String(data.completedEvents)} />
+          </StatGrid>
+          <StatGrid>
+            <StatTile icon="paper-plane-outline" label="Applications" value={String(data.applicationsSubmitted)} />
+            <StatTile icon="location-outline" label="Cities" value={String(data.citiesServed)} />
+          </StatGrid>
 
           {showEmpty ? (
             <EmptyPanel
@@ -165,7 +162,7 @@ export default function VendorGrowthScreen() {
             />
           ) : null}
 
-          <View style={styles.card}>
+          <Surface style={styles.card}>
             <Text style={styles.section}>Profile strength</Text>
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, strength))}%` }]} />
@@ -184,45 +181,35 @@ export default function VendorGrowthScreen() {
             )}
             {incomplete.length > 0 ? (
               <View style={styles.inlineActions}>
-                <Pressable
-                  style={styles.secondaryBtn}
-                  onPress={() => router.push("/(vendor)/profile" as Href)}
-                >
-                  <Text style={styles.secondaryBtnText}>Complete profile</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.secondaryBtn}
-                  onPress={() => router.push("/(vendor)/documents" as Href)}
-                >
-                  <Text style={styles.secondaryBtnText}>Upload documents</Text>
-                </Pressable>
+                <Button label="Complete profile" variant="secondary" size="sm" style={styles.flex} onPress={() => router.push("/(vendor)/profile" as Href)} />
+                <Button label="Upload documents" variant="secondary" size="sm" style={styles.flex} onPress={() => router.push("/(vendor)/documents" as Href)} />
               </View>
             ) : null}
-          </View>
+          </Surface>
 
           {!showEmpty && data.recommendations.length > 0 ? (
-            <View style={styles.card}>
+            <Surface style={styles.card}>
               <Text style={styles.section}>Recommendations</Text>
               <View style={styles.listGap}>
                 {data.recommendations.map((rec) => (
                   <RecommendationCard key={rec.id} recommendation={rec} />
                 ))}
               </View>
-            </View>
+            </Surface>
           ) : null}
 
           {!showEmpty && data.insights.length > 0 ? (
-            <View style={styles.card}>
+            <Surface style={styles.card}>
               <Text style={styles.section}>Insights</Text>
               {data.insights.map((line) => (
                 <Text key={line} style={styles.bodyLine}>
                   · {line}
                 </Text>
               ))}
-            </View>
+            </Surface>
           ) : null}
 
-          <View style={styles.card}>
+          <Surface style={styles.card}>
             <Text style={styles.section}>Milestones</Text>
             <View style={styles.listGap}>
               {data.milestones.map((m) => (
@@ -236,7 +223,7 @@ export default function VendorGrowthScreen() {
                 </View>
               ))}
             </View>
-          </View>
+          </Surface>
         </View>
       ) : null}
     </Screen>
@@ -258,24 +245,15 @@ function RecommendationCard({ recommendation }: { recommendation: VendorGrowthRe
   )
 }
 
-function Kpi({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.kpi}>
-      <Text style={styles.kpiValue}>{value}</Text>
-      <Text style={styles.kpiLabel}>{label}</Text>
-    </View>
-  )
-}
-
 const styles = StyleSheet.create({
-  back: { marginBottom: spacing.sm },
-  backText: { fontSize: typeScale.body, fontWeight: "600", color: colors.gray700 },
+  flex: {
+    flex: 1,
+  },
   recruitCard: {
     backgroundColor: colors.black,
     borderRadius: radii.lg,
     padding: spacing.lg,
     gap: spacing.xs,
-    marginBottom: spacing.md,
   },
   recruitEyebrow: {
     color: colors.lime,
@@ -341,30 +319,6 @@ const styles = StyleSheet.create({
     fontSize: typeScale.footnote,
     color: colors.gray700,
   },
-  scoreCta: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.black,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 2,
-  },
-  scoreCtaText: {
-    color: colors.white,
-    fontWeight: "700",
-    fontSize: typeScale.body,
-  },
-  kpiRow: { flexDirection: "row", gap: spacing.md },
-  kpi: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    padding: spacing.lg,
-    alignItems: "center",
-  },
-  kpiValue: { fontSize: typeScale.title, fontWeight: "800", color: colors.black },
-  kpiLabel: { fontSize: typeScale.caption, color: colors.gray500, marginTop: 2 },
   card: {
     backgroundColor: colors.white,
     borderRadius: radii.lg,
@@ -397,19 +351,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: spacing.sm,
     marginTop: spacing.xs,
-  },
-  secondaryBtn: {
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.gray50,
-  },
-  secondaryBtnText: {
-    fontSize: typeScale.footnote,
-    fontWeight: "700",
-    color: colors.black,
   },
   recCard: {
     borderWidth: 1,

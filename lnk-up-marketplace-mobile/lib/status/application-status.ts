@@ -78,6 +78,36 @@ export function applicationStatusTone(status: ApplicationStatus, audience: Statu
   return COPY[status][audience].tone
 }
 
+/** One plain sentence telling a vendor what happens next for a booking in this status. */
+export function vendorStatusExplainer(status: ApplicationStatus): string {
+  switch (status) {
+    case "submitted":
+    case "under_review":
+      return "The organizer is reviewing your application. You only pay if they approve you."
+    case "info_requested":
+      return "The organizer asked a question. Reply to keep your application moving."
+    case "approved":
+    case "payment_required":
+      return "You're approved. Pay the booth fee to lock in your spot."
+    case "paid":
+      return "You're booked. Your event pass has arrival and check-in details."
+    case "waitlisted":
+      return "You're on the waitlist. We'll tell you if a spot opens."
+    case "rejected":
+      return "The organizer passed on this one. Keep exploring — new events open every week."
+    case "cancelled":
+      return "This booking was cancelled."
+    case "completed":
+      return "Event complete. Thanks for vending!"
+    case "unknown":
+      return "We're checking the latest status with the organizer."
+    default: {
+      const exhaustive: never = status
+      return exhaustive
+    }
+  }
+}
+
 /** Vendor lifecycle buckets used by Bookings tabs and Home. */
 export type VendorLifecycleBucket = "action" | "review" | "confirmed" | "past" | "closed"
 

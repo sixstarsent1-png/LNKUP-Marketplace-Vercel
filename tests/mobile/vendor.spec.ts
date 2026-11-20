@@ -72,6 +72,15 @@ test.describe('Vendor experience', () => {
     await snap(page, 'opportunity-applied', testInfo);
   });
 
+  test('documents show compliance progress and per-document status from the server', async ({ page }, testInfo) => {
+    const { body } = await restAs(page, vendorUser, 'GET', '/documents/vendor');
+    expect(body, 'documents endpoint answers').toBeTruthy();
+    await page.goto('/(vendor)/documents');
+    await expect(page.getByText(/of \d+ required documents approved/)).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByRole('button', { name: /^(Upload|Replace|View) / }).first()).toBeVisible();
+    await snap(page, 'documents', testInfo);
+  });
+
   test('wallet groups due, history and receipts', async ({ page }, testInfo) => {
     await page.goto('/(vendor)/wallet');
     for (const tab of ['Due', 'History', 'Receipts']) {

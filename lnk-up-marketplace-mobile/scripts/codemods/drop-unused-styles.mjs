@@ -19,9 +19,13 @@ for (const file of process.argv.slice(2)) {
   const removed = []
   for (const name of names) {
     if (new RegExp(`styles\\.${name}\\b`).test(head)) continue
-    const block = new RegExp(`^ {2}${name}: \\{[\\s\\S]*?^ {2}\\},?\\r?\\n`, "m")
-    if (block.test(sheet)) {
-      sheet = sheet.replace(block, "")
+    // One-line entries (`name: { … },`) first; otherwise the multi-line pattern would run on to the
+    // next entry's closing brace.
+    const oneLine = new RegExp(`^ {2}${name}: \\{[^\\n]*\\},?\\r?\\n`, "m")
+    const block = new RegExp(`^ {2}${name}: \\{\\r?\\n[\\s\\S]*?^ {2}\\},?\\r?\\n`, "m")
+    const pattern = oneLine.test(sheet) ? oneLine : block
+    if (pattern.test(sheet)) {
+      sheet = sheet.replace(pattern, "")
       removed.push(name)
     }
   }

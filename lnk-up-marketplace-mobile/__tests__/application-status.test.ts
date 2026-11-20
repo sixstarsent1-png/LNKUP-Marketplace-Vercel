@@ -2,6 +2,7 @@ import {
   applicationStatusLabel,
   applicationStatusTone,
   vendorLifecycleBucket,
+  vendorStatusExplainer,
   type ApplicationStatus,
 } from "@/lib/status/application-status"
 import { organizerRequestStatusLabel } from "@/lib/api/organizer-requests"
@@ -51,5 +52,12 @@ describe("application status wording", () => {
     expect(vendorLifecycleBucket("paid", true)).toBe("past")
     expect(vendorLifecycleBucket("under_review", false)).toBe("review")
     expect(vendorLifecycleBucket("rejected", false)).toBe("closed")
+  })
+})
+
+describe("vendorStatusExplainer", () => {
+  it("explains every status in plain words and never promises payment before approval", () => {
+    for (const status of ALL) expect(vendorStatusExplainer(status).length).toBeGreaterThan(10)
+    expect(vendorStatusExplainer("under_review")).toMatch(/only pay if they approve/)
   })
 })
