@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Pressable, StyleSheet, View } from "react-native"
 import { router, useNavigation, type Href } from "expo-router"
 import * as DocumentPicker from "expo-document-picker"
+import { hasPhotoLibraryPicker, pickSquarePhoto } from "@/lib/native/image-picker"
 
 import { ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { ProfileMark } from "@/components/profile-mark"
@@ -180,13 +181,20 @@ export default function VendorProfileScreen() {
     if (logoRef.current) return
     logoRef.current = true
     try {
-      const picked = await DocumentPicker.getDocumentAsync({
-        type: ["image/jpeg", "image/png", "image/webp"],
-        copyToCacheDirectory: true,
-        multiple: false,
-      })
-      if (picked.canceled || !picked.assets?.[0]) return
-      const asset = picked.assets[0]
+      let asset: { uri: string; name: string; mimeType?: string; size?: number | null }
+      if (hasPhotoLibraryPicker()) {
+        const photo = await pickSquarePhoto()
+        if (!photo) return
+        asset = { uri: photo.uri, name: photo.fileName, mimeType: photo.mimeType, size: photo.size }
+      } else {
+        const picked = await DocumentPicker.getDocumentAsync({
+          type: ["image/jpeg", "image/png", "image/webp"],
+          copyToCacheDirectory: true,
+          multiple: false,
+        })
+        if (picked.canceled || !picked.assets?.[0]) return
+        asset = picked.assets[0]
+      }
       if (asset.size != null && asset.size > 5 * 1024 * 1024) {
         showToast("Choose an image under 5 MB.", "error")
         return

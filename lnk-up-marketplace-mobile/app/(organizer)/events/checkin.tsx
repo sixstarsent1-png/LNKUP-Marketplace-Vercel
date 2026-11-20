@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native"
 import { useFocusEffect, useLocalSearchParams, type Href } from "expo-router"
 
 import { EmptyPanel, ErrorPanel } from "@/components/panel-states"
+import { hasPassScanner, PassScanner } from "@/components/pass-scanner"
 import { Screen } from "@/components/screen"
 import { BackLink } from "@/components/ui/back-link"
 import { InlineBanner } from "@/components/ui/banner"
@@ -55,6 +56,7 @@ export default function OrganizerCheckInScreen() {
   const [filter, setFilter] = useState<CheckInFilter>("waiting")
   const [query, setQuery] = useState("")
   const [code, setCode] = useState("")
+  const [scannerOpen, setScannerOpen] = useState(false)
   const [codeResult, setCodeResult] = useState<CheckInOutcome | null>(null)
   const [boothFor, setBoothFor] = useState<RosterEntry | null>(null)
   const [booths, setBooths] = useState<EventBooth[] | null>(null)
@@ -139,8 +141,8 @@ export default function OrganizerCheckInScreen() {
     reportOutcome(await overrideCheckIn(auth, eventId, applicationId, reason.trim()), entry.businessName)
   })
 
-  const [submitCode, codeBusy] = useSingleFlight(async () => {
-    const trimmed = code.trim()
+  const [submitCode, codeBusy] = useSingleFlight(async (scanned?: string) => {
+    const trimmed = (scanned ?? code).trim()
     if (!trimmed) {
       setCodeResult({ kind: "error", message: "Enter the code from the vendor's pass." })
       return
@@ -252,6 +254,24 @@ export default function OrganizerCheckInScreen() {
               tone="muted"
             />
             <Button label="Check in with code" loadingLabel="Checking…" icon="qr-code-outline" loading={codeBusy} onPress={() => void submitCode()} />
+            {hasPassScanner() ? (
+              <Button
+                label="Scan pass QR"
+                icon="scan-outline"
+                variant="secondary"
+                disabled={codeBusy}
+                onPress={() => setScannerOpen(true)}
+              />
+            ) : null}
+            <PassScanner
+              visible={scannerOpen}
+              onClose={() => setScannerOpen(false)}
+              onCode={(scanned) => {
+                setScannerOpen(false)
+                setCode(scanned)
+                void submitCode(scanned)
+              }}
+            />
             {codeResult ? <CodeResultBanner outcome={codeResult} /> : null}
           </Surface>
 

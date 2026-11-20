@@ -22,6 +22,7 @@ import { getOrganizerPublicProfileUrl } from "@/lib/api/config"
 import { useAuth } from "@/lib/auth/auth-context"
 import { showToast } from "@/lib/feedback/feedback"
 import { useSingleFlight } from "@/lib/hooks/use-single-flight"
+import { hasPhotoLibraryPicker, pickSquarePhoto } from "@/lib/native/image-picker"
 import { spacing } from "@/lib/theme"
 
 const LOGO_TYPES = ["image/jpeg", "image/png", "image/webp"]
@@ -87,13 +88,20 @@ export default function OrganizerProfileScreen() {
 
   const [pickLogo, uploadingLogo] = useSingleFlight(async () => {
     try {
-      const picked = await DocumentPicker.getDocumentAsync({
-        type: LOGO_TYPES,
-        copyToCacheDirectory: true,
-        multiple: false,
-      })
-      if (picked.canceled || !picked.assets?.[0]) return
-      const asset = picked.assets[0]
+      let asset: { uri: string; name: string; mimeType?: string; size?: number | null }
+      if (hasPhotoLibraryPicker()) {
+        const photo = await pickSquarePhoto()
+        if (!photo) return
+        asset = { uri: photo.uri, name: photo.fileName, mimeType: photo.mimeType, size: photo.size }
+      } else {
+        const picked = await DocumentPicker.getDocumentAsync({
+          type: LOGO_TYPES,
+          copyToCacheDirectory: true,
+          multiple: false,
+        })
+        if (picked.canceled || !picked.assets?.[0]) return
+        asset = picked.assets[0]
+      }
       if (asset.mimeType && !LOGO_TYPES.includes(asset.mimeType)) {
         showToast("Choose a JPG, PNG, or WebP image.", "error")
         return

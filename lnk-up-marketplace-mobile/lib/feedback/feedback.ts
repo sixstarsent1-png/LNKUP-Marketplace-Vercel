@@ -1,3 +1,4 @@
+import { hapticFeedback } from "@/lib/native/haptics"
 /**
  * Cross-platform feedback: toasts, confirm sheets and text prompts with a promise API.
  * `Alert.alert` buttons and `Alert.prompt` do nothing on web and `Alert.prompt` is iOS-only, so
@@ -70,6 +71,7 @@ export function showToast(message: string, tone: ToastTone = "info"): void {
   const toast = { id: nextId++, message, tone }
   toasts = [...toasts.slice(-2), toast]
   emit()
+  if (tone !== "info") hapticFeedback(tone)
   setTimeout(() => dismissToast(toast.id), tone === "error" ? 6000 : 3500)
 }
 
