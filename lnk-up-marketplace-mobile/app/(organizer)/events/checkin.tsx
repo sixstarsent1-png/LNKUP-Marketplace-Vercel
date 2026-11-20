@@ -309,7 +309,13 @@ export default function OrganizerCheckInScreen() {
                   key={booth.id}
                   icon="grid-outline"
                   title={`Booth ${booth.number}`}
-                  meta={mine ? "Current booth" : taken ? `Taken by ${booth.vendorName ?? "another vendor"}` : booth.typeLabel || "Open"}
+                  meta={taken ? `Taken by ${booth.vendorName || "another vendor"}` : booth.typeLabel || undefined}
+                  rightSlot={
+                    <StatusBadge
+                      label={mine ? "Current" : taken ? "Taken" : isAssigning(booth.id) ? "Assigning…" : "Open"}
+                      tone={mine ? "approved" : taken ? "neutral" : "paid"}
+                    />
+                  }
                   onPress={taken || mine || isAssigning(booth.id) ? undefined : () => void chooseBooth(booth.id)}
                 />
               )
@@ -373,7 +379,7 @@ function CheckInRow({
           <Button
             label="Check in"
             loadingLabel="Saving…"
-            size="sm"
+            size="md"
             style={styles.flex}
             loading={checkingIn}
             onPress={onCheckIn}
@@ -384,7 +390,7 @@ function CheckInRow({
           <Button
             label="Check in anyway"
             loadingLabel="Saving…"
-            size="sm"
+            size="md"
             variant="secondary"
             style={styles.flex}
             loading={checkingIn}
@@ -394,7 +400,7 @@ function CheckInRow({
         ) : null}
         <Button
           label={entry.booth ? "Move booth" : "Assign booth"}
-          size="sm"
+          size="md"
           variant="secondary"
           style={styles.flex}
           onPress={onBooth}
