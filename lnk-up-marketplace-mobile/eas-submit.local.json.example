@@ -1,0 +1,8 @@
+{
+  "appleId": "you@example.com",
+  "ascAppId": "1234567890",
+  "appleTeamId": "ABCD123456",
+  "ascApiKeyPath": "./secrets/AuthKey_XXXXXXXXXX.p8",
+  "ascApiKeyId": "XXXXXXXXXX",
+  "ascApiIssuerId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+}

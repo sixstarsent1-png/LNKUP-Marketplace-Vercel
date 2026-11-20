@@ -74,14 +74,18 @@ class LNKup_Outreach {
 			return new WP_Error( 'invalid_name', __( 'Campaign name is required.', 'lnkup-marketplace' ) );
 		}
 
-		$role = sanitize_text_field( $args['target_role'] ?? 'lnkup_vendor' );
-		if ( ! in_array( $role, array( 'lnkup_vendor', 'lnkup_organizer' ), true ) ) {
-			$role = 'lnkup_vendor';
+		$source = sanitize_key( $args['source'] ?? 'admin' );
+		if ( ! in_array( $source, array( 'admin', 'organizer', 'accounts' ), true ) ) {
+			$source = 'admin';
 		}
 
-		$source = sanitize_key( $args['source'] ?? 'admin' );
-		if ( ! in_array( $source, array( 'admin', 'organizer' ), true ) ) {
-			$source = 'admin';
+		$role = sanitize_text_field( $args['target_role'] ?? 'lnkup_vendor' );
+		$allowed_roles = array( 'lnkup_vendor', 'lnkup_organizer' );
+		if ( 'accounts' === $source ) {
+			$allowed_roles[] = 'everyone';
+		}
+		if ( ! in_array( $role, $allowed_roles, true ) ) {
+			$role = 'lnkup_vendor';
 		}
 
 		$created_by = absint( $args['created_by'] ?? get_current_user_id() );
@@ -92,7 +96,7 @@ class LNKup_Outreach {
 			if ( ! LNKup_Roles::is_organizer( $created_by ) && ! LNKup_Capabilities::user_has_manage_all() ) {
 				return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 			}
-			if ( $event_id && ! LNKup_Capabilities::organizer_owns_event( $created_by, $event_id ) ) {
+			if ( $event_id && ! LNKup_Capabilities::organizer_owns_event( $event_id, $created_by ) ) {
 				return new WP_Error( 'forbidden', __( 'You do not own this event.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 			}
 			$role = 'lnkup_vendor';
@@ -425,6 +429,10 @@ class LNKup_Outreach {
 		$table = LNKup_Outreach_Tables::table_name( LNKup_Outreach_Tables::RECIPIENTS );
 		$now   = current_time( 'mysql' );
 
+		if ( 'accounts' === ( $campaign['source'] ?? '' ) ) {
+			return self::send_account_email( $row, $campaign );
+		}
+
 		$user = get_user_by( 'email', $row['email'] );
 		if ( $user ) {
 			$handled = self::handle_existing_user( $user, $row, $campaign );
@@ -478,6 +486,132 @@ class LNKup_Outreach {
 			array( '%d' )
 		);
 		return false;
+	}
+
+	/**
+	 * Send a queued admin message to an existing account. No sign-up link.
+	 *
+	 * @param array $row      Recipient row.
+	 * @param array $campaign Campaign row.
+	 * @return bool True when the message was sent.
+	 */
+	protected static function send_account_email( array $row, array $campaign ) {
+		global $wpdb;
+		$table = LNKup_Outreach_Tables::table_name( LNKup_Outreach_Tables::RECIPIENTS );
+		$now   = current_time( 'mysql' );
+		$email = sanitize_email( $row['email'] ?? '' );
+
+		$subject = str_replace( array( "\r", "\n" ), '', (string) ( $campaign['name'] ?? '' ) );
+		$message = (string) ( $campaign['message'] ?? '' );
+		$body    = '';
+		$lines   = preg_split( "/\r\n|\n|\r/", $message );
+		if ( is_array( $lines ) ) {
+			foreach ( $lines as $line ) {
+				$line = trim( $line );
+				if ( '' === $line ) {
+					continue;
+				}
+				$body .= '<p style="margin:0 0 16px;">' . esc_html( $line ) . '</p>';
+			}
+		}
+
+		$headers = array();
+		$admin   = get_userdata( (int) ( $campaign['created_by'] ?? 0 ) );
+		if ( $admin ) {
+			$reply = sanitize_email( $admin->user_email );
+			if ( $reply ) {
+				$from_name = str_replace( array( "\r", "\n", '<', '>' ), '', $admin->display_name );
+				$headers[] = 'Reply-To: ' . $from_name . ' <' . $reply . '>';
+			}
+		}
+
+		$sent = ( '' !== $email && '' !== $subject && '' !== $body )
+			? (bool) LNKup_Notifications::send( $email, $subject, $body, $headers )
+			: false;
+
+		if ( $sent ) {
+			$wpdb->update(
+				$table,
+				array(
+					'status'  => self::REC_SENT,
+					'user_id' => (int) ( $row['user_id'] ?? 0 ),
+					'sent_at' => $now,
+				),
+				array( 'id' => (int) $row['id'] ),
+				array( '%s', '%d', '%s' ),
+				array( '%d' )
+			);
+			return true;
+		}
+
+		$wpdb->update(
+			$table,
+			array(
+				'status'        => self::REC_FAILED,
+				'user_id'       => (int) ( $row['user_id'] ?? 0 ),
+				'error_message' => __( 'Email delivery failed.', 'lnkup-marketplace' ),
+			),
+			array( 'id' => (int) $row['id'] ),
+			array( '%s', '%d', '%s' ),
+			array( '%d' )
+		);
+		return false;
+	}
+
+	/**
+	 * Queue account-email recipients without the invite-list cap.
+	 *
+	 * @param int                                                                 $campaign_id Campaign ID.
+	 * @param array<int, array{email:string,name:string,user_id:int}>             $people      Accounts.
+	 * @return int Number of rows added.
+	 */
+	public static function add_account_recipients( $campaign_id, array $people ) {
+		global $wpdb;
+		$campaign = self::get_campaign( $campaign_id );
+		if ( ! $campaign || 'accounts' !== $campaign['source'] ) {
+			return 0;
+		}
+		if ( ! self::user_can_manage_campaign( $campaign ) ) {
+			return 0;
+		}
+
+		$table = LNKup_Outreach_Tables::table_name( LNKup_Outreach_Tables::RECIPIENTS );
+		$now   = current_time( 'mysql' );
+		$seen  = array();
+		$added = 0;
+
+		foreach ( $people as $person ) {
+			$email = sanitize_email( $person['email'] ?? '' );
+			if ( ! $email ) {
+				continue;
+			}
+			$key = strtolower( $email );
+			if ( isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+
+			$token = self::generate_unique_token();
+			$ok    = $wpdb->insert(
+				$table,
+				array(
+					'campaign_id' => absint( $campaign_id ),
+					'email'       => $email,
+					'name'        => sanitize_text_field( $person['name'] ?? '' ),
+					'token'       => $token,
+					'status'      => self::REC_PENDING,
+					'user_id'     => absint( $person['user_id'] ?? 0 ),
+					'created_at'  => $now,
+				),
+				array( '%d', '%s', '%s', '%s', '%s', '%d', '%s' )
+			);
+			if ( $ok ) {
+				++$added;
+			}
+		}
+
+		self::refresh_campaign_totals( $campaign_id );
+		return $added;
 	}
 
 	/**

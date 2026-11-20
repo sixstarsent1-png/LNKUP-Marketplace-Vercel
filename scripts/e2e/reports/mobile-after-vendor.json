@@ -1,0 +1,212 @@
+{
+  "loginMs": 9300,
+  "metrics": [
+    {
+      "route": "/(vendor)",
+      "ms": 16107,
+      "settled": true,
+      "apiCalls": 14,
+      "calls": [
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/applications/vendor",
+        "POST /lnkup/v1/marketplace/track/event",
+        "GET /lnkup/v1/marketplace/sections/recommended?limit=3",
+        "GET /lnkup/v1/marketplace/sections/trending?section=closing_soon&limit=3",
+        "GET /lnkup/v1/verification/vendor",
+        "GET /lnkup/v1/reputation/vendor-dashboard",
+        "GET /lnkup/v1/operations/vendor-home",
+        "GET /lnkup/v1/marketplace/favorites",
+        "POST /lnkup/v1/marketplace/track/event",
+        "POST /lnkup/v1/marketplace/track/event",
+        "POST /lnkup/v1/marketplace/track/event",
+        "GET /lnkup/v1/growth/profile-strength",
+        "GET /lnkup/v1/notifications/inbox"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/find",
+      "ms": 1353,
+      "settled": true,
+      "apiCalls": 3,
+      "calls": [
+        "GET /lnkup/v1/marketplace/favorites",
+        "GET /lnkup/v1/marketplace/search?per_page=20&page=1&sort=recommended",
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "pending": [
+        "GET /lnkup/v1/marketplace/favorites",
+        "GET /lnkup/v1/marketplace/search?per_page=20&page=1&sort=recommended",
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/requests",
+      "ms": 3199,
+      "settled": true,
+      "apiCalls": 1,
+      "calls": [
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/wallet",
+      "ms": 4753,
+      "settled": true,
+      "apiCalls": 7,
+      "calls": [
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/financial/summary?role=vendor",
+        "GET /lnkup/v1/financial/dashboard?role=vendor",
+        "GET /lnkup/v1/financial/activity?role=vendor",
+        "GET /lnkup/v1/financial/invoices?role=vendor",
+        "GET /lnkup/v1/financial/receipts?role=vendor",
+        "GET /lnkup/v1/financial/disputes?role=vendor"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/more",
+      "ms": 3659,
+      "settled": true,
+      "apiCalls": 3,
+      "calls": [
+        "GET /lnkup/v1/push/preferences",
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/vendor/profile"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/profile",
+      "ms": 7907,
+      "settled": true,
+      "apiCalls": 4,
+      "calls": [
+        "GET /lnkup/v1/vendor/profile",
+        "GET /lnkup/v1/verification/vendor",
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/growth/profile-strength"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/documents",
+      "ms": 1276,
+      "settled": true,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/documents/vendor",
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "pending": [
+        "GET /lnkup/v1/documents/vendor",
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/favorites",
+      "ms": 5270,
+      "settled": true,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/marketplace/favorites"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/growth",
+      "ms": 7422,
+      "settled": true,
+      "apiCalls": 3,
+      "calls": [
+        "GET /lnkup/v1/growth/dashboard",
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/reputation/vendor-dashboard"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/reviews",
+      "ms": 3926,
+      "settled": true,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/reputation/vendor-dashboard",
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/operations",
+      "ms": 1335,
+      "settled": true,
+      "apiCalls": 1,
+      "calls": [
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "pending": [
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/notifications",
+      "ms": 1425,
+      "settled": true,
+      "apiCalls": 4,
+      "calls": [
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/verification/vendor",
+        "GET /lnkup/v1/reputation/vendor-dashboard",
+        "GET /lnkup/v1/operations/vendor-home"
+      ],
+      "pending": [
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/verification/vendor",
+        "GET /lnkup/v1/reputation/vendor-dashboard",
+        "GET /lnkup/v1/operations/vendor-home"
+      ],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/saved-searches",
+      "ms": 3645,
+      "settled": true,
+      "apiCalls": 3,
+      "calls": [
+        "GET /lnkup/v1/notifications/inbox",
+        "GET /lnkup/v1/marketplace/saved-searches",
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "pending": [
+        "GET /lnkup/v1/notifications/inbox"
+      ],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/referrals",
+      "ms": 4057,
+      "settled": true,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/referrals/organizer-recruit"
+      ],
+      "pending": [],
+      "errors": []
+    }
+  ]
+}

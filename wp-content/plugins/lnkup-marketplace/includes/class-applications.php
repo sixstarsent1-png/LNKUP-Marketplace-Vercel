@@ -125,6 +125,28 @@ class LNKup_Applications {
 	 * @return int|WP_Error
 	 */
 	public static function submit_with_profile( $vendor_user_id, $opportunity_id, $args = array() ) {
+		global $wpdb;
+		$lock = 'lnkup_apply_' . absint( $vendor_user_id ) . '_' . absint( $opportunity_id );
+		if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return new WP_Error( 'rate_limit', __( 'Your application is already being submitted. Please wait a moment.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
+		}
+		try {
+			return self::submit_with_profile_locked( $vendor_user_id, $opportunity_id, $args );
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/**
+	 * Body of submit_with_profile; callers must hold the per-vendor/opportunity lock so the
+	 * duplicate check and insert cannot interleave across concurrent requests.
+	 *
+	 * @param int   $vendor_user_id Vendor user ID.
+	 * @param int   $opportunity_id Opportunity ID.
+	 * @param array $args           Submission args.
+	 * @return int|WP_Error
+	 */
+	private static function submit_with_profile_locked( $vendor_user_id, $opportunity_id, $args = array() ) {
 		$vendor_user_id = absint( $vendor_user_id );
 		$opportunity_id = absint( $opportunity_id );
 
@@ -664,21 +686,61 @@ class LNKup_Applications {
 	 */
 	public static function transition( $app_id, $status, $extra = array() ) {
 		$status = LNKup_Security::sanitize_application_status( $status );
-		$prev   = get_post_meta( $app_id, '_lnkup_application_status', true );
+		$prev   = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
 
-		update_post_meta( $app_id, '_lnkup_application_status', $status );
+		if ( ! self::can_transition( $prev, $status ) ) {
+			return new WP_Error(
+				'invalid_transition',
+				__( 'This application can no longer be changed that way.', 'lnkup-marketplace' ),
+				array(
+					'status' => 409,
+					'from'   => $prev,
+					'to'     => $status,
+				)
+			);
+		}
 
 		if ( 'approved' === $status ) {
-			update_post_meta( $app_id, '_lnkup_approved_at', current_time( 'mysql' ) );
-			LNKup_Payments::create_from_application( $app_id );
-			update_post_meta( $app_id, '_lnkup_application_status', 'payment_required' );
-			update_post_meta( $app_id, '_lnkup_payment_due_at', gmdate( 'Y-m-d H:i:s', strtotime( '+7 days' ) ) );
+			$opp_id   = (int) get_post_meta( $app_id, '_lnkup_opportunity_id', true );
+			$reserved = LNKup_Opportunity_Inventory::with_lock(
+				$opp_id,
+				static function () use ( $app_id, $opp_id ) {
+					if ( ! LNKup_Opportunity_Inventory::has_room( $opp_id, $app_id ) ) {
+						return new WP_Error(
+							'opportunity_full',
+							__( 'This vendor slot is full. Waitlist the vendor or add spots before approving.', 'lnkup-marketplace' ),
+							array( 'status' => 409 )
+						);
+					}
+					update_post_meta( $app_id, '_lnkup_application_status', 'approved' );
+					update_post_meta( $app_id, '_lnkup_approved_at', current_time( 'mysql' ) );
+					$payment_id = LNKup_Payments::create_from_application( $app_id );
+					update_post_meta( $app_id, '_lnkup_application_status', 'payment_required' );
+					update_post_meta( $app_id, '_lnkup_payment_due_at', gmdate( 'Y-m-d H:i:s', strtotime( '+7 days' ) ) );
+					return (int) $payment_id;
+				}
+			);
+			if ( is_wp_error( $reserved ) ) {
+				return $reserved;
+			}
+			$payment_id = $reserved;
+		} else {
+			update_post_meta( $app_id, '_lnkup_application_status', $status );
+		}
+
+		if ( 'approved' === $status ) {
 			LNKup_Notifications::send_application_approved( $app_id );
+			if ( $payment_id ) {
+				LNKup_Financial_Service::maybe_finalize_zero_amount( (int) $payment_id, 'free_booth' );
+			}
 		} elseif ( 'rejected' === $status ) {
 			if ( ! empty( $extra['reason'] ) ) {
 				update_post_meta( $app_id, '_lnkup_rejection_reason', sanitize_textarea_field( $extra['reason'] ) );
 			}
+			self::void_pending_payment( $app_id, 'rejected' );
 			LNKup_Notifications::send_application_rejected( $app_id );
+		} elseif ( 'cancelled' === $status ) {
+			self::void_pending_payment( $app_id, (string) ( $extra['reason'] ?? 'cancelled' ) );
 		} elseif ( 'waitlisted' === $status ) {
 			LNKup_Notifications::send_application_waitlisted( $app_id );
 		} elseif ( 'paid' === $status ) {
@@ -704,10 +766,188 @@ class LNKup_Applications {
 	}
 
 	/**
-	 * Allowed transitions for organizer actions.
+	 * Stop an unpaid payment from being collected after its application leaves the booking flow.
+	 * Paid payments are never touched here — refunds go through the Financial Service.
 	 *
-	 * @param string $action Action.
+	 * @param int    $app_id Application ID.
+	 * @param string $reason Audit reason.
 	 */
+	private static function void_pending_payment( $app_id, $reason ) {
+		$payment = LNKup_Payments::get_for_application( $app_id );
+		if ( ! $payment || 'pending' !== (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true ) ) {
+			return;
+		}
+		update_post_meta( $payment->ID, '_lnkup_payment_status', 'failed' );
+		update_post_meta( $payment->ID, '_lnkup_voided_at', current_time( 'mysql' ) );
+		update_post_meta( $payment->ID, '_lnkup_voided_reason', sanitize_key( $reason ) );
+		if ( class_exists( 'LNKup_Financial_Audit' ) ) {
+			LNKup_Financial_Audit::log( 'payment_voided', 'payment', $payment->ID, array( 'reason' => sanitize_key( $reason ), 'application_id' => (int) $app_id ) );
+		}
+	}
+
+	/**
+	 * Source statuses each target status may be reached from.
+	 *
+	 * `paid` is reachable from any open state because it reflects money already
+	 * collected and confirmed by the Financial Service; it never moves backwards.
+	 */
+	const TRANSITIONS = array(
+		'under_review'     => array( '', 'submitted', 'waitlisted', 'rejected', 'info_requested' ),
+		'info_requested'   => array( 'submitted', 'under_review' ),
+		'approved'         => array( '', 'submitted', 'under_review', 'waitlisted', 'info_requested' ),
+		'waitlisted'       => array( '', 'submitted', 'under_review', 'info_requested' ),
+		'rejected'         => array( '', 'submitted', 'under_review', 'waitlisted', 'approved', 'payment_required', 'info_requested' ),
+		'payment_required' => array( 'approved' ),
+		'paid'             => array( '', 'submitted', 'under_review', 'waitlisted', 'approved', 'payment_required', 'rejected', 'cancelled' ),
+		'completed'        => array( 'paid' ),
+		'cancelled'        => array( '', 'submitted', 'under_review', 'waitlisted', 'approved', 'payment_required', 'paid', 'info_requested' ),
+		'submitted'        => array( '' ),
+	);
+
+	const INFO_HISTORY_META = '_lnkup_info_requests';
+
+	/**
+	 * Organizer asks the vendor for more information before deciding.
+	 *
+	 * @param int      $app_id       Application ID.
+	 * @param string   $message      What the organizer needs.
+	 * @param string[] $doc_types    Optional document types to upload.
+	 * @param int      $organizer_id Acting organizer.
+	 * @return array|WP_Error History entry.
+	 */
+	public static function request_info( $app_id, $message, $doc_types, $organizer_id ) {
+		$app_id = absint( $app_id );
+		if ( 'lnkup_application' !== get_post_type( $app_id ) ) {
+			return new WP_Error( 'not_found', __( 'Application not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		if ( ! LNKup_Capabilities::user_owns_post( $app_id, $organizer_id, '_lnkup_organizer_user_id' ) && ! LNKup_Capabilities::user_has_manage_all( $organizer_id ) ) {
+			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+		$message = trim( sanitize_textarea_field( (string) $message ) );
+		if ( mb_strlen( $message ) < 3 ) {
+			return new WP_Error( 'message_required', __( 'Tell the vendor what you need.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$docs   = array_values( array_filter( array_map( 'sanitize_text_field', (array) $doc_types ) ) );
+		$result = self::transition( $app_id, 'info_requested' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$entry = self::append_info_history(
+			$app_id,
+			array(
+				'type'      => 'request',
+				'message'   => mb_substr( $message, 0, 2000 ),
+				'documents' => array_slice( $docs, 0, 10 ),
+				'by'        => (int) $organizer_id,
+			)
+		);
+		LNKup_Notifications::send_info_requested( $app_id, $entry );
+		LNKup_Organizer_CRM::log_activity(
+			'info_requested',
+			(int) get_post_meta( $app_id, '_lnkup_organizer_user_id', true ),
+			(int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true ),
+			array( 'event_id' => (int) get_post_meta( $app_id, '_lnkup_event_id', true ), 'application_id' => $app_id )
+		);
+		return $entry;
+	}
+
+	/**
+	 * Vendor answers an information request; the application returns to review.
+	 *
+	 * @param int    $app_id    Application ID.
+	 * @param string $message   Vendor reply.
+	 * @param int    $vendor_id Acting vendor.
+	 * @return array|WP_Error History entry.
+	 */
+	public static function respond_info( $app_id, $message, $vendor_id ) {
+		$app_id = absint( $app_id );
+		if ( 'lnkup_application' !== get_post_type( $app_id ) || (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true ) !== (int) $vendor_id ) {
+			return new WP_Error( 'not_found', __( 'Application not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		if ( 'info_requested' !== (string) get_post_meta( $app_id, '_lnkup_application_status', true ) ) {
+			return new WP_Error( 'no_open_request', __( 'The organizer is not waiting on more information for this request.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+		$message = trim( sanitize_textarea_field( (string) $message ) );
+		if ( mb_strlen( $message ) < 2 ) {
+			return new WP_Error( 'message_required', __( 'Add a reply for the organizer.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$result = self::transition( $app_id, 'under_review' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$entry = self::append_info_history(
+			$app_id,
+			array(
+				'type'    => 'response',
+				'message' => mb_substr( $message, 0, 4000 ),
+				'by'      => (int) $vendor_id,
+			)
+		);
+		LNKup_Notifications::send_info_response( $app_id, $entry );
+		LNKup_Organizer_CRM::log_activity(
+			'info_responded',
+			(int) get_post_meta( $app_id, '_lnkup_organizer_user_id', true ),
+			(int) $vendor_id,
+			array( 'event_id' => (int) get_post_meta( $app_id, '_lnkup_event_id', true ), 'application_id' => $app_id, 'actor_user_id' => (int) $vendor_id )
+		);
+		return $entry;
+	}
+
+	/**
+	 * Request/response thread for an application, oldest first.
+	 *
+	 * @param int $app_id Application ID.
+	 * @return array<int, array{type:string,message:string,documents?:string[],by:int,at:string}>
+	 */
+	public static function info_history( $app_id ) {
+		$history = get_post_meta( absint( $app_id ), self::INFO_HISTORY_META, true );
+		return is_array( $history ) ? array_values( $history ) : array();
+	}
+
+	/**
+	 * Latest unanswered organizer request, if the application is waiting on the vendor.
+	 *
+	 * @param int $app_id Application ID.
+	 * @return array|null
+	 */
+	public static function open_info_request( $app_id ) {
+		if ( 'info_requested' !== (string) get_post_meta( absint( $app_id ), '_lnkup_application_status', true ) ) {
+			return null;
+		}
+		foreach ( array_reverse( self::info_history( $app_id ) ) as $entry ) {
+			if ( 'request' === ( $entry['type'] ?? '' ) ) {
+				return $entry;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * @param int   $app_id Application ID.
+	 * @param array $entry  Entry without timestamp.
+	 */
+	private static function append_info_history( $app_id, $entry ) {
+		$entry['at'] = current_time( 'mysql' );
+		$history     = self::info_history( $app_id );
+		$history[]   = $entry;
+		update_post_meta( $app_id, self::INFO_HISTORY_META, array_slice( $history, -50 ) );
+		return $entry;
+	}
+
+	/**
+	 * Whether an application may move between two statuses.
+	 *
+	 * @param string $from Current status ('' for legacy records with no status).
+	 * @param string $to   Target status.
+	 */
+	public static function can_transition( $from, $to ) {
+		if ( 'paid' === $to && 'paid' === $from ) {
+			return true;
+		}
+		$allowed = self::TRANSITIONS[ $to ] ?? array();
+		return in_array( (string) $from, $allowed, true );
+	}
+
 	/**
 	 * Organizer approve / reject / waitlist / review.
 	 *
@@ -728,11 +968,16 @@ class LNKup_Applications {
 			'review'    => 'under_review',
 		);
 
+		$payload = is_array( $extra ) ? $extra : array();
+		if ( 'request_info' === $action ) {
+			$entry = self::request_info( $app_id, (string) ( $payload['info_message'] ?? '' ), (array) ( $payload['info_documents'] ?? array() ), $user_id );
+			return is_wp_error( $entry ) ? $entry : true;
+		}
+
 		if ( empty( $map[ $action ] ) ) {
 			return new WP_Error( 'invalid', __( 'Invalid action.', 'lnkup-marketplace' ) );
 		}
 
-		$payload = is_array( $extra ) ? $extra : array();
 		if ( 'reject' === $action ) {
 			if ( ! empty( $payload['rejection_reason'] ) ) {
 				$payload['reason'] = sanitize_textarea_field( (string) $payload['rejection_reason'] );

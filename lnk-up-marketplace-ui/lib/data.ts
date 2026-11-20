@@ -26,6 +26,8 @@ export const vendorCategories = [
 
 export type EventItem = {
   id: string
+  /** WordPress opportunity post ID when loaded from live API */
+  opportunityId?: number
   name: string
   image: string
   date: string
@@ -47,6 +49,17 @@ export type EventItem = {
   paidVendors: number
   revenue: number
   status: "draft" | "live" | "closed"
+  eventType?: string
+  documentsRequired?: boolean
+  indoor?: boolean
+  outdoor?: boolean
+  applicationStatus?: string
+  gallery?: Array<{
+    id: number
+    url: string
+    type: "image" | "video"
+    thumb?: string
+  }>
 }
 
 export const events: EventItem[] = [
@@ -353,6 +366,8 @@ export type VendorRequest = {
   category: string
   vendorFee: number
   submittedAt: string
+  paymentId?: string
+  paymentDueAt?: string
   reason?: string
 }
 
@@ -369,6 +384,7 @@ export const vendorRequests: VendorRequest[] = [
     category: "Food Vendor",
     vendorFee: 185,
     submittedAt: "Jun 20",
+    paymentId: "pay-mock-1",
   },
   {
     id: "req-2",
@@ -382,6 +398,8 @@ export const vendorRequests: VendorRequest[] = [
     category: "Food Truck",
     vendorFee: 320,
     submittedAt: "Jun 24",
+    paymentId: "pay-mock-2",
+    paymentDueAt: "Aug 1, 2026",
   },
   {
     id: "req-3",
@@ -451,7 +469,12 @@ export type IncomingRequest = {
   completedEvents: number
   verified: boolean
   message: string
-  status: "under-review" | "approved" | "waitlisted" | "rejected"
+  status: "under-review" | "approved" | "payment-due" | "paid" | "waitlisted" | "rejected"
+  eventId?: string
+  eventName?: string
+  opportunityId?: string
+  vendorProfileId?: string
+  paymentStatus?: string
 }
 
 export const incomingRequests: IncomingRequest[] = [
@@ -506,6 +529,75 @@ export const incomingRequests: IncomingRequest[] = [
     verified: true,
     message: "Streetwear and custom tees. We bring high foot traffic to markets.",
     status: "approved",
+    eventId: "charlotte-night-market",
+    eventName: "Charlotte Night Market",
+    vendorProfileId: "city-drip-apparel",
+  },
+  {
+    id: "in-5",
+    vendorId: "taco-temple",
+    vendorName: "Taco Temple",
+    initials: "TT",
+    category: "Food Truck",
+    city: "Atlanta, GA",
+    rating: 4.8,
+    completedEvents: 22,
+    verified: true,
+    message: "Gourmet tacos with local ingredients.",
+    status: "payment-due",
+    eventId: "atlanta-food-fest",
+    eventName: "Atlanta Food Fest",
+    vendorProfileId: "taco-temple",
+    paymentStatus: "pending",
+  },
+  {
+    id: "in-6",
+    vendorId: "velvet-scoops",
+    vendorName: "Velvet Scoops",
+    initials: "VS",
+    category: "Dessert Vendor",
+    city: "Charlotte, NC",
+    rating: 4.9,
+    completedEvents: 41,
+    verified: true,
+    message: "Artisan gelato — booked and ready.",
+    status: "paid",
+    eventId: "charlotte-night-market",
+    eventName: "Charlotte Night Market",
+    vendorProfileId: "velvet-scoops",
+    paymentStatus: "paid",
+  },
+  {
+    id: "in-7",
+    vendorId: "sparkle-jewels",
+    vendorName: "Sparkle Jewels",
+    initials: "SJ",
+    category: "Jewelry",
+    city: "Raleigh, NC",
+    rating: 4.5,
+    completedEvents: 8,
+    verified: false,
+    message: "Handmade earrings and bracelets.",
+    status: "waitlisted",
+    eventId: "raleigh-homecoming-market",
+    eventName: "Raleigh Homecoming Market",
+    vendorProfileId: "sparkle-jewels",
+  },
+  {
+    id: "in-8",
+    vendorId: "overloaded-truck",
+    vendorName: "Overloaded Truck Co.",
+    initials: "OT",
+    category: "Food Truck",
+    city: "Houston, TX",
+    rating: 3.9,
+    completedEvents: 5,
+    verified: false,
+    message: "Late application — category was full.",
+    status: "rejected",
+    eventId: "houston-rodeo-weekend-market",
+    eventName: "Houston Rodeo Weekend Market",
+    vendorProfileId: "overloaded-truck",
   },
 ]
 
@@ -526,6 +618,86 @@ export const vendorKpis = {
   completedEvents: currentVendor.completedEvents,
   averageRating: currentVendor.rating,
   profileStrength: 78,
+}
+
+export type VendorDocument = {
+  id: string
+  name: string
+  status: "verified" | "pending" | "missing"
+  required: boolean
+  expiresAt?: string
+}
+
+export const vendorDocuments: VendorDocument[] = [
+  { id: "biz-license", name: "Business license", status: "verified", required: true, expiresAt: "Dec 2026" },
+  { id: "insurance", name: "Certificate of insurance", status: "pending", required: true },
+  { id: "health-permit", name: "Health department permit", status: "verified", required: true, expiresAt: "Aug 2026" },
+  { id: "food-handler", name: "Food handler certification", status: "missing", required: false },
+  { id: "w9", name: "W-9 tax form", status: "verified", required: true },
+]
+
+export type VendorReview = {
+  id: string
+  eventName: string
+  organizer: string
+  rating: number
+  text: string
+  date: string
+}
+
+export const vendorReviews: VendorReview[] = [
+  {
+    id: "rev-1",
+    eventName: "Charlotte Night Market",
+    organizer: "CultureWave Events",
+    rating: 5,
+    text: "Great crowd and smooth load-in. Would book again.",
+    date: "Jun 2026",
+  },
+  {
+    id: "rev-2",
+    eventName: "Atlanta Food Fest",
+    organizer: "Southern Social Co.",
+    rating: 4,
+    text: "Well organized. Parking was tight but staff helped.",
+    date: "May 2026",
+  },
+  {
+    id: "rev-3",
+    eventName: "Raleigh Homecoming Market",
+    organizer: "Block Party Group",
+    rating: 5,
+    text: "Professional team and clear vendor packet.",
+    date: "Apr 2026",
+  },
+]
+
+export const vendorFavoriteIds = [
+  "charlotte-night-market",
+  "atlanta-food-fest",
+  "dc-greek-picnic-vendor-row",
+]
+
+export const vendorGrowth = {
+  score: 87,
+  rankLabel: "Top 12% in Charlotte",
+  responseRate: 94,
+  acceptanceRate: 68,
+  repeatBookings: 12,
+  profileViews: 248,
+  milestones: [
+    { label: "10 events completed", done: true },
+    { label: "4.8+ average rating", done: true },
+    { label: "50 profile views this month", done: false },
+  ],
+}
+
+export function getVendorFavoriteEvents() {
+  return events.filter((e) => vendorFavoriteIds.includes(e.id))
+}
+
+export function getVendorOperations() {
+  return vendorRequests.filter((r) => ["approved", "payment-due", "paid"].includes(r.status))
 }
 
 export const organizerKpis = {

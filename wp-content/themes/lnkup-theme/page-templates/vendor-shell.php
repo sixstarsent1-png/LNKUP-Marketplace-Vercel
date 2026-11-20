@@ -32,7 +32,29 @@ if ( $is_vendor_page ) {
 
 $use_dashboard_shell = $is_vendor_page;
 
-if ( ! $use_dashboard_shell && is_user_logged_in() ) {
+$is_public_listing = 'opportunities' === $shell_slug && ( isset( $_GET['event'] ) || isset( $_GET['apply'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+if ( $is_public_listing ) {
+	$use_dashboard_shell = false;
+	add_filter(
+		'document_title_parts',
+		static function ( $parts ) {
+			$event_id = isset( $_GET['event'] ) ? absint( $_GET['event'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( $event_id ) {
+				$event = get_post( $event_id );
+				if ( $event && 'lnkup_event' === $event->post_type ) {
+					$parts['title'] = $event->post_title;
+				}
+			} elseif ( ! empty( $_GET['apply'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				$slot = get_post( absint( $_GET['apply'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				$event_id = ( $slot && 'lnkup_opportunity' === $slot->post_type ) ? (int) get_post_meta( $slot->ID, '_lnkup_event_id', true ) : 0;
+				$event    = $event_id ? get_post( $event_id ) : null;
+				$parts['title'] = ( $event && 'lnkup_event' === $event->post_type ) ? $event->post_title : __( 'Apply', 'lnkup-theme' );
+			}
+			return $parts;
+		}
+	);
+} elseif ( ! $use_dashboard_shell && is_user_logged_in() ) {
 
 	$user = wp_get_current_user();
 

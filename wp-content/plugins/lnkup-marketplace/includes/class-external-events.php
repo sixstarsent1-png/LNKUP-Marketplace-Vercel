@@ -1532,7 +1532,7 @@ class LNKup_External_Events {
 		return array(
 			'event_id'          => (int) $event_id,
 			'external_event_id' => $external_id,
-			'dashboard_url'     => lnkup_page_url_helper( 'organizer-dashboard' ) . '#applications',
+			'dashboard_url'     => lnkup_organizer_view_url( 'applications' ),
 		);
 	}
 

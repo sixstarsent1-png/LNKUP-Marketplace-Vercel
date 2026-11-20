@@ -17,7 +17,7 @@ async function loginVendor(page: import('@playwright/test').Page) {
 test.describe('Vendor growth dashboard', () => {
   test('growth view requires login when unauthenticated', async ({ page }) => {
     await page.goto('/vendor-dashboard/?view=growth');
-    await expect(page).toHaveURL(/wp-login|login/);
+    await expect(page).toHaveURL(/wp-login|log-?in/);
   });
 
   test.describe('authenticated vendor', () => {

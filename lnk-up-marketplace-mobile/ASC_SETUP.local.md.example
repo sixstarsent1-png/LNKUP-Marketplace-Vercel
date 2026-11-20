@@ -1,0 +1,28 @@
+# App Store Connect setup (copy to ASC_SETUP.local.md — gitignored)
+
+Fill after creating the app in https://appstoreconnect.apple.com
+
+| Field | Where to find | Value |
+|-------|----------------|-------|
+| Apple ID (email) | Account you use for ASC | |
+| Team ID | developer.apple.com → Membership | |
+| ASC App ID (numeric) | ASC → App → App Information → Apple ID | |
+| Bundle ID | Must match | `com.lnkup.marketplace` |
+| App name | ASC | LNKup |
+| SKU | ASC create form | lnkup-marketplace |
+
+## ASC API key (preferred for `eas submit`)
+
+1. ASC → Users and Access → Integrations → App Store Connect API
+2. Create key (App Manager or Admin)
+3. Download `.p8` once → put in `secrets/` (gitignored)
+4. Record Key ID + Issuer ID in `eas-submit.local.json` (from example)
+
+## Privacy URLs (must resolve)
+
+- Privacy: https://thelnkup.com/privacy
+- Support: https://thelnkup.com/contact
+- Terms: https://thelnkup.com/terms
+
+## Note
+Confirm privacy URL resolves before review (was 404 on thelnkup.com/privacy).

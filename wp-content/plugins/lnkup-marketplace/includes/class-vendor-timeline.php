@@ -32,6 +32,8 @@ class LNKup_Vendor_Timeline {
 			'checked_in'         => __( 'Checked in', 'lnkup-marketplace' ),
 			'rebooked'           => __( 'Rebooked', 'lnkup-marketplace' ),
 			'invite_sent'        => __( 'Invite sent', 'lnkup-marketplace' ),
+			'info_requested'     => __( 'You asked for more information', 'lnkup-marketplace' ),
+			'info_responded'     => __( 'Vendor replied to your question', 'lnkup-marketplace' ),
 			'invite_accepted'    => __( 'Invite accepted', 'lnkup-marketplace' ),
 			'invite_declined'    => __( 'Invite declined', 'lnkup-marketplace' ),
 			'flag_added'         => __( 'Risk flag added', 'lnkup-marketplace' ),

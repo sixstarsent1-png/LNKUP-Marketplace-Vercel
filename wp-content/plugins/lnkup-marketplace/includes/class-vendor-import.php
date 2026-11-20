@@ -655,14 +655,14 @@ class LNKup_Vendor_Import {
 		}
 
 		$event_id = absint( $options['event_id'] );
-		if ( $event_id && ! LNKup_Capabilities::organizer_owns_event( $organizer_id, $event_id ) ) {
+		if ( $event_id && ! LNKup_Capabilities::organizer_owns_event( $event_id, $organizer_id ) ) {
 			return new WP_Error( 'forbidden', __( 'You do not own this event.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 		}
 
 		$opp_id = absint( $options['opportunity_id'] );
 		if ( $opp_id ) {
 			$opp_event = (int) get_post_meta( $opp_id, '_lnkup_event_id', true );
-			if ( $opp_event && ! LNKup_Capabilities::organizer_owns_event( $organizer_id, $opp_event ) ) {
+			if ( $opp_event && ! LNKup_Capabilities::organizer_owns_event( $opp_event, $organizer_id ) ) {
 				return new WP_Error( 'forbidden', __( 'You do not own this opportunity.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 			}
 		}

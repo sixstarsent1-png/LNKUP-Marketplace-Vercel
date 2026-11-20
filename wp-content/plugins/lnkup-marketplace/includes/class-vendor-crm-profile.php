@@ -263,6 +263,27 @@ class LNKup_Vendor_CRM_Profile {
 	}
 
 	/**
+	 * City and state, or the first cities and states served.
+	 *
+	 * @param array $profile Profile data.
+	 */
+	public static function location_label( $profile ) {
+		$profile = is_array( $profile ) ? $profile : array();
+		$city    = trim( (string) ( $profile['city'] ?? '' ) );
+		$state   = trim( (string) ( $profile['state'] ?? '' ) );
+		if ( '' === $city && '' === $state ) {
+			$cities = array_values( array_filter( array_map( 'strval', (array) ( $profile['cities_served'] ?? array() ) ) ) );
+			$states = array_values( array_filter( array_map( 'strval', (array) ( $profile['states_served'] ?? array() ) ) ) );
+			$city   = trim( (string) ( $cities[0] ?? '' ) );
+			$state  = trim( (string) ( $states[0] ?? '' ) );
+		}
+		if ( '' === $city ) {
+			return $state;
+		}
+		return $state ? $city . ', ' . $state : $city;
+	}
+
+	/**
 	 * Format profile as CRM card HTML.
 	 *
 	 * @param array $profile Profile data.
@@ -271,53 +292,70 @@ class LNKup_Vendor_CRM_Profile {
 		if ( ! $profile ) {
 			return '';
 		}
-		$url = add_query_arg( 'vendor', $profile['profile_id'], lnkup_page_url_helper( 'organizer-dashboard' ) );
+		$initials = '';
+		foreach ( preg_split( '/\s+/', trim( (string) $profile['business_name'] ) ) as $part ) {
+			$initials .= strtoupper( substr( $part, 0, 1 ) );
+			if ( strlen( $initials ) >= 2 ) {
+				break;
+			}
+		}
+		$categories = array();
+		foreach ( array_slice( (array) ( $profile['category'] ?? array() ), 0, 3 ) as $category ) {
+			$label = is_array( $category ) ? (string) ( $category['name'] ?? '' ) : (string) $category;
+			$label = trim( $label );
+			if ( '' !== $label ) {
+				$categories[] = $label;
+			}
+		}
+		$location   = self::location_label( $profile );
+		$sell       = trim( (string) ( $profile['products_services'] ?? '' ) );
+		$profile_id = absint( $profile['profile_id'] ?? 0 );
+		$profile_url = '';
+		if ( $profile_id && function_exists( 'lnkup_page_url_helper' ) ) {
+			$profile_url = add_query_arg( 'vendor', $profile_id, lnkup_page_url_helper( 'organizer-dashboard' ) );
+		}
 		ob_start();
 		?>
-		<article class="lnkup-vendor-card lnkup-crm-card" data-profile-id="<?php echo esc_attr( (string) $profile['profile_id'] ); ?>">
+		<article class="lnkup-vendor-card lnkup-crm-card" data-profile-id="<?php echo esc_attr( (string) $profile_id ); ?>">
 			<div class="lnkup-vendor-card__header lnkup-crm-card__header">
 				<?php if ( ! empty( $profile['logo'] ) ) : ?>
 					<img src="<?php echo esc_url( $profile['logo'] ); ?>" alt="" class="lnkup-vendor-card__avatar lnkup-crm-card__avatar" />
 				<?php else : ?>
-					<span class="lnkup-vendor-card__avatar lnkup-crm-card__avatar lnkup-crm-card__avatar--placeholder"><?php echo esc_html( substr( $profile['business_name'], 0, 1 ) ); ?></span>
+					<span class="lnkup-vendor-card__avatar lnkup-crm-card__avatar lnkup-crm-card__avatar--placeholder"><?php echo esc_html( $initials ?: 'V' ); ?></span>
 				<?php endif; ?>
 				<div>
-					<h3 class="lnkup-vendor-card__name"><a href="<?php echo esc_url( $url ); ?>"><?php echo esc_html( $profile['business_name'] ); ?></a></h3>
-					<p class="lnkup-muted"><?php echo esc_html( implode( ', ', array_slice( $profile['category'], 0, 2 ) ) ); ?></p>
+					<h3 class="lnkup-vendor-card__name">
+						<?php if ( $profile_url ) : ?>
+							<a href="<?php echo esc_url( $profile_url ); ?>"><?php echo esc_html( $profile['business_name'] ); ?></a>
+						<?php else : ?>
+							<?php echo esc_html( $profile['business_name'] ); ?>
+						<?php endif; ?>
+					</h3>
+					<p class="lnkup-muted"><?php echo esc_html( $location ? $location : __( 'Location not listed.', 'lnkup-marketplace' ) ); ?></p>
 				</div>
-				<?php echo lnkup_status_badge( 'featured', (string) $profile['vendor_score'] . ' score' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			</div>
-			<div class="lnkup-vendor-card__meta lnkup-crm-card__meta">
-				<span><?php echo esc_html( $profile['city'] . ( $profile['state'] ? ', ' . $profile['state'] : '' ) ); ?></span>
-				<?php
-				$completed_events = (int) ( $profile['reliability']['completed_events'] ?? $profile['completed_events'] ?? 0 );
-				if ( $completed_events > 0 ) :
-					?>
-					<span><?php echo esc_html( (string) $completed_events ); ?> <?php echo esc_html( _n( 'event', 'events', $completed_events, 'lnkup-marketplace' ) ); ?></span>
-				<?php else : ?>
-					<span class="lnkup-muted lnkup-vendor-card__meta--empty"><?php esc_html_e( 'No events yet', 'lnkup-marketplace' ); ?></span>
-				<?php endif; ?>
-				<?php if ( ! empty( $profile['avg_rating'] ) ) : ?>
-					<?php echo LNKup_Reputation_Render::star_rating( $profile['avg_rating'], $profile['review_count'] ?? 0 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-				<?php endif; ?>
-			</div>
-			<div class="lnkup-vendor-card__chips">
-				<?php foreach ( array_slice( $profile['badges'] ?? array(), 0, 2 ) as $badge ) : ?>
-					<?php echo lnkup_status_badge( 'recommended', $badge['label'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-				<?php endforeach; ?>
-				<?php if ( $profile['is_favorite'] ) : ?><?php echo lnkup_status_badge( 'approved', __( 'Favorite', 'lnkup-marketplace' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php endif; ?>
-				<?php if ( $profile['is_preferred'] ) : ?><?php echo lnkup_status_badge( 'info', __( 'Preferred', 'lnkup-marketplace' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php endif; ?>
-				<?php foreach ( array_slice( $profile['flags'], 0, 2 ) as $flag ) : ?>
-					<?php echo lnkup_status_badge( 'rejected', $flag['label'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-				<?php endforeach; ?>
-			</div>
+			<?php
+			$completed_events = (int) ( $profile['reliability']['completed_events'] ?? $profile['completed_events'] ?? 0 );
+			?>
+			<?php if ( $categories ) : ?>
+				<ul class="lnkup-vendor-card__chips" aria-label="<?php esc_attr_e( 'Categories', 'lnkup-marketplace' ); ?>">
+					<?php foreach ( $categories as $category ) : ?>
+						<li class="lnkup-badge lnkup-badge--outline"><?php echo esc_html( $category ); ?></li>
+					<?php endforeach; ?>
+				</ul>
+			<?php elseif ( $sell ) : ?>
+				<p class="lnkup-muted"><?php echo esc_html( wp_trim_words( $sell, 12, '…' ) ); ?></p>
+			<?php else : ?>
+				<p class="lnkup-muted"><?php esc_html_e( 'Category not listed.', 'lnkup-marketplace' ); ?></p>
+			<?php endif; ?>
+			<?php if ( $completed_events > 0 ) : ?>
+				<p class="lnkup-muted"><?php echo esc_html( sprintf( _n( '%d event', '%d events', $completed_events, 'lnkup-marketplace' ), $completed_events ) ); ?></p>
+			<?php endif; ?>
 			<div class="lnkup-vendor-card__actions lnkup-crm-card__actions">
-				<a href="<?php echo esc_url( $url ); ?>" class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost"><?php esc_html_e( 'View Intel', 'lnkup-marketplace' ); ?></a>
-				<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost lnkup-crm-fav" data-profile-id="<?php echo esc_attr( (string) $profile['profile_id'] ); ?>"><?php echo $profile['is_favorite'] ? '★' : '☆'; ?> <?php esc_html_e( 'Favorite', 'lnkup-marketplace' ); ?></button>
-				<div class="lnkup-crm-add-to-list-wrap">
-					<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost lnkup-crm-add-to-list" data-profile-id="<?php echo esc_attr( (string) $profile['profile_id'] ); ?>" aria-haspopup="true"><?php esc_html_e( 'Save to list', 'lnkup-marketplace' ); ?></button>
-				</div>
-				<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--soft lnkup-crm-invite" data-vendor-id="<?php echo esc_attr( (string) $profile['vendor_user_id'] ); ?>" data-vendor-name="<?php echo esc_attr( $profile['business_name'] ); ?>" data-profile-id="<?php echo esc_attr( (string) $profile['profile_id'] ); ?>"><?php esc_html_e( 'Invite', 'lnkup-marketplace' ); ?></button>
+				<?php if ( $profile_url ) : ?>
+					<a class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" href="<?php echo esc_url( $profile_url ); ?>"><?php esc_html_e( 'View', 'lnkup-marketplace' ); ?></a>
+				<?php endif; ?>
+				<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline lnkup-crm-invite" data-vendor-id="<?php echo esc_attr( (string) $profile['vendor_user_id'] ); ?>" data-vendor-name="<?php echo esc_attr( $profile['business_name'] ); ?>" data-profile-id="<?php echo esc_attr( (string) $profile_id ); ?>"><?php esc_html_e( 'Invite', 'lnkup-marketplace' ); ?></button>
 			</div>
 		</article>
 		<?php

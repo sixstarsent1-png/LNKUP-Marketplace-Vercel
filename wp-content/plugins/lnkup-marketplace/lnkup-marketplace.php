@@ -3,7 +3,7 @@
  * Plugin Name: LNKup Marketplace
  * Plugin URI: https://lnkup.com
  * Description: Custom marketplace functionality for LNKup — vendor opportunities, applications, payments, and event management.
- * Version: 12.18.45
+ * Version: 12.21.0
  * Author: LNKup
  * Author URI: https://lnkup.com
  * License: GPL v2 or later
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'LNKUP_VERSION', '12.18.45' );
+define( 'LNKUP_VERSION', '12.21.0' );
 define( 'LNKUP_PLUGIN_FILE', __FILE__ );
 define( 'LNKUP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LNKUP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -71,6 +71,7 @@ $lnkup_core_files = array(
 	'includes/class-capabilities.php',
 	'includes/class-activator.php',
 	'includes/class-applications.php',
+	'includes/class-opportunity-inventory.php',
 	'includes/class-apply-with-profile-view.php',
 	'includes/class-applications-rest.php',
 	'includes/class-payments.php',
@@ -81,7 +82,11 @@ $lnkup_core_files = array(
 	'includes/class-documents.php',
 	'includes/class-documents-rest.php',
 	'includes/class-vendor-profile-rest.php',
+	'includes/class-profile-media.php',
+	'includes/class-organizer-profile-rest.php',
+	'includes/class-app-links.php',
 	'includes/class-notifications.php',
+	'includes/class-user-mail.php',
 	'includes/class-activation-emails.php',
 	'includes/class-push-tables.php',
 	'includes/class-push-service.php',
@@ -97,6 +102,7 @@ $lnkup_core_files = array(
 	'includes/class-organizer-launch-rest.php',
 	'includes/class-organizer-launch-checklist.php',
 	'includes/class-vendor-getting-started.php',
+	'includes/class-app-promo.php',
 	'includes/class-knowledge-base.php',
 	'includes/class-dashboard-tour.php',
 	'includes/class-ajax.php',
@@ -183,6 +189,7 @@ $lnkup_core_files = array(
 	'includes/class-ui-copy.php',
 	'includes/class-vendor-dashboard-data.php',
 	'public/class-vendor-dashboard-views.php',
+	'public/class-organizer-dashboard-views.php',
 	'public/class-shortcodes.php',
 	'public/class-registration.php',
 	'admin/class-admin.php',
@@ -331,8 +338,11 @@ function lnkup_marketplace_init() {
 	LNKup_Applications_REST::init();
 	LNKup_Documents_REST::init();
 	LNKup_Vendor_Profile_REST::init();
+	LNKup_Organizer_Profile_REST::init();
+	LNKup_App_Links::init();
 	LNKup_Packets_REST::init();
 	LNKup_Push_REST::init();
+	LNKup_App_Promo::init();
 	LNKup_Inbox_REST::init();
 	LNKup_Mobile_Auth::init();
 	LNKup_Auth_REST::init();
@@ -382,7 +392,12 @@ function lnkup_marketplace_init() {
 		LNKup_Market_Pages_Admin::init();
 	}
 	LNKup_Ajax::init();
+	if ( class_exists( 'LNKup_User_Mail' ) ) {
+		LNKup_User_Mail::init();
+	}
 	LNKup_Documents::init();
+	LNKup_Opportunity_Inventory::init();
+	LNKup_Notifications::init();
 	LNKup_Stripe::init();
 	LNKup_SEO::init();
 	LNKup_Activator::maybe_repair_dashboard_pages();
@@ -587,6 +602,7 @@ function lnkup_get_settings() {
 		'google_maps_key'       => '',
 		'payment_provider'      => 'stripe',
 		'stripe_webhook_secret' => '',
+		'stripe_connect_webhook_secret' => '',
 		'stripe_connect_enabled'       => false,
 		'connect_platform_country'     => 'US',
 		'connect_platform_currency'    => 'usd',
@@ -623,6 +639,8 @@ function lnkup_get_settings() {
 		'platform_prelaunch_admin_preview'  => true,
 		'app_release_datetime'              => '2026-08-16 12:00:00',
 		'app_release_tz'                    => 'America/New_York',
+		'app_store_url'                     => 'https://apps.apple.com/app/id6795865859',
+		'app_prompts_enabled'               => true,
 		'launch_goal_vendors'          => 4000,
 		'launch_goal_organizers'       => 500,
 		'outreach_emails_enabled'      => true,

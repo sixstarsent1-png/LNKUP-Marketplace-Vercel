@@ -11,6 +11,8 @@ class LNKup_Organizer_Payouts {
 
 	const INSTANT_FEE_RATE = 0.015;
 
+	const TYPES = array( 'standard', 'instant' );
+
 	/**
 	 * Request cashout from organizer wallet.
 	 *
@@ -18,23 +20,65 @@ class LNKup_Organizer_Payouts {
 	 * @param float  $amount  Requested amount.
 	 * @param string $type    Payout type.
 	 */
-	public static function request_cashout( $user_id, $amount, $type = 'standard' ) {
+	public static function request_cashout( $user_id, $amount, $type = 'standard', $client_token = '' ) {
+		global $wpdb;
+		$client_token = substr( sanitize_text_field( (string) $client_token ), 0, 64 );
 		$user_id = absint( $user_id );
 		$amount  = round( (float) $amount, 2 );
+		$type    = sanitize_key( (string) $type );
 		if ( $amount <= 0 ) {
 			return new WP_Error( 'invalid_amount', __( 'Invalid cashout amount.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
+		if ( ! in_array( $type, self::TYPES, true ) ) {
+			return new WP_Error( 'invalid_payout_type', __( 'Choose a standard or instant cashout.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		if ( 'instant' === $type && round( $amount - round( $amount * self::INSTANT_FEE_RATE, 2 ), 2 ) <= 0 ) {
+			return new WP_Error( 'amount_below_fee', __( 'This amount is too small for an instant cashout.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
 
+		$lock = 'lnkup_cashout_' . $user_id;
+		if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return new WP_Error( 'busy', __( 'A cashout is already being processed. Refresh in a moment.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
+		}
+		try {
+			if ( '' !== $client_token ) {
+				$existing = self::payout_for_client_token( $user_id, $client_token );
+				if ( $existing ) {
+					return $existing;
+				}
+			}
+			return self::request_cashout_locked( $user_id, $amount, $type, $client_token );
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/**
+	 * Balance check, insert and debit for one organizer; caller holds the cashout lock so two
+	 * concurrent requests cannot both spend the same available balance.
+	 *
+	 * @param int    $user_id Organizer user ID.
+	 * @param float  $amount  Amount.
+	 * @param string $type    Validated payout type.
+	 */
+	private static function payout_for_client_token( $user_id, $client_token ) {
+		global $wpdb;
+		$table = LNKup_Treasury_Tables::organizer_payouts_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE user_id = %d AND metadata LIKE %s ORDER BY id DESC LIMIT 1", absint( $user_id ), '%' . $wpdb->esc_like( '"client_token":"' . $client_token . '"' ) . '%' ) );
+	}
+
+	private static function request_cashout_locked( $user_id, $amount, $type, $client_token = '' ) {
 		$settlement_mode = class_exists( 'LNKup_Stripe_Connect' )
 			? LNKup_Stripe_Connect::settlement_mode_for_organizer( $user_id )
 			: 'platform_treasury';
 
 		if ( 'destination' === $settlement_mode ) {
 			if ( ! LNKup_Stripe_Connect::is_connect_ready( $user_id ) ) {
-				return new WP_Error( 'connect_not_ready', __( 'Complete Stripe Connect setup before cashing out.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+				return new WP_Error( 'connect_not_ready', __( 'Finish payout setup before cashing out.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 			}
 			if ( LNKup_Stripe_Connect::has_past_due_requirements( $user_id ) ) {
-				return new WP_Error( 'requirements_past_due', __( 'Resolve Stripe verification requirements before cashing out.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+				return new WP_Error( 'requirements_past_due', __( 'Finish your payout verification before cashing out.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 			}
 		}
 
@@ -75,20 +119,28 @@ class LNKup_Organizer_Payouts {
 			}
 		}
 
-		$wpdb->insert(
+		$inserted = $wpdb->insert(
 			$table,
 			array(
 				'user_id'      => $user_id,
 				'amount'       => $amount,
 				'fee_amount'   => $fee,
 				'net_amount'   => $net,
-				'payout_type'  => sanitize_key( $type ),
+				'payout_type'  => $type,
 				'status'       => 'requested',
 				'provider'     => $provider,
+				'metadata'     => '' !== $client_token ? wp_json_encode( array( 'client_token' => $client_token ) ) : null,
 				'created_at'   => $now,
 				'updated_at'   => $now,
 			)
 		);
+		if ( false === $inserted || ! $wpdb->insert_id ) {
+			return new WP_Error(
+				'payout_failed',
+				__( 'Cashout could not be recorded. Your balance was not changed.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
+		}
 		$payout_id = (int) $wpdb->insert_id;
 
 		LNKup_Organizer_Wallet::debit( $user_id, $amount, array(
@@ -142,19 +194,30 @@ class LNKup_Organizer_Payouts {
 				array( 'status' => 400, 'payout_id' => absint( $payout_id ) )
 			);
 		}
+		$invalid_status = new WP_Error(
+			'payout_invalid_status',
+			sprintf(
+				/* translators: %s: payout status slug */
+				__( 'Cashout cannot be processed from status “%s”.', 'lnkup-marketplace' ),
+				(string) $payout['status']
+			),
+			array( 'status' => 400, 'payout_id' => absint( $payout_id ), 'payout_status' => (string) $payout['status'] )
+		);
 		if ( ! in_array( $payout['status'], array( 'requested', 'approved' ), true ) ) {
-			return new WP_Error(
-				'payout_invalid_status',
-				sprintf(
-					/* translators: %s: payout status slug */
-					__( 'Cashout cannot be processed from status “%s”.', 'lnkup-marketplace' ),
-					(string) $payout['status']
-				),
-				array( 'status' => 400, 'payout_id' => absint( $payout_id ), 'payout_status' => (string) $payout['status'] )
-			);
+			return $invalid_status;
 		}
 
-		$wpdb->update( $table, array( 'status' => 'processing', 'updated_at' => current_time( 'mysql' ) ), array( 'id' => $payout_id ) );
+		// Atomic claim: a concurrent request that already moved the row must not pay out twice.
+		$claimed = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = 'processing', updated_at = %s WHERE id = %d AND status IN ('requested','approved')",
+				current_time( 'mysql' ),
+				absint( $payout_id )
+			)
+		);
+		if ( 1 !== (int) $claimed ) {
+			return $invalid_status;
+		}
 
 		if ( 'stripe_connect_payout' === $payout['provider'] && class_exists( 'LNKup_Stripe_Connect' ) ) {
 			$result = LNKup_Stripe_Connect::create_connect_payout(
@@ -182,6 +245,7 @@ class LNKup_Organizer_Payouts {
 			$result = LNKup_Stripe_Connect::schedule_transfer( (int) $payout['user_id'], (float) $payout['net_amount'], array( 'payout_id' => $payout_id ) );
 			if ( is_wp_error( $result ) ) {
 				self::mark_payout_failed( $payout_id, $result );
+				self::restore_failed_cashout( (int) $payout['user_id'], (float) $payout['amount'], $payout_id );
 				return $result;
 			}
 			if ( ! empty( $result['transfer_id'] ) ) {
@@ -194,6 +258,7 @@ class LNKup_Organizer_Payouts {
 				array( 'status' => 400, 'payout_id' => absint( $payout_id ) )
 			);
 			self::mark_payout_failed( $payout_id, $err );
+			self::restore_failed_cashout( (int) $payout['user_id'], (float) $payout['amount'], $payout_id );
 			return $err;
 		}
 
@@ -252,14 +317,15 @@ class LNKup_Organizer_Payouts {
 	/**
 	 * Restore balance after failed Connect payout.
 	 *
-	 * @param int   $user_id   Organizer user ID.
-	 * @param float $amount    Amount.
-	 * @param int   $payout_id Payout ID.
+	 * @param int   $user_id            Organizer user ID.
+	 * @param float $amount             Amount.
+	 * @param int   $payout_id          Payout ID.
+	 * @param bool  $release_processing False when mark_paid() already released processing_balance.
 	 */
-	private static function restore_failed_cashout( $user_id, $amount, $payout_id ) {
+	private static function restore_failed_cashout( $user_id, $amount, $payout_id, $release_processing = true ) {
 		global $wpdb;
 		$wallet = LNKup_Organizer_Wallet::get_or_create( $user_id );
-		if ( $wallet ) {
+		if ( $wallet && $release_processing ) {
 			$wpdb->update(
 				LNKup_Treasury_Tables::organizer_wallets_table(),
 				array(
@@ -313,17 +379,24 @@ class LNKup_Organizer_Payouts {
 		if ( ! $payout ) {
 			return false;
 		}
-		$now = current_time( 'mysql' );
-		$wpdb->update(
-			$table,
-			array(
-				'status'       => 'paid',
-				'provider_ref' => sanitize_text_field( $provider_ref ),
-				'paid_at'      => $now,
-				'updated_at'   => $now,
-			),
-			array( 'id' => $payout_id )
+		if ( 'paid' === $payout['status'] ) {
+			return true;
+		}
+		$now          = current_time( 'mysql' );
+		$provider_ref = '' !== (string) $provider_ref ? sanitize_text_field( $provider_ref ) : (string) ( $payout['provider_ref'] ?? '' );
+		// Only the request that flips the row to paid may touch wallet totals (webhook + sync path race).
+		$updated = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = 'paid', provider_ref = %s, paid_at = %s, updated_at = %s WHERE id = %d AND status <> 'paid'",
+				$provider_ref,
+				$now,
+				$now,
+				absint( $payout_id )
+			)
 		);
+		if ( 1 !== (int) $updated ) {
+			return true;
+		}
 		$wallet = LNKup_Organizer_Wallet::get_or_create( (int) $payout['user_id'] );
 		if ( $wallet ) {
 			$processing = max( 0, (float) $wallet['processing_balance'] - (float) $payout['amount'] );
@@ -342,6 +415,64 @@ class LNKup_Organizer_Payouts {
 	}
 
 	/**
+	 * Fail a payout after Stripe reports it failed asynchronously (payout.failed, transfer.reversed).
+	 *
+	 * @param int    $payout_id Payout row ID.
+	 * @param string $reason    Failure reason.
+	 * @return bool True when the payout was moved to failed and the balance restored.
+	 */
+	public static function handle_async_failure( $payout_id, $reason = '' ) {
+		global $wpdb;
+		$payout_id = absint( $payout_id );
+		$table     = LNKup_Treasury_Tables::organizer_payouts_table();
+		$payout    = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $payout_id ), ARRAY_A );
+		if ( ! $payout || ! in_array( $payout['status'], array( 'processing', 'paid' ), true ) ) {
+			return false;
+		}
+		$prior_status = (string) $payout['status'];
+		$reason       = '' !== trim( (string) $reason ) ? sanitize_text_field( $reason ) : __( 'Payout failed', 'lnkup-marketplace' );
+
+		$updated = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = 'failed', failure_reason = %s, updated_at = %s WHERE id = %d AND status = %s",
+				$reason,
+				current_time( 'mysql' ),
+				$payout_id,
+				$prior_status
+			)
+		);
+		if ( 1 !== (int) $updated ) {
+			return false;
+		}
+
+		$user_id = (int) $payout['user_id'];
+		if ( 'paid' === $prior_status ) {
+			$wallet = LNKup_Organizer_Wallet::get_or_create( $user_id );
+			if ( $wallet ) {
+				$wpdb->update(
+					LNKup_Treasury_Tables::organizer_wallets_table(),
+					array(
+						'lifetime_paid_out' => max( 0, (float) $wallet['lifetime_paid_out'] - (float) $payout['net_amount'] ),
+						'updated_at'        => current_time( 'mysql' ),
+					),
+					array( 'id' => (int) $wallet['id'] )
+				);
+			}
+		}
+		self::restore_failed_cashout( $user_id, (float) $payout['amount'], $payout_id, 'paid' !== $prior_status );
+		LNKup_Financial_Audit::log(
+			'organizer_payout_failed_async',
+			'payout',
+			$payout_id,
+			array(
+				'prior_status' => $prior_status,
+				'reason'       => $reason,
+			)
+		);
+		return true;
+	}
+
+	/**
 	 * Cancel pending payout and restore balance.
 	 *
 	 * @param int $payout_id Payout ID.
@@ -355,9 +486,19 @@ class LNKup_Organizer_Payouts {
 			ARRAY_A
 		);
 		if ( ! $payout || ! in_array( $payout['status'], array( 'requested', 'approved' ), true ) ) {
-			return new WP_Error( 'cannot_cancel', __( 'Payout cannot be cancelled.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'cannot_cancel', __( 'Payout cannot be cancelled.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
 		}
-		$wpdb->update( $table, array( 'status' => 'cancelled', 'updated_at' => current_time( 'mysql' ) ), array( 'id' => $payout_id ) );
+		$cancelled = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = 'cancelled', updated_at = %s WHERE id = %d AND user_id = %d AND status IN ('requested','approved')",
+				current_time( 'mysql' ),
+				absint( $payout_id ),
+				absint( $user_id )
+			)
+		);
+		if ( 1 !== (int) $cancelled ) {
+			return new WP_Error( 'cannot_cancel', __( 'This cashout is already being processed.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
 		LNKup_Organizer_Wallet::add_entry(
 			$user_id,
 			(float) $payout['amount'],

@@ -85,7 +85,30 @@ class LNKup_Checkout {
 	 * @param array $args       Optional payment_method_id.
 	 */
 	public static function prepare( $payment_id, $args = array() ) {
+		$pay_status = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
+		if ( 'paid' === $pay_status ) {
+			return array(
+				'mode'         => 'no_payment_due',
+				'paid'         => true,
+				'already_paid' => true,
+				'payment_id'   => (int) $payment_id,
+			);
+		}
+		if ( 'pending' !== $pay_status ) {
+			return new WP_Error( 'payment_not_payable', __( 'This booking is no longer open for payment.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
 		LNKup_Payments::refresh_pending_fees( $payment_id );
+		$zero = LNKup_Financial_Service::maybe_finalize_zero_amount( $payment_id, 'free_booth' );
+		if ( is_wp_error( $zero ) ) {
+			return $zero;
+		}
+		if ( null !== $zero ) {
+			return array(
+				'mode'       => 'no_payment_due',
+				'paid'       => true,
+				'payment_id' => (int) $payment_id,
+			);
+		}
 		$provider = LNKup_Payment_Provider::get_instance();
 		return $provider->create_payment_intent( $payment_id, $args );
 	}
@@ -98,8 +121,9 @@ class LNKup_Checkout {
 	 */
 	public static function apply_credits( $payment_id, $amount = 0 ) {
 		$vendor_id = (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true );
+		$actor_id  = LNKup_Capabilities::user_has_manage_all() ? $vendor_id : get_current_user_id();
 		$total     = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
-		$result    = LNKup_Credits::apply_to_payment( $payment_id, $vendor_id, $amount > 0 ? $amount : $total );
+		$result    = LNKup_Credits::apply_to_payment( $payment_id, $actor_id, $amount > 0 ? $amount : $total );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}

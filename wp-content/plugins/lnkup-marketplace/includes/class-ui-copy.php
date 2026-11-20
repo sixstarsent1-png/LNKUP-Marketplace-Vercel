@@ -262,7 +262,7 @@ class LNKup_UI_Copy {
 			'apply_submit'                => __( 'Submit application', 'lnkup-marketplace' ),
 			'apply_success'               => __( 'Application submitted. You\'ll be notified when the organizer reviews it.', 'lnkup-marketplace' ),
 			'apply_already_applied'       => __( 'You already applied to this opportunity.', 'lnkup-marketplace' ),
-			'apply_logged_out'            => __( 'Create a free vendor profile to apply for this opportunity.', 'lnkup-marketplace' ),
+			'apply_logged_out'            => __( 'Create a free vendor profile to apply.', 'lnkup-marketplace' ),
 			'apply_no_profile'            => __( 'Build your vendor profile first', 'lnkup-marketplace' ),
 			'apply_create_profile_cta'    => __( 'Create vendor profile', 'lnkup-marketplace' ),
 			'apply_terms_label'           => __( 'I understand payment is only required if I am accepted.', 'lnkup-marketplace' ),

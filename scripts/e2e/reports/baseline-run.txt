@@ -1,0 +1,2970 @@
+﻿
+Running 182 tests using 2 workers
+
+
+
+powershell : (node:62636) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+At line:1 char:469
++ ... spec.ts" }; powershell -File scripts/e2e/run-specs.ps1 @specs --proje ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:62636) Wa... env being set.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+(node:75260) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[1/182] [chromium] › tests\e2e\app-promo.spec.ts:57:7 › Optional iPhone app prompts › homepage offers the app without blocking the page
+[2/182] [chromium] › tests\e2e\app-promo.spec.ts:67:7 › Optional iPhone app prompts › homepage app bar can be closed and stays closed
+[3/182] [chromium] › tests\e2e\app-promo.spec.ts:89:9 › Optional iPhone app prompts › organizer › overview shows quick actions
+[4/182] [chromium] › tests\e2e\app-promo.spec.ts:95:9 › Optional iPhone app prompts › organizer › app card can be closed and stays closed after reload
+[5/182] [chromium] › tests\e2e\app-promo.spec.ts:99:9 › Optional iPhone app prompts › organizer › hiding app suggestions removes the card
+  1) [chromium] › tests\e2e\app-promo.spec.ts:89:9 › Optional iPhone app prompts › organizer › overview shows quick actions 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-organizer-quick-actions')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-organizer-quick-actions')
+
+
+      89 |     test('overview shows quick actions', async ({ page }) => {
+      90 |       await page.goto('/organizer-dashboard/?view=home');
+    > 91 |       await expect(page.getByTestId('lnkup-organizer-quick-actions')).toBeVisible();
+         |                                                                       ^
+      92 |       await expect(page.getByTestId('lnkup-organizer-quick-actions').getByRole('link', { name: /invite vendors/i })).toBeVisible();
+      93 |     });
+      94 |
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\app-promo.spec.ts:91:71
+
+    Error Context: test-results\app-promo-Optional-iPhone--4dc12-verview-shows-quick-actions-chromium\error-context.md
+
+
+
+(node:3104) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[6/182] [chromium] › tests\e2e\app-promo.spec.ts:122:9 › Optional iPhone app prompts › vendor › app card can be closed and stays closed after reload
+[7/182] [chromium] › tests\e2e\connector-program.spec.ts:4:7 › City Connector program › connector interest page renders form with market context
+[8/182] [chromium] › tests\e2e\connector-program.spec.ts:12:7 › City Connector program › market page connector CTA links to interest form with market
+  2) [chromium] › tests\e2e\connector-program.spec.ts:4:7 › City Connector program › connector interest page renders form with market context 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/Charlotte/i)
+    Expected: visible
+    Error: strict mode violation: getByText(/Charlotte/i) resolved to 3 elements:
+        1) <span class="lnkup-hero__stamp">CHARLOTTE / CONNECTOR</span> aka getByText('CHARLOTTE / CONNECTOR')
+        2) <h1 class="lnkup-heading lnkup-heading--hero">Charlotte. Their events. Our network.</h1> aka getByRole('heading', { name: 'Charlotte. Their events. Our' })
+        3) <p class="lnkup-hero__lead">Become a City Connector in Charlotte. Introduce t…</p> aka getByText('Become a City Connector in')
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByText(/Charlotte/i)
+
+
+       7 |     await expect(page.getByTestId('lnkup-connector-interest-form')).toBeVisible();
+       8 |     await expect(page.getByLabel('Email')).toBeEditable();
+    >  9 |     await expect(page.getByText(/Charlotte/i)).toBeVisible();
+         |                                                ^
+      10 |   });
+      11 |
+      12 |   test('market page connector CTA links to interest form with market', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:9:48
+
+    Error Context: test-results\connector-program-City-Con-f2f11-rs-form-with-market-context-chromium\error-context.md
+
+
+
+(node:73960) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[9/182] [chromium] › tests\e2e\connector-program.spec.ts:20:7 › City Connector program › sign-up with ref query includes hidden ref field
+[10/182] [chromium] › tests\e2e\connector-program.spec.ts:27:7 › City Connector program › sign-up with outreach and ref both render without blocking
+[11/182] [chromium] › tests\e2e\connector-program.spec.ts:34:7 › City Connector program › public referral resolve endpoint returns JSON
+[12/182] [chromium] › tests\e2e\connector-program.spec.ts:41:7 › City Connector program › connector dashboard requires login
+[13/182] [chromium] › tests\e2e\connector-program.spec.ts:46:7 › City Connector program › connector dashboard mobile viewport has no horizontal overflow
+[14/182] [chromium] › tests\e2e\connector-program.spec.ts:55:7 › City Connector program › unauthorized users cannot read connector earnings or calculator
+[15/182] [chromium] › tests\e2e\connector-program.spec.ts:64:7 › City Connector program › unauthorized users cannot read connector rank or leaderboard
+[16/182] [chromium] › tests\e2e\connector-program.spec.ts:71:7 › City Connector program › onboarding and terms endpoints reject anonymous JSON clients
+[17/182] [chromium] › tests\e2e\connector-program.spec.ts:85:7 › City Connector program › unauthorized users cannot read connector studio
+[18/182] [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 320px
+[19/182] [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 320px
+[20/182] [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 320px
+[21/182] [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 375px
+[22/182] [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 375px
+[23/182] [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 375px
+[24/182] [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 768px
+[25/182] [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 768px
+[26/182] [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 768px
+[27/182] [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 1024px
+[28/182] [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 1024px
+[29/182] [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 1024px
+[30/182] [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 1440px
+[31/182] [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 1440px
+[32/182] [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 1440px
+[33/182] [chromium] › tests\e2e\connector-program.spec.ts:129:7 › City Connector program › logged-in connector Get Started shows a launch plan without generic Continue
+[34/182] [chromium] › tests\e2e\connector-program.spec.ts:143:7 › City Connector program › logged-in connector can open a studio template and submit a URL
+[35/182] [chromium] › tests\e2e\connector-program.spec.ts:161:7 › City Connector program › logged-in connector rank card and roadmap stay on-page
+[36/182] [chromium] › tests\e2e\connector-program.spec.ts:174:7 › City Connector program › logged-in connector Share sheet opens without reload
+[37/182] [chromium] › tests\e2e\connector-program.spec.ts:187:7 › City Connector program › logged-in connector referrals filters and earnings calculator stay on-page
+[38/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:26:7 › Organizer dashboard enhancements › Requests shows search, sort, and status badges on each card
+[39/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:37:7 › Organizer dashboard enhancements › Requests bulk bar stays hidden until a request is selected
+[40/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:52:7 › Organizer dashboard enhancements › View details opens the request drawer and Escape closes it
+  3) [chromium] › tests\e2e\dashboard-enhancements.spec.ts:26:7 › Organizer dashboard enhancements › Requests shows search, sort, and status badges on each card 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('searchbox', { name: /search requests/i })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('searchbox', { name: /search requests/i })
+
+
+      26 |   test('Requests shows search, sort, and status badges on each card', async ({ page }) => {
+      27 |     await page.goto('/organizer-dashboard/?view=applications');
+    > 28 |     await expect(page.getByRole('searchbox', { name: /search requests/i })).toBeVisible();
+         |                                                                             ^
+      29 |     await expect(page.getByRole('combobox', { name: /^sort$/i })).toBeVisible();
+      30 |
+      31 |     const cards = page.locator('.lnkup-request-row');
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\dashboard-enhancements.spec.ts:28:77
+
+    Error Context: test-results\dashboard-enhancements-Org-1e2b7--status-badges-on-each-card-chromium\error-context.md
+
+
+
+
+(node:64784) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[41/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:64:7 › Organizer dashboard enhancements › Decline asks for a reason inline instead of a browser prompt
+[42/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:83:7 › Organizer dashboard enhancements › Event workspace overview shows readiness, spots, and tools
+  4) [chromium] › tests\e2e\dashboard-enhancements.spec.ts:83:7 › Organizer dashboard enhancements › Event workspace overview shows readiness, spots, and tools 
+
+    Error: expect(page).not.toHaveURL(expected) failed
+
+    Expected pattern: not /wp-login/
+    Received string: "http://localhost:8888/wp-login.php"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "not toHaveURL" with timeout 5000ms
+        14 × unexpected value "http://localhost:8888/wp-login.php"
+
+
+      15 |   await page.getByLabel(/^password$/i).fill(pass);
+      16 |   await page.getByRole('button', { name: /log in/i }).click();
+    > 17 |   await expect(page).not.toHaveURL(/wp-login/);
+         |                          ^
+      18 | }
+      19 |
+      20 | test.describe('Organizer dashboard enhancements', () => {
+        at login (C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\dashboard-enhancements.spec.ts:17:26)
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\dashboard-enhancements.spec.ts:23:5
+
+    Error Context: test-results\dashboard-enhancements-Org-882ac-s-readiness-spots-and-tools-chromium\error-context.md
+
+
+
+(node:73036) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[43/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:93:7 › Organizer dashboard enhancements › Edit view links back to the workspace for requests and vendors
+  5) [chromium] › tests\e2e\dashboard-enhancements.spec.ts:93:7 › Organizer dashboard enhancements › Edit view links back to the workspace for requests and vendors 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('link', { name: /back to event/i })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('link', { name: /back to event/i })
+
+
+      94 |     test.skip(!organizerEventId, 'Set PLAYWRIGHT_ORGANIZER_EVENT_ID to an event the organizer owns');
+      95 |     await page.goto(`/organizer-dashboard/?event=${organizerEventId}&edit=1`);
+    > 96 |     await expect(page.getByRole('link', { name: /back to event/i })).toBeVisible();
+         |                                                                      ^
+      97 |     const editorTabs = page.getByRole('navigation', { name: /event editor sections/i });
+      98 |     await expect(editorTabs.getByRole('link', { name: /^Requests/ })).toHaveAttribute('href', /tab=requests/);
+      99 |     await expect(editorTabs.getByRole('link', { name: 'Vendors' })).toHaveAttribute('href', /tab=vendors/);
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\dashboard-enhancements.spec.ts:96:70
+
+    Error Context: test-results\dashboard-enhancements-Org-8bec5-ce-for-requests-and-vendors-chromium\error-context.md
+
+
+
+(node:73080) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[44/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:102:7 › Organizer dashboard enhancements › Roster selection count drives the bulk buttons
+  6) [chromium] › tests\e2e\dashboard-enhancements.spec.ts:64:7 › Organizer dashboard enhancements › Decline asks for a reason inline instead of a browser prompt 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for locator('.lnkup-review-btn--decline').first()
+        - locator resolved to <button type="button" data-app-id="182" data-action="reject" class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost lnkup-review-btn lnkup-review-btn--decline">Decline</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        11 × waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+
+
+      72 |       await dialog.dismiss();
+      73 |     });
+    > 74 |     await decline.first().click();
+         |                           ^
+      75 |     const reasonForm = page.getByRole('group', { name: /decline request/i });
+      76 |     await expect(reasonForm).toBeVisible();
+      77 |     await expect(reasonForm.getByLabel(/reason for the vendor/i)).toBeFocused();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\dashboard-enhancements.spec.ts:74:27
+
+    Error Context: test-results\dashboard-enhancements-Org-7f36d-instead-of-a-browser-prompt-chromium\error-context.md
+
+
+
+(node:44916) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[45/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:116:7 › Organizer dashboard enhancements › QR check-in offers manual entry and a recent check-ins list
+[46/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:131:7 › Vendor dashboard enhancements › Home shows the Action Center once the vendor has applied
+  7) [chromium] › tests\e2e\dashboard-enhancements.spec.ts:116:7 › Organizer dashboard enhancements › QR check-in offers manual entry and a recent check-ins list 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: 'Recent check-ins' })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('heading', { name: 'Recent check-ins' })
+
+
+      118 |     await page.goto(`/organizer-dashboard/?event=${organizerEventId}&scan=1`);
+      119 |     await expect(page.getByLabel('Pass code')).toBeVisible();
+    > 120 |     await expect(page.getByRole('heading', { name: 'Recent check-ins' })).toBeVisible();
+          |                                                                           ^
+      121 |     await expect(page.getByTestId('lnkup-qr-recent').locator('.lnkup-loading-state')).toHaveCount(0);
+      122 |   });
+      123 | });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\dashboard-enhancements.spec.ts:120:75
+
+    Error Context: test-results\dashboard-enhancements-Org-8455b-and-a-recent-check-ins-list-chromium\error-context.md
+
+
+
+(node:62708) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[47/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:141:7 › Vendor dashboard enhancements › Request cards show event timing and progress steps
+[48/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:153:7 › Vendor dashboard enhancements › Empty request tabs show an empty state instead of a blank list
+[49/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:171:7 › Vendor dashboard enhancements › Profile renders the documents section the strength links point to
+[50/182] [chromium] › tests\e2e\event-intelligence.spec.ts:25:7 › Event Intelligence › intelligence panel requires login
+[51/182] [chromium] › tests\e2e\event-intelligence.spec.ts:36:9 › Event Intelligence › authenticated organizer › organizer intelligence panel loads
+  8) [chromium] › tests\e2e\dashboard-enhancements.spec.ts:171:7 › Vendor dashboard enhancements › Profile renders the documents section the strength links point to 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-profile-strength-summary')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-profile-strength-summary')
+
+
+      172 |     await page.goto('/vendor-profile/');
+      173 |     await expect(page.locator('#section-documents')).toBeVisible();
+    > 174 |     await expect(page.getByTestId('lnkup-profile-strength-summary')).toBeVisible();
+          |                                                                      ^
+      175 |   });
+      176 | });
+      177 |
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\dashboard-enhancements.spec.ts:174:70
+
+    Error Context: test-results\dashboard-enhancements-Ven-5f502-the-strength-links-point-to-chromium\error-context.md
+
+
+
+
+(node:69100) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[52/182] [chromium] › tests\e2e\event-intelligence.spec.ts:45:9 › Event Intelligence › authenticated organizer › organizer intelligence expand button clears skeleton
+  9) [chromium] › tests\e2e\event-intelligence.spec.ts:36:9 › Event Intelligence › authenticated organizer › organizer intelligence panel loads 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('#lnkup-organizer-intelligence .lnkup-crm-skeleton')
+    Expected: 0
+    Received: 1
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveCount" with timeout 15000ms
+      - waiting for locator('#lnkup-organizer-intelligence .lnkup-crm-skeleton')
+        33 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      40 |       await expect(page.locator('#lnkup-organizer-intelligence')).not.toContainText('Loading intelligence', { timeout: 15000 });
+      41 |       await expect(page.locator('#lnkup-organizer-intelligence .lnkup-intel-dashboard--loading')).toHaveCount(0, { timeout: 15000 });
+    > 42 |       await expect(page.locator('#lnkup-organizer-intelligence .lnkup-crm-skeleton')).toHaveCount(0, { timeout: 15000 });
+         |                                                                                       ^
+      43 |     });
+      44 |
+      45 |     test('organizer intelligence expand button clears skeleton', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\event-intelligence.spec.ts:42:87
+
+    Error Context: test-results\event-intelligence-Event-I-de41e-er-intelligence-panel-loads-chromium\error-context.md
+
+
+
+
+(node:50284) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[53/182] [chromium] › tests\e2e\event-intelligence.spec.ts:55:9 › Event Intelligence › authenticated organizer › application intel button opens drawer
+  10) [chromium] › tests\e2e\event-intelligence.spec.ts:45:9 › Event Intelligence › authenticated organizer › organizer intelligence expand button clears skeleton 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for locator('[data-expand-panel="intelligence"]')
+        - locator resolved to <button type="button" data-expand-panel="intelligence" class="lnkup-btn lnkup-btn--sm lnkup-btn--primary">View insights</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        45 × waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+
+
+      46 |       await page.goto('/organizer-dashboard/');
+      47 |       await expect(page.locator('#intelligence')).toBeVisible();
+    > 48 |       await page.locator('[data-expand-panel="intelligence"]').click();
+         |                                                                ^
+      49 |       await expect(page.locator('#lnkup-organizer-expand-intelligence')).toBeVisible();
+      50 |       await expect(page.locator('#lnkup-organizer-intelligence')).toBeVisible();
+      51 |       await expect(page.locator('#lnkup-organizer-intelligence .lnkup-intel-dashboard--loading')).toHaveCount(0, { timeout: 15000 });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\event-intelligence.spec.ts:48:64
+
+    Error Context: test-results\event-intelligence-Event-I-cab82-pand-button-clears-skeleton-chromium\error-context.md
+
+
+
+
+(node:41728) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[54/182] [chromium] › tests\e2e\event-intelligence.spec.ts:67:9 › Event Intelligence › authenticated organizer › operations command center has insights tab
+  11) [chromium] › tests\e2e\event-intelligence.spec.ts:55:9 › Event Intelligence › authenticated organizer › application intel button opens drawer 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for locator('.lnkup-intel-open').first()
+        - locator resolved to <button type="button" data-app-id="182" class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost lnkup-intel-open">View Intel</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - element is outside of the viewport
+      2 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is not stable
+      2 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      6 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+
+
+      60 |         return;
+      61 |       }
+    > 62 |       await intelBtn.click();
+         |                      ^
+      63 |       await expect(page.locator('#lnkup-intel-drawer')).toBeVisible();
+      64 |       await expect(page.locator('#lnkup-intel-drawer-content')).not.toContainText('Loading application intelligence', { timeout: 15000 });
+      65 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\event-intelligence.spec.ts:62:22
+
+    Error Context: test-results\event-intelligence-Event-I-0caec-n-intel-button-opens-drawer-chromium\error-context.md
+
+
+
+
+(node:67212) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[55/182] [chromium] › tests\e2e\event-intelligence.spec.ts:86:9 › Event Intelligence › authenticated vendor › vendor intelligence panel loads
+  12) [chromium] › tests\e2e\event-intelligence.spec.ts:67:9 › Event Intelligence › authenticated organizer › operations command center has insights tab 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('link', { name: /^operations$/i }).first()
+        - locator resolved to <a data-hash="operations" class="lnkup-organizer-section-nav__link" href="http://localhost:8888/organizer-dashboard/#operations">Operations</a>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="nojq" id="wpadminbar">…</div> intercepts pointer events
+      7 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      2 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      8 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+
+
+      72 |         return;
+      73 |       }
+    > 74 |       await opsBtn.click();
+         |                    ^
+      75 |       await page.getByRole('button', { name: /^insights$/i }).click();
+      76 |       await expect(page.locator('#lnkup-event-insights')).toBeVisible();
+      77 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\event-intelligence.spec.ts:74:20
+
+    Error Context: test-results\event-intelligence-Event-I-9c731-and-center-has-insights-tab-chromium\error-context.md
+
+
+
+(node:42604) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[56/182] [chromium] › tests\e2e\event-intelligence.spec.ts:95:7 › Event Intelligence regression › marketplace and operations pages still load
+[57/182] [chromium] › tests\e2e\external-events.spec.ts:25:7 › External event discovery › claim URL pre-selects organizer role on sign-up
+  13) [chromium] › tests\e2e\event-intelligence.spec.ts:86:9 › Event Intelligence › authenticated vendor › vendor intelligence panel loads 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('#intelligence')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('#intelligence')
+
+
+      86 |     test('vendor intelligence panel loads', async ({ page }) => {
+      87 |       await page.goto('/vendor-dashboard/#intelligence');
+    > 88 |       await expect(page.locator('#intelligence')).toBeVisible();
+         |                                                   ^
+      89 |       await expect(page.locator('#lnkup-vendor-intelligence')).toBeVisible();
+      90 |     });
+      91 |   });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\event-intelligence.spec.ts:88:51
+
+    Error Context: test-results\event-intelligence-Event-I-ab420-or-intelligence-panel-loads-chromium\error-context.md
+
+
+
+(node:78428) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[58/182] [chromium] › tests\e2e\external-events.spec.ts:31:7 › External event discovery › claim landing page renders for invalid token gracefully
+[59/182] [chromium] › tests\e2e\external-events.spec.ts:36:7 › External event discovery › external events search REST returns JSON
+[60/182] [chromium] › tests\e2e\external-events.spec.ts:46:7 › External event discovery › external events dashboard REST returns JSON
+[61/182] [chromium] › tests\e2e\external-events.spec.ts:72:9 › External event discovery › admin › external events admin import tab loads
+  14) [chromium] › tests\e2e\external-events.spec.ts:46:7 › External event discovery › external events dashboard REST returns JSON 
+
+    Error: expect(received).toBeTruthy()
+
+    Received: false
+
+      57 |     expect(login.ok()).toBeTruthy();
+      58 |     const res = await request.get('/wp-json/lnkup/v1/external-events/dashboard');
+    > 59 |     expect(res.ok()).toBeTruthy();
+         |                      ^
+      60 |     const ct = res.headers()['content-type'] || '';
+      61 |     expect(ct).toContain('application/json');
+      62 |     const data = await res.json();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:59:22
+
+    Error Context: test-results\external-events-External-e-371d5-dashboard-REST-returns-JSON-chromium\error-context.md
+
+
+
+
+(node:71428) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[62/182] [chromium] › tests\e2e\external-events.spec.ts:79:9 › External event discovery › admin › import-url REST returns JSON error for invalid Eventbrite URL
+  15) [chromium] › tests\e2e\external-events.spec.ts:72:9 › External event discovery › admin › external events admin import tab loads 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-external-event-form')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-external-event-form')
+
+
+      72 |     test('external events admin import tab loads', async ({ page }) => {
+      73 |       await page.goto('/wp-admin/admin.php?page=lnkup-external-events&tab=import');
+    > 74 |       await expect(page.getByTestId('lnkup-external-event-form')).toBeVisible();
+         |                                                                   ^
+      75 |       await expect(page.getByTestId('lnkup-external-csv-form')).toBeVisible();
+      76 |       await expect(page.getByTestId('lnkup-external-url-form')).toBeVisible();
+      77 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:74:67
+
+    Error Context: test-results\external-events-External-e-485b8-ents-admin-import-tab-loads-chromium\error-context.md
+
+
+
+(node:77420) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[63/182] [chromium] › tests\e2e\external-events.spec.ts:105:9 › External event discovery › admin › external events review queue tab loads
+[64/182] [chromium] › tests\e2e\external-events.spec.ts:118:9 › External event discovery › admin › external events analytics tab loads
+  16) [chromium] › tests\e2e\external-events.spec.ts:105:9 › External event discovery › admin › external events review queue tab loads 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-ext-review-kpi')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-ext-review-kpi')
+
+
+      105 |     test('external events review queue tab loads', async ({ page }) => {
+      106 |       await page.goto('/wp-admin/admin.php?page=lnkup-external-events&tab=review');
+    > 107 |       await expect(page.getByTestId('lnkup-ext-review-kpi')).toBeVisible();
+          |                                                              ^
+      108 |       await expect(page.getByTestId('lnkup-ext-review-filters')).toBeVisible();
+      109 |       await expect(page.getByTestId('lnkup-ext-review-sort')).toBeVisible();
+      110 |       await expect(page.getByTestId('lnkup-ext-review-bulk-bar')).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:107:62
+
+    Error Context: test-results\external-events-External-e-7ef06-ents-review-queue-tab-loads-chromium\error-context.md
+
+
+
+(node:21808) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[65/182] [chromium] › tests\e2e\external-events.spec.ts:123:9 › External event discovery › admin › external events auto sync tab loads
+  17) [chromium] › tests\e2e\external-events.spec.ts:118:9 › External event discovery › admin › external events analytics tab loads 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-external-analytics')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-external-analytics')
+
+
+      118 |     test('external events analytics tab loads', async ({ page }) => {
+      119 |       await page.goto('/wp-admin/admin.php?page=lnkup-external-events&tab=analytics');
+    > 120 |       await expect(page.getByTestId('lnkup-external-analytics')).toBeVisible();
+          |                                                                  ^
+      121 |     });
+      122 |
+      123 |     test('external events auto sync tab loads', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:120:66
+
+    Error Context: test-results\external-events-External-e-a5d6b--events-analytics-tab-loads-chromium\error-context.md
+
+
+
+
+(node:71176) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[66/182] [chromium] › tests\e2e\external-events.spec.ts:132:9 › External event discovery › admin › external events needs-email filter and published email form
+  18) [chromium] › tests\e2e\external-events.spec.ts:123:9 › External event discovery › admin › external events auto sync tab loads 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-external-autosync')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-external-autosync')
+
+
+      123 |     test('external events auto sync tab loads', async ({ page }) => {
+      124 |       await page.goto('/wp-admin/admin.php?page=lnkup-external-events&tab=sync');
+    > 125 |       await expect(page.getByTestId('lnkup-external-autosync')).toBeVisible();
+          |                                                                 ^
+      126 |       await expect(page.getByRole('button', { name: /save auto sync settings/i })).toBeVisible();
+      127 |       await expect(page.getByRole('button', { name: /run sync now/i })).toBeVisible();
+      128 |       await expect(page.getByLabel(/vendor terms/i)).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:125:65
+
+    Error Context: test-results\external-events-External-e-2e138--events-auto-sync-tab-loads-chromium\error-context.md
+
+
+
+
+(node:75032) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[67/182] [chromium] › tests\e2e\external-events.spec.ts:150:9 › External event discovery › vendor feed › find events page loads marketplace grid
+  19) [chromium] › tests\e2e\external-events.spec.ts:132:9 › External event discovery › admin › external events needs-email filter and published email form 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-external-events-table')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-external-events-table')
+
+
+      132 |     test('external events needs-email filter and published email form', async ({ page }) => {
+      133 |       await page.goto('/wp-admin/admin.php?page=lnkup-external-events&tab=events&needs_email=1');
+    > 134 |       await expect(page.getByTestId('lnkup-external-events-table')).toBeVisible();
+          |                                                                     ^
+      135 |       await expect(page.getByRole('checkbox', { name: /needs organizer email/i })).toBeChecked();
+      136 |       const emailForm = page.locator('[data-testid^="lnkup-ext-email-form-"]').first();
+      137 |       if (await emailForm.count()) {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:134:69
+
+    Error Context: test-results\external-events-External-e-b0911-er-and-published-email-form-chromium\error-context.md
+
+
+
+
+(node:19136) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[68/182] [chromium] › tests\e2e\external-events.spec.ts:161:9 › External event discovery › vendor feed › external event cards show media and type badge when present
+[69/182] [chromium] › tests\e2e\external-events.spec.ts:177:9 › External event discovery › vendor feed › external event interest modal opens with structured form
+  20) [chromium] › tests\e2e\external-events.spec.ts:150:9 › External event discovery › vendor feed › find events page loads marketplace grid 
+
+    Error: expect(page).not.toHaveURL(expected) failed
+
+    Expected pattern: not /wp-login/
+    Received string: "http://localhost:8888/wp-login.php?redirect_to=http%3A%2F%2Flocalhost%3A8888%2Fwp-admin%2Fprofile.php&reauth=1"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "not toHaveURL" with timeout 5000ms
+        14 × unexpected value "http://localhost:8888/wp-login.php?redirect_to=http%3A%2F%2Flocalhost%3A8888%2Fwp-admin%2Fprofile.php&reauth=1"
+
+
+      19 |   await page.getByLabel(/^password$/i).fill(vendorPass!);
+      20 |   await page.getByRole('button', { name: /log in/i }).click();
+    > 21 |   await expect(page).not.toHaveURL(/wp-login/);
+         |                          ^
+      22 | }
+      23 |
+      24 | test.describe('External event discovery', () => {
+        at loginVendor (C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:21:26)
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:147:7
+
+    Error Context: test-results\external-events-External-e-ada3a-page-loads-marketplace-grid-chromium\error-context.md
+
+
+
+
+(node:69760) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[70/182] [chromium] › tests\e2e\external-events.spec.ts:200:7 › External event discovery › claim landing mobile viewport smoke
+[71/182] [chromium] › tests\e2e\interactive-maps.spec.ts:4:7 › Interactive Maps › opportunities page has grid map and split view toggles when phase 1c
+[72/182] [chromium] › tests\e2e\interactive-maps.spec.ts:18:7 › Interactive Maps › marketplace regression still loads results grid
+[73/182] [chromium] › tests\e2e\interactive-maps.spec.ts:23:7 › Interactive Maps › split view places map beside the list at desktop
+[74/182] [chromium] › tests\e2e\interactive-maps.spec.ts:71:7 › Interactive Maps authenticated › operations command center has map builder and live map tabs
+[75/182] [chromium] › tests\e2e\landing-launch.spec.ts:12:7 › Launch homepage › homepage launch chrome matches marketplace state
+[76/182] [chromium] › tests\e2e\landing-launch.spec.ts:31:7 › Launch homepage › featured opportunities section is on the homepage
+  21) [chromium] › tests\e2e\interactive-maps.spec.ts:23:7 › Interactive Maps › split view places map beside the list at desktop 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  locator('#lnkup-grid-view')
+    Expected: visible
+    Received: hidden
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('#lnkup-grid-view')
+        13 × locator resolved to <div id="lnkup-grid-view" class="lnkup-mp-v2__results-view">…</div>
+           - unexpected value "hidden"
+
+
+      44 |     const list = page.locator('#lnkup-grid-view');
+      45 |     const map = page.locator('#lnkup-map-view');
+    > 46 |     await expect(list).toBeVisible();
+         |                        ^
+      47 |     await expect(map).toBeVisible();
+      48 |
+      49 |     const listBox = await list.boundingBox();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\interactive-maps.spec.ts:46:24
+
+    Error Context: test-results\interactive-maps-Interacti-22f44--beside-the-list-at-desktop-chromium\error-context.md
+
+
+
+(node:73040) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[77/182] [chromium] › tests\e2e\landing-launch.spec.ts:55:7 › Launch homepage › opportunities nav targets the homepage section
+[78/182] [chromium] › tests\e2e\landing-launch.spec.ts:76:7 › Launch homepage › sign-up page renders role selector and live copy when open
+  22) [chromium] › tests\e2e\landing-launch.spec.ts:55:7 › Launch homepage › opportunities nav targets the homepage section 
+
+    Error: expect(locator).toBeAttached() failed
+
+    Locator: locator('a[href$="#opportunities"]').first()
+    Expected: attached
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeAttached" with timeout 5000ms
+      - waiting for locator('a[href$="#opportunities"]').first()
+
+
+      61 |
+      62 |     const hashLinks = page.locator('a[href$="#opportunities"]');
+    > 63 |     await expect(hashLinks.first()).toBeAttached();
+         |                                     ^
+      64 |     await expect(page.locator('#opportunities')).toBeAttached();
+      65 |
+      66 |     const viewport = page.viewportSize();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\landing-launch.spec.ts:63:37
+
+    Error Context: test-results\landing-launch-Launch-home-96e09-argets-the-homepage-section-chromium\error-context.md
+
+
+
+(node:25772) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[79/182] [chromium] › tests\e2e\landing-launch.spec.ts:92:7 › Launch homepage › opportunities page shows prelaunch gate when marketplace closed
+[80/182] [chromium] › tests\e2e\landing-launch.spec.ts:99:7 › Launch homepage › trust section does not show fake achievement stats
+[81/182] [chromium] › tests\e2e\landing-launch.spec.ts:116:7 › Launch homepage › hero avoids fake vendor counts
+[82/182] [chromium] › tests\e2e\landing-launch.spec.ts:132:7 › Launch homepage › login and lost-password pages are LNKup branded
+[83/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:4:7 › Marketplace V2 › opportunities page loads search and results grid
+[84/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:18:7 › Marketplace V2 › SSR renders opportunity cards without JavaScript
+  23) [chromium] › tests\e2e\landing-launch.spec.ts:132:7 › Launch homepage › login and lost-password pages are LNKup branded 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('link[href*="login.css"]')
+    Expected: 1
+    Received: 2
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveCount" with timeout 5000ms
+      - waiting for locator('link[href*="login.css"]')
+        14 × locator resolved to 2 elements
+           - unexpected value "2"
+
+
+      136 |     await expect(logo).toHaveAttribute('href', /https?:\/\//);
+      137 |     await expect(page.locator('#lnkup-login, body.login')).toHaveCount(1);
+    > 138 |     await expect(page.locator('link[href*="login.css"]')).toHaveCount(1);
+          |                                                           ^
+      139 |
+      140 |     await page.goto('/wp-login.php?action=lostpassword');
+      141 |     await expect(page.getByText(/enter your account email/i)).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\landing-launch.spec.ts:138:59
+
+    Error Context: test-results\landing-launch-Launch-home-595ad-ord-pages-are-LNKup-branded-chromium\error-context.md
+
+
+[85/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:33:7 › Marketplace V2 › quick chip filters by event type
+
+(node:78904) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[86/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:26:7 › Marketplace V2 › search input debounces and updates results
+[87/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:40:7 › Marketplace V2 › filter drawer opens on mobile
+[88/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:48:7 › Marketplace V2 › clear all filters from empty state
+[89/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:55:7 › Marketplace V2 › phase 1A hides map toggle, compare tray, and intelligence rails
+[90/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:64:7 › Marketplace V2 › saved search restore applies filters from query string
+[91/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:72:7 › Marketplace V2 › search button is visible and submits on Enter
+  24) [chromium] › tests\e2e\marketplace-v2.spec.ts:55:7 › Marketplace V2 › phase 1A hides map toggle, compare tray, and intelligence rails 
+
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator:  locator('#lnkup-marketplace')
+    Expected: "1a"
+    Received: "1c"
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveAttribute" with timeout 5000ms
+      - waiting for locator('#lnkup-marketplace')
+        13 × locator resolved to <div data-phase="1c" id="lnkup-marketplace" class="lnkup-mp lnkup-mp-v2" data-rest="http://localhost:8888/wp-json/lnkup/v1/marketplace">…</div>
+           - unexpected value "1c"
+
+
+      55 |   test('phase 1A hides map toggle, compare tray, and intelligence rails', async ({ page }) => {
+      56 |     await page.goto('/opportunities/');
+    > 57 |     await expect(page.locator('#lnkup-marketplace')).toHaveAttribute('data-phase', '1a');
+         |                                                      ^
+      58 |     await expect(page.locator('#lnkup-map-toggle')).toHaveCount(0);
+      59 |     await expect(page.locator('#lnkup-compare-tray')).toHaveCount(0);
+      60 |     await expect(page.locator('#lnkup-explore-more')).toHaveCount(0);
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\marketplace-v2.spec.ts:57:54
+
+    Error Context: test-results\marketplace-v2-Marketplace-e2b71-tray-and-intelligence-rails-chromium\error-context.md
+
+
+
+(node:67216) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[92/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:82:7 › Marketplace V2 › apply opens modal dialog instead of inline panel
+[93/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:95:7 › Marketplace V2 › page loads without JavaScript parse errors
+[94/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:105:7 › Marketplace V2 › explore more card sits below results with tabbed layout on phase 1b
+  25) [chromium] › tests\e2e\marketplace-v2.spec.ts:95:7 › Marketplace V2 › page loads without JavaScript parse errors 
+
+    Error: expect(received).toHaveLength(expected)
+
+    Expected length: 0
+    Received length: 1
+    Received array:  ["Unexpected token ')'"]
+
+      100 |     await page.goto('/opportunities/');
+      101 |     await expect(page.locator('#lnkup-marketplace')).toBeVisible();
+    > 102 |     expect(errors.filter(function (m) { return /unexpected token/i.test(m); })).toHaveLength(0);
+          |                                                                                 ^
+      103 |   });
+      104 |
+      105 |   test('explore more card sits below results with tabbed layout on phase 1b', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\marketplace-v2.spec.ts:102:81
+
+    Error Context: test-results\marketplace-v2-Marketplace-a9642-out-JavaScript-parse-errors-chromium\error-context.md
+
+
+
+(node:65140) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[95/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:133:7 › Marketplace V2 › explore more shows collection chips when collections tab is present
+[96/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:154:7 › Marketplace V2 › active search hides explore more rails
+[97/182] [chromium] › tests\e2e\outreach-invite.spec.ts:4:7 › Outreach invite sign-up › sign-up page renders normally without outreach token
+[98/182] [chromium] › tests\e2e\outreach-invite.spec.ts:12:7 › Outreach invite sign-up › invalid outreach token shows normal editable sign-up form
+[99/182] [chromium] › tests\e2e\outreach-invite.spec.ts:19:7 › Outreach invite sign-up › role query param pre-selects vendor on sign-up
+  26) [chromium] › tests\e2e\outreach-invite.spec.ts:12:7 › Outreach invite sign-up › invalid outreach token shows normal editable sign-up form 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  getByTestId('lnkup-outreach-token')
+    Expected: 0
+    Received: 1
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveCount" with timeout 5000ms
+      - waiting for getByTestId('lnkup-outreach-token')
+        14 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      14 |     await expect(page.getByTestId('lnkup-signup-form')).toBeVisible();
+      15 |     await expect(page.getByLabel('Email')).toBeEditable();
+    > 16 |     await expect(page.getByTestId('lnkup-outreach-token')).toHaveCount(0);
+         |                                                            ^
+      17 |   });
+      18 |
+      19 |   test('role query param pre-selects vendor on sign-up', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\outreach-invite.spec.ts:16:60
+
+    Error Context: test-results\outreach-invite-Outreach-i-d9a22-ormal-editable-sign-up-form-chromium\error-context.md
+
+
+[100/182] [chromium] › tests\e2e\outreach-invite.spec.ts:30:7 › Outreach invite sign-up › ref query param is preserved alongside outreach token on sign-up
+
+(node:31144) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[101/182] [chromium] › tests\e2e\outreach-invite.spec.ts:25:7 › Outreach invite sign-up › role query param pre-selects organizer on sign-up
+[102/182] [chromium] › tests\e2e\profile-images.spec.ts:42:7 › Organizer profile images › Profile page shows the form below the sticky top bar
+[103/182] [chromium] › tests\e2e\profile-images.spec.ts:55:7 › Organizer profile images › old profile=edit links land on the Profile page
+  27) [chromium] › tests\e2e\profile-images.spec.ts:55:7 › Organizer profile images › old profile=edit links land on the Profile page 
+
+    Error: expect(page).toHaveURL(expected) failed
+
+    Expected pattern: /view=profile/
+    Received string:  "http://localhost:8888/organizer-dashboard/?view=events&profile=edit"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toHaveURL" with timeout 5000ms
+        12 × unexpected value "http://localhost:8888/organizer-dashboard/?view=events&profile=edit"
+
+
+      55 |   test('old profile=edit links land on the Profile page', async ({ page }) => {
+      56 |     await page.goto('/organizer-dashboard/?view=events&profile=edit');
+    > 57 |     await expect(page).toHaveURL(/view=profile/);
+         |                        ^
+      58 |   });
+      59 |
+      60 |   test('uploading a logo previews it and survives save and reload', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\profile-images.spec.ts:57:24
+
+    Error Context: test-results\profile-images-Organizer-p-89b36-ks-land-on-the-Profile-page-chromium\error-context.md
+
+
+
+(node:21172) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+
+(Use `node --trace-warnings ...` to show where the warning was created)
+[104/182] [chromium] › tests\e2e\profile-images.spec.ts:60:7 › Organizer profile images › uploading a logo previews it and survives save and reload
+  28) [chromium] › tests\e2e\profile-images.spec.ts:42:7 › Organizer profile images › Profile page shows the form below the sticky top bar 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: 'Profile', level: 1 })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('heading', { name: 'Profile', level: 1 })
+
+
+      42 |   test('Profile page shows the form below the sticky top bar', async ({ page }) => {
+      43 |     await page.goto('/organizer-dashboard/?view=profile');
+    > 44 |     await expect(page.getByRole('heading', { level: 1, name: 'Profile' })).toBeVisible();
+         |                                                                            ^
+      45 |     const name = page.getByLabel('Organization name');
+      46 |     await expect(name).toBeVisible();
+      47 |     const bar = page.locator('.lnkup-workspace-bar').first();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\profile-images.spec.ts:44:76
+
+    Error Context: test-results\profile-images-Organizer-p-c450b-rm-below-the-sticky-top-bar-chromium\error-context.md
+
+
+
+(node:53412) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[105/182] [chromium] › tests\e2e\profile-images.spec.ts:75:7 › Organizer profile images › a non-image file shows an inline error and changes nothing
+  29) [chromium] › tests\e2e\profile-images.spec.ts:60:7 › Organizer profile images › uploading a logo previews it and survives save and reload 
+
+    Error: expect(page).not.toHaveURL(expected) failed
+
+    Expected pattern: not /wp-login/
+    Received string: "http://localhost:8888/wp-login.php?redirect_to=http%3A%2F%2Flocalhost%3A8888%2Fwp-admin%2Fprofile.php&reauth=1"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "not toHaveURL" with timeout 5000ms
+        14 × unexpected value "http://localhost:8888/wp-login.php?redirect_to=http%3A%2F%2Flocalhost%3A8888%2Fwp-admin%2Fprofile.php&reauth=1"
+
+
+      19 |   await page.getByLabel(/^password$/i).fill(pass);
+      20 |   await page.getByRole('button', { name: /log in/i }).click();
+    > 21 |   await expect(page).not.toHaveURL(/wp-login/);
+         |                          ^
+      22 | }
+      23 |
+      24 | /**
+        at login (C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\profile-images.spec.ts:21:26)
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\profile-images.spec.ts:39:5
+
+    Error Context: test-results\profile-images-Organizer-p-4dccb-nd-survives-save-and-reload-chromium\error-context.md
+
+
+
+
+(node:69404) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[106/182] [chromium] › tests\e2e\profile-images.spec.ts:93:7 › Vendor profile images › vendor logo upload previews without the media library
+  30) [chromium] › tests\e2e\profile-images.spec.ts:75:7 › Organizer profile images › a non-image file shows an inline error and changes nothing 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.inputValue: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for locator('#lnkup-organizer-cover-id')
+
+
+      76 |     await page.goto('/organizer-dashboard/?view=profile');
+      77 |     const cover = page.getByTestId('lnkup-organizer-cover-upload');
+    > 78 |     const before = await page.locator('#lnkup-organizer-cover-id').inputValue();
+         |                                                                    ^
+      79 |     const chooser = page.waitForEvent('filechooser');
+      80 |     await cover.getByRole('button', { name: /upload cover/i }).click();
+      81 |     await (await chooser).setFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('not an image') });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\profile-images.spec.ts:78:68
+
+    Error Context: test-results\profile-images-Organizer-p-cf366-e-error-and-changes-nothing-chromium\error-context.md
+
+
+
+
+(node:64888) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[107/182] [chromium] › tests\e2e\saved-searches.spec.ts:17:7 › Saved searches › logged-out user sees signup CTA when trying to save search
+[108/182] [chromium] › tests\e2e\saved-searches.spec.ts:31:7 › Saved searches › mobile save search modal does not overflow
+  31) [chromium] › tests\e2e\profile-images.spec.ts:93:7 › Vendor profile images › vendor logo upload previews without the media library 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: page.waitForEvent: Test timeout of 30000ms exceeded.
+    =========================== logs ===========================
+    waiting for event "filechooser"
+    ============================================================
+
+      26 |  */
+      27 | async function uploadInto(page: Page, control: Locator, file: { name: string; mimeType: string; buffer: Buffer }) {
+    > 28 |   const chooser = page.waitForEvent('filechooser');
+         |                        ^
+      29 |   await control.getByRole('button', { name: /^upload|^add photos/i }).click();
+      30 |   const fileChooser = await chooser;
+      31 |   const response = page.waitForResponse((res) => res.url().includes('admin-ajax.php') && res.request().method() === 'POST');
+        at uploadInto (C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\profile-images.spec.ts:28:24)
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\profile-images.spec.ts:96:28
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByTestId('lnkup-vendor-logo-upload').getByRole('button', { name: /^upload|^add photos/i })
+
+
+      27 | async function uploadInto(page: Page, control: Locator, file: { name: string; mimeType: string; buffer: Buffer }) {
+      28 |   const chooser = page.waitForEvent('filechooser');
+    > 29 |   await control.getByRole('button', { name: /^upload|^add photos/i }).click();
+         |                                                                       ^
+      30 |   const fileChooser = await chooser;
+      31 |   const response = page.waitForResponse((res) => res.url().includes('admin-ajax.php') && res.request().method() === 'POST');
+      32 |   await fileChooser.setFiles(file);
+        at uploadInto (C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\profile-images.spec.ts:29:71)
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\profile-images.spec.ts:96:28
+
+    Error Context: test-results\profile-images-Vendor-prof-5195c-s-without-the-media-library-chromium\error-context.md
+
+
+
+
+(node:70580) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[109/182] [chromium] › tests\e2e\saved-searches.spec.ts:56:9 › Saved searches › vendor flows › vendor can save current Find Events filters
+  32) [chromium] › tests\e2e\saved-searches.spec.ts:56:9 › Saved searches › vendor flows › vendor can save current Find Events filters 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  locator('#lnkup-save-search-success')
+    Expected: visible
+    Received: hidden
+    Timeout:  10000ms
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for locator('#lnkup-save-search-success')
+        23 × locator resolved to <p hidden="" role="status" id="lnkup-save-search-success" class="lnkup-save-search-modal__success">Saved. New matching opportunities will appear in …</p>
+           - unexpected value "hidden"
+
+
+      67 |       await page.locator('#lnkup-save-search-name').fill('Charlotte test search');
+      68 |       await page.locator('#lnkup-save-search-submit').click();
+    > 69 |       await expect(page.locator('#lnkup-save-search-success')).toBeVisible({ timeout: 10000 });
+         |                                                                ^
+      70 |     });
+      71 |
+      72 |     test('empty filter search shows warning', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\saved-searches.spec.ts:69:64
+
+    Error Context: test-results\saved-searches-Saved-searc-92692-current-Find-Events-filters-chromium\error-context.md
+
+
+
+(node:77452) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[110/182] [chromium] › tests\e2e\saved-searches.spec.ts:72:9 › Saved searches › vendor flows › empty filter search shows warning
+  33) [chromium] › tests\e2e\saved-searches.spec.ts:31:7 › Saved searches › mobile save search modal does not overflow 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: /save this search/i })
+
+
+      37 |       return;
+      38 |     }
+    > 39 |     await page.getByRole('button', { name: /save this search/i }).click();
+         |                                                                   ^
+      40 |     const dialog = page.locator('.lnkup-save-search-modal__dialog');
+      41 |     await expect(dialog).toBeVisible();
+      42 |     const box = await dialog.boundingBox();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\saved-searches.spec.ts:39:67
+
+    Error Context: test-results\saved-searches-Saved-searc-e3ea5-rch-modal-does-not-overflow-chromium\error-context.md
+
+
+
+(node:56332) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[111/182] [chromium] › tests\e2e\saved-searches.spec.ts:83:9 › Saved searches › vendor flows › saved search appears in favorites dashboard section
+  34) [chromium] › tests\e2e\saved-searches.spec.ts:83:9 › Saved searches › vendor flows › saved search appears in favorites dashboard section 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-saved-searches-panel').getByText(/saved searches/i)
+    Expected: visible
+    Error: strict mode violation: getByTestId('lnkup-saved-searches-panel').getByText(/saved searches/i) resolved to 2 elements:
+        1) <h2 class="lnkup-panel__title">Saved Searches</h2> aka getByRole('heading', { name: 'Saved Searches' })
+        2) <div class="lnkup-saved-searches-dashboard__loading lnkup-muted">Loading saved searches…</div> aka getByText('Loading saved searches…')
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-saved-searches-panel').getByText(/saved searches/i)
+
+
+      85 |       const panel = page.getByTestId('lnkup-saved-searches-panel');
+      86 |       await expect(panel).toBeVisible();
+    > 87 |       await expect(panel.getByText(/saved searches/i)).toBeVisible();
+         |                                                        ^
+      88 |       await page.waitForFunction(() => {
+      89 |         const el = document.getElementById('lnkup-saved-searches-dashboard');
+      90 |         return el && !el.textContent?.includes('Loading');
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\saved-searches.spec.ts:87:56
+
+    Error Context: test-results\saved-searches-Saved-searc-d284e-favorites-dashboard-section-chromium\error-context.md
+
+
+
+
+(node:69572) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[112/182] [chromium] › tests\e2e\saved-searches.spec.ts:99:9 › Saved searches › vendor flows › vendor can pause and delete saved search via REST
+[113/182] [chromium] › tests\e2e\saved-searches.spec.ts:124:9 › Saved searches › vendor flows › vendor can run saved search
+  35) [chromium] › tests\e2e\saved-searches.spec.ts:72:9 › Saved searches › vendor flows › empty filter search shows warning 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  locator('#lnkup-save-search-empty-warning')
+    Expected: visible
+    Received: hidden
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('#lnkup-save-search-empty-warning')
+        13 × locator resolved to <p hidden="" id="lnkup-save-search-empty-warning" class="lnkup-save-search-modal__warning">This search will match a lot of opportunities. Ad…</p>
+           - unexpected value "hidden"
+
+
+      78 |       }
+      79 |       await page.getByRole('button', { name: /save this search/i }).click();
+    > 80 |       await expect(page.locator('#lnkup-save-search-empty-warning')).toBeVisible();
+         |                                                                      ^
+      81 |     });
+      82 |
+      83 |     test('saved search appears in favorites dashboard section', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\saved-searches.spec.ts:80:70
+
+    Error Context: test-results\saved-searches-Saved-searc-e6664-filter-search-shows-warning-chromium\error-context.md
+
+
+
+(node:77764) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[114/182] [chromium] › tests\e2e\saved-searches.spec.ts:148:7 › Saved searches › vendor cannot access another vendor saved search
+[115/182] [chromium] › tests\e2e\saved-searches.spec.ts:179:7 › Saved searches › existing marketplace search still works
+[116/182] [chromium] › tests\e2e\seo-rankmath.spec.ts:12:7 › Rank Math SEO › homepage has description and is indexable when SEO plugin active
+[117/182] [chromium] › tests\e2e\seo-rankmath.spec.ts:25:7 › Rank Math SEO › homepage og:image uses block-party illustration
+[118/182] [chromium] › tests\e2e\seo-rankmath.spec.ts:34:7 › Rank Math SEO › opportunities page is noindex pre-launch
+[119/182] [chromium] › tests\e2e\seo-rankmath.spec.ts:48:7 › Rank Math SEO › vendor dashboard is noindex
+[120/182] [chromium] › tests\e2e\stripe-connect.spec.ts:45:9 › Stripe Connect marketplace › webhook signature verification › forged signature is rejected with JSON, never 500
+[121/182] [chromium] › tests\e2e\stripe-connect.spec.ts:63:11 › Stripe Connect marketplace › webhook signature verification › with known signing secret › unsigned payload is rejected
+[122/182] [chromium] › tests\e2e\stripe-connect.spec.ts:71:11 › Stripe Connect marketplace › webhook signature verification › with known signing secret › stale timestamp is rejected as a replay
+[123/182] [chromium] › tests\e2e\stripe-connect.spec.ts:84:11 › Stripe Connect marketplace › webhook signature verification › with known signing secret › correctly signed payload is accepted
+[124/182] [chromium] › tests\e2e\stripe-connect.spec.ts:105:9 › Stripe Connect marketplace › organizer Connect REST › connect status returns JSON with settlement_mode
+[125/182] [chromium] › tests\e2e\stripe-connect.spec.ts:116:9 › Stripe Connect marketplace › organizer Connect REST › connect status explains itself when Connect is unavailable
+[126/182] [chromium] › tests\e2e\stripe-connect.spec.ts:128:9 › Stripe Connect marketplace › organizer Connect REST › onboarding link returns structured JSON when Connect unavailable
+  36) [chromium] › tests\e2e\stripe-connect.spec.ts:105:9 › Stripe Connect marketplace › organizer Connect REST › connect status returns JSON with settlement_mode 
+
+    Error: expect(page).not.toHaveURL(expected) failed
+
+    Expected pattern: not /wp-login/
+    Received string: "http://localhost:8888/wp-login.php?redirect_to=http%3A%2F%2Flocalhost%3A8888%2Fwp-admin%2Fprofile.php&reauth=1"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "not toHaveURL" with timeout 5000ms
+        14 × unexpected value "http://localhost:8888/wp-login.php?redirect_to=http%3A%2F%2Flocalhost%3A8888%2Fwp-admin%2Fprofile.php&reauth=1"
+
+
+      19 |   await page.getByLabel(/^password$/i).fill(password);
+      20 |   await page.getByRole('button', { name: /log in/i }).click();
+    > 21 |   await expect(page).not.toHaveURL(/wp-login/);
+         |                          ^
+      22 | }
+      23 |
+      24 | /**
+        at loginUser (C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\stripe-connect.spec.ts:21:26)
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\stripe-connect.spec.ts:102:7
+
+    Error Context: test-results\stripe-connect-Stripe-Conn-a44ef-s-JSON-with-settlement-mode-chromium\error-context.md
+
+
+
+
+(node:77496) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[127/182] [chromium] › tests\e2e\stripe-connect.spec.ts:142:9 › Stripe Connect marketplace › organizer Connect REST › organizer financial shell shows Connect banner area
+[128/182] [chromium] › tests\e2e\stripe-connect.spec.ts:148:9 › Stripe Connect marketplace › organizer Connect REST › onboarding failure shows an inline message and re-enables the button
+[129/182] [chromium] › tests\e2e\stripe-connect.spec.ts:187:9 › Stripe Connect marketplace › organizer Connect REST › connect refresh endpoint returns JSON
+  37) [chromium] › tests\e2e\stripe-connect.spec.ts:187:9 › Stripe Connect marketplace › organizer Connect REST › connect refresh endpoint returns JSON 
+
+    Error: expect(received).toBeLessThan(expected)
+
+    Expected: < 500
+    Received:   500
+
+      190 |         data: {},
+      191 |       });
+    > 192 |       expect(response.status()).toBeLessThan(500);
+          |                                 ^
+      193 |       const contentType = response.headers()['content-type'] || '';
+      194 |       expect(contentType).toMatch(/json/);
+      195 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\stripe-connect.spec.ts:192:33
+
+    Error Context: test-results\stripe-connect-Stripe-Conn-75148-fresh-endpoint-returns-JSON-chromium\error-context.md
+
+
+
+
+(node:49616) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[130/182] [chromium] › tests\e2e\stripe-connect.spec.ts:204:9 › Stripe Connect marketplace › vendor isolation from Connect › vendor financial shell has no Connect onboarding CTA
+  38) [chromium] › tests\e2e\stripe-connect.spec.ts:148:9 › Stripe Connect marketplace › organizer Connect REST › onboarding failure shows an inline message and re-enables the button 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for locator('#lnkup-fin-connect-banner').getByRole('button', { name: /finish payout setup/i })
+        - locator resolved to <button type="button" id="lnkup-connect-onboard-top" class="lnkup-btn lnkup-btn--sm">Finish payout setup</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - element is outside of the viewport
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+      - element was detached from the DOM, retrying
+        - locator resolved to <button type="button" id="lnkup-connect-onboard-top" class="lnkup-btn lnkup-btn--sm">Finish payout setup</button>
+      - attempting click action
+        - waiting for element to be visible, enabled and stable
+        - element is not stable
+      - retrying click action
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        9 × waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+
+
+      178 |       await expect(setupButton).toBeVisible();
+      179 |
+    > 180 |       await setupButton.click();
+          |                         ^
+      181 |
+      182 |       await expect(banner.getByRole('alert')).toHaveText(ONBOARDING_ERROR);
+      183 |       await expect(setupButton).toBeEnabled();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\stripe-connect.spec.ts:180:25
+
+    Error Context: test-results\stripe-connect-Stripe-Conn-48b44-e-and-re-enables-the-button-chromium\error-context.md
+
+
+
+(node:79648) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[131/182] [chromium] › tests\e2e\stripe-connect.spec.ts:211:9 › Stripe Connect marketplace › vendor isolation from Connect › vendor cannot access organizer connect onboarding route
+  39) [chromium] › tests\e2e\stripe-connect.spec.ts:204:9 › Stripe Connect marketplace › vendor isolation from Connect › vendor financial shell has no Connect onboarding CTA 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('#lnkup-vendor-financial')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('#lnkup-vendor-financial')
+
+
+      204 |     test('vendor financial shell has no Connect onboarding CTA', async ({ page }) => {
+      205 |       await page.goto('/vendor-dashboard/#financial');
+    > 206 |       await expect(page.locator('#lnkup-vendor-financial')).toBeVisible();
+          |                                                             ^
+      207 |       await expect(page.getByRole('button', { name: /connect stripe/i })).toHaveCount(0);
+      208 |       await expect(page.locator('#lnkup-fin-connect-banner')).toHaveCount(0);
+      209 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\stripe-connect.spec.ts:206:61
+
+    Error Context: test-results\stripe-connect-Stripe-Conn-39d5a-s-no-Connect-onboarding-CTA-chromium\error-context.md
+
+
+
+(node:78620) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[132/182] [chromium] › tests\e2e\vendor-event-pass.spec.ts:31:9 › Vendor Event Pass › authenticated vendor › locked pass hides sensitive fields for payment-required application
+[133/182] [chromium] › tests\e2e\vendor-event-pass.spec.ts:60:9 › Vendor Event Pass › authenticated vendor › unlocked pass shows hero when confirmed booking exists
+[134/182] [chromium] › tests\e2e\vendor-event-pass.spec.ts:76:9 › Vendor Event Pass › authenticated vendor › mobile pass layout has no horizontal overflow
+[135/182] [chromium] › tests\e2e\vendor-event-pass.spec.ts:98:9 › Vendor Event Pass › authenticated organizer › vendor pass builder tab loads in command center
+[136/182] [chromium] › tests\e2e\vendor-event-pass.spec.ts:113:9 › Vendor Event Pass › authenticated organizer › organizer can save arrival pass details
+  40) [chromium] › tests\e2e\vendor-event-pass.spec.ts:98:9 › Vendor Event Pass › authenticated organizer › vendor pass builder tab loads in command center 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('link', { name: /^operations$/i }).first()
+        - locator resolved to <a data-hash="operations" class="lnkup-organizer-section-nav__link" href="http://localhost:8888/organizer-dashboard/#operations">Operations</a>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        - waiting for element to be visible, enabled and stable
+        - element is not stable
+      11 × retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+
+
+      103 |         return;
+      104 |       }
+    > 105 |       await opsBtn.click();
+          |                    ^
+      106 |       await expect(page.locator('#lnkup-event-ops')).toBeVisible({ timeout: 15000 });
+      107 |       await page.getByRole('button', { name: /build vendor pass/i }).click();
+      108 |       await expect(page.getByTestId('lnkup-ops-vendor-pass-builder')).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-event-pass.spec.ts:105:20
+
+    Error Context: test-results\vendor-event-pass-Vendor-E-5af37-tab-loads-in-command-center-chromium\error-context.md
+
+
+
+
+(node:76144) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[137/182] [chromium] › tests\e2e\vendor-financial.spec.ts:18:7 › Vendor financial dashboard › payments view requires login when unauthenticated
+  41) [chromium] › tests\e2e\vendor-event-pass.spec.ts:113:9 › Vendor Event Pass › authenticated organizer › organizer can save arrival pass details 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('link', { name: /^operations$/i }).first()
+        - locator resolved to <a data-hash="operations" class="lnkup-organizer-section-nav__link" href="http://localhost:8888/organizer-dashboard/#operations">Operations</a>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="nojq" id="wpadminbar">…</div> intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <h2 class="lnkup-type-title" id="lnkup-organizer-welcome-title">Welcome to LNKup</h2> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      10 × retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+
+
+      118 |         return;
+      119 |       }
+    > 120 |       await opsBtn.click();
+          |                    ^
+      121 |       await expect(page.locator('#lnkup-event-ops')).toBeVisible({ timeout: 15000 });
+      122 |       await page.getByRole('button', { name: /build vendor pass/i }).click();
+      123 |       const gateField = page.locator('#lnkup-ops-vendor-pass-form input[name="vendor_gate"]');
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-event-pass.spec.ts:120:20
+
+    Error Context: test-results\vendor-event-pass-Vendor-E-4e75d-n-save-arrival-pass-details-chromium\error-context.md
+
+
+
+
+(node:36804) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[138/182] [chromium] › tests\e2e\vendor-financial.spec.ts:29:9 › Vendor financial dashboard › authenticated vendor › payments hub renders tabs and balance hero without connect onboarding on load
+[139/182] [chromium] › tests\e2e\vendor-financial.spec.ts:48:9 › Vendor financial dashboard › authenticated vendor › refunds tab shows request form
+  42) [chromium] › tests\e2e\vendor-financial.spec.ts:29:9 › Vendor financial dashboard › authenticated vendor › payments hub renders tabs and balance hero without connect onboarding on load 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  locator('#lnkup-fin-balance-hero')
+    Expected: visible
+    Received: hidden
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('#lnkup-fin-balance-hero')
+        10 × locator resolved to <div id="lnkup-fin-balance-hero" class="lnkup-fin-balance-hero">…</div>
+           - unexpected value "hidden"
+        4 × locator resolved to <div hidden="" aria-hidden="true" id="lnkup-fin-balance-hero" class="lnkup-fin-balance-hero">…</div>
+          - unexpected value "hidden"
+
+
+      38 |       await expect(page.getByRole('heading', { name: /^payments$/i })).toBeVisible();
+      39 |       await expect(page.locator('#lnkup-vendor-financial')).toBeVisible();
+    > 40 |       await expect(page.locator('#lnkup-fin-balance-hero')).toBeVisible();
+         |                                                             ^
+      41 |       await expect(page.getByRole('button', { name: /^overview$/i })).toBeVisible();
+      42 |       await expect(page.getByRole('button', { name: /^payment methods$/i })).toBeVisible();
+      43 |       await expect(page.getByRole('button', { name: /^wallet & credits$/i })).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-financial.spec.ts:40:61
+
+    Error Context: test-results\vendor-financial-Vendor-fi-c4fe1--connect-onboarding-on-load-chromium\error-context.md
+
+
+
+
+(node:76076) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[140/182] [chromium] › tests\e2e\vendor-growth.spec.ts:18:7 › Vendor growth dashboard › growth view requires login when unauthenticated
+[141/182] [chromium] › tests\e2e\vendor-growth.spec.ts:29:9 › Vendor growth dashboard › authenticated vendor › growth dashboard renders shell and KPI strip
+[142/182] [chromium] › tests\e2e\vendor-growth.spec.ts:39:9 › Vendor growth dashboard › authenticated vendor › revenue tab loads on click
+  43) [chromium] › tests\e2e\vendor-financial.spec.ts:48:9 › Vendor financial dashboard › authenticated vendor › refunds tab shows request form 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: /^refunds$/i })
+
+
+      48 |     test('refunds tab shows request form', async ({ page }) => {
+      49 |       await page.goto('/vendor-dashboard/?view=payments');
+    > 50 |       await page.getByRole('button', { name: /^refunds$/i }).click();
+         |                                                              ^
+      51 |       await expect(page.locator('#lnkup-refund-form')).toBeVisible();
+      52 |     });
+      53 |   });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-financial.spec.ts:50:62
+
+    Error Context: test-results\vendor-financial-Vendor-fi-bb3f0-unds-tab-shows-request-form-chromium\error-context.md
+
+
+
+(node:69240) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[143/182] [chromium] › tests\e2e\vendor-growth.spec.ts:46:9 › Vendor growth dashboard › authenticated vendor › sidebar includes Growth nav link
+[144/182] [chromium] › tests\e2e\vendor-import.spec.ts:23:9 › Organizer vendor CSV import › authenticated organizer › import button opens wizard on vendors panel
+  44) [chromium] › tests\e2e\vendor-growth.spec.ts:46:9 › Vendor growth dashboard › authenticated vendor › sidebar includes Growth nav link 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('link', { name: /^growth$/i })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('link', { name: /^growth$/i })
+
+
+      46 |     test('sidebar includes Growth nav link', async ({ page }) => {
+      47 |       await page.goto('/vendor-dashboard/');
+    > 48 |       await expect(page.getByRole('link', { name: /^growth$/i })).toBeVisible();
+         |                                                                   ^
+      49 |     });
+      50 |   });
+      51 | });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-growth.spec.ts:48:67
+
+    Error Context: test-results\vendor-growth-Vendor-growt-d2ea7-ar-includes-Growth-nav-link-chromium\error-context.md
+
+
+
+(node:18612) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[145/182] [chromium] › tests\e2e\vendor-import.spec.ts:30:9 › Organizer vendor CSV import › authenticated organizer › upload CSV advances through map and review steps
+  45) [chromium] › tests\e2e\vendor-import.spec.ts:23:9 › Organizer vendor CSV import › authenticated organizer › import button opens wizard on vendors panel 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByTestId('lnkup-import-vendors-btn')
+        - locator resolved to <button type="button" id="lnkup-import-vendors-btn" data-testid="lnkup-import-vendors-btn" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm">Import vendors</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - element is outside of the viewport
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is not stable
+      2 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      7 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+
+
+      23 |     test('import button opens wizard on vendors panel', async ({ page }) => {
+      24 |       await page.goto('/organizer-dashboard/#vendors');
+    > 25 |       await page.getByTestId('lnkup-import-vendors-btn').click();
+         |                                                          ^
+      26 |       await expect(page.getByTestId('lnkup-vendor-import-wizard')).toBeVisible();
+      27 |       await expect(page.getByTestId('lnkup-import-step-upload')).toBeVisible();
+      28 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-import.spec.ts:25:58
+
+    Error Context: test-results\vendor-import-Organizer-ve-ddc22-ens-wizard-on-vendors-panel-chromium\error-context.md
+
+
+
+
+(node:64048) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[146/182] [chromium] › tests\e2e\vendor-import.spec.ts:47:9 › Organizer vendor CSV import › authenticated organizer › import without invites completes and shows results
+  46) [chromium] › tests\e2e\vendor-import.spec.ts:30:9 › Organizer vendor CSV import › authenticated organizer › upload CSV advances through map and review steps 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByTestId('lnkup-import-vendors-btn')
+        - locator resolved to <button type="button" id="lnkup-import-vendors-btn" data-testid="lnkup-import-vendors-btn" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm">Import vendors</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        3 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - element is outside of the viewport
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is not stable
+      10 × retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <p class="lnkup-muted">Use the launch checklist to create your first eve…</p> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+
+
+      31 |       await page.setViewportSize({ width: 390, height: 844 });
+      32 |       await page.goto('/organizer-dashboard/#vendors');
+    > 33 |       await page.getByTestId('lnkup-import-vendors-btn').click();
+         |                                                          ^
+      34 |
+      35 |       await page.locator('#lnkup-import-file').setInputFiles(sampleCsv);
+      36 |       await expect(page.locator('#lnkup-import-upload-status')).toContainText(/rows ready/i, { timeout: 15000 });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-import.spec.ts:33:58
+
+    Error Context: test-results\vendor-import-Organizer-ve-52ec4-hrough-map-and-review-steps-chromium\error-context.md
+
+
+
+(node:77708) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[147/182] [chromium] › tests\e2e\vendor-import.spec.ts:63:9 › Organizer vendor CSV import › authenticated organizer › imported scope tab loads in vendor directory
+  47) [chromium] › tests\e2e\vendor-import.spec.ts:47:9 › Organizer vendor CSV import › authenticated organizer › import without invites completes and shows results 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByTestId('lnkup-import-vendors-btn')
+        - locator resolved to <button type="button" id="lnkup-import-vendors-btn" data-testid="lnkup-import-vendors-btn" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm">Import vendors</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="lnkup-modal__actions">…</div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is not stable
+      2 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      7 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+
+
+      47 |     test('import without invites completes and shows results', async ({ page }) => {
+      48 |       await page.goto('/organizer-dashboard/#vendors');
+    > 49 |       await page.getByTestId('lnkup-import-vendors-btn').click();
+         |                                                          ^
+      50 |       await page.locator('#lnkup-import-file').setInputFiles(sampleCsv);
+      51 |       await expect(page.locator('#lnkup-import-upload-status')).toContainText(/rows ready/i, { timeout: 15000 });
+      52 |
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-import.spec.ts:49:58
+
+    Error Context: test-results\vendor-import-Organizer-ve-5b910-completes-and-shows-results-chromium\error-context.md
+
+
+
+
+(node:80872) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[148/182] [chromium] › tests\e2e\vendor-operations.spec.ts:31:7 › Vendor Operations › operations command center requires login
+  48) [chromium] › tests\e2e\vendor-import.spec.ts:63:9 › Organizer vendor CSV import › authenticated organizer › imported scope tab loads in vendor directory 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: /^imported$/i })
+        - locator resolved to <button type="button" data-crm-scope="imported" class="lnkup-btn lnkup-btn--sm">Imported</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - element is outside of the viewport
+      4 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      8 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      2 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <section id="overview" class="lnkup-organizer-overview lnkup-organizer-section">…</section> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+
+
+      63 |     test('imported scope tab loads in vendor directory', async ({ page }) => {
+      64 |       await page.goto('/organizer-dashboard/#vendors');
+    > 65 |       await page.getByRole('button', { name: /^imported$/i }).click();
+         |                                                               ^
+      66 |       await expect(page.locator('#lnkup-crm-directory')).not.toContainText('Loading vendors', { timeout: 15000 });
+      67 |     });
+      68 |   });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-import.spec.ts:65:63
+
+    Error Context: test-results\vendor-import-Organizer-ve-f7dd8-b-loads-in-vendor-directory-chromium\error-context.md
+
+
+
+(node:66024) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[149/182] [chromium] › tests\e2e\vendor-operations.spec.ts:42:9 › Vendor Operations › authenticated organizer › events table shows Operations button
+[150/182] [chromium] › tests\e2e\vendor-operations.spec.ts:50:9 › Vendor Operations › authenticated organizer › command center shell loads when event exists
+[151/182] [chromium] › tests\e2e\vendor-operations.spec.ts:64:9 › Vendor Operations › authenticated organizer › command center kanban tab switches panels
+  49) [chromium] › tests\e2e\vendor-operations.spec.ts:50:9 › Vendor Operations › authenticated organizer › command center shell loads when event exists 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('link', { name: /^operations$/i }).first()
+        - locator resolved to <a data-hash="operations" class="lnkup-organizer-section-nav__link" href="http://localhost:8888/organizer-dashboard/#operations">Operations</a>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="nojq" id="wpadminbar">…</div> intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <h2 class="lnkup-type-title" id="lnkup-organizer-welcome-title">Welcome to LNKup</h2> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      10 × retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+
+
+      55 |         return;
+      56 |       }
+    > 57 |       await opsBtn.click();
+         |                    ^
+      58 |       await expect(page.locator('#lnkup-event-ops')).toBeVisible({ timeout: 15000 });
+      59 |       await expect(page.locator('.lnkup-ops-kpis')).toBeVisible();
+      60 |       await expect(page.locator('.lnkup-ops-tabs')).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-operations.spec.ts:57:20
+
+    Error Context: test-results\vendor-operations-Vendor-O-902ef-ell-loads-when-event-exists-chromium\error-context.md
+
+
+
+(node:71040) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[152/182] [chromium] › tests\e2e\vendor-operations.spec.ts:78:9 › Vendor Operations › authenticated organizer › CRM widgets include operations metrics
+  50) [chromium] › tests\e2e\vendor-operations.spec.ts:64:9 › Vendor Operations › authenticated organizer › command center kanban tab switches panels 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('link', { name: /^operations$/i }).first()
+        - locator resolved to <a data-hash="operations" class="lnkup-organizer-section-nav__link" href="http://localhost:8888/organizer-dashboard/#operations">Operations</a>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="nojq" id="wpadminbar">…</div> intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <h2 class="lnkup-type-title" id="lnkup-organizer-welcome-title">Welcome to LNKup</h2> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      5 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+
+
+      69 |         return;
+      70 |       }
+    > 71 |       await opsBtn.click();
+         |                    ^
+      72 |       await expect(page.locator('#lnkup-event-ops')).toBeVisible({ timeout: 15000 });
+      73 |       await page.getByRole('button', { name: /roster \/ kanban/i }).click();
+      74 |       await expect(page.locator('#lnkup-ops-kanban-wrap')).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-operations.spec.ts:71:20
+
+    Error Context: test-results\vendor-operations-Vendor-O-a2cbe--kanban-tab-switches-panels-chromium\error-context.md
+
+
+
+(node:79068) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[153/182] [chromium] › tests\e2e\vendor-operations.spec.ts:87:9 › Vendor Operations › authenticated organizer › command center mobile sticky bar visible at narrow viewport
+[154/182] [chromium] › tests\e2e\vendor-operations.spec.ts:106:9 › Vendor Operations › authenticated vendor › vendor operations view loads from sidebar
+  51) [chromium] › tests\e2e\vendor-operations.spec.ts:87:9 › Vendor Operations › authenticated organizer › command center mobile sticky bar visible at narrow viewport 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('link', { name: /^operations$/i }).first()
+        - locator resolved to <a data-hash="operations" class="lnkup-organizer-section-nav__link" href="http://localhost:8888/organizer-dashboard/#operations">Operations</a>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        - waiting for element to be visible, enabled and stable
+        - element is not stable
+      10 × retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <p class="lnkup-muted">Use the launch checklist to create your first eve…</p> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+
+
+      93 |         return;
+      94 |       }
+    > 95 |       await opsBtn.click();
+         |                    ^
+      96 |       await expect(page.locator('.lnkup-ops-mobile-bar')).toBeVisible({ timeout: 15000 });
+      97 |     });
+      98 |   });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-operations.spec.ts:95:20
+
+    Error Context: test-results\vendor-operations-Vendor-O-99e19--visible-at-narrow-viewport-chromium\error-context.md
+
+
+
+
+(node:39976) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[155/182] [chromium] › tests\e2e\vendor-operations.spec.ts:112:9 › Vendor Operations › authenticated vendor › vendor operations shows five tabs and full overview when bookings exist
+[156/182] [chromium] › tests\e2e\vendor-operations.spec.ts:133:7 › Vendor Operations regression › marketplace and CRM pages still load
+[157/182] [chromium] › tests\e2e\vendor-profile-strength.spec.ts:31:9 › Vendor profile strength › authenticated vendor › dashboard shows profile strength card or empty state
+  52) [chromium] › tests\e2e\vendor-operations.spec.ts:112:9 › Vendor Operations › authenticated vendor › vendor operations shows five tabs and full overview when bookings exist 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('tab', { name: /^readiness$/i })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('tab', { name: /^readiness$/i })
+
+
+      119 |       await expect(page.getByRole('tab', { name: /^overview$/i })).toBeVisible();
+      120 |       await expect(page.getByRole('tab', { name: /event pass/i })).toBeVisible();
+    > 121 |       await expect(page.getByRole('tab', { name: /^readiness$/i })).toBeVisible();
+          |                                                                     ^
+      122 |       await expect(page.getByRole('tab', { name: /venue map/i })).toBeVisible();
+      123 |       await expect(page.getByRole('tab', { name: /^support$/i })).toBeVisible();
+      124 |       await expect(page.locator('.lnkup-ops-overview-grid')).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-operations.spec.ts:121:69
+
+    Error Context: test-results\vendor-operations-Vendor-O-4e77c-verview-when-bookings-exist-chromium\error-context.md
+
+
+
+(node:26356) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[158/182] [chromium] › tests\e2e\vendor-profile-strength.spec.ts:40:9 › Vendor profile strength › authenticated vendor › profile editor shows sectioned resume layout
+[159/182] [chromium] › tests\e2e\vendor-profile-strength.spec.ts:47:9 › Vendor profile strength › authenticated vendor › business basics save updates profile strength preview
+  53) [chromium] › tests\e2e\vendor-profile-strength.spec.ts:31:9 › Vendor profile strength › authenticated vendor › dashboard shows profile strength card or empty state 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-vendor-strength-card')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-vendor-strength-card')
+
+
+      32 |       await page.goto('/vendor-dashboard/');
+      33 |       const card = page.getByTestId('lnkup-vendor-strength-card');
+    > 34 |       await expect(card).toBeVisible();
+         |                          ^
+      35 |       await expect(
+      36 |         card.getByText(/build your vendor profile|your vendor profile|booking ready/i)
+      37 |       ).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-profile-strength.spec.ts:34:26
+
+    Error Context: test-results\vendor-profile-strength-Ve-aa030-trength-card-or-empty-state-chromium\error-context.md
+
+
+
+(node:61780) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[160/182] [chromium] › tests\e2e\vendor-profile-strength.spec.ts:59:9 › Vendor profile strength › authenticated vendor › documents section shows status labels
+[161/182] [chromium] › tests\e2e\vendor-profile-strength.spec.ts:65:9 › Vendor profile strength › authenticated vendor › mobile profile editor does not overflow horizontally
+[162/182] [chromium] › tests\e2e\vendor-profile-strength.spec.ts:81:9 › Vendor profile strength › organizer application scan › application cards may show profile strength badge
+[163/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:31:7 › Vendor Reputation › public vendor profile page handles missing slug gracefully
+[164/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:52:9 › Vendor Reputation › authenticated vendor › vendor dashboard shows reputation panel
+[165/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:58:9 › Vendor Reputation › authenticated vendor › reputation panel shows reliability meter or tips
+  54) [chromium] › tests\e2e\vendor-reputation.spec.ts:58:9 › Vendor Reputation › authenticated vendor › reputation panel shows reliability meter or tips 
+
+    Error: expect(page).not.toHaveURL(expected) failed
+
+    Expected pattern: not /wp-login/
+    Received string: "http://localhost:8888/wp-login.php?redirect_to=http%3A%2F%2Flocalhost%3A8888%2Fwp-admin%2Fprofile.php&reauth=1"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "not toHaveURL" with timeout 5000ms
+        14 × unexpected value "http://localhost:8888/wp-login.php?redirect_to=http%3A%2F%2Flocalhost%3A8888%2Fwp-admin%2Fprofile.php&reauth=1"
+
+
+      14 |   await page.getByLabel(/^password$/i).fill(vendorPass!);
+      15 |   await page.getByRole('button', { name: /log in/i }).click();
+    > 16 |   await expect(page).not.toHaveURL(/wp-login/);
+         |                          ^
+      17 | }
+      18 |
+      19 | /**
+        at loginVendor (C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-reputation.spec.ts:16:26)
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-reputation.spec.ts:49:7
+
+    Error Context: test-results\vendor-reputation-Vendor-R-3e1d2-s-reliability-meter-or-tips-chromium\error-context.md
+
+
+
+
+(node:64872) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[166/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:72:9 › Vendor Reputation › authenticated organizer reputation intel › vendor directory has reputation sort control
+  55) [chromium] › tests\e2e\vendor-reputation.spec.ts:52:9 › Vendor Reputation › authenticated vendor › vendor dashboard shows reputation panel 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.lnkup-rep-score, .lnkup-rep-score--new').first()
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('.lnkup-rep-score, .lnkup-rep-score--new').first()
+
+
+      53 |       await page.goto('/vendor-dashboard/?view=reviews');
+      54 |       await expect(page.locator('#reviews')).toBeVisible();
+    > 55 |       await expect(page.locator('.lnkup-rep-score, .lnkup-rep-score--new').first()).toBeVisible();
+         |                                                                                     ^
+      56 |     });
+      57 |
+      58 |     test('reputation panel shows reliability meter or tips', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-reputation.spec.ts:55:85
+
+    Error Context: test-results\vendor-reputation-Vendor-R-05119-oard-shows-reputation-panel-chromium\error-context.md
+
+
+
+(node:68304) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[167/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:78:9 › Vendor Reputation › authenticated organizer reputation intel › application cards show score intel when applications exist
+[168/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:93:7 › Vendor Reputation regression › opportunities marketplace still loads
+[169/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:99:7 › Vendor Reputation regression › vendor dashboard route responds
+  56) [chromium] › tests\e2e\vendor-reputation.spec.ts:78:9 › Vendor Reputation › authenticated organizer reputation intel › application cards show score intel when applications exist 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.lnkup-crm-app-card').first().locator('.lnkup-crm-app-card__intel')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('.lnkup-crm-app-card').first().locator('.lnkup-crm-app-card__intel')
+
+
+      84 |         return;
+      85 |       }
+    > 86 |       await expect(cards.first().locator('.lnkup-crm-app-card__intel')).toBeVisible();
+         |                                                                         ^
+      87 |       await expect(cards.first().locator('.lnkup-crm-app-card__intel')).toContainText(/score/i);
+      88 |     });
+      89 |   });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-reputation.spec.ts:86:73
+
+    Error Context: test-results\vendor-reputation-Vendor-R-aef73-tel-when-applications-exist-chromium\error-context.md
+
+
+[170/182] [chromium] › tests\e2e\verification-trust.spec.ts:41:9 › Trust and verification › vendor dashboard › verification REST returns vendor status JSON
+
+
+(node:68540) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[171/182] [chromium] › tests\e2e\verification-trust.spec.ts:31:9 › Trust and verification › vendor dashboard › home shows trust status card
+[172/182] [chromium] › tests\e2e\verification-trust.spec.ts:53:9 › Trust and verification › vendor dashboard › mobile trust card does not overflow
+  57) [chromium] › tests\e2e\verification-trust.spec.ts:31:9 › Trust and verification › vendor dashboard › home shows trust status card 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-vendor-trust-card').getByText(/your trust status/i)
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-vendor-trust-card').getByText(/your trust status/i)
+
+
+      33 |       const card = page.getByTestId('lnkup-vendor-trust-card');
+      34 |       await expect(card).toBeVisible();
+    > 35 |       await expect(card.getByText(/your trust status/i)).toBeVisible();
+         |                                                          ^
+      36 |       await expect(card.getByText(/basic vendor|profile complete|documents ready|verified|trust status/i)).toBeVisible({
+      37 |         timeout: 15000,
+      38 |       });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\verification-trust.spec.ts:35:58
+
+    Error Context: test-results\verification-trust-Trust-a-c7b4a-ome-shows-trust-status-card-chromium\error-context.md
+
+
+
+
+(node:68812) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[173/182] [chromium] › tests\e2e\verification-trust.spec.ts:78:9 › Trust and verification › organizer dashboard › organizer verification REST returns payout fields
+[174/182] [chromium] › tests\e2e\verification-trust.spec.ts:69:9 › Trust and verification › organizer dashboard › overview shows organizer trust strip
+[175/182] [chromium] › tests\e2e\verification-trust.spec.ts:89:9 › Trust and verification › organizer dashboard › create event form exposes document mode options
+  58) [chromium] › tests\e2e\verification-trust.spec.ts:69:9 › Trust and verification › organizer dashboard › overview shows organizer trust strip 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-organizer-trust-strip').getByText(/organizer|payout|verification unavailable|trust/i)
+    Expected: visible
+    Error: strict mode violation: getByTestId('lnkup-organizer-trust-strip').getByText(/organizer|payout|verification unavailable|trust/i) resolved to 2 elements:
+        1) <span class="lnkup-organizer-trust-strip__meta">This organizer can securely collect vendor paymen…</span> aka getByTestId('lnkup-organizer-trust-strip').getByText('This organizer can securely')
+        2) <span class="lnkup-trust-badge lnkup-trust-badge--accent">Payout Connected</span> aka getByText('Payout Connected')
+
+    Call log:
+      - Expect "toBeVisible" with timeout 15000ms
+      - waiting for getByTestId('lnkup-organizer-trust-strip').getByText(/organizer|payout|verification unavailable|trust/i)
+
+
+      71 |       const strip = page.getByTestId('lnkup-organizer-trust-strip');
+      72 |       await expect(strip).toBeVisible();
+    > 73 |       await expect(strip.getByText(/organizer|payout|verification unavailable|trust/i)).toBeVisible({
+         |                                                                                         ^
+      74 |         timeout: 15000,
+      75 |       });
+      76 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\verification-trust.spec.ts:73:89
+
+    Error Context: test-results\verification-trust-Trust-a-f7907-shows-organizer-trust-strip-chromium\error-context.md
+
+
+
+(node:61612) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[176/182] [chromium] › tests\e2e\verification-trust.spec.ts:105:9 › Trust and verification › application review trust signals › application cards may show trust badges and document context
+[177/182] [chromium] › tests\e2e\verification-trust.spec.ts:124:9 › Trust and verification › marketplace opportunity cards › public feed may show organizer trust badges when opportunities exist
+[178/182] [chromium] › tests\e2e\verification-trust.spec.ts:137:9 › Trust and verification › authorization › unauthenticated verification vendor route is forbidden
+[179/182] [chromium] › tests\e2e\weather-intelligence.spec.ts:15:7 › Event Weather Intelligence › weather REST admin status requires auth
+[180/182] [chromium] › tests\e2e\weather-intelligence.spec.ts:26:9 › Event Weather Intelligence › authenticated organizer › organizer dashboard shows weather readiness card
+  59) [chromium] › tests\e2e\verification-trust.spec.ts:89:9 › Trust and verification › organizer dashboard › create event form exposes document mode options 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  getByTestId('lnkup-document-mode')
+    Expected: visible
+    Received: hidden
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toBeVisible" with timeout 15000ms
+      - waiting for getByTestId('lnkup-document-mode')
+        30 × locator resolved to <div class="lnkup-form-row" data-testid="lnkup-document-mode">…</div>
+           - unexpected value "hidden"
+
+
+      90 |       await page.goto('/organizer-dashboard/#create');
+      91 |       const mode = page.getByTestId('lnkup-document-mode');
+    > 92 |       await expect(mode).toBeVisible({ timeout: 15000 });
+         |                          ^
+      93 |       await expect(page.getByTestId('lnkup-doc-mode-none')).toBeVisible();
+      94 |       await expect(page.getByTestId('lnkup-doc-mode-defaults')).toBeVisible();
+      95 |       await expect(page.getByTestId('lnkup-doc-mode-custom')).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\verification-trust.spec.ts:92:26
+
+    Error Context: test-results\verification-trust-Trust-a-465a0-poses-document-mode-options-chromium\error-context.md
+
+
+
+
+(node:12120) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[181/182] [chromium] › tests\e2e\weather-intelligence.spec.ts:33:9 › Event Weather Intelligence › authenticated organizer › operations command center weather panel does not 500
+[182/182] [chromium] › tests\e2e\weather-intelligence.spec.ts:53:9 › Event Weather Intelligence › authenticated organizer › insights tab includes weather intelligence block when configured
+  60) [chromium] › tests\e2e\weather-intelligence.spec.ts:33:9 › Event Weather Intelligence › authenticated organizer › operations command center weather panel does not 500 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('link', { name: /^operations$/i }).first()
+        - locator resolved to <a data-hash="operations" class="lnkup-organizer-section-nav__link" href="http://localhost:8888/organizer-dashboard/#operations">Operations</a>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div class="nojq" id="wpadminbar">…</div> intercepts pointer events
+      5 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      9 × retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+          - waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+      - retrying click action
+        - waiting 500ms
+
+
+      38 |         return;
+      39 |       }
+    > 40 |       await opsBtn.click();
+         |                    ^
+      41 |       const weatherPanel = page.locator('#lnkup-ops-weather-panel');
+      42 |       await expect(weatherPanel).toBeVisible({ timeout: 15000 });
+      43 |       const weatherCard = weatherPanel.getByTestId('lnkup-ops-weather');
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\weather-intelligence.spec.ts:40:20
+
+    Error Context: test-results\weather-intelligence-Event-21891--weather-panel-does-not-500-chromium\error-context.md
+
+
+  61) [chromium] › tests\e2e\weather-intelligence.spec.ts:53:9 › Event Weather Intelligence › authenticated organizer › insights tab includes weather intelligence block when configured 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('link', { name: /^operations$/i }).first()
+        - locator resolved to <a data-hash="operations" class="lnkup-organizer-section-nav__link" href="http://localhost:8888/organizer-dashboard/#operations">Operations</a>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not stable
+        - retrying click action
+          - waiting 100ms
+        10 × waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+           - waiting for element to be visible, enabled and stable
+           - element is visible, enabled and stable
+           - scrolling into view if needed
+           - done scrolling
+           - <div role="dialog" aria-modal="true" class="lnkup-modal__dialog" aria-labelledby="lnkup-organizer-welcome-title">…</div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+         - retrying click action
+           - waiting 500ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is visible, enabled and stable
+          - scrolling into view if needed
+          - done scrolling
+          - <div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div> from <div id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" class="lnkup-modal lnkup-modal--organizer-welcome">…</div> subtree intercepts pointer events
+        - retrying click action
+          - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+
+
+      58 |         return;
+      59 |       }
+    > 60 |       await opsBtn.click();
+         |                    ^
+      61 |       await page.getByRole('button', { name: /^insights$/i }).click();
+      62 |       await expect(page.locator('#lnkup-event-insights')).toBeVisible({ timeout: 15000 });
+      63 |       const intelWeather = page.locator('#lnkup-ops-weather-intel, .lnkup-weather-intel-block');
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\weather-intelligence.spec.ts:60:20
+
+    Error Context: test-results\weather-intelligence-Event-35905-gence-block-when-configured-chromium\error-context.md
+
+
+  61 failed
+    [chromium] › tests\e2e\app-promo.spec.ts:89:9 › Optional iPhone app prompts › organizer › overview shows quick actions 
+    [chromium] › tests\e2e\connector-program.spec.ts:4:7 › City Connector program › connector interest page renders form with market context 
+    [chromium] › tests\e2e\dashboard-enhancements.spec.ts:26:7 › Organizer dashboard enhancements › Requests shows search, sort, and status badges on each card 
+    [chromium] › tests\e2e\dashboard-enhancements.spec.ts:64:7 › Organizer dashboard enhancements › Decline asks for a reason inline instead of a browser prompt 
+    [chromium] › tests\e2e\dashboard-enhancements.spec.ts:83:7 › Organizer dashboard enhancements › Event workspace overview shows readiness, spots, and tools 
+    [chromium] › tests\e2e\dashboard-enhancements.spec.ts:93:7 › Organizer dashboard enhancements › Edit view links back to the workspace for requests and vendors 
+    [chromium] › tests\e2e\dashboard-enhancements.spec.ts:116:7 › Organizer dashboard enhancements › QR check-in offers manual entry and a recent check-ins list 
+    [chromium] › tests\e2e\dashboard-enhancements.spec.ts:171:7 › Vendor dashboard enhancements › Profile renders the documents section the strength links point to 
+    [chromium] › tests\e2e\event-intelligence.spec.ts:36:9 › Event Intelligence › authenticated organizer › organizer intelligence panel loads 
+    [chromium] › tests\e2e\event-intelligence.spec.ts:45:9 › Event Intelligence › authenticated organizer › organizer intelligence expand button clears skeleton 
+    [chromium] › tests\e2e\event-intelligence.spec.ts:55:9 › Event Intelligence › authenticated organizer › application intel button opens drawer 
+    [chromium] › tests\e2e\event-intelligence.spec.ts:67:9 › Event Intelligence › authenticated organizer › operations command center has insights tab 
+    [chromium] › tests\e2e\event-intelligence.spec.ts:86:9 › Event Intelligence › authenticated vendor › vendor intelligence panel loads 
+    [chromium] › tests\e2e\external-events.spec.ts:46:7 › External event discovery › external events dashboard REST returns JSON 
+    [chromium] › tests\e2e\external-events.spec.ts:72:9 › External event discovery › admin › external events admin import tab loads 
+    [chromium] › tests\e2e\external-events.spec.ts:105:9 › External event discovery › admin › external events review queue tab loads 
+    [chromium] › tests\e2e\external-events.spec.ts:118:9 › External event discovery › admin › external events analytics tab loads 
+    [chromium] › tests\e2e\external-events.spec.ts:123:9 › External event discovery › admin › external events auto sync tab loads 
+    [chromium] › tests\e2e\external-events.spec.ts:132:9 › External event discovery › admin › external events needs-email filter and published email form 
+    [chromium] › tests\e2e\external-events.spec.ts:150:9 › External event discovery › vendor feed › find events page loads marketplace grid 
+    [chromium] › tests\e2e\interactive-maps.spec.ts:23:7 › Interactive Maps › split view places map beside the list at desktop 
+    [chromium] › tests\e2e\landing-launch.spec.ts:55:7 › Launch homepage › opportunities nav targets the homepage section 
+    [chromium] › tests\e2e\landing-launch.spec.ts:132:7 › Launch homepage › login and lost-password pages are LNKup branded 
+    [chromium] › tests\e2e\marketplace-v2.spec.ts:55:7 › Marketplace V2 › phase 1A hides map toggle, compare tray, and intelligence rails 
+    [chromium] › tests\e2e\marketplace-v2.spec.ts:95:7 › Marketplace V2 › page loads without JavaScript parse errors 
+    [chromium] › tests\e2e\outreach-invite.spec.ts:12:7 › Outreach invite sign-up › invalid outreach token shows normal editable sign-up form 
+    [chromium] › tests\e2e\profile-images.spec.ts:42:7 › Organizer profile images › Profile page shows the form below the sticky top bar 
+    [chromium] › tests\e2e\profile-images.spec.ts:55:7 › Organizer profile images › old profile=edit links land on the Profile page 
+    [chromium] › tests\e2e\profile-images.spec.ts:60:7 › Organizer profile images › uploading a logo previews it and survives save and reload 
+    [chromium] › tests\e2e\profile-images.spec.ts:75:7 › Organizer profile images › a non-image file shows an inline error and changes nothing 
+    [chromium] › tests\e2e\profile-images.spec.ts:93:7 › Vendor profile images › vendor logo upload previews without the media library 
+    [chromium] › tests\e2e\saved-searches.spec.ts:31:7 › Saved searches › mobile save search modal does not overflow 
+    [chromium] › tests\e2e\saved-searches.spec.ts:56:9 › Saved searches › vendor flows › vendor can save current Find Events filters 
+    [chromium] › tests\e2e\saved-searches.spec.ts:72:9 › Saved searches › vendor flows › empty filter search shows warning 
+    [chromium] › tests\e2e\saved-searches.spec.ts:83:9 › Saved searches › vendor flows › saved search appears in favorites dashboard section 
+    [chromium] › tests\e2e\stripe-connect.spec.ts:105:9 › Stripe Connect marketplace › organizer Connect REST › connect status returns JSON with settlement_mode 
+    [chromium] › tests\e2e\stripe-connect.spec.ts:148:9 › Stripe Connect marketplace › organizer Connect REST › onboarding failure shows an inline message and re-enables the button 
+    [chromium] › tests\e2e\stripe-connect.spec.ts:187:9 › Stripe Connect marketplace › organizer Connect REST › connect refresh endpoint returns JSON 
+    [chromium] › tests\e2e\stripe-connect.spec.ts:204:9 › Stripe Connect marketplace › vendor isolation from Connect › vendor financial shell has no Connect onboarding CTA 
+    [chromium] › tests\e2e\vendor-event-pass.spec.ts:98:9 › Vendor Event Pass › authenticated organizer › vendor pass builder tab loads in command center 
+    [chromium] › tests\e2e\vendor-event-pass.spec.ts:113:9 › Vendor Event Pass › authenticated organizer › organizer can save arrival pass details 
+    [chromium] › tests\e2e\vendor-financial.spec.ts:29:9 › Vendor financial dashboard › authenticated vendor › payments hub renders tabs and balance hero without connect onboarding on load 
+    [chromium] › tests\e2e\vendor-financial.spec.ts:48:9 › Vendor financial dashboard › authenticated vendor › refunds tab shows request form 
+    [chromium] › tests\e2e\vendor-growth.spec.ts:46:9 › Vendor growth dashboard › authenticated vendor › sidebar includes Growth nav link 
+    [chromium] › tests\e2e\vendor-import.spec.ts:23:9 › Organizer vendor CSV import › authenticated organizer › import button opens wizard on vendors panel 
+    [chromium] › tests\e2e\vendor-import.spec.ts:30:9 › Organizer vendor CSV import › authenticated organizer › upload CSV advances through map and review steps 
+    [chromium] › tests\e2e\vendor-import.spec.ts:47:9 › Organizer vendor CSV import › authenticated organizer › import without invites completes and shows results 
+    [chromium] › tests\e2e\vendor-import.spec.ts:63:9 › Organizer vendor CSV import › authenticated organizer › imported scope tab loads in vendor directory 
+    [chromium] › tests\e2e\vendor-operations.spec.ts:50:9 › Vendor Operations › authenticated organizer › command center shell loads when event exists 
+    [chromium] › tests\e2e\vendor-operations.spec.ts:64:9 › Vendor Operations › authenticated organizer › command center kanban tab switches panels 
+    [chromium] › tests\e2e\vendor-operations.spec.ts:87:9 › Vendor Operations › authenticated organizer › command center mobile sticky bar visible at narrow viewport 
+    [chromium] › tests\e2e\vendor-operations.spec.ts:112:9 › Vendor Operations › authenticated vendor › vendor operations shows five tabs and full overview when bookings exist 
+    [chromium] › tests\e2e\vendor-profile-strength.spec.ts:31:9 › Vendor profile strength › authenticated vendor › dashboard shows profile strength card or empty state 
+    [chromium] › tests\e2e\vendor-reputation.spec.ts:52:9 › Vendor Reputation › authenticated vendor › vendor dashboard shows reputation panel 
+    [chromium] › tests\e2e\vendor-reputation.spec.ts:58:9 › Vendor Reputation › authenticated vendor › reputation panel shows reliability meter or tips 
+    [chromium] › tests\e2e\vendor-reputation.spec.ts:78:9 › Vendor Reputation › authenticated organizer reputation intel › application cards show score intel when applications exist 
+    [chromium] › tests\e2e\verification-trust.spec.ts:31:9 › Trust and verification › vendor dashboard › home shows trust status card 
+    [chromium] › tests\e2e\verification-trust.spec.ts:69:9 › Trust and verification › organizer dashboard › overview shows organizer trust strip 
+    [chromium] › tests\e2e\verification-trust.spec.ts:89:9 › Trust and verification › organizer dashboard › create event form exposes document mode options 
+    [chromium] › tests\e2e\weather-intelligence.spec.ts:33:9 › Event Weather Intelligence › authenticated organizer › operations command center weather panel does not 500 
+    [chromium] › tests\e2e\weather-intelligence.spec.ts:53:9 › Event Weather Intelligence › authenticated organizer › insights tab includes weather intelligence block when configured 
+  30 skipped
+  91 passed (15.5m)

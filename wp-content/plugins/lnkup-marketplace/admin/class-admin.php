@@ -204,6 +204,12 @@ class LNKup_Admin {
 				$output['stripe_webhook_secret'] = $webhook_secret;
 			}
 		}
+		if ( isset( $input['stripe_connect_webhook_secret'] ) ) {
+			$connect_webhook_secret = sanitize_text_field( $input['stripe_connect_webhook_secret'] );
+			if ( '' !== $connect_webhook_secret ) {
+				$output['stripe_connect_webhook_secret'] = $connect_webhook_secret;
+			}
+		}
 		$output['test_mode']           = ! empty( $input['test_mode'] );
 		$output['default_packet_lock'] = ! empty( $input['default_packet_lock'] );
 		$output['support_email']       = isset( $input['support_email'] ) ? sanitize_email( $input['support_email'] ) : $output['support_email'];
@@ -454,6 +460,15 @@ class LNKup_Admin {
 				$output['app_release_tz'] = 'America/New_York';
 			}
 		}
+		if ( isset( $input['app_store_url'] ) ) {
+			$store_url  = esc_url_raw( trim( (string) $input['app_store_url'] ), array( 'https' ) );
+			$store_host = $store_url ? wp_parse_url( $store_url, PHP_URL_HOST ) : '';
+			if ( in_array( $store_host, array( 'apps.apple.com', 'itunes.apple.com' ), true ) ) {
+				$output['app_store_url'] = $store_url;
+			}
+			// Checkbox lives beside the URL field, so only read it when that form section posts.
+			$output['app_prompts_enabled'] = ! empty( $input['app_prompts_enabled'] );
+		}
 		LNKup_Marketplace_Cron::sync_with_phase();
 		return $output;
 	}
@@ -546,12 +561,13 @@ class LNKup_Admin {
 							<p class="description">
 								<?php esc_html_e( 'In Stripe Dashboard → Developers → Webhooks, add this URL as a destination. Select these events:', 'lnkup-marketplace' ); ?>
 								<code>account.updated</code>,
+								<code>account.application.deauthorized</code>,
 								<code>checkout.session.completed</code>,
 								<code>payment_intent.succeeded</code>,
 								<code>payment_intent.processing</code>,
 								<code>payment_intent.payment_failed</code>,
 								<code>transfer.created</code>,
-								<code>transfer.failed</code>,
+								<code>transfer.reversed</code>,
 								<code>payout.created</code>,
 								<code>payout.paid</code>,
 								<code>payout.failed</code>,
@@ -575,6 +591,19 @@ class LNKup_Admin {
 							<?php else : ?>
 								<p class="description"><?php esc_html_e( 'Paste the whsec_... value from your Stripe webhook destination.', 'lnkup-marketplace' ); ?></p>
 							<?php endif; ?>
+							<p>
+								<label for="stripe_connect_webhook_secret"><strong><?php esc_html_e( 'Connect signing secret (connected accounts)', 'lnkup-marketplace' ); ?></strong></label><br />
+								<input
+									type="password"
+									class="regular-text"
+									id="stripe_connect_webhook_secret"
+									name="lnkup_settings[stripe_connect_webhook_secret]"
+									value=""
+									placeholder="<?php echo esc_attr( ! empty( $settings['stripe_connect_webhook_secret'] ) ? __( 'Configured — enter new value to replace', 'lnkup-marketplace' ) : 'whsec_...' ); ?>"
+									autocomplete="new-password"
+								/>
+							</p>
+							<p class="description"><?php esc_html_e( 'Optional. Add a second destination with the same URL that listens to events on connected accounts (account.updated, account.application.deauthorized, payout.paid, payout.failed) and paste its whsec_... value here. Leave empty to keep the current value.', 'lnkup-marketplace' ); ?></p>
 						</td>
 					</tr>
 					<tr>
@@ -693,14 +722,14 @@ class LNKup_Admin {
 					<tr>
 						<th><label for="connect_return_url"><?php esc_html_e( 'Connect return URL', 'lnkup-marketplace' ); ?></label></th>
 						<td>
-							<input type="url" class="large-text" id="connect_return_url" name="lnkup_settings[connect_return_url]" value="<?php echo esc_attr( $settings['connect_return_url'] ?? '' ); ?>" placeholder="<?php echo esc_attr( home_url( '/organizer-dashboard/?connect=return#financial' ) ); ?>" />
+							<input type="url" class="large-text" id="connect_return_url" name="lnkup_settings[connect_return_url]" value="<?php echo esc_attr( $settings['connect_return_url'] ?? '' ); ?>" placeholder="<?php echo esc_attr( home_url( '/organizer-dashboard/?view=financial&connect=return' ) ); ?>" />
 							<p class="description"><?php esc_html_e( 'Leave blank to use organizer dashboard default.', 'lnkup-marketplace' ); ?></p>
 						</td>
 					</tr>
 					<tr>
 						<th><label for="connect_refresh_url"><?php esc_html_e( 'Connect refresh URL', 'lnkup-marketplace' ); ?></label></th>
 						<td>
-							<input type="url" class="large-text" id="connect_refresh_url" name="lnkup_settings[connect_refresh_url]" value="<?php echo esc_attr( $settings['connect_refresh_url'] ?? '' ); ?>" placeholder="<?php echo esc_attr( home_url( '/organizer-dashboard/?connect=refresh#financial' ) ); ?>" />
+							<input type="url" class="large-text" id="connect_refresh_url" name="lnkup_settings[connect_refresh_url]" value="<?php echo esc_attr( $settings['connect_refresh_url'] ?? '' ); ?>" placeholder="<?php echo esc_attr( home_url( '/organizer-dashboard/?view=financial&connect=refresh' ) ); ?>" />
 						</td>
 					</tr>
 				</table>
@@ -732,6 +761,36 @@ class LNKup_Admin {
 								<label for="activation_daily_batch"><?php esc_html_e( 'Daily activation batch size', 'lnkup-marketplace' ); ?></label>
 								<input type="number" min="10" max="500" id="activation_daily_batch" name="lnkup_settings[activation_daily_batch]" value="<?php echo esc_attr( (string) ( $settings['activation_daily_batch'] ?? 100 ) ); ?>" class="small-text" />
 							</p>
+							<?php if ( current_user_can( 'manage_options' ) || ( class_exists( 'LNKup_Capabilities' ) && LNKup_Capabilities::user_has_manage_all() ) ) : ?>
+								<?php $lnkup_failures = LNKup_Notifications::recent_failures( 20 ); ?>
+								<h4 style="margin:16px 0 8px;"><?php esc_html_e( 'Recent notification failures', 'lnkup-marketplace' ); ?></h4>
+								<?php if ( empty( $lnkup_failures ) ) : ?>
+									<p class="description"><?php esc_html_e( 'No failed or suppressed deliveries.', 'lnkup-marketplace' ); ?></p>
+								<?php else : ?>
+									<table class="widefat striped" style="max-width:720px;">
+										<thead>
+											<tr>
+												<th><?php esc_html_e( 'Outcome', 'lnkup-marketplace' ); ?></th>
+												<th><?php esc_html_e( 'Event', 'lnkup-marketplace' ); ?></th>
+												<th><?php esc_html_e( 'Attempts', 'lnkup-marketplace' ); ?></th>
+												<th><?php esc_html_e( 'Reason', 'lnkup-marketplace' ); ?></th>
+												<th><?php esc_html_e( 'Updated', 'lnkup-marketplace' ); ?></th>
+											</tr>
+										</thead>
+										<tbody>
+											<?php foreach ( $lnkup_failures as $failure ) : ?>
+												<tr>
+													<td><?php echo esc_html( (string) ( $failure['status'] ?? '' ) ); ?></td>
+													<td><?php echo esc_html( trim( (string) ( $failure['event_key'] ?? '' ) . ' ' . (string) ( $failure['channel'] ?? '' ) . ' ' . (string) ( $failure['window_key'] ?? '' ) ) ); ?></td>
+													<td><?php echo esc_html( (string) ( $failure['attempts'] ?? '' ) ); ?></td>
+													<td><?php echo esc_html( (string) ( $failure['last_error'] ?? '' ) ); ?></td>
+													<td><?php echo esc_html( (string) ( $failure['updated_at'] ?? '' ) ); ?></td>
+												</tr>
+											<?php endforeach; ?>
+										</tbody>
+									</table>
+								<?php endif; ?>
+							<?php endif; ?>
 						</td>
 					</tr>
 					<tr>
@@ -1056,6 +1115,23 @@ class LNKup_Admin {
 						<td>
 							<input type="text" id="app_release_tz" name="lnkup_settings[app_release_tz]" value="<?php echo esc_attr( (string) ( $settings['app_release_tz'] ?? 'America/New_York' ) ); ?>" class="regular-text" />
 							<p class="description"><?php esc_html_e( 'PHP timezone ID (default America/New_York). Does not gate the web marketplace.', 'lnkup-marketplace' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="app_store_url"><?php esc_html_e( 'App Store URL', 'lnkup-marketplace' ); ?></label></th>
+						<td>
+							<input type="url" id="app_store_url" name="lnkup_settings[app_store_url]" value="<?php echo esc_attr( (string) ( $settings['app_store_url'] ?? 'https://apps.apple.com/app/id6795865859' ) ); ?>" class="regular-text" />
+							<p class="description"><?php esc_html_e( 'apps.apple.com link used by the homepage, dashboards, footer, and the Safari app banner.', 'lnkup-marketplace' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'App suggestions', 'lnkup-marketplace' ); ?></th>
+						<td>
+							<label>
+								<input type="checkbox" name="lnkup_settings[app_prompts_enabled]" value="1" <?php checked( ! isset( $settings['app_prompts_enabled'] ) || ! empty( $settings['app_prompts_enabled'] ) ); ?> />
+								<?php esc_html_e( 'Show optional "Get the iPhone app" prompts after the app release date', 'lnkup-marketplace' ); ?>
+							</label>
+							<p class="description"><?php esc_html_e( 'Prompts can always be dismissed and are hidden for people who already use the app.', 'lnkup-marketplace' ); ?></p>
 						</td>
 					</tr>
 				</table>

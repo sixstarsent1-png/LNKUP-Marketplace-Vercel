@@ -56,13 +56,8 @@ class LNKup_Vendor_Dashboard_Data {
 	 */
 	public static function nav_badges( $user_id = 0 ) {
 		$user_id = $user_id ? $user_id : get_current_user_id();
-		$action  = 0;
-		foreach ( lnkup_get_applications_for_user( $user_id, 'vendor' ) as $app ) {
-			$status = get_post_meta( $app->ID, '_lnkup_application_status', true );
-			if ( in_array( $status, array( 'payment_required', 'approved' ), true ) ) {
-				$action++;
-			}
-		}
+		$counts = self::request_bucket_counts( lnkup_get_applications_for_user( $user_id, 'vendor' ), $user_id );
+		$action = (int) $counts['pay-now'];
 		$compliance = LNKup_Documents::compliance_summary( $user_id );
 		$docs       = (int) ( $compliance['attention_count'] ?? 0 );
 
@@ -81,6 +76,7 @@ class LNKup_Vendor_Dashboard_Data {
 		$labels = array(
 			'submitted'        => __( 'Submitted', 'lnkup-marketplace' ),
 			'under_review'     => __( 'Under Review', 'lnkup-marketplace' ),
+			'info_requested'   => __( 'More info needed', 'lnkup-marketplace' ),
 			'approved'         => __( 'Approved', 'lnkup-marketplace' ),
 			'payment_required' => __( 'Payment Required', 'lnkup-marketplace' ),
 			'paid'             => __( 'Paid', 'lnkup-marketplace' ),
@@ -101,10 +97,113 @@ class LNKup_Vendor_Dashboard_Data {
 		if ( in_array( $status, array( 'completed', 'rejected', 'cancelled' ), true ) ) {
 			return 'past';
 		}
-		if ( in_array( $status, array( 'payment_required', 'approved' ), true ) ) {
+		if ( in_array( $status, array( 'payment_required', 'approved', 'info_requested' ), true ) ) {
 			return 'action';
 		}
 		return 'active';
+	}
+
+	/**
+	 * Payment owned by this vendor for an application.
+	 *
+	 * @param WP_Post|int $app     Application post or ID.
+	 * @param int         $user_id Vendor user ID.
+	 * @return WP_Post|null
+	 */
+	public static function application_payment_for_vendor( $app, $user_id = 0 ) {
+		$app_id  = $app instanceof WP_Post ? (int) $app->ID : (int) $app;
+		$user_id = $user_id ? (int) $user_id : get_current_user_id();
+		if ( ! $app_id || ! class_exists( 'LNKup_Payments' ) ) {
+			return null;
+		}
+		$payment = LNKup_Payments::get_for_application( $app_id );
+		if ( ! $payment instanceof WP_Post ) {
+			return null;
+		}
+		$owner = (int) get_post_meta( $payment->ID, '_lnkup_vendor_user_id', true );
+		if ( $owner && $owner !== $user_id && ! current_user_can( 'manage_options' ) ) {
+			return null;
+		}
+		return $payment;
+	}
+
+	/**
+	 * Approved or payment-required, with a pending payment the vendor owns.
+	 * Rejected and cancelled applications are never payable.
+	 *
+	 * @param WP_Post|int $app     Application post or ID.
+	 * @param int         $user_id Vendor user ID.
+	 */
+	public static function application_is_payable( $app, $user_id = 0 ) {
+		$app_id = $app instanceof WP_Post ? (int) $app->ID : (int) $app;
+		$status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+		if ( ! in_array( $status, array( 'approved', 'payment_required' ), true ) ) {
+			return false;
+		}
+		$payment = self::application_payment_for_vendor( $app_id, $user_id );
+		if ( ! $payment ) {
+			return false;
+		}
+		return 'pending' === (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true );
+	}
+
+	/**
+	 * Request filter bucket: in-review, pay-now, booked (confirmed, upcoming), completed, or applied (other).
+	 *
+	 * @param WP_Post|int $app     Application post or ID.
+	 * @param int         $user_id Vendor user ID.
+	 */
+	public static function application_request_bucket( $app, $user_id = 0 ) {
+		$app_id = $app instanceof WP_Post ? (int) $app->ID : (int) $app;
+		$status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+		if ( in_array( $status, array( 'submitted', 'under_review', 'info_requested' ), true ) ) {
+			return 'in-review';
+		}
+		if ( self::application_is_payable( $app_id, $user_id ) ) {
+			return 'pay-now';
+		}
+		if ( 'completed' === $status ) {
+			return 'completed';
+		}
+		if ( 'paid' === $status ) {
+			return self::application_event_has_passed( $app_id ) ? 'completed' : 'booked';
+		}
+		return 'applied';
+	}
+
+	/**
+	 * Whether the application's event date is before today (site time).
+	 *
+	 * @param int $app_id Application ID.
+	 */
+	public static function application_event_has_passed( $app_id ) {
+		$event_id = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
+		$date     = $event_id ? (string) get_post_meta( $event_id, '_lnkup_event_date', true ) : '';
+		return '' !== $date && $date < current_time( 'Y-m-d' );
+	}
+
+	/**
+	 * Counts per request tab.
+	 *
+	 * @param array $applications Application posts.
+	 * @param int   $user_id      Vendor user ID.
+	 * @return array{all:int,in-review:int,pay-now:int,booked:int,completed:int}
+	 */
+	public static function request_bucket_counts( $applications, $user_id = 0 ) {
+		$counts = array(
+			'all'       => count( $applications ),
+			'in-review' => 0,
+			'pay-now'   => 0,
+			'booked'    => 0,
+			'completed' => 0,
+		);
+		foreach ( $applications as $app ) {
+			$bucket = self::application_request_bucket( $app, $user_id );
+			if ( isset( $counts[ $bucket ] ) ) {
+				++$counts[ $bucket ];
+			}
+		}
+		return $counts;
 	}
 
 	/**
@@ -266,12 +365,18 @@ class LNKup_Vendor_Dashboard_Data {
 	 * @param array $ctx Context from self::context().
 	 */
 	public static function week_snapshot( $ctx ) {
-		$totals           = self::payment_totals( $ctx['payments'] );
-		$pending_count    = 0;
-		foreach ( $ctx['payments'] as $payment ) {
-			if ( 'pending' === get_post_meta( $payment->ID, '_lnkup_payment_status', true ) ) {
-				$pending_count++;
+		$pending_count = 0;
+		$outstanding   = 0.0;
+		foreach ( $ctx['applications'] as $app ) {
+			if ( ! self::application_is_payable( $app, $ctx['user_id'] ) ) {
+				continue;
 			}
+			$payment = self::application_payment_for_vendor( $app, $ctx['user_id'] );
+			if ( ! $payment ) {
+				continue;
+			}
+			++$pending_count;
+			$outstanding += (float) get_post_meta( $payment->ID, '_lnkup_total_amount', true );
 		}
 		$profile_strength = 0;
 		if ( class_exists( 'LNKup_Growth_Profile_Strength' ) ) {
@@ -290,7 +395,7 @@ class LNKup_Vendor_Dashboard_Data {
 			'next_event_title'   => $app_id && ! empty( $ops['event_title'] ) ? $ops['event_title'] : '',
 			'next_application_id'=> $app_id,
 			'readiness_percent'  => $app_id && ! empty( $ops['readiness_percent'] ) ? (int) $ops['readiness_percent'] : 0,
-			'outstanding_amount' => $totals['outstanding'],
+			'outstanding_amount' => $outstanding,
 			'outstanding_count'  => $pending_count,
 			'profile_strength'   => $profile_strength,
 		);
@@ -323,22 +428,36 @@ class LNKup_Vendor_Dashboard_Data {
 		$pay_url    = add_query_arg( 'view', 'payments', $dashboard );
 		$week       = self::week_snapshot( $ctx );
 
-		foreach ( self::attention_applications( $ctx['applications'] ) as $app ) {
+		foreach ( $ctx['applications'] as $app ) {
+			if ( 'info_requested' !== (string) get_post_meta( $app->ID, '_lnkup_application_status', true ) ) {
+				continue;
+			}
 			$meta    = self::application_event_meta( $app );
-			$status  = get_post_meta( $app->ID, '_lnkup_application_status', true );
-			$payment = LNKup_Payments::get_for_application( $app->ID );
-			$level   = 'payment_required' === $status ? 'urgent' : 'warn';
-			$pay_pending = $payment && 'pending' === get_post_meta( $payment->ID, '_lnkup_payment_status', true );
 			$items[] = array(
-				'level'        => $level,
-				'title'        => 'payment_required' === $status
-					? sprintf( __( 'Payment due — %s', 'lnkup-marketplace' ), $meta['event_title'] )
-					: sprintf( __( 'Approved — complete payment for %s', 'lnkup-marketplace' ), $meta['event_title'] ),
-				'meta'         => $meta['date'] ? date_i18n( 'M j, Y', strtotime( $meta['date'] ) ) : '',
-				'action_label' => $pay_pending ? __( 'Pay now', 'lnkup-marketplace' ) : __( 'View app', 'lnkup-marketplace' ),
-				'action_href'  => $apps_url,
+				'level'        => 'urgent',
+				/* translators: %s: event title */
+				'title'        => sprintf( __( 'Organizer needs more info — %s', 'lnkup-marketplace' ), $meta['event_title'] ),
+				'meta'         => __( 'Reply so they can decide on your request.', 'lnkup-marketplace' ),
+				'action_label' => __( 'Reply', 'lnkup-marketplace' ),
+				'action_href'  => add_query_arg( 'app', (int) $app->ID, $apps_url ),
 				'primary'      => true,
-				'payment_id'   => $pay_pending ? $payment->ID : 0,
+			);
+		}
+
+		foreach ( $ctx['applications'] as $app ) {
+			if ( 'pay-now' !== self::application_request_bucket( $app, $ctx['user_id'] ) ) {
+				continue;
+			}
+			$meta    = self::application_event_meta( $app );
+			$payment = self::application_payment_for_vendor( $app, $ctx['user_id'] );
+			$items[] = array(
+				'level'        => 'urgent',
+				'title'        => sprintf( __( 'Complete payment — %s', 'lnkup-marketplace' ), $meta['event_title'] ),
+				'meta'         => $meta['date'] ? date_i18n( 'M j, Y', strtotime( $meta['date'] ) ) : '',
+				'action_label' => __( 'Complete payment', 'lnkup-marketplace' ),
+				'action_href'  => $pay_url,
+				'primary'      => true,
+				'payment_id'   => $payment ? $payment->ID : 0,
 			);
 		}
 
@@ -353,7 +472,13 @@ class LNKup_Vendor_Dashboard_Data {
 			);
 		}
 
-		if ( $week['outstanding_count'] > 0 ) {
+		$has_pay_items = (bool) array_filter(
+			$items,
+			static function ( $item ) {
+				return ! empty( $item['payment_id'] );
+			}
+		);
+		if ( $week['outstanding_count'] > 0 && ! $has_pay_items ) {
 			$items[] = array(
 				'level'        => 'urgent',
 				'title'        => __( 'Outstanding payments', 'lnkup-marketplace' ),
@@ -364,7 +489,19 @@ class LNKup_Vendor_Dashboard_Data {
 			);
 		}
 
-		if ( $week['next_application_id'] && $week['next_event_date'] ) {
+		if ( $week['next_application_id'] && $week['next_event_date'] && gmdate( 'Y-m-d', strtotime( $week['next_event_date'] ) ) === current_time( 'Y-m-d' ) ) {
+			array_unshift(
+				$items,
+				array(
+					'level'        => 'urgent',
+					'title'        => sprintf( __( 'Event day — %s', 'lnkup-marketplace' ), $week['next_event_title'] ),
+					'meta'         => __( 'Open your pass for check-in, arrival, and booth details.', 'lnkup-marketplace' ),
+					'action_label' => __( 'Open event pass', 'lnkup-marketplace' ),
+					'action_href'  => add_query_arg( array( 'view' => 'operations', 'app' => $week['next_application_id'], 'tab' => 'pass' ), $dashboard ),
+					'primary'      => true,
+				)
+			);
+		} elseif ( $week['next_application_id'] && $week['next_event_date'] ) {
 			$load_in = strtotime( $week['next_event_date'] ) - current_time( 'timestamp' );
 			if ( $load_in > 0 && $load_in < 14 * DAY_IN_SECONDS ) {
 				$items[] = array(
@@ -382,29 +519,50 @@ class LNKup_Vendor_Dashboard_Data {
 	}
 
 	/**
-	 * Workflow step states for an application.
+	 * Booking timeline: Submitted → Review → Payment → Confirmed → Event day → Completed.
+	 * Payment is omitted for free booths. Steps after the reached one are "pending",
+	 * so the timeline never implies payment or attendance that has not happened.
 	 *
-	 * @param string $status Application status.
+	 * @param string $status     Application status.
+	 * @param array  $args       Optional: is_free (bool), event_date (Y-m-d).
 	 */
-	public static function application_workflow_steps( $status ) {
+	public static function application_workflow_steps( $status, $args = array() ) {
+		$is_free    = ! empty( $args['is_free'] );
+		$event_date = (string) ( $args['event_date'] ?? '' );
+		$today      = current_time( 'Y-m-d' );
+
 		$steps = array(
-			array( 'label' => __( 'Applied', 'lnkup-marketplace' ), 'key' => 'applied' ),
+			array( 'label' => __( 'Submitted', 'lnkup-marketplace' ), 'key' => 'applied' ),
 			array( 'label' => __( 'Review', 'lnkup-marketplace' ), 'key' => 'review' ),
-			array( 'label' => __( 'Payment', 'lnkup-marketplace' ), 'key' => 'payment' ),
-			array( 'label' => __( 'Booked', 'lnkup-marketplace' ), 'key' => 'booked' ),
 		);
-		$map = array(
-			'submitted'        => 0,
-			'under_review'     => 1,
-			'waitlisted'       => 1,
-			'approved'         => 2,
-			'payment_required' => 2,
-			'paid'             => 3,
-			'completed'        => 3,
-		);
-		$current = $map[ $status ] ?? 0;
+		if ( ! $is_free ) {
+			$steps[] = array( 'label' => __( 'Payment', 'lnkup-marketplace' ), 'key' => 'payment' );
+		}
+		$steps[] = array( 'label' => __( 'Confirmed', 'lnkup-marketplace' ), 'key' => 'booked' );
+		$steps[] = array( 'label' => __( 'Event day', 'lnkup-marketplace' ), 'key' => 'event' );
+		$steps[] = array( 'label' => __( 'Completed', 'lnkup-marketplace' ), 'key' => 'completed' );
+
+		$reached      = 'applied';
+		$reached_done = false;
+		if ( in_array( $status, array( 'under_review', 'waitlisted', 'info_requested' ), true ) ) {
+			$reached = 'review';
+		} elseif ( in_array( $status, array( 'approved', 'payment_required' ), true ) ) {
+			$reached = $is_free ? 'review' : 'payment';
+		} elseif ( 'paid' === $status ) {
+			$reached = 'booked';
+			if ( '' !== $event_date && $event_date <= $today ) {
+				$reached      = 'event';
+				$reached_done = $event_date < $today;
+			}
+		} elseif ( 'completed' === $status ) {
+			$reached      = 'completed';
+			$reached_done = true;
+		}
+
+		$keys    = wp_list_pluck( $steps, 'key' );
+		$current = (int) array_search( $reached, $keys, true );
 		foreach ( $steps as $i => &$step ) {
-			if ( $i < $current ) {
+			if ( $i < $current || ( $reached_done && $i === $current ) ) {
 				$step['state'] = 'done';
 			} elseif ( $i === $current ) {
 				$step['state'] = 'current';

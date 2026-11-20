@@ -194,7 +194,7 @@
       return;
     }
     var section = container.closest('.lnkup-rail');
-    container.innerHTML = '<div class="lnkup-skeleton lnkup-skeleton--card" style="min-width:16rem"></div><div class="lnkup-skeleton lnkup-skeleton--card" style="min-width:16rem"></div>';
+    container.innerHTML = '<div class="lnkup-skeleton lnkup-skeleton--card lnkup-rail__skeleton"></div><div class="lnkup-skeleton lnkup-skeleton--card lnkup-rail__skeleton"></div>';
     api(path, query).then(function (data) {
       var html = cardsFromPayload(data);
       container.dataset.loaded = '1';
@@ -210,13 +210,21 @@
         section.hidden = false;
       }
       container.innerHTML = html;
-    }).catch(function () {
-      container.dataset.loaded = '1';
+    }).catch(function (error) {
+      console.error('LNKup vendor home: could not load rail', path, error);
+      container.dataset.loaded = '0';
       if (section) {
-        section.hidden = true;
-      } else {
-        container.innerHTML = '';
+        section.hidden = false;
       }
+      var retry = function () {
+        loadRail(container, path, query);
+      };
+      if (window.LNKupUI && LNKupUI.panelError) {
+        LNKupUI.panelError(container, { title: 'We couldn\u2019t load these events.', onRetry: retry });
+        container.dataset.loaded = '0';
+        return;
+      }
+      container.innerHTML = '<p class="lnkup-alert lnkup-alert--error">We couldn\u2019t load these events.</p>';
     });
   }
 

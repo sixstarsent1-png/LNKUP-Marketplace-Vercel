@@ -17,15 +17,20 @@ class LNKup_Refund_Rules {
 	 * @param float  $requested_amount Requested amount.
 	 */
 	public static function calculate( $payment_id, $requested_type = 'full', $requested_amount = 0 ) {
-		$paid    = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
-		$status  = get_post_meta( $payment_id, '_lnkup_payment_status', true );
-		if ( 'paid' !== $status ) {
-			return new WP_Error( 'not_paid', __( 'Payment is not paid.', 'lnkup-marketplace' ) );
+		$total    = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
+		$refunded = (float) get_post_meta( $payment_id, '_lnkup_refund_amount', true ) + (float) get_post_meta( $payment_id, '_lnkup_credit_refund_amount', true );
+		$status   = get_post_meta( $payment_id, '_lnkup_payment_status', true );
+		if ( ! in_array( $status, array( 'paid', 'partially_refunded' ), true ) ) {
+			return new WP_Error( 'not_paid', __( 'Only paid bookings can be refunded.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+		$paid = max( 0, round( $total - $refunded, 2 ) );
+		if ( $paid <= 0 ) {
+			return new WP_Error( 'fully_refunded', __( 'This payment has already been fully refunded.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
 		}
 
 		$rule = self::match_rule( $payment_id );
 		$type = $requested_type;
-		$amount = $requested_amount > 0 ? $requested_amount : $paid;
+		$amount = ( 'full' === $type || $requested_amount <= 0 ) ? $paid : min( (float) $requested_amount, $paid );
 
 		if ( $rule ) {
 			if ( 'full_only' === ( $rule['refund_type'] ?? '' ) ) {
@@ -39,14 +44,11 @@ class LNKup_Refund_Rules {
 			}
 		}
 
-		if ( 'full' === $type ) {
-			$amount = $paid;
-		}
-
 		return array(
-			'refund_type'   => $type,
-			'amount'        => round( $amount, 2 ),
-			'max_amount'    => $paid,
+			'refund_type'     => $type,
+			'amount'          => round( $amount, 2 ),
+			'max_amount'      => $paid,
+			'already_refunded'=> round( $refunded, 2 ),
 			'rule_id'       => $rule ? (int) $rule['id'] : 0,
 			'approval_needed' => $amount > ( class_exists( 'LNKup_Approval_Workflows' ) ? LNKup_Approval_Workflows::get_threshold( 'refund' ) : 500 ),
 		);

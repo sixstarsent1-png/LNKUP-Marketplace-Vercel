@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Search, MoreHorizontal, ShieldCheck, Ban } from "lucide-react"
 import { vendors, organizers } from "@/lib/data"
 import { PageHeader } from "@/components/marketplace/page-header"
+import { DemoModeNotice } from "@/components/marketplace/demo-mode-notice"
 import { StatusBadge, VerificationBadge } from "@/components/marketplace/badges"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
@@ -62,6 +63,9 @@ export default function AdminUsersPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Users" subtitle="Manage vendors and organizers on the platform." />
+      <DemoModeNotice testId="admin-users-demo-notice">
+        Demo sample only — user directory below is not live. Manage users on LNKup web admin.
+      </DemoModeNotice>
 
       <div className="relative">
         <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />

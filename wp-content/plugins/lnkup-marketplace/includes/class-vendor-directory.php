@@ -78,20 +78,34 @@ class LNKup_Vendor_Directory {
 		if ( ! empty( $args['preferred'] ) ) {
 			$where .= ' AND is_preferred = 1';
 		}
-		$offset = ( $page - 1 ) * $per;
-		$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$where}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$rows = $wpdb->get_results(
-			"SELECT * FROM {$table} WHERE {$where} ORDER BY last_activity_at DESC LIMIT {$offset}, {$per}", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			ARRAY_A
-		);
-		$items = array();
-		foreach ( (array) $rows as $row ) {
-			$profile = LNKup_Vendor_CRM_Profile::get( (int) $row['vendor_profile_id'], $organizer_id );
-			if ( $profile && self::matches_filters( $profile, $args ) ) {
-				$items[] = lnkup_normalize_vendor_card( $profile );
+		$offset      = ( $page - 1 ) * $per;
+		$has_filters = '' !== trim( (string) ( $args['q'] ?? '' ) ) || ! empty( $args['city'] ) || ! empty( $args['state'] ) || ! empty( $args['category'] ) || ! empty( $args['verified'] );
+		$items       = array();
+		if ( $has_filters ) {
+			// Profile filters live on post meta, so filter the whole relationship set before paging.
+			$rows = $wpdb->get_results( "SELECT * FROM {$table} WHERE {$where} ORDER BY last_activity_at DESC LIMIT 2000", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			foreach ( (array) $rows as $row ) {
+				$profile = LNKup_Vendor_CRM_Profile::get( (int) $row['vendor_profile_id'], $organizer_id );
+				if ( $profile && self::matches_filters( $profile, $args ) ) {
+					$items[] = lnkup_normalize_vendor_card( $profile );
+				}
 			}
+			$total = count( $items );
+			$items = array_slice( self::sort_items( $items, $args ), $offset, $per );
+		} else {
+			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$where}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$rows  = $wpdb->get_results(
+				"SELECT * FROM {$table} WHERE {$where} ORDER BY last_activity_at DESC LIMIT {$offset}, {$per}", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				ARRAY_A
+			);
+			foreach ( (array) $rows as $row ) {
+				$profile = LNKup_Vendor_CRM_Profile::get( (int) $row['vendor_profile_id'], $organizer_id );
+				if ( $profile ) {
+					$items[] = lnkup_normalize_vendor_card( $profile );
+				}
+			}
+			$items = self::sort_items( $items, $args );
 		}
-		$items = self::sort_items( $items, $args );
 		return array(
 			'items' => $items,
 			'total' => $total,
@@ -257,7 +271,7 @@ class LNKup_Vendor_Directory {
 					<a class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" href="<?php echo esc_url( lnkup_page_url_helper( 'opportunities' ) ); ?>"><?php esc_html_e( 'Browse opportunities', 'lnkup-marketplace' ); ?></a>
 				<?php else : ?>
 					<p class="lnkup-muted"><?php esc_html_e( 'Vendors you work with will appear here after applications or invites.', 'lnkup-marketplace' ); ?></p>
-					<a class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" href="<?php echo esc_url( lnkup_page_url_helper( 'organizer-dashboard' ) . '#vendors' ); ?>"><?php esc_html_e( 'Discover vendors', 'lnkup-marketplace' ); ?></a>
+					<a class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" href="<?php echo esc_url( lnkup_organizer_view_url( 'vendors' ) ); ?>"><?php esc_html_e( 'Discover vendors', 'lnkup-marketplace' ); ?></a>
 				<?php endif; ?>
 				<?php if ( 'imported' === $scope ) : ?>
 					<button type="button" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" data-testid="lnkup-import-vendors-btn"><?php esc_html_e( 'Import vendors', 'lnkup-marketplace' ); ?></button>
@@ -316,5 +330,203 @@ class LNKup_Vendor_Directory {
 			}
 		);
 		return $items;
+	}
+
+	/**
+	 * CSV header labels for a vendor contact list.
+	 *
+	 * @param bool $include_event Include event name and application status.
+	 * @return string[]
+	 */
+	public static function contact_csv_headers( $include_event = false ) {
+		$headers = array(
+			__( 'Business name', 'lnkup-marketplace' ),
+			__( 'Contact name', 'lnkup-marketplace' ),
+			__( 'Categories', 'lnkup-marketplace' ),
+			__( 'Email', 'lnkup-marketplace' ),
+			__( 'Phone', 'lnkup-marketplace' ),
+			__( 'City', 'lnkup-marketplace' ),
+			__( 'State', 'lnkup-marketplace' ),
+			__( 'Website', 'lnkup-marketplace' ),
+		);
+		if ( $include_event ) {
+			$headers[] = __( 'Event', 'lnkup-marketplace' );
+			$headers[] = __( 'Application status', 'lnkup-marketplace' );
+		}
+		return $headers;
+	}
+
+	/**
+	 * One contact row from a vendor profile.
+	 *
+	 * Email falls back to the WordPress account email when the profile field is empty.
+	 *
+	 * @param int   $profile_id Profile post ID. 0 when unknown.
+	 * @param array $context    Optional vendor_user_id, category_fallback, event_name, application_status.
+	 * @return string[]
+	 */
+	public static function contact_row( $profile_id, $context = array() ) {
+		$profile_id     = (int) $profile_id;
+		$vendor_user_id = isset( $context['vendor_user_id'] ) ? (int) $context['vendor_user_id'] : 0;
+		if ( ! $profile_id && $vendor_user_id && function_exists( 'lnkup_get_vendor_profile_id' ) ) {
+			$profile_id = (int) lnkup_get_vendor_profile_id( $vendor_user_id );
+		}
+		if ( $profile_id && ! $vendor_user_id ) {
+			$vendor_user_id = (int) get_post_meta( $profile_id, '_lnkup_owner_user_id', true );
+		}
+
+		$post = $profile_id ? get_post( $profile_id ) : null;
+		$user = $vendor_user_id ? get_userdata( $vendor_user_id ) : false;
+
+		$business = $profile_id ? (string) get_post_meta( $profile_id, '_lnkup_business_name', true ) : '';
+		if ( '' === $business && $post ) {
+			$business = $post->post_title;
+		}
+		if ( '' === $business && $user ) {
+			$business = $user->display_name;
+		}
+
+		$contact = $profile_id ? (string) get_post_meta( $profile_id, '_lnkup_owner_name', true ) : '';
+		if ( '' === $contact && $user ) {
+			$contact = $user->display_name;
+		}
+
+		$categories = array();
+		if ( $profile_id ) {
+			$terms = wp_get_post_terms( $profile_id, 'lnkup_vendor_category', array( 'fields' => 'names' ) );
+			if ( ! is_wp_error( $terms ) && is_array( $terms ) ) {
+				$categories = $terms;
+			}
+		}
+		if ( ! $categories && ! empty( $context['category_fallback'] ) ) {
+			$categories = array( (string) $context['category_fallback'] );
+		}
+
+		$email = $profile_id ? sanitize_email( (string) get_post_meta( $profile_id, '_lnkup_contact_email', true ) ) : '';
+		if ( '' === $email && $user ) {
+			$email = $user->user_email;
+		}
+
+		$row = array(
+			$business,
+			$contact,
+			implode( '; ', $categories ),
+			$email,
+			$profile_id ? (string) get_post_meta( $profile_id, '_lnkup_contact_phone', true ) : '',
+			$profile_id ? (string) get_post_meta( $profile_id, '_lnkup_city', true ) : '',
+			$profile_id ? (string) get_post_meta( $profile_id, '_lnkup_state', true ) : '',
+			$profile_id ? (string) get_post_meta( $profile_id, '_lnkup_website', true ) : '',
+		);
+
+		if ( array_key_exists( 'event_name', $context ) ) {
+			$row[] = (string) $context['event_name'];
+			$row[] = (string) ( $context['application_status'] ?? '' );
+		}
+
+		return $row;
+	}
+
+	/**
+	 * Contact rows for every application on one event.
+	 *
+	 * @param int $event_id Event post ID.
+	 * @return string[][]
+	 */
+	public static function contact_rows_for_event( $event_id ) {
+		$event_id   = (int) $event_id;
+		$event      = get_post( $event_id );
+		$event_name = $event ? $event->post_title : '';
+		$apps       = get_posts(
+			array(
+				'post_type'      => 'lnkup_application',
+				'posts_per_page' => -1,
+				'post_status'    => array( 'publish', 'draft', 'pending', 'private' ),
+				'meta_key'       => '_lnkup_event_id',
+				'meta_value'     => $event_id,
+				'orderby'        => 'title',
+				'order'          => 'ASC',
+			)
+		);
+
+		$rows = array();
+		foreach ( $apps as $app ) {
+			$rows[] = self::contact_row(
+				(int) get_post_meta( $app->ID, '_lnkup_vendor_profile_id', true ),
+				array(
+					'vendor_user_id'    => (int) get_post_meta( $app->ID, '_lnkup_vendor_user_id', true ),
+					'category_fallback'  => (string) get_post_meta( $app->ID, '_lnkup_selected_category', true ),
+					'event_name'         => $event_name,
+					'application_status' => (string) get_post_meta( $app->ID, '_lnkup_application_status', true ),
+				)
+			);
+		}
+		return $rows;
+	}
+
+	/**
+	 * Contact rows for every published vendor profile.
+	 *
+	 * @param string $category Optional vendor category name. Unknown names return no rows.
+	 * @return string[][]
+	 */
+	public static function contact_rows_for_platform( $category = '' ) {
+		$category = sanitize_text_field( (string) $category );
+		$args     = array(
+			'post_type'      => 'lnkup_vendor_profile',
+			'post_status'    => 'publish',
+			'posts_per_page' => -1,
+			'orderby'        => 'title',
+			'order'          => 'ASC',
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+		);
+		if ( '' !== $category ) {
+			if ( ! term_exists( $category, 'lnkup_vendor_category' ) ) {
+				return array();
+			}
+			$args['tax_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+				array(
+					'taxonomy' => 'lnkup_vendor_category',
+					'field'    => 'name',
+					'terms'    => $category,
+				),
+			);
+		}
+
+		$rows = array();
+		foreach ( get_posts( $args ) as $profile_id ) {
+			$rows[] = self::contact_row( (int) $profile_id );
+		}
+		return $rows;
+	}
+
+	/**
+	 * Stream a contact CSV and stop the request.
+	 *
+	 * @param string[][] $rows          Data rows.
+	 * @param string     $filename      Download filename.
+	 * @param bool       $include_event Include event columns.
+	 */
+	public static function stream_contact_csv( $rows, $filename, $include_event = false ) {
+		$filename = sanitize_file_name( (string) $filename );
+		if ( '' === $filename ) {
+			$filename = 'vendor-contacts.csv';
+		}
+
+		nocache_headers();
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+
+		echo "\xEF\xBB\xBF";
+		$out = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+		if ( false === $out ) {
+			wp_die( esc_html__( 'Could not create the export.', 'lnkup-marketplace' ), 500 );
+		}
+		fputcsv( $out, self::contact_csv_headers( $include_event ) );
+		foreach ( $rows as $row ) {
+			fputcsv( $out, $row );
+		}
+		fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+		exit;
 	}
 }

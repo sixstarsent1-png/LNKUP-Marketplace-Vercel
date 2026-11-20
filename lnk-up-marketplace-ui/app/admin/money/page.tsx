@@ -7,6 +7,7 @@ import { StatCard } from "@/components/marketplace/stat-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { StatusBadge } from "@/components/marketplace/badges"
+import { DemoModeNotice } from "@/components/marketplace/demo-mode-notice"
 
 const transactions = [
   { id: "t1", label: "Vendor fee — Houston Rodeo Weekend", org: "Southern Social Co.", amount: 395, fee: 40, type: "in" as const },
@@ -23,6 +24,9 @@ export default function AdminMoneyPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Money" subtitle="Platform revenue, take rate, and transaction flow." />
+      <DemoModeNotice testId="admin-money-demo-notice">
+        Demo sample only — platform money charts are not live. Use LNKup Financial Center for production totals.
+      </DemoModeNotice>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="GMV (all time)" value={`$${gmv.toLocaleString()}`} hint="+22% MoM" icon={DollarSign} accent />

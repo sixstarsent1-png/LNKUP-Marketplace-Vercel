@@ -17,7 +17,7 @@ async function loginVendor(page: import('@playwright/test').Page) {
 test.describe('Vendor financial dashboard', () => {
   test('payments view requires login when unauthenticated', async ({ page }) => {
     await page.goto('/vendor-dashboard/?view=payments');
-    await expect(page).toHaveURL(/wp-login|login/);
+    await expect(page).toHaveURL(/wp-login|log-?in/);
   });
 
   test.describe('authenticated vendor', () => {
@@ -35,7 +35,7 @@ test.describe('Vendor financial dashboard', () => {
       });
 
       await page.goto('/vendor-dashboard/?view=payments');
-      await expect(page.getByRole('heading', { name: /^payments$/i })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: /^wallet$/i })).toBeVisible();
       await expect(page.locator('#lnkup-vendor-financial')).toBeVisible();
       await expect(page.locator('#lnkup-fin-balance-hero')).toBeVisible();
       await expect(page.getByRole('button', { name: /^overview$/i })).toBeVisible();

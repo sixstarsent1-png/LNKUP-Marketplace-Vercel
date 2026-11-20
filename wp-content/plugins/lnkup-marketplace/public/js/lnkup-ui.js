@@ -195,7 +195,7 @@
     var alt = (title || 'Vendor event') + (city ? ' in ' + city : '');
     var fallback = opp.category_fallback_url || '';
     var media = img
-      ? '<img src="' + escapeHtml(img) + '" alt="' + escapeHtml(alt) + '" width="1280" height="800" loading="lazy"' + (fallback ? ' data-fallback-src="' + escapeHtml(fallback) + '"' : '') + ' onerror="if(!this.dataset.tried){this.dataset.tried=\'1\';var f=this.getAttribute(\'data-fallback-src\');if(f&&f!==this.src){this.src=f;return;}}this.onerror=null;this.removeAttribute(\'src\');var p=document.createElement(\'div\');p.className=\'lnkup-event-card__placeholder\';p.setAttribute(\'aria-hidden\',\'true\');p.innerHTML=\'<span>LNKup</span>\';if(this.parentNode){this.parentNode.replaceChild(p,this);}" />'
+      ? '<img src="' + escapeHtml(img) + '" alt="' + escapeHtml(alt) + '" width="1280" height="800" loading="lazy" decoding="async" data-fallback-src="' + escapeHtml(fallback) + '" />'
       : '<div class="lnkup-event-card__placeholder" aria-hidden="true"><span>LNKup</span></div>';
     var meta = '';
     if (dateLabel) {
@@ -204,15 +204,75 @@
     if (location) {
       meta += '<p class="lnkup-event-card__location">' + escapeHtml(location) + '</p>';
     }
-    return '<article class="lnkup-event-card lnkup-event-card--v2 lnkup-surface--primary lnkup-micro-lift' + compact + '" data-opportunity-id="' + escapeHtml(String(opp.opportunity_id || '')) + '">' +
+    var statusLabel = applicationStatusLabel(opp.application_status);
+    var cta = '';
+    if (opts.showCta !== false) {
+      cta = statusLabel
+        ? '<span class="lnkup-badge lnkup-badge--accent lnkup-event-card__status">' + escapeHtml(t('application_prefix', 'Application') + ': ' + statusLabel) + '</span>'
+        : '<a href="' + escapeHtml(applyUrl) + '" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm">' + escapeHtml(opts.ctaLabel || 'View event') + '</a>';
+    }
+    return '<article class="lnkup-event-card lnkup-event-card--v2 lnkup-surface--primary lnkup-micro-lift' + compact + '" data-opportunity-id="' + escapeHtml(String(opp.opportunity_id || '')) + '" data-event-id="' + escapeHtml(String(opp.event_id || '')) + '">' +
       '<div class="lnkup-event-card__media">' + media +
       '<div class="lnkup-event-card__media-gradient" aria-hidden="true"></div>' +
-      '<div class="lnkup-event-card__badges-top"><span class="lnkup-badge lnkup-badge--accent">' + escapeHtml(fee) + '</span></div></div>' +
+      (fee ? '<div class="lnkup-event-card__badges-top"><span class="lnkup-badge lnkup-badge--accent">' + escapeHtml(fee) + '</span></div>' : '') +
+      '</div>' +
       '<div class="lnkup-event-card__body">' +
       '<h3 class="lnkup-event-card__title">' + escapeHtml(title) + '</h3>' +
       meta +
-      (opts.showCta !== false ? '<a href="' + escapeHtml(applyUrl) + '" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm">' + escapeHtml(opts.ctaLabel || 'View') + '</a>' : '') +
+      cta +
       '</div></article>';
+  }
+
+  var APPLICATION_STATUS_LABELS = {
+    submitted: 'Submitted',
+    under_review: 'Under review',
+    waitlisted: 'Waitlisted',
+    approved: 'Approved',
+    payment_required: 'Payment required',
+    paid: 'Confirmed',
+    completed: 'Completed',
+    rejected: 'Declined',
+    cancelled: 'Withdrawn'
+  };
+
+  /**
+   * Vendor-facing label for an application status (mirrors lnkup_application_status_label()).
+   */
+  function applicationStatusLabel(status) {
+    if (!status) {
+      return '';
+    }
+    return t('status_' + status, APPLICATION_STATUS_LABELS[status] || '');
+  }
+
+  /**
+   * Swap a failed card image for its category fallback, then for the placeholder.
+   */
+  function cardImageFallback(img) {
+    if (!img || img.tagName !== 'IMG' || !img.hasAttribute('data-fallback-src')) {
+      return;
+    }
+    var fallback = img.getAttribute('data-fallback-src');
+    if (!img.dataset.tried && fallback && fallback !== img.src) {
+      img.dataset.tried = '1';
+      img.removeAttribute('srcset');
+      img.src = fallback;
+      return;
+    }
+    var placeholder = document.createElement('div');
+    placeholder.className = 'lnkup-event-card__placeholder';
+    placeholder.setAttribute('aria-hidden', 'true');
+    placeholder.innerHTML = '<span>LNKup</span>';
+    if (img.parentNode) {
+      img.parentNode.replaceChild(placeholder, img);
+    }
+  }
+
+  if (!window.lnkupCardImageFallback) {
+    window.lnkupCardImageFallback = cardImageFallback;
+    document.addEventListener('error', function (e) {
+      window.lnkupCardImageFallback(e.target);
+    }, true);
   }
 
   function renderRail(title, innerHtml, linkHref, linkLabel) {
@@ -320,7 +380,71 @@
     panelEmpty(el, opts);
   }
 
+  /**
+   * Accessible replacement for window.prompt(): resolves with the trimmed text, or null when cancelled.
+   *
+   * @param {{title:string,label:string,value?:string,required?:boolean,multiline?:boolean,confirmLabel?:string}} opts
+   * @returns {Promise<string|null>}
+   */
+  function askText(opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      var dialog = document.createElement('dialog');
+      dialog.className = 'lnkup-ask-dialog';
+      dialog.setAttribute('data-testid', 'lnkup-ask-dialog');
+      var fieldId = 'lnkup-ask-' + Date.now();
+      var field = opts.multiline
+        ? '<textarea id="' + fieldId + '" rows="4"' + (opts.required ? ' required' : '') + '></textarea>'
+        : '<input type="text" id="' + fieldId + '"' + (opts.required ? ' required' : '') + ' />';
+      dialog.innerHTML =
+        '<form method="dialog" class="lnkup-ask-dialog__form">' +
+        '<h2 class="lnkup-ask-dialog__title">' + escapeHtml(opts.title || '') + '</h2>' +
+        '<label for="' + fieldId + '">' + escapeHtml(opts.label || '') + '</label>' + field +
+        '<p class="lnkup-ask-dialog__error" role="alert" hidden></p>' +
+        '<div class="lnkup-ask-dialog__actions">' +
+        '<button type="button" class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" value="cancel">' + escapeHtml(t('cancel', 'Cancel')) + '</button>' +
+        '<button type="submit" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" value="ok">' + escapeHtml(opts.confirmLabel || t('save', 'Save')) + '</button>' +
+        '</div></form>';
+      document.body.appendChild(dialog);
+      var input = dialog.querySelector('#' + fieldId);
+      input.value = opts.value || '';
+      var settled = false;
+      function finish(result) {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (dialog.open) {
+          dialog.close();
+        }
+        dialog.remove();
+        resolve(result);
+      }
+      dialog.querySelector('[value="cancel"]').addEventListener('click', function () { finish(null); });
+      dialog.addEventListener('cancel', function () { finish(null); });
+      dialog.querySelector('form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var value = String(input.value || '').trim();
+        if (opts.required && !value) {
+          var err = dialog.querySelector('.lnkup-ask-dialog__error');
+          err.textContent = t('required_field', 'This field is required.');
+          err.hidden = false;
+          input.focus();
+          return;
+        }
+        finish(value);
+      });
+      if (typeof dialog.showModal === 'function') {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute('open', '');
+      }
+      input.focus();
+    });
+  }
+
   window.LNKupUI = {
+    askText: askText,
     escapeHtml: escapeHtml,
     t: t,
     fetchJson: fetchJson,
@@ -331,6 +455,7 @@
     renderPriorityItem: renderPriorityItem,
     renderWorkflowStep: renderWorkflowStep,
     renderOpportunityCard: renderOpportunityCard,
+    applicationStatusLabel: applicationStatusLabel,
     renderRail: renderRail,
     showInlineSuccess: showInlineSuccess,
     renderBarChart: renderBarChart,

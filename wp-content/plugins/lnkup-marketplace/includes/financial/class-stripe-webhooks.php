@@ -44,15 +44,16 @@ class LNKup_Stripe_Webhooks {
 		$obj  = $event['data']['object'] ?? array();
 
 		try {
+			$result = null;
 			switch ( $type ) {
 				case 'checkout.session.completed':
-					self::handle_checkout_completed( $obj );
+					$result = self::handle_checkout_completed( $obj );
 					break;
 				case 'payment_intent.succeeded':
-					self::handle_payment_intent_succeeded( $obj );
+					$result = self::handle_payment_intent_succeeded( $obj );
 					break;
 				case 'payment_intent.processing':
-					self::handle_payment_intent_processing( $obj );
+					$result = self::handle_payment_intent_processing( $obj );
 					break;
 				case 'payment_intent.payment_failed':
 					self::handle_payment_intent_failed( $obj );
@@ -71,11 +72,14 @@ class LNKup_Stripe_Webhooks {
 				case 'account.updated':
 					LNKup_Stripe_Connect::handle_account_updated( $obj );
 					break;
+				case 'account.application.deauthorized':
+					LNKup_Stripe_Connect::handle_account_deauthorized( $obj, (string) ( $event['account'] ?? '' ) );
+					break;
 				case 'transfer.created':
 					LNKup_Stripe_Connect::handle_transfer_created( $obj );
 					break;
-				case 'transfer.failed':
-					LNKup_Stripe_Connect::handle_transfer_failed( $obj );
+				case 'transfer.reversed':
+					LNKup_Stripe_Connect::handle_transfer_reversed( $obj );
 					break;
 				case 'payout.paid':
 				case 'payout.created':
@@ -84,6 +88,10 @@ class LNKup_Stripe_Webhooks {
 					break;
 				default:
 					break;
+			}
+			if ( is_wp_error( $result ) ) {
+				self::mark_failed( $log_id, $result->get_error_message() );
+				return $result;
 			}
 			self::mark_processed( $log_id );
 			return true;
@@ -155,13 +163,25 @@ class LNKup_Stripe_Webhooks {
 		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
 			return;
 		}
-		$rows  = $wpdb->get_results(
-			"SELECT * FROM {$table} WHERE status = 'failed' AND attempts < 5 ORDER BY id ASC LIMIT 10",
+		// Pending rows older than 15 minutes were interrupted mid-processing (e.g. a fatal error).
+		$stale_before = wp_date( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS );
+		$rows         = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE attempts < 5 AND ( status = 'failed' OR ( status = 'pending' AND created_at < %s ) ) ORDER BY id ASC LIMIT 10",
+				$stale_before
+			),
 			ARRAY_A
 		);
+		if ( ! is_array( $rows ) ) {
+			return;
+		}
 		foreach ( $rows as $row ) {
+			if ( 'pending' === $row['status'] ) {
+				// Count the attempt up front so an event that keeps crashing stops after 5 tries.
+				$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET attempts = attempts + 1 WHERE id = %d", (int) $row['id'] ) );
+			}
 			$event = json_decode( $row['payload'], true );
-			if ( $event ) {
+			if ( is_array( $event ) ) {
 				self::process_event( $event, (int) $row['id'] );
 			}
 		}
@@ -176,7 +196,7 @@ class LNKup_Stripe_Webhooks {
 			$payment_id = absint( $session['metadata']['payment_post_id'] );
 		}
 		if ( ! $payment_id ) {
-			return;
+			return null;
 		}
 
 		$intent_raw = $session['payment_intent'] ?? '';
@@ -195,7 +215,7 @@ class LNKup_Stripe_Webhooks {
 		// Only finalize when Stripe reports payment_status=paid; otherwise wait for payment_intent.succeeded.
 		$payment_status = isset( $session['payment_status'] ) ? (string) $session['payment_status'] : '';
 		if ( 'paid' !== $payment_status ) {
-			LNKup_Financial_Service::mark_payment_processing(
+			return LNKup_Financial_Service::mark_payment_processing(
 				$payment_id,
 				$intent_id,
 				array(
@@ -203,10 +223,9 @@ class LNKup_Stripe_Webhooks {
 					'payment_status'  => $payment_status,
 				)
 			);
-			return;
 		}
 
-		LNKup_Financial_Service::finalize_payment( $payment_id, $intent_id, array( 'source' => 'checkout_session' ) );
+		return LNKup_Financial_Service::finalize_payment( $payment_id, $intent_id, array( 'source' => 'checkout_session' ) );
 	}
 
 	/**
@@ -218,12 +237,13 @@ class LNKup_Stripe_Webhooks {
 		$payment_id = self::resolve_payment_id( $intent );
 		if ( $payment_id ) {
 			LNKup_Financial_Service::backfill_stripe_payment_meta( $payment_id, $intent['id'] ?? '' );
-			LNKup_Financial_Service::mark_payment_processing(
+			return LNKup_Financial_Service::mark_payment_processing(
 				$payment_id,
 				$intent['id'] ?? '',
 				array( 'source' => 'payment_intent.processing' )
 			);
 		}
+		return null;
 	}
 
 	/**
@@ -233,8 +253,9 @@ class LNKup_Stripe_Webhooks {
 		$payment_id = self::resolve_payment_id( $intent );
 		if ( $payment_id ) {
 			LNKup_Financial_Service::backfill_stripe_payment_meta( $payment_id, $intent['id'] ?? '' );
-			LNKup_Financial_Service::finalize_payment( $payment_id, $intent['id'] ?? '', array( 'source' => 'payment_intent' ) );
+			return LNKup_Financial_Service::finalize_payment( $payment_id, $intent['id'] ?? '', array( 'source' => 'payment_intent' ) );
 		}
+		return null;
 	}
 
 	/**
@@ -286,9 +307,7 @@ class LNKup_Stripe_Webhooks {
 		}
 		$refunded = (float) ( ( $charge['amount_refunded'] ?? 0 ) / 100 );
 		update_post_meta( $payment_id, '_lnkup_refund_amount', $refunded );
-		if ( $refunded >= (float) get_post_meta( $payment_id, '_lnkup_total_amount', true ) ) {
-			update_post_meta( $payment_id, '_lnkup_payment_status', 'refunded' );
-		}
+		LNKup_Refunds::sync_payment_refund_status( $payment_id );
 		if ( class_exists( 'LNKup_Stripe_Connect' ) ) {
 			LNKup_Stripe_Connect::handle_destination_refund( $payment_id, $refunded );
 		}

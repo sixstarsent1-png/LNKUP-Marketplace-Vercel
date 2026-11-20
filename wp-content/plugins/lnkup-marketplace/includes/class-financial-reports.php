@@ -215,6 +215,10 @@ class LNKup_Financial_Reports {
 	}
 
 	public static function revenue_by_month( $organizer_id, $months = 12 ) {
+		$from_payments = self::revenue_by_month_from_payments( $organizer_id, $months );
+		if ( $from_payments ) {
+			return $from_payments;
+		}
 		global $wpdb;
 		$table = LNKup_Financial_Tables::transactions_table();
 		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
@@ -230,9 +234,58 @@ class LNKup_Financial_Reports {
 			ARRAY_A
 		);
 		$rows = is_array( $rows ) ? $rows : array();
-		return array_map( function ( $r ) {
+		$mapped = array_map( function ( $r ) {
 			return array( 'month' => $r['month_key'], 'revenue' => round( (float) $r['total'], 2 ) );
 		}, $rows );
+		return $mapped;
+	}
+
+	/**
+	 * Month totals from paid booth payments when the ledger query is empty.
+	 *
+	 * @param int $organizer_id Organizer user ID.
+	 * @param int $months       Lookback in months.
+	 * @return array<int, array{month: string, revenue: float}>
+	 */
+	private static function revenue_by_month_from_payments( $organizer_id, $months = 12 ) {
+		if ( ! function_exists( 'lnkup_get_payments_for_user' ) || ! class_exists( 'LNKup_Financial' ) ) {
+			return array();
+		}
+		$payments = lnkup_get_payments_for_user( (int) $organizer_id, 'organizer' );
+		if ( ! is_array( $payments ) ) {
+			return array();
+		}
+		$paid = array();
+		foreach ( $payments as $payment ) {
+			if ( $payment instanceof WP_Post && 'paid' === (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true ) ) {
+				$paid[] = $payment;
+			}
+		}
+		$rows    = function_exists( 'lnkup_payment_display_rows' ) ? lnkup_payment_display_rows( $paid ) : array();
+		$cutoff  = strtotime( '-' . absint( $months ) . ' months' );
+		$buckets = array();
+		foreach ( $rows as $row ) {
+			$payment = $row['payment'];
+			$paid_at = (string) get_post_meta( $payment->ID, '_lnkup_paid_at', true );
+			$ts      = $paid_at ? strtotime( $paid_at ) : strtotime( (string) $payment->post_date );
+			if ( ! $ts || ( $cutoff && $ts < $cutoff ) ) {
+				continue;
+			}
+			$month = function_exists( 'wp_date' ) ? wp_date( 'Y-m', $ts ) : gmdate( 'Y-m', $ts );
+			if ( ! isset( $buckets[ $month ] ) ) {
+				$buckets[ $month ] = 0.0;
+			}
+			$buckets[ $month ] += (float) $row['amount'];
+		}
+		ksort( $buckets );
+		$out = array();
+		foreach ( $buckets as $month => $total ) {
+			$out[] = array(
+				'month'   => (string) $month,
+				'revenue' => round( (float) $total, 2 ),
+			);
+		}
+		return $out;
 	}
 
 	public static function revenue_by_category( $organizer_id ) {

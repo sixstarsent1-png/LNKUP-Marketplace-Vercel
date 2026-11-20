@@ -38,6 +38,16 @@ class LNKup_Vendor_Profile_REST {
 				),
 			)
 		);
+
+		register_rest_route(
+			self::NS,
+			'/vendor/profile/logo',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'upload_logo' ),
+				'permission_callback' => array( __CLASS__, 'vendor_permission' ),
+			)
+		);
 	}
 
 	/**
@@ -58,11 +68,19 @@ class LNKup_Vendor_Profile_REST {
 					'contact_phone' => '',
 					'city'          => '',
 					'state'         => '',
+					'categories'    => array(),
+					'logo_url'      => '',
+					'logo_attachment_id' => 0,
 				)
 			);
 		}
 
 		$post = get_post( $profile_id );
+		$categories = wp_get_post_terms( $profile_id, 'lnkup_vendor_category', array( 'fields' => 'names' ) );
+		if ( is_wp_error( $categories ) ) {
+			$categories = array();
+		}
+		$logo_id = (int) get_post_meta( $profile_id, '_lnkup_logo_attachment_id', true );
 		$slug = '';
 		if ( class_exists( 'LNKup_Vendor_Reputation' ) ) {
 			$slug = (string) LNKup_Vendor_Reputation::ensure_public_slug( $profile_id );
@@ -80,6 +98,9 @@ class LNKup_Vendor_Profile_REST {
 				'contact_phone' => (string) get_post_meta( $profile_id, '_lnkup_contact_phone', true ),
 				'city'          => (string) get_post_meta( $profile_id, '_lnkup_city', true ),
 				'state'         => (string) get_post_meta( $profile_id, '_lnkup_state', true ),
+				'categories'    => array_values( $categories ),
+				'logo_attachment_id' => $logo_id,
+				'logo_url'      => $logo_id ? (string) wp_get_attachment_image_url( $logo_id, 'medium' ) : '',
 				'public_slug'   => $slug,
 				'public_url'    => $slug
 					? add_query_arg( 'vendor', $slug, lnkup_page_url_helper( 'vendors' ) )
@@ -154,6 +175,17 @@ class LNKup_Vendor_Profile_REST {
 		}
 		update_post_meta( $profile_id, '_lnkup_business_name', $business );
 
+		if ( array_key_exists( 'categories', $body ) ) {
+			self::save_categories( (int) $profile_id, $body['categories'] );
+		}
+		if ( array_key_exists( 'logo_attachment_id', $body ) ) {
+			$logo_id      = absint( $body['logo_attachment_id'] );
+			$current_logo = (int) get_post_meta( $profile_id, '_lnkup_logo_attachment_id', true );
+			if ( $logo_id && LNKup_Security::filter_owned_images( array( $logo_id ), get_current_user_id(), array( $current_logo ) ) ) {
+				update_post_meta( $profile_id, '_lnkup_logo_attachment_id', $logo_id );
+			}
+		}
+
 		if ( class_exists( 'LNKup_Vendor_Reputation' ) ) {
 			LNKup_Vendor_Reputation::ensure_public_slug( $profile_id );
 			LNKup_Vendor_Reputation::refresh( $profile_id );
@@ -166,6 +198,62 @@ class LNKup_Vendor_Profile_REST {
 				'message'    => __( 'Profile saved.', 'lnkup-marketplace' ),
 			)
 		);
+	}
+
+	/**
+	 * POST multipart logo. Stores the attachment on the vendor profile.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function upload_logo( WP_REST_Request $request ) {
+		if ( ! current_user_can( 'lnkup_manage_own_profile' ) && ! LNKup_Capabilities::user_has_manage_all() ) {
+			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+		$user_id    = get_current_user_id();
+		$profile_id = function_exists( 'lnkup_get_vendor_profile_id' ) ? (int) lnkup_get_vendor_profile_id( $user_id ) : 0;
+		if ( ! $profile_id ) {
+			return new WP_Error( 'validation_error', __( 'Save your business name before adding a logo.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$file = LNKup_Profile_Media::file_from_request( $request );
+		if ( ! $file ) {
+			return new WP_Error( 'no_file', __( 'Choose an image to upload.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$attachment_id = LNKup_Profile_Media::store_image( $file, $profile_id );
+		if ( is_wp_error( $attachment_id ) ) {
+			return $attachment_id;
+		}
+		update_post_meta( $profile_id, '_lnkup_logo_attachment_id', $attachment_id );
+		return rest_ensure_response(
+			array(
+				'success'            => true,
+				'logo_attachment_id' => (int) $attachment_id,
+				'logo_url'           => (string) wp_get_attachment_image_url( $attachment_id, 'medium' ),
+			)
+		);
+	}
+
+	/**
+	 * Replace vendor category terms with the submitted names.
+	 *
+	 * @param int          $profile_id Profile post ID.
+	 * @param mixed        $raw        Category names.
+	 */
+	private static function save_categories( int $profile_id, $raw ) {
+		$cats = $raw;
+		if ( is_string( $cats ) ) {
+			$cats = array_map( 'trim', explode( ',', $cats ) );
+		}
+		if ( ! is_array( $cats ) ) {
+			$cats = array();
+		}
+		$names = array();
+		foreach ( $cats as $cat ) {
+			$name = sanitize_text_field( (string) $cat );
+			if ( '' !== $name ) {
+				$names[] = $name;
+			}
+		}
+		wp_set_object_terms( $profile_id, $names, 'lnkup_vendor_category' );
 	}
 
 	/**

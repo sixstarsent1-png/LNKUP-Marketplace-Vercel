@@ -113,7 +113,7 @@ class LNKup_Weather_REST {
 		if ( LNKup_Capabilities::user_has_manage_all() ) {
 			return true;
 		}
-		if ( LNKup_Capabilities::organizer_owns_event( $event_id ) ) {
+		if ( LNKup_Capabilities::staff_can( $event_id, 'view_roster' ) ) {
 			return true;
 		}
 		return self::vendor_can_view_event( $event_id );
@@ -157,9 +157,10 @@ class LNKup_Weather_REST {
 		);
 		foreach ( $apps as $app_id ) {
 			$profile_id = (int) get_post_meta( $app_id, '_lnkup_vendor_profile_id', true );
-			$owner      = $profile_id ? (int) get_post_meta( $profile_id, '_lnkup_user_id', true ) : 0;
+			$is_owner   = LNKup_Capabilities::vendor_owns_profile( $profile_id, $user_id )
+				|| (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true ) === (int) $user_id;
 			$status     = get_post_meta( $app_id, '_lnkup_application_status', true );
-			if ( $owner === $user_id && in_array( $status, array( 'paid', 'completed', 'approved', 'payment_required' ), true ) ) {
+			if ( $is_owner && in_array( $status, array( 'paid', 'completed', 'approved', 'payment_required' ), true ) ) {
 				return true;
 			}
 		}

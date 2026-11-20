@@ -20,12 +20,12 @@ class LNKup_Growth_Render {
 				<div class="lnkup-growth-skeleton lnkup-growth-skeleton--kpi"></div>
 			</div>
 			<div class="lnkup-growth-tabs-wrap lnkup-filter-bar--sticky">
-			<div class="lnkup-growth-tabs" role="tablist">
-				<button type="button" class="lnkup-growth-tab is-active" data-tab="overview"><?php esc_html_e( 'Overview', 'lnkup-marketplace' ); ?></button>
-				<button type="button" class="lnkup-growth-tab" data-tab="revenue"><?php esc_html_e( 'Revenue', 'lnkup-marketplace' ); ?></button>
-				<button type="button" class="lnkup-growth-tab" data-tab="markets"><?php esc_html_e( 'Markets', 'lnkup-marketplace' ); ?></button>
-				<button type="button" class="lnkup-growth-tab" data-tab="profile-exports"><?php esc_html_e( 'Profile & exports', 'lnkup-marketplace' ); ?></button>
-			</div>
+				<div class="lnkup-growth-tabs lnkup-dash-tabs lnkup-dash-tabs--underline" role="tablist" aria-label="<?php esc_attr_e( 'Growth sections', 'lnkup-marketplace' ); ?>">
+					<button type="button" class="lnkup-dash-tabs__btn lnkup-growth-tab is-active" data-tab="overview"><?php esc_html_e( 'Overview', 'lnkup-marketplace' ); ?></button>
+					<button type="button" class="lnkup-dash-tabs__btn lnkup-growth-tab" data-tab="revenue"><?php esc_html_e( 'Revenue', 'lnkup-marketplace' ); ?></button>
+					<button type="button" class="lnkup-dash-tabs__btn lnkup-growth-tab" data-tab="markets"><?php esc_html_e( 'Markets', 'lnkup-marketplace' ); ?></button>
+					<button type="button" class="lnkup-dash-tabs__btn lnkup-growth-tab" data-tab="profile-exports"><?php esc_html_e( 'Profile & exports', 'lnkup-marketplace' ); ?></button>
+				</div>
 			</div>
 			<div class="lnkup-growth-panels">
 				<div class="lnkup-growth-panel is-active" data-panel="overview" id="lnkup-growth-overview"></div>

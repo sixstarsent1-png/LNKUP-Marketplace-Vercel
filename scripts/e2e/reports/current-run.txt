@@ -1,0 +1,2320 @@
+﻿
+Running 182 tests using 2 workers
+
+
+powershell : (node:22656) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+At line:1 char:579
++ ... spec.ts" }; powershell -File scripts/e2e/run-specs.ps1 @specs --proje ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:22656) Wa... env being set.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:2744) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+
+(Use `node --trace-warnings ...` to show where the warning was created)
+[1/182] [chromium] › tests\e2e\app-promo.spec.ts:67:7 › Optional iPhone app prompts › homepage app bar can be closed and stays closed
+[2/182] [chromium] › tests\e2e\app-promo.spec.ts:57:7 › Optional iPhone app prompts › homepage offers the app without blocking the page
+[3/182] [chromium] › tests\e2e\app-promo.spec.ts:89:9 › Optional iPhone app prompts › organizer › overview shows quick actions
+  1) [chromium] › tests\e2e\app-promo.spec.ts:57:7 › Optional iPhone app prompts › homepage offers the app without blocking the page 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-hero-cta-primary')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-hero-cta-primary')
+
+
+      62 |     await expect(page.locator('meta[name="apple-itunes-app"]')).toHaveAttribute('content', /app-id=\d+/);
+      63 |     await expect(section.getByTestId('lnkup-app-store-badge')).toHaveAttribute('href', /apps\.apple\.com/);
+    > 64 |     await expect(page.getByTestId('lnkup-hero-cta-primary')).toBeVisible();
+         |                                                              ^
+      65 |   });
+      66 |
+      67 |   test('homepage app bar can be closed and stays closed', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\app-promo.spec.ts:64:62
+
+    Error Context: test-results\app-promo-Optional-iPhone--9796d-p-without-blocking-the-page-chromium\error-context.md
+
+
+
+(node:61124) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[4/182] [chromium] › tests\e2e\app-promo.spec.ts:95:9 › Optional iPhone app prompts › organizer › app card can be closed and stays closed after reload
+[5/182] [chromium] › tests\e2e\app-promo.spec.ts:99:9 › Optional iPhone app prompts › organizer › hiding app suggestions removes the card
+[6/182] [chromium] › tests\e2e\app-promo.spec.ts:122:9 › Optional iPhone app prompts › vendor › app card can be closed and stays closed after reload
+[7/182] [chromium] › tests\e2e\connector-program.spec.ts:4:7 › City Connector program › connector interest page renders form with market context
+  2) [chromium] › tests\e2e\connector-program.spec.ts:4:7 › City Connector program › connector interest page renders form with market context 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/Charlotte/i)
+    Expected: visible
+    Error: strict mode violation: getByText(/Charlotte/i) resolved to 3 elements:
+        1) <span class="lnkup-hero__stamp">CHARLOTTE / CONNECTOR</span> aka getByText('CHARLOTTE / CONNECTOR')
+        2) <h1 class="lnkup-heading lnkup-heading--hero">Charlotte. Their events. Our network.</h1> aka getByRole('heading', { name: 'Charlotte. Their events. Our' })
+        3) <p class="lnkup-hero__lead">Become a City Connector in Charlotte. Introduce t…</p> aka getByText('Become a City Connector in')
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByText(/Charlotte/i)
+
+
+       7 |     await expect(page.getByTestId('lnkup-connector-interest-form')).toBeVisible();
+       8 |     await expect(page.getByLabel('Email')).toBeEditable();
+    >  9 |     await expect(page.getByText(/Charlotte/i)).toBeVisible();
+         |                                                ^
+      10 |   });
+      11 |
+      12 |   test('market page connector CTA links to interest form with market', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:9:48
+
+    Error Context: test-results\connector-program-City-Con-f2f11-rs-form-with-market-context-chromium\error-context.md
+
+
+
+(node:60704) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[8/182] [chromium] › tests\e2e\connector-program.spec.ts:12:7 › City Connector program › market page connector CTA links to interest form with market
+[9/182] [chromium] › tests\e2e\connector-program.spec.ts:20:7 › City Connector program › sign-up with ref query includes hidden ref field
+[10/182] [chromium] › tests\e2e\connector-program.spec.ts:27:7 › City Connector program › sign-up with outreach and ref both render without blocking
+[11/182] [chromium] › tests\e2e\connector-program.spec.ts:34:7 › City Connector program › public referral resolve endpoint returns JSON
+[12/182] [chromium] › tests\e2e\connector-program.spec.ts:41:7 › City Connector program › connector dashboard requires login
+[13/182] [chromium] › tests\e2e\connector-program.spec.ts:46:7 › City Connector program › connector dashboard mobile viewport has no horizontal overflow
+[14/182] [chromium] › tests\e2e\connector-program.spec.ts:55:7 › City Connector program › unauthorized users cannot read connector earnings or calculator
+  3) [chromium] › tests\e2e\connector-program.spec.ts:41:7 › City Connector program › connector dashboard requires login 
+
+    Error: expect(page).toHaveURL(expected) failed
+
+    Expected pattern: /wp-login|login/
+    Received string:  "http://localhost:8888/log-in/?redirect=http%3A%2F%2Flocalhost%3A8888%2Fconnector-dashboard%2F"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toHaveURL" with timeout 5000ms
+        14 × unexpected value "http://localhost:8888/log-in/?redirect=http%3A%2F%2Flocalhost%3A8888%2Fconnector-dashboard%2F"
+
+
+      41 |   test('connector dashboard requires login', async ({ page }) => {
+      42 |     await page.goto('/connector-dashboard/');
+    > 43 |     await expect(page).toHaveURL(/wp-login|login/);
+         |                        ^
+      44 |   });
+      45 |
+      46 |   test('connector dashboard mobile viewport has no horizontal overflow', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:43:24
+
+    Error Context: test-results\connector-program-City-Con-03c03-or-dashboard-requires-login-chromium\error-context.md
+
+
+
+
+(node:71228) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[15/182] [chromium] › tests\e2e\connector-program.spec.ts:64:7 › City Connector program › unauthorized users cannot read connector rank or leaderboard
+[16/182] [chromium] › tests\e2e\connector-program.spec.ts:71:7 › City Connector program › onboarding and terms endpoints reject anonymous JSON clients
+[17/182] [chromium] › tests\e2e\connector-program.spec.ts:85:7 › City Connector program › unauthorized users cannot read connector studio
+[18/182] [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 320px
+[19/182] [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 320px
+  4) [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 320px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-dashboard')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-dashboard')
+
+
+       99 |         return;
+      100 |       }
+    > 101 |       await expect(page.getByTestId('lnkup-connector-dashboard')).toBeVisible();
+          |                                                                   ^
+      102 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      103 |       expect(overflow).toBe(false);
+      104 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:101:67
+
+    Error Context: test-results\connector-program-City-Con-e267c--does-not-overflow-at-320px-chromium\error-context.md
+
+
+
+
+(node:64144) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[20/182] [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 320px
+  5) [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 320px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-studio')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-studio')
+
+
+      110 |         return;
+      111 |       }
+    > 112 |       await expect(page.getByTestId('lnkup-connector-studio')).toBeVisible();
+          |                                                                ^
+      113 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      114 |       expect(overflow).toBe(false);
+      115 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:112:64
+
+    Error Context: test-results\connector-program-City-Con-ffb74--does-not-overflow-at-320px-chromium\error-context.md
+
+
+
+(node:67104) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[21/182] [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 375px
+  6) [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 320px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-roadmap')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-roadmap')
+
+
+      121 |         return;
+      122 |       }
+    > 123 |       await expect(page.getByTestId('lnkup-connector-roadmap')).toBeVisible();
+          |                                                                 ^
+      124 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      125 |       expect(overflow).toBe(false);
+      126 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:123:65
+
+    Error Context: test-results\connector-program-City-Con-fff3e--does-not-overflow-at-320px-chromium\error-context.md
+
+
+
+
+(node:55664) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[22/182] [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 375px
+  7) [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 375px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-dashboard')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-dashboard')
+
+
+       99 |         return;
+      100 |       }
+    > 101 |       await expect(page.getByTestId('lnkup-connector-dashboard')).toBeVisible();
+          |                                                                   ^
+      102 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      103 |       expect(overflow).toBe(false);
+      104 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:101:67
+
+    Error Context: test-results\connector-program-City-Con-9a96f--does-not-overflow-at-375px-chromium\error-context.md
+
+
+
+
+(node:78568) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[23/182] [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 375px
+  8) [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 375px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-studio')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-studio')
+
+
+      110 |         return;
+      111 |       }
+    > 112 |       await expect(page.getByTestId('lnkup-connector-studio')).toBeVisible();
+          |                                                                ^
+      113 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      114 |       expect(overflow).toBe(false);
+      115 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:112:64
+
+    Error Context: test-results\connector-program-City-Con-93d09--does-not-overflow-at-375px-chromium\error-context.md
+
+
+
+(node:71532) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+
+(Use `node --trace-warnings ...` to show where the warning was created)
+[24/182] [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 768px
+  9) [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 375px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-roadmap')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-roadmap')
+
+
+      121 |         return;
+      122 |       }
+    > 123 |       await expect(page.getByTestId('lnkup-connector-roadmap')).toBeVisible();
+          |                                                                 ^
+      124 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      125 |       expect(overflow).toBe(false);
+      126 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:123:65
+
+    Error Context: test-results\connector-program-City-Con-35485--does-not-overflow-at-375px-chromium\error-context.md
+
+
+
+(node:77680) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[25/182] [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 768px
+  10) [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 768px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-dashboard')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-dashboard')
+
+
+       99 |         return;
+      100 |       }
+    > 101 |       await expect(page.getByTestId('lnkup-connector-dashboard')).toBeVisible();
+          |                                                                   ^
+      102 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      103 |       expect(overflow).toBe(false);
+      104 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:101:67
+
+    Error Context: test-results\connector-program-City-Con-89d3c--does-not-overflow-at-768px-chromium\error-context.md
+
+
+
+(node:72176) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+
+(Use `node --trace-warnings ...` to show where the warning was created)
+[26/182] [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 768px
+  11) [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 768px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-studio')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-studio')
+
+
+      110 |         return;
+      111 |       }
+    > 112 |       await expect(page.getByTestId('lnkup-connector-studio')).toBeVisible();
+          |                                                                ^
+      113 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      114 |       expect(overflow).toBe(false);
+      115 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:112:64
+
+    Error Context: test-results\connector-program-City-Con-7bb67--does-not-overflow-at-768px-chromium\error-context.md
+
+
+
+(node:23644) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[27/182] [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 1024px
+  12) [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 768px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-roadmap')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-roadmap')
+
+
+      121 |         return;
+      122 |       }
+    > 123 |       await expect(page.getByTestId('lnkup-connector-roadmap')).toBeVisible();
+          |                                                                 ^
+      124 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      125 |       expect(overflow).toBe(false);
+      126 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:123:65
+
+    Error Context: test-results\connector-program-City-Con-894d1--does-not-overflow-at-768px-chromium\error-context.md
+
+
+  13) [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 1024px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-dashboard')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-dashboard')
+
+
+       99 |         return;
+      100 |       }
+    > 101 |       await expect(page.getByTestId('lnkup-connector-dashboard')).toBeVisible();
+          |                                                                   ^
+      102 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      103 |       expect(overflow).toBe(false);
+      104 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:101:67
+
+    Error Context: test-results\connector-program-City-Con-65759-does-not-overflow-at-1024px-chromium\error-context.md
+
+
+
+
+(node:70672) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:75836) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[28/182] [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 1024px
+[29/182] [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 1024px
+  14) [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 1024px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-studio')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-studio')
+
+
+      110 |         return;
+      111 |       }
+    > 112 |       await expect(page.getByTestId('lnkup-connector-studio')).toBeVisible();
+          |                                                                ^
+      113 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      114 |       expect(overflow).toBe(false);
+      115 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:112:64
+
+    Error Context: test-results\connector-program-City-Con-516a9-does-not-overflow-at-1024px-chromium\error-context.md
+
+
+  15) [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 1024px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-roadmap')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-roadmap')
+
+
+      121 |         return;
+      122 |       }
+    > 123 |       await expect(page.getByTestId('lnkup-connector-roadmap')).toBeVisible();
+          |                                                                 ^
+      124 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      125 |       expect(overflow).toBe(false);
+      126 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:123:65
+
+    Error Context: test-results\connector-program-City-Con-d5cee-does-not-overflow-at-1024px-chromium\error-context.md
+
+
+
+(node:63424) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[30/182] [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 1440px
+
+(node:52756) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[31/182] [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 1440px
+  16) [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 1440px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-studio')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-studio')
+
+
+      110 |         return;
+      111 |       }
+    > 112 |       await expect(page.getByTestId('lnkup-connector-studio')).toBeVisible();
+          |                                                                ^
+      113 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      114 |       expect(overflow).toBe(false);
+      115 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:112:64
+
+    Error Context: test-results\connector-program-City-Con-7162c-does-not-overflow-at-1440px-chromium\error-context.md
+
+
+
+(node:80868) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[32/182] [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 1440px
+  17) [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 1440px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-dashboard')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-dashboard')
+
+
+       99 |         return;
+      100 |       }
+    > 101 |       await expect(page.getByTestId('lnkup-connector-dashboard')).toBeVisible();
+          |                                                                   ^
+      102 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      103 |       expect(overflow).toBe(false);
+      104 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:101:67
+
+    Error Context: test-results\connector-program-City-Con-4e1f9-does-not-overflow-at-1440px-chromium\error-context.md
+
+
+
+(node:80448) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[33/182] [chromium] › tests\e2e\connector-program.spec.ts:129:7 › City Connector program › logged-in connector Get Started shows a launch plan without generic Continue
+  18) [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 1440px 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-roadmap')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-roadmap')
+
+
+      121 |         return;
+      122 |       }
+    > 123 |       await expect(page.getByTestId('lnkup-connector-roadmap')).toBeVisible();
+          |                                                                 ^
+      124 |       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+      125 |       expect(overflow).toBe(false);
+      126 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:123:65
+
+    Error Context: test-results\connector-program-City-Con-504f2-does-not-overflow-at-1440px-chromium\error-context.md
+
+
+  19) [chromium] › tests\e2e\connector-program.spec.ts:129:7 › City Connector program › logged-in connector Get Started shows a launch plan without generic Continue 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-launch-plan')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-launch-plan')
+
+
+      133 |       return;
+      134 |     }
+    > 135 |     await expect(page.getByTestId('lnkup-connector-launch-plan')).toBeVisible();
+          |                                                                   ^
+      136 |     await expect(page.getByTestId('lnkup-connector-current-action')).toBeVisible();
+      137 |     await expect(page.getByTestId('lnkup-connector-growth-styles')).toBeVisible();
+      138 |     await expect(page.getByRole('button', { name: 'Continue', exact: true })).toHaveCount(0);
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:135:67
+
+    Error Context: test-results\connector-program-City-Con-a1129-an-without-generic-Continue-chromium\error-context.md
+
+
+
+
+(node:70008) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+(node:68880) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[34/182] [chromium] › tests\e2e\connector-program.spec.ts:143:7 › City Connector program › logged-in connector can open a studio template and submit a URL
+[35/182] [chromium] › tests\e2e\connector-program.spec.ts:161:7 › City Connector program › logged-in connector rank card and roadmap stay on-page
+  20) [chromium] › tests\e2e\connector-program.spec.ts:161:7 › City Connector program › logged-in connector rank card and roadmap stay on-page 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-rank-card')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-rank-card')
+
+
+      165 |       return;
+      166 |     }
+    > 167 |     await expect(page.getByTestId('lnkup-connector-rank-card')).toBeVisible();
+          |                                                                 ^
+      168 |     await page.getByRole('link', { name: 'View All Ranks' }).click();
+      169 |     await expect(page).toHaveURL(/view=ranks/);
+      170 |     await expect(page.getByTestId('lnkup-connector-roadmap')).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:167:65
+
+    Error Context: test-results\connector-program-City-Con-bc583-rd-and-roadmap-stay-on-page-chromium\error-context.md
+
+
+  21) [chromium] › tests\e2e\connector-program.spec.ts:143:7 › City Connector program › logged-in connector can open a studio template and submit a URL 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-studio')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-studio')
+
+
+      147 |       return;
+      148 |     }
+    > 149 |     await expect(page.getByTestId('lnkup-connector-studio')).toBeVisible();
+          |                                                              ^
+      150 |     const open = page.getByRole('button', { name: /Open template|Build This Video/i }).first();
+      151 |     await expect(open).toBeVisible();
+      152 |     await open.click();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:149:62
+
+    Error Context: test-results\connector-program-City-Con-0daa9-o-template-and-submit-a-URL-chromium\error-context.md
+
+
+
+(node:79576) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[36/182] [chromium] › tests\e2e\connector-program.spec.ts:174:7 › City Connector program › logged-in connector Share sheet opens without reload
+
+
+(node:64740) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[37/182] [chromium] › tests\e2e\connector-program.spec.ts:187:7 › City Connector program › logged-in connector referrals filters and earnings calculator stay on-page
+  22) [chromium] › tests\e2e\connector-program.spec.ts:187:7 › City Connector program › logged-in connector referrals filters and earnings calculator stay on-page 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-connector-filters')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-connector-filters')
+
+
+      191 |       return;
+      192 |     }
+    > 193 |     await expect(page.getByTestId('lnkup-connector-filters')).toBeVisible();
+          |                                                               ^
+      194 |     await expect(page.getByRole('button', { name: 'Organizers' })).toBeVisible();
+      195 |     await page.getByRole('link', { name: 'Earnings' }).first().click();
+      196 |     await expect(page).toHaveURL(/view=earnings/);
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:193:63
+
+    Error Context: test-results\connector-program-City-Con-0389f-ngs-calculator-stay-on-page-chromium\error-context.md
+
+
+
+(node:62748) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[38/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:26:7 › Organizer dashboard enhancements › Requests shows search, sort, and status badges on each card
+[39/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:37:7 › Organizer dashboard enhancements › Requests bulk bar stays hidden until a request is selected
+  23) [chromium] › tests\e2e\connector-program.spec.ts:174:7 › City Connector program › logged-in connector Share sheet opens without reload 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByTestId('lnkup-connector-copy-organizer')
+
+
+      179 |     }
+      180 |     const before = page.url();
+    > 181 |     await page.getByTestId('lnkup-connector-copy-organizer').click();
+          |                                                              ^
+      182 |     await expect(page.getByTestId('lnkup-connector-share-sheet')).toBeVisible();
+      183 |     expect(page.url()).toBe(before);
+      184 |     await expect(page.getByRole('heading', { name: /Share Your Link/i })).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\connector-program.spec.ts:181:62
+
+    Error Context: test-results\connector-program-City-Con-ed6dd--sheet-opens-without-reload-chromium\error-context.md
+
+
+
+(node:35536) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[40/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:52:7 › Organizer dashboard enhancements › View details opens the request drawer and Escape closes it
+[41/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:64:7 › Organizer dashboard enhancements › Decline asks for a reason inline instead of a browser prompt
+[42/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:83:7 › Organizer dashboard enhancements › Event workspace overview shows readiness, spots, and tools
+[43/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:93:7 › Organizer dashboard enhancements › Edit view links back to the workspace for requests and vendors
+[44/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:102:7 › Organizer dashboard enhancements › Roster selection count drives the bulk buttons
+[45/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:116:7 › Organizer dashboard enhancements › QR check-in offers manual entry and a recent check-ins list
+  24) [chromium] › tests\e2e\dashboard-enhancements.spec.ts:93:7 › Organizer dashboard enhancements › Edit view links back to the workspace for requests and vendors 
+
+    Error: expect(page).not.toHaveURL(expected) failed
+
+    Expected pattern: not /wp-login/
+    Received string: "http://localhost:8888/wp-login.php?redirect_to=http%3A%2F%2Flocalhost%3A8888%2Fwp-admin%2Fprofile.php&reauth=1"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "not toHaveURL" with timeout 5000ms
+        14 × unexpected value "http://localhost:8888/wp-login.php?redirect_to=http%3A%2F%2Flocalhost%3A8888%2Fwp-admin%2Fprofile.php&reauth=1"
+
+
+      15 |   await page.getByLabel(/^password$/i).fill(pass);
+      16 |   await page.getByRole('button', { name: /log in/i }).click();
+    > 17 |   await expect(page).not.toHaveURL(/wp-login/);
+         |                          ^
+      18 | }
+      19 |
+      20 | test.describe('Organizer dashboard enhancements', () => {
+        at login (C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\dashboard-enhancements.spec.ts:17:26)
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\dashboard-enhancements.spec.ts:23:5
+
+    Error Context: test-results\dashboard-enhancements-Org-8bec5-ce-for-requests-and-vendors-chromium\error-context.md
+
+
+
+(node:74300) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+
+(Use `node --trace-warnings ...` to show where the warning was created)
+[46/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:131:7 › Vendor dashboard enhancements › Home shows the Action Center once the vendor has applied
+[47/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:141:7 › Vendor dashboard enhancements › Request cards show event timing and progress steps
+[48/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:153:7 › Vendor dashboard enhancements › Empty request tabs show an empty state instead of a blank list
+[49/182] [chromium] › tests\e2e\dashboard-enhancements.spec.ts:171:7 › Vendor dashboard enhancements › Profile renders the documents section the strength links point to
+[50/182] [chromium] › tests\e2e\event-intelligence.spec.ts:25:7 › Event Intelligence › intelligence panel requires login
+[51/182] [chromium] › tests\e2e\event-intelligence.spec.ts:36:9 › Event Intelligence › authenticated organizer › organizer intelligence panel loads
+  25) [chromium] › tests\e2e\event-intelligence.spec.ts:25:7 › Event Intelligence › intelligence panel requires login 
+
+    Error: expect(page).toHaveURL(expected) failed
+
+    Expected pattern: /wp-login|login/
+    Received string:  "http://localhost:8888/log-in/?redirect=http%3A%2F%2Flocalhost%3A8888%2Forganizer-dashboard%2F#intelligence"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toHaveURL" with timeout 5000ms
+        13 × unexpected value "http://localhost:8888/log-in/?redirect=http%3A%2F%2Flocalhost%3A8888%2Forganizer-dashboard%2F#intelligence"
+
+
+      25 |   test('intelligence panel requires login', async ({ page }) => {
+      26 |     await page.goto('/organizer-dashboard/#intelligence');
+    > 27 |     await expect(page).toHaveURL(/wp-login|login/);
+         |                        ^
+      28 |   });
+      29 |
+      30 |   test.describe('authenticated organizer', () => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\event-intelligence.spec.ts:27:24
+
+    Error Context: test-results\event-intelligence-Event-I-92581-igence-panel-requires-login-chromium\error-context.md
+
+
+
+(node:49684) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[52/182] [chromium] › tests\e2e\event-intelligence.spec.ts:45:9 › Event Intelligence › authenticated organizer › organizer intelligence expand button clears skeleton
+[53/182] [chromium] › tests\e2e\event-intelligence.spec.ts:55:9 › Event Intelligence › authenticated organizer › application intel button opens drawer
+  26) [chromium] › tests\e2e\event-intelligence.spec.ts:45:9 › Event Intelligence › authenticated organizer › organizer intelligence expand button clears skeleton 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('#intelligence')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('#intelligence')
+
+
+      45 |     test('organizer intelligence expand button clears skeleton', async ({ page }) => {
+      46 |       await page.goto('/organizer-dashboard/');
+    > 47 |       await expect(page.locator('#intelligence')).toBeVisible();
+         |                                                   ^
+      48 |       await page.locator('[data-expand-panel="intelligence"]').click();
+      49 |       await expect(page.locator('#lnkup-organizer-expand-intelligence')).toBeVisible();
+      50 |       await expect(page.locator('#lnkup-organizer-intelligence')).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\event-intelligence.spec.ts:47:51
+
+    Error Context: test-results\event-intelligence-Event-I-cab82-pand-button-clears-skeleton-chromium\error-context.md
+
+
+
+(node:71584) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[54/182] [chromium] › tests\e2e\event-intelligence.spec.ts:67:9 › Event Intelligence › authenticated organizer › operations command center has insights tab
+[55/182] [chromium] › tests\e2e\event-intelligence.spec.ts:86:9 › Event Intelligence › authenticated vendor › vendor intelligence panel loads
+[56/182] [chromium] › tests\e2e\event-intelligence.spec.ts:95:7 › Event Intelligence regression › marketplace and operations pages still load
+[57/182] [chromium] › tests\e2e\external-events.spec.ts:25:7 › External event discovery › claim URL pre-selects organizer role on sign-up
+[58/182] [chromium] › tests\e2e\external-events.spec.ts:31:7 › External event discovery › claim landing page renders for invalid token gracefully
+[59/182] [chromium] › tests\e2e\external-events.spec.ts:36:7 › External event discovery › external events search REST returns JSON
+  27) [chromium] › tests\e2e\event-intelligence.spec.ts:86:9 › Event Intelligence › authenticated vendor › vendor intelligence panel loads 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('#intelligence')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('#intelligence')
+
+
+      86 |     test('vendor intelligence panel loads', async ({ page }) => {
+      87 |       await page.goto('/vendor-dashboard/#intelligence');
+    > 88 |       await expect(page.locator('#intelligence')).toBeVisible();
+         |                                                   ^
+      89 |       await expect(page.locator('#lnkup-vendor-intelligence')).toBeVisible();
+      90 |     });
+      91 |   });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\event-intelligence.spec.ts:88:51
+
+    Error Context: test-results\event-intelligence-Event-I-ab420-or-intelligence-panel-loads-chromium\error-context.md
+
+
+
+(node:72844) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+
+(Use `node --trace-warnings ...` to show where the warning was created)
+[60/182] [chromium] › tests\e2e\external-events.spec.ts:46:7 › External event discovery › external events dashboard REST returns JSON
+[61/182] [chromium] › tests\e2e\external-events.spec.ts:72:9 › External event discovery › admin › external events admin import tab loads
+  28) [chromium] › tests\e2e\external-events.spec.ts:46:7 › External event discovery › external events dashboard REST returns JSON 
+
+    Error: expect(received).toBeTruthy()
+
+    Received: false
+
+      57 |     expect(login.ok()).toBeTruthy();
+      58 |     const res = await request.get('/wp-json/lnkup/v1/external-events/dashboard');
+    > 59 |     expect(res.ok()).toBeTruthy();
+         |                      ^
+      60 |     const ct = res.headers()['content-type'] || '';
+      61 |     expect(ct).toContain('application/json');
+      62 |     const data = await res.json();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:59:22
+
+    Error Context: test-results\external-events-External-e-371d5-dashboard-REST-returns-JSON-chromium\error-context.md
+
+
+
+(node:57644) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[62/182] [chromium] › tests\e2e\external-events.spec.ts:79:9 › External event discovery › admin › import-url REST returns JSON error for invalid Eventbrite URL
+[63/182] [chromium] › tests\e2e\external-events.spec.ts:105:9 › External event discovery › admin › external events review queue tab loads
+  29) [chromium] › tests\e2e\external-events.spec.ts:72:9 › External event discovery › admin › external events admin import tab loads 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-external-event-form')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-external-event-form')
+
+
+      72 |     test('external events admin import tab loads', async ({ page }) => {
+      73 |       await page.goto('/wp-admin/admin.php?page=lnkup-external-events&tab=import');
+    > 74 |       await expect(page.getByTestId('lnkup-external-event-form')).toBeVisible();
+         |                                                                   ^
+      75 |       await expect(page.getByTestId('lnkup-external-csv-form')).toBeVisible();
+      76 |       await expect(page.getByTestId('lnkup-external-url-form')).toBeVisible();
+      77 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:74:67
+
+    Error Context: test-results\external-events-External-e-485b8-ents-admin-import-tab-loads-chromium\error-context.md
+
+
+
+
+(node:5016) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[64/182] [chromium] › tests\e2e\external-events.spec.ts:118:9 › External event discovery › admin › external events analytics tab loads
+  30) [chromium] › tests\e2e\external-events.spec.ts:105:9 › External event discovery › admin › external events review queue tab loads 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-ext-review-kpi')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-ext-review-kpi')
+
+
+      105 |     test('external events review queue tab loads', async ({ page }) => {
+      106 |       await page.goto('/wp-admin/admin.php?page=lnkup-external-events&tab=review');
+    > 107 |       await expect(page.getByTestId('lnkup-ext-review-kpi')).toBeVisible();
+          |                                                              ^
+      108 |       await expect(page.getByTestId('lnkup-ext-review-filters')).toBeVisible();
+      109 |       await expect(page.getByTestId('lnkup-ext-review-sort')).toBeVisible();
+      110 |       await expect(page.getByTestId('lnkup-ext-review-bulk-bar')).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:107:62
+
+    Error Context: test-results\external-events-External-e-7ef06-ents-review-queue-tab-loads-chromium\error-context.md
+
+
+
+(node:33332) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[65/182] [chromium] › tests\e2e\external-events.spec.ts:123:9 › External event discovery › admin › external events auto sync tab loads
+  31) [chromium] › tests\e2e\external-events.spec.ts:118:9 › External event discovery › admin › external events analytics tab loads 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-external-analytics')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-external-analytics')
+
+
+      118 |     test('external events analytics tab loads', async ({ page }) => {
+      119 |       await page.goto('/wp-admin/admin.php?page=lnkup-external-events&tab=analytics');
+    > 120 |       await expect(page.getByTestId('lnkup-external-analytics')).toBeVisible();
+          |                                                                  ^
+      121 |     });
+      122 |
+      123 |     test('external events auto sync tab loads', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:120:66
+
+    Error Context: test-results\external-events-External-e-a5d6b--events-analytics-tab-loads-chromium\error-context.md
+
+
+
+(node:33196) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[66/182] [chromium] › tests\e2e\external-events.spec.ts:132:9 › External event discovery › admin › external events needs-email filter and published email form
+  32) [chromium] › tests\e2e\external-events.spec.ts:132:9 › External event discovery › admin › external events needs-email filter and published email form 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-external-events-table')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-external-events-table')
+
+
+      132 |     test('external events needs-email filter and published email form', async ({ page }) => {
+      133 |       await page.goto('/wp-admin/admin.php?page=lnkup-external-events&tab=events&needs_email=1');
+    > 134 |       await expect(page.getByTestId('lnkup-external-events-table')).toBeVisible();
+          |                                                                     ^
+      135 |       await expect(page.getByRole('checkbox', { name: /needs organizer email/i })).toBeChecked();
+      136 |       const emailForm = page.locator('[data-testid^="lnkup-ext-email-form-"]').first();
+      137 |       if (await emailForm.count()) {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:134:69
+
+    Error Context: test-results\external-events-External-e-b0911-er-and-published-email-form-chromium\error-context.md
+
+
+
+
+(node:36668) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[67/182] [chromium] › tests\e2e\external-events.spec.ts:150:9 › External event discovery › vendor feed › find events page loads marketplace grid
+  33) [chromium] › tests\e2e\external-events.spec.ts:123:9 › External event discovery › admin › external events auto sync tab loads 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-external-autosync')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-external-autosync')
+
+
+      123 |     test('external events auto sync tab loads', async ({ page }) => {
+      124 |       await page.goto('/wp-admin/admin.php?page=lnkup-external-events&tab=sync');
+    > 125 |       await expect(page.getByTestId('lnkup-external-autosync')).toBeVisible();
+          |                                                                 ^
+      126 |       await expect(page.getByRole('button', { name: /save auto sync settings/i })).toBeVisible();
+      127 |       await expect(page.getByRole('button', { name: /run sync now/i })).toBeVisible();
+      128 |       await expect(page.getByLabel(/vendor terms/i)).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\external-events.spec.ts:125:65
+
+    Error Context: test-results\external-events-External-e-2e138--events-auto-sync-tab-loads-chromium\error-context.md
+
+
+
+(node:16672) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[68/182] [chromium] › tests\e2e\external-events.spec.ts:161:9 › External event discovery › vendor feed › external event cards show media and type badge when present
+[69/182] [chromium] › tests\e2e\external-events.spec.ts:177:9 › External event discovery › vendor feed › external event interest modal opens with structured form
+[70/182] [chromium] › tests\e2e\external-events.spec.ts:200:7 › External event discovery › claim landing mobile viewport smoke
+[71/182] [chromium] › tests\e2e\interactive-maps.spec.ts:4:7 › Interactive Maps › opportunities page has grid map and split view toggles when phase 1c
+[72/182] [chromium] › tests\e2e\interactive-maps.spec.ts:18:7 › Interactive Maps › marketplace regression still loads results grid
+  34) [chromium] › tests\e2e\interactive-maps.spec.ts:4:7 › Interactive Maps › opportunities page has grid map and split view toggles when phase 1c 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  locator('#lnkup-map-toggle')
+    Expected: visible
+    Received: hidden
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('#lnkup-map-toggle')
+        13 × locator resolved to <button type="button" data-view="map" id="lnkup-map-toggle" class="lnkup-btn lnkup-btn--sm">Map</button>
+           - unexpected value "hidden"
+
+
+      10 |       test.skip(true, 'Map/split view requires marketplace phase 1c');
+      11 |     }
+    > 12 |     await expect(mapToggle).toBeVisible();
+         |                             ^
+      13 |     await expect(splitToggle).toBeVisible();
+      14 |     await mapToggle.click();
+      15 |     await expect(page.locator('#lnkup-map-view')).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\interactive-maps.spec.ts:12:29
+
+    Error Context: test-results\interactive-maps-Interacti-1118f--view-toggles-when-phase-1c-chromium\error-context.md
+
+
+[73/182] [chromium] › tests\e2e\interactive-maps.spec.ts:71:7 › Interactive Maps authenticated › operations command center has map builder and live map tabs
+
+
+(node:45300) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[74/182] [chromium] › tests\e2e\interactive-maps.spec.ts:23:7 › Interactive Maps › split view places map beside the list at desktop
+[75/182] [chromium] › tests\e2e\landing-launch.spec.ts:12:7 › Launch homepage › homepage launch chrome matches marketplace state
+[76/182] [chromium] › tests\e2e\landing-launch.spec.ts:31:7 › Launch homepage › featured opportunities section is on the homepage
+[77/182] [chromium] › tests\e2e\landing-launch.spec.ts:55:7 › Launch homepage › opportunities nav targets the homepage section
+  35) [chromium] › tests\e2e\landing-launch.spec.ts:12:7 › Launch homepage › homepage launch chrome matches marketplace state 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-hero-cta-primary')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-hero-cta-primary')
+
+
+      13 |     await page.goto('/');
+      14 |     await expect(page.getByTestId('lnkup-header-signup')).toBeVisible();
+    > 15 |     await expect(page.getByTestId('lnkup-hero-cta-primary')).toBeVisible();
+         |                                                              ^
+      16 |
+      17 |     if (await marketplaceIsOpen(page)) {
+      18 |       await expect(page.getByTestId('lnkup-launch-bar')).toHaveCount(0);
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\landing-launch.spec.ts:15:62
+
+    Error Context: test-results\landing-launch-Launch-home-4e8f9-e-matches-marketplace-state-chromium\error-context.md
+
+
+
+
+(node:9528) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[78/182] [chromium] › tests\e2e\landing-launch.spec.ts:76:7 › Launch homepage › sign-up page renders role selector and live copy when open
+  36) [chromium] › tests\e2e\landing-launch.spec.ts:55:7 › Launch homepage › opportunities nav targets the homepage section 
+
+    Error: expect(locator).toBeAttached() failed
+
+    Locator: locator('a[href$="#opportunities"]').first()
+    Expected: attached
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeAttached" with timeout 5000ms
+      - waiting for locator('a[href$="#opportunities"]').first()
+
+
+      61 |
+      62 |     const hashLinks = page.locator('a[href$="#opportunities"]');
+    > 63 |     await expect(hashLinks.first()).toBeAttached();
+         |                                     ^
+      64 |     await expect(page.locator('#opportunities')).toBeAttached();
+      65 |
+      66 |     const viewport = page.viewportSize();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\landing-launch.spec.ts:63:37
+
+    Error Context: test-results\landing-launch-Launch-home-96e09-argets-the-homepage-section-chromium\error-context.md
+
+
+
+
+(node:43664) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[79/182] [chromium] › tests\e2e\landing-launch.spec.ts:92:7 › Launch homepage › opportunities page shows prelaunch gate when marketplace closed
+[80/182] [chromium] › tests\e2e\landing-launch.spec.ts:99:7 › Launch homepage › trust section does not show fake achievement stats
+[81/182] [chromium] › tests\e2e\landing-launch.spec.ts:116:7 › Launch homepage › hero avoids fake vendor counts
+[82/182] [chromium] › tests\e2e\landing-launch.spec.ts:132:7 › Launch homepage › login and lost-password pages are LNKup branded
+  37) [chromium] › tests\e2e\landing-launch.spec.ts:132:7 › Launch homepage › login and lost-password pages are LNKup branded 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('link[href*="login.css"]')
+    Expected: 1
+    Received: 2
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveCount" with timeout 5000ms
+      - waiting for locator('link[href*="login.css"]')
+        14 × locator resolved to 2 elements
+           - unexpected value "2"
+
+
+      136 |     await expect(logo).toHaveAttribute('href', /https?:\/\//);
+      137 |     await expect(page.locator('#lnkup-login, body.login')).toHaveCount(1);
+    > 138 |     await expect(page.locator('link[href*="login.css"]')).toHaveCount(1);
+          |                                                           ^
+      139 |
+      140 |     await page.goto('/wp-login.php?action=lostpassword');
+      141 |     await expect(page.getByText(/enter your account email/i)).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\landing-launch.spec.ts:138:59
+
+    Error Context: test-results\landing-launch-Launch-home-595ad-ord-pages-are-LNKup-branded-chromium\error-context.md
+
+
+  38) [chromium] › tests\e2e\landing-launch.spec.ts:116:7 › Launch homepage › hero avoids fake vendor counts 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-hero-visual')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-hero-visual')
+
+
+      116 |   test('hero avoids fake vendor counts', async ({ page }) => {
+      117 |     await page.goto('/');
+    > 118 |     await expect(page.getByTestId('lnkup-hero-visual')).toBeVisible();
+          |                                                         ^
+      119 |     await expect(page.getByText('4,800+')).toHaveCount(0);
+      120 |     await expect(page.getByText('LNKup Event')).toHaveCount(0);
+      121 |
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\landing-launch.spec.ts:118:57
+
+    Error Context: test-results\landing-launch-Launch-home-aab34-o-avoids-fake-vendor-counts-chromium\error-context.md
+
+
+
+(node:6932) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[83/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:4:7 › Marketplace V2 › opportunities page loads search and results grid
+
+(node:78484) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[84/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:18:7 › Marketplace V2 › SSR renders opportunity cards without JavaScript
+[85/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:26:7 › Marketplace V2 › search input debounces and updates results
+[86/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:33:7 › Marketplace V2 › quick chip filters by event type
+[87/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:40:7 › Marketplace V2 › filter drawer opens on mobile
+[88/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:48:7 › Marketplace V2 › clear all filters from empty state
+[89/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:55:7 › Marketplace V2 › phase 1A hides map toggle, compare tray, and intelligence rails
+  39) [chromium] › tests\e2e\marketplace-v2.spec.ts:55:7 › Marketplace V2 › phase 1A hides map toggle, compare tray, and intelligence rails 
+
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator:  locator('#lnkup-marketplace')
+    Expected: "1a"
+    Received: "1c"
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveAttribute" with timeout 5000ms
+      - waiting for locator('#lnkup-marketplace')
+        13 × locator resolved to <div data-phase="1c" id="lnkup-marketplace" class="lnkup-mp lnkup-mp-v2" data-rest="http://localhost:8888/wp-json/lnkup/v1/marketplace">…</div>
+           - unexpected value "1c"
+
+
+      55 |   test('phase 1A hides map toggle, compare tray, and intelligence rails', async ({ page }) => {
+      56 |     await page.goto('/opportunities/');
+    > 57 |     await expect(page.locator('#lnkup-marketplace')).toHaveAttribute('data-phase', '1a');
+         |                                                      ^
+      58 |     await expect(page.locator('#lnkup-map-toggle')).toHaveCount(0);
+      59 |     await expect(page.locator('#lnkup-compare-tray')).toHaveCount(0);
+      60 |     await expect(page.locator('#lnkup-explore-more')).toHaveCount(0);
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\marketplace-v2.spec.ts:57:54
+
+    Error Context: test-results\marketplace-v2-Marketplace-e2b71-tray-and-intelligence-rails-chromium\error-context.md
+
+
+
+(node:35472) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[90/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:64:7 › Marketplace V2 › saved search restore applies filters from query string
+  40) [chromium] › tests\e2e\marketplace-v2.spec.ts:33:7 › Marketplace V2 › quick chip filters by event type 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for locator('.lnkup-quick-chip').filter({ hasText: /conference/i })
+        - locator resolved to <button type="button" data-quick-filter="{"event_types":"Conferences"}" class="lnkup-badge lnkup-badge--secondary lnkup-quick-chip">Conferences</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not visible
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not visible
+        - retrying click action
+          - waiting 100ms
+        52 × waiting for element to be visible, enabled and stable
+           - element is not visible
+         - retrying click action
+           - waiting 500ms
+
+
+      33 |   test('quick chip filters by event type', async ({ page }) => {
+      34 |     await page.goto('/opportunities/');
+    > 35 |     await page.locator('.lnkup-quick-chip', { hasText: /conference/i }).click();
+         |                                                                         ^
+      36 |     await expect(page.locator('#lnkup-result-count')).toContainText(/opportunit/i, { timeout: 10000 });
+      37 |     await expect(page.locator('#lnkup-active-filters')).toBeVisible();
+      38 |   });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\marketplace-v2.spec.ts:35:73
+
+    Error Context: test-results\marketplace-v2-Marketplace-f8fcc--chip-filters-by-event-type-chromium\error-context.md
+
+
+
+
+(node:78040) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[91/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:72:7 › Marketplace V2 › search button is visible and submits on Enter
+[92/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:82:7 › Marketplace V2 › apply opens modal dialog instead of inline panel
+[93/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:95:7 › Marketplace V2 › page loads without JavaScript parse errors
+[94/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:105:7 › Marketplace V2 › explore more card sits below results with tabbed layout on phase 1b
+[95/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:133:7 › Marketplace V2 › explore more shows collection chips when collections tab is present
+[96/182] [chromium] › tests\e2e\marketplace-v2.spec.ts:154:7 › Marketplace V2 › active search hides explore more rails
+[97/182] [chromium] › tests\e2e\outreach-invite.spec.ts:4:7 › Outreach invite sign-up › sign-up page renders normally without outreach token
+[98/182] [chromium] › tests\e2e\outreach-invite.spec.ts:12:7 › Outreach invite sign-up › invalid outreach token shows normal editable sign-up form
+[99/182] [chromium] › tests\e2e\outreach-invite.spec.ts:19:7 › Outreach invite sign-up › role query param pre-selects vendor on sign-up
+[100/182] [chromium] › tests\e2e\outreach-invite.spec.ts:25:7 › Outreach invite sign-up › role query param pre-selects organizer on sign-up
+  41) [chromium] › tests\e2e\outreach-invite.spec.ts:12:7 › Outreach invite sign-up › invalid outreach token shows normal editable sign-up form 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  getByTestId('lnkup-outreach-token')
+    Expected: 0
+    Received: 1
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveCount" with timeout 5000ms
+      - waiting for getByTestId('lnkup-outreach-token')
+        14 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      14 |     await expect(page.getByTestId('lnkup-signup-form')).toBeVisible();
+      15 |     await expect(page.getByLabel('Email')).toBeEditable();
+    > 16 |     await expect(page.getByTestId('lnkup-outreach-token')).toHaveCount(0);
+         |                                                            ^
+      17 |   });
+      18 |
+      19 |   test('role query param pre-selects vendor on sign-up', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\outreach-invite.spec.ts:16:60
+
+    Error Context: test-results\outreach-invite-Outreach-i-d9a22-ormal-editable-sign-up-form-chromium\error-context.md
+
+
+[101/182] [chromium] › tests\e2e\profile-images.spec.ts:42:7 › Organizer profile images › Profile page shows the form below the sticky top bar
+
+
+(node:79788) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[102/182] [chromium] › tests\e2e\outreach-invite.spec.ts:30:7 › Outreach invite sign-up › ref query param is preserved alongside outreach token on sign-up
+[103/182] [chromium] › tests\e2e\profile-images.spec.ts:55:7 › Organizer profile images › old profile=edit links land on the Profile page
+[104/182] [chromium] › tests\e2e\profile-images.spec.ts:60:7 › Organizer profile images › uploading a logo previews it and survives save and reload
+[105/182] [chromium] › tests\e2e\profile-images.spec.ts:75:7 › Organizer profile images › a non-image file shows an inline error and changes nothing
+[106/182] [chromium] › tests\e2e\profile-images.spec.ts:93:7 › Vendor profile images › vendor logo upload previews without the media library
+[107/182] [chromium] › tests\e2e\saved-searches.spec.ts:17:7 › Saved searches › logged-out user sees signup CTA when trying to save search
+[108/182] [chromium] › tests\e2e\saved-searches.spec.ts:31:7 › Saved searches › mobile save search modal does not overflow
+[109/182] [chromium] › tests\e2e\saved-searches.spec.ts:56:9 › Saved searches › vendor flows › vendor can save current Find Events filters
+[110/182] [chromium] › tests\e2e\saved-searches.spec.ts:72:9 › Saved searches › vendor flows › empty filter search shows warning
+  42) [chromium] › tests\e2e\saved-searches.spec.ts:72:9 › Saved searches › vendor flows › empty filter search shows warning 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  locator('#lnkup-save-search-empty-warning')
+    Expected: visible
+    Received: hidden
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('#lnkup-save-search-empty-warning')
+        13 × locator resolved to <p hidden="" id="lnkup-save-search-empty-warning" class="lnkup-save-search-modal__warning">This search will match a lot of opportunities. Ad…</p>
+           - unexpected value "hidden"
+
+
+      78 |       }
+      79 |       await page.getByRole('button', { name: /save this search/i }).click();
+    > 80 |       await expect(page.locator('#lnkup-save-search-empty-warning')).toBeVisible();
+         |                                                                      ^
+      81 |     });
+      82 |
+      83 |     test('saved search appears in favorites dashboard section', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\saved-searches.spec.ts:80:70
+
+    Error Context: test-results\saved-searches-Saved-searc-e6664-filter-search-shows-warning-chromium\error-context.md
+
+
+
+(node:77780) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[111/182] [chromium] › tests\e2e\saved-searches.spec.ts:83:9 › Saved searches › vendor flows › saved search appears in favorites dashboard section
+  43) [chromium] › tests\e2e\saved-searches.spec.ts:56:9 › Saved searches › vendor flows › vendor can save current Find Events filters 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  locator('#lnkup-save-search-success')
+    Expected: visible
+    Received: hidden
+    Timeout:  10000ms
+
+    Call log:
+      - Expect "toBeVisible" with timeout 10000ms
+      - waiting for locator('#lnkup-save-search-success')
+        23 × locator resolved to <p hidden="" role="status" id="lnkup-save-search-success" class="lnkup-save-search-modal__success">Saved. New matching opportunities will appear in …</p>
+           - unexpected value "hidden"
+
+
+      67 |       await page.locator('#lnkup-save-search-name').fill('Charlotte test search');
+      68 |       await page.locator('#lnkup-save-search-submit').click();
+    > 69 |       await expect(page.locator('#lnkup-save-search-success')).toBeVisible({ timeout: 10000 });
+         |                                                                ^
+      70 |     });
+      71 |
+      72 |     test('empty filter search shows warning', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\saved-searches.spec.ts:69:64
+
+    Error Context: test-results\saved-searches-Saved-searc-92692-current-Find-Events-filters-chromium\error-context.md
+
+
+
+(node:3460) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[112/182] [chromium] › tests\e2e\saved-searches.spec.ts:99:9 › Saved searches › vendor flows › vendor can pause and delete saved search via REST
+  44) [chromium] › tests\e2e\saved-searches.spec.ts:83:9 › Saved searches › vendor flows › saved search appears in favorites dashboard section 
+
+    Error: expect(received).toBeTruthy()
+
+    Received: false
+
+      94 |       const hasCard = await card.count();
+      95 |       const hasEmpty = await empty.isVisible().catch(() => false);
+    > 96 |       expect(hasCard > 0 || hasEmpty).toBeTruthy();
+         |                                       ^
+      97 |     });
+      98 |
+      99 |     test('vendor can pause and delete saved search via REST', async ({ page, request }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\saved-searches.spec.ts:96:39
+
+    Error Context: test-results\saved-searches-Saved-searc-d284e-favorites-dashboard-section-chromium\error-context.md
+
+
+[113/182] [chromium] › tests\e2e\saved-searches.spec.ts:148:7 › Saved searches › vendor cannot access another vendor saved search
+[114/182] [chromium] › tests\e2e\saved-searches.spec.ts:179:7 › Saved searches › existing marketplace search still works
+
+(node:75780) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[115/182] [chromium] › tests\e2e\saved-searches.spec.ts:124:9 › Saved searches › vendor flows › vendor can run saved search
+[116/182] [chromium] › tests\e2e\seo-rankmath.spec.ts:12:7 › Rank Math SEO › homepage has description and is indexable when SEO plugin active
+[117/182] [chromium] › tests\e2e\seo-rankmath.spec.ts:25:7 › Rank Math SEO › homepage og:image uses block-party illustration
+[118/182] [chromium] › tests\e2e\seo-rankmath.spec.ts:34:7 › Rank Math SEO › opportunities page is noindex pre-launch
+[119/182] [chromium] › tests\e2e\seo-rankmath.spec.ts:48:7 › Rank Math SEO › vendor dashboard is noindex
+  45) [chromium] › tests\e2e\seo-rankmath.spec.ts:25:7 › Rank Math SEO › homepage og:image uses block-party illustration 
+
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator: locator('meta[property="og:image"]')
+    Expected pattern: /block-party|events\//i
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveAttribute" with timeout 5000ms
+      - waiting for locator('meta[property="og:image"]')
+
+
+      29 |     }
+      30 |     const ogImage = page.locator('meta[property="og:image"]');
+    > 31 |     await expect(ogImage).toHaveAttribute('content', /block-party|events\//i);
+         |                           ^
+      32 |   });
+      33 |
+      34 |   test('opportunities page is noindex pre-launch', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\seo-rankmath.spec.ts:31:27
+
+    Error Context: test-results\seo-rankmath-Rank-Math-SEO-0fc9f-es-block-party-illustration-chromium\error-context.md
+
+
+[120/182] [chromium] › tests\e2e\stripe-connect.spec.ts:63:11 › Stripe Connect marketplace › webhook signature verification › with known signing secret › unsigned payload is rejected
+[121/182] [chromium] › tests\e2e\stripe-connect.spec.ts:71:11 › Stripe Connect marketplace › webhook signature verification › with known signing secret › stale timestamp is rejected as a replay
+[122/182] [chromium] › tests\e2e\stripe-connect.spec.ts:84:11 › Stripe Connect marketplace › webhook signature verification › with known signing secret › correctly signed payload is accepted
+[123/182] [chromium] › tests\e2e\stripe-connect.spec.ts:105:9 › Stripe Connect marketplace › organizer Connect REST › connect status returns JSON with settlement_mode
+
+
+(node:2920) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[124/182] [chromium] › tests\e2e\stripe-connect.spec.ts:45:9 › Stripe Connect marketplace › webhook signature verification › forged signature is rejected with JSON, never 500
+[125/182] [chromium] › tests\e2e\stripe-connect.spec.ts:116:9 › Stripe Connect marketplace › organizer Connect REST › connect status explains itself when Connect is unavailable
+[126/182] [chromium] › tests\e2e\stripe-connect.spec.ts:128:9 › Stripe Connect marketplace › organizer Connect REST › onboarding link returns structured JSON when Connect unavailable
+  46) [chromium] › tests\e2e\stripe-connect.spec.ts:105:9 › Stripe Connect marketplace › organizer Connect REST › connect status returns JSON with settlement_mode 
+
+    Error: expect(page).not.toHaveURL(expected) failed
+
+    Expected pattern: not /wp-login/
+    Received string: "http://localhost:8888/wp-login.php?redirect_to=http%3A%2F%2Flocalhost%3A8888%2Fwp-admin%2Fprofile.php&reauth=1"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "not toHaveURL" with timeout 5000ms
+        14 × unexpected value "http://localhost:8888/wp-login.php?redirect_to=http%3A%2F%2Flocalhost%3A8888%2Fwp-admin%2Fprofile.php&reauth=1"
+
+
+      19 |   await page.getByLabel(/^password$/i).fill(password);
+      20 |   await page.getByRole('button', { name: /log in/i }).click();
+    > 21 |   await expect(page).not.toHaveURL(/wp-login/);
+         |                          ^
+      22 | }
+      23 |
+      24 | /**
+        at loginUser (C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\stripe-connect.spec.ts:21:26)
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\stripe-connect.spec.ts:102:7
+
+    Error Context: test-results\stripe-connect-Stripe-Conn-a44ef-s-JSON-with-settlement-mode-chromium\error-context.md
+
+
+
+(node:69152) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[127/182] [chromium] › tests\e2e\stripe-connect.spec.ts:142:9 › Stripe Connect marketplace › organizer Connect REST › organizer financial shell shows Connect banner area
+[128/182] [chromium] › tests\e2e\stripe-connect.spec.ts:148:9 › Stripe Connect marketplace › organizer Connect REST › onboarding failure shows an inline message and re-enables the button
+[129/182] [chromium] › tests\e2e\stripe-connect.spec.ts:187:9 › Stripe Connect marketplace › organizer Connect REST › connect refresh endpoint returns JSON
+[130/182] [chromium] › tests\e2e\stripe-connect.spec.ts:204:9 › Stripe Connect marketplace › vendor isolation from Connect › vendor financial shell has no Connect onboarding CTA
+  47) [chromium] › tests\e2e\stripe-connect.spec.ts:187:9 › Stripe Connect marketplace › organizer Connect REST › connect refresh endpoint returns JSON 
+
+    Error: expect(received).toBeLessThan(expected)
+
+    Expected: < 500
+    Received:   500
+
+      190 |         data: {},
+      191 |       });
+    > 192 |       expect(response.status()).toBeLessThan(500);
+          |                                 ^
+      193 |       const contentType = response.headers()['content-type'] || '';
+      194 |       expect(contentType).toMatch(/json/);
+      195 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\stripe-connect.spec.ts:192:33
+
+    Error Context: test-results\stripe-connect-Stripe-Conn-75148-fresh-endpoint-returns-JSON-chromium\error-context.md
+
+
+
+
+(node:33292) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[131/182] [chromium] › tests\e2e\stripe-connect.spec.ts:211:9 › Stripe Connect marketplace › vendor isolation from Connect › vendor cannot access organizer connect onboarding route
+  48) [chromium] › tests\e2e\stripe-connect.spec.ts:204:9 › Stripe Connect marketplace › vendor isolation from Connect › vendor financial shell has no Connect onboarding CTA 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('#lnkup-vendor-financial')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('#lnkup-vendor-financial')
+
+
+      204 |     test('vendor financial shell has no Connect onboarding CTA', async ({ page }) => {
+      205 |       await page.goto('/vendor-dashboard/#financial');
+    > 206 |       await expect(page.locator('#lnkup-vendor-financial')).toBeVisible();
+          |                                                             ^
+      207 |       await expect(page.getByRole('button', { name: /connect stripe/i })).toHaveCount(0);
+      208 |       await expect(page.locator('#lnkup-fin-connect-banner')).toHaveCount(0);
+      209 |     });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\stripe-connect.spec.ts:206:61
+
+    Error Context: test-results\stripe-connect-Stripe-Conn-39d5a-s-no-Connect-onboarding-CTA-chromium\error-context.md
+
+
+
+(node:78716) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[132/182] [chromium] › tests\e2e\vendor-event-pass.spec.ts:31:9 › Vendor Event Pass › authenticated vendor › locked pass hides sensitive fields for payment-required application
+[133/182] [chromium] › tests\e2e\vendor-event-pass.spec.ts:60:9 › Vendor Event Pass › authenticated vendor › unlocked pass shows hero when confirmed booking exists
+[134/182] [chromium] › tests\e2e\vendor-event-pass.spec.ts:76:9 › Vendor Event Pass › authenticated vendor › mobile pass layout has no horizontal overflow
+[135/182] [chromium] › tests\e2e\vendor-event-pass.spec.ts:98:9 › Vendor Event Pass › authenticated organizer › vendor pass builder tab loads in command center
+[136/182] [chromium] › tests\e2e\vendor-event-pass.spec.ts:113:9 › Vendor Event Pass › authenticated organizer › organizer can save arrival pass details
+[137/182] [chromium] › tests\e2e\vendor-financial.spec.ts:18:7 › Vendor financial dashboard › payments view requires login when unauthenticated
+  49) [chromium] › tests\e2e\vendor-event-pass.spec.ts:60:9 › Vendor Event Pass › authenticated vendor › unlocked pass shows hero when confirmed booking exists 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('tab', { name: /event pass/i })
+
+
+      65 |         return;
+      66 |       }
+    > 67 |       await page.getByRole('tab', { name: /event pass/i }).click();
+         |                                                            ^
+      68 |       const locked = page.getByTestId('lnkup-pass-locked');
+      69 |       if (await locked.isVisible().catch(() => false)) {
+      70 |         test.skip(true, 'Only locked pass in environment — need paid booking for unlocked hero');
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-event-pass.spec.ts:67:60
+
+    Error Context: test-results\vendor-event-pass-Vendor-E-82cea-en-confirmed-booking-exists-chromium\error-context.md
+
+
+
+(node:73100) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[138/182] [chromium] › tests\e2e\vendor-financial.spec.ts:29:9 › Vendor financial dashboard › authenticated vendor › payments hub renders tabs and balance hero without connect onboarding on load
+  50) [chromium] › tests\e2e\vendor-financial.spec.ts:18:7 › Vendor financial dashboard › payments view requires login when unauthenticated 
+
+    Error: expect(page).toHaveURL(expected) failed
+
+    Expected pattern: /wp-login|login/
+    Received string:  "http://localhost:8888/log-in/?redirect=http%3A%2F%2Flocalhost%3A8888%2Fvendor-dashboard%2F%3Fview%3Dpayments"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toHaveURL" with timeout 5000ms
+        14 × unexpected value "http://localhost:8888/log-in/?redirect=http%3A%2F%2Flocalhost%3A8888%2Fvendor-dashboard%2F%3Fview%3Dpayments"
+
+
+      18 |   test('payments view requires login when unauthenticated', async ({ page }) => {
+      19 |     await page.goto('/vendor-dashboard/?view=payments');
+    > 20 |     await expect(page).toHaveURL(/wp-login|login/);
+         |                        ^
+      21 |   });
+      22 |
+      23 |   test.describe('authenticated vendor', () => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-financial.spec.ts:20:24
+
+    Error Context: test-results\vendor-financial-Vendor-fi-5594f--login-when-unauthenticated-chromium\error-context.md
+
+
+
+(node:70280) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[139/182] [chromium] › tests\e2e\vendor-financial.spec.ts:48:9 › Vendor financial dashboard › authenticated vendor › refunds tab shows request form
+  51) [chromium] › tests\e2e\vendor-financial.spec.ts:29:9 › Vendor financial dashboard › authenticated vendor › payments hub renders tabs and balance hero without connect onboarding on load 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: /^payments$/i })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('heading', { name: /^payments$/i })
+
+
+      36 |
+      37 |       await page.goto('/vendor-dashboard/?view=payments');
+    > 38 |       await expect(page.getByRole('heading', { name: /^payments$/i })).toBeVisible();
+         |                                                                        ^
+      39 |       await expect(page.locator('#lnkup-vendor-financial')).toBeVisible();
+      40 |       await expect(page.locator('#lnkup-fin-balance-hero')).toBeVisible();
+      41 |       await expect(page.getByRole('button', { name: /^overview$/i })).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-financial.spec.ts:38:72
+
+    Error Context: test-results\vendor-financial-Vendor-fi-c4fe1--connect-onboarding-on-load-chromium\error-context.md
+
+
+
+(node:32716) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[140/182] [chromium] › tests\e2e\vendor-growth.spec.ts:18:7 › Vendor growth dashboard › growth view requires login when unauthenticated
+  52) [chromium] › tests\e2e\vendor-growth.spec.ts:18:7 › Vendor growth dashboard › growth view requires login when unauthenticated 
+
+    Error: expect(page).toHaveURL(expected) failed
+
+    Expected pattern: /wp-login|login/
+    Received string:  "http://localhost:8888/log-in/?redirect=http%3A%2F%2Flocalhost%3A8888%2Fvendor-dashboard%2F%3Fview%3Dgrowth"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toHaveURL" with timeout 5000ms
+        14 × unexpected value "http://localhost:8888/log-in/?redirect=http%3A%2F%2Flocalhost%3A8888%2Fvendor-dashboard%2F%3Fview%3Dgrowth"
+
+
+      18 |   test('growth view requires login when unauthenticated', async ({ page }) => {
+      19 |     await page.goto('/vendor-dashboard/?view=growth');
+    > 20 |     await expect(page).toHaveURL(/wp-login|login/);
+         |                        ^
+      21 |   });
+      22 |
+      23 |   test.describe('authenticated vendor', () => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-growth.spec.ts:20:24
+
+    Error Context: test-results\vendor-growth-Vendor-growt-456ca--login-when-unauthenticated-chromium\error-context.md
+
+
+
+(node:46784) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[141/182] [chromium] › tests\e2e\vendor-growth.spec.ts:29:9 › Vendor growth dashboard › authenticated vendor › growth dashboard renders shell and KPI strip
+[142/182] [chromium] › tests\e2e\vendor-growth.spec.ts:39:9 › Vendor growth dashboard › authenticated vendor › revenue tab loads on click
+  53) [chromium] › tests\e2e\vendor-financial.spec.ts:48:9 › Vendor financial dashboard › authenticated vendor › refunds tab shows request form 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: /^refunds$/i })
+
+
+      48 |     test('refunds tab shows request form', async ({ page }) => {
+      49 |       await page.goto('/vendor-dashboard/?view=payments');
+    > 50 |       await page.getByRole('button', { name: /^refunds$/i }).click();
+         |                                                              ^
+      51 |       await expect(page.locator('#lnkup-refund-form')).toBeVisible();
+      52 |     });
+      53 |   });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-financial.spec.ts:50:62
+
+    Error Context: test-results\vendor-financial-Vendor-fi-bb3f0-unds-tab-shows-request-form-chromium\error-context.md
+
+
+
+
+(node:48332) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[143/182] [chromium] › tests\e2e\vendor-growth.spec.ts:46:9 › Vendor growth dashboard › authenticated vendor › sidebar includes Growth nav link
+[144/182] [chromium] › tests\e2e\vendor-import.spec.ts:23:9 › Organizer vendor CSV import › authenticated organizer › import button opens wizard on vendors panel
+  54) [chromium] › tests\e2e\vendor-growth.spec.ts:46:9 › Vendor growth dashboard › authenticated vendor › sidebar includes Growth nav link 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('link', { name: /^growth$/i })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('link', { name: /^growth$/i })
+
+
+      46 |     test('sidebar includes Growth nav link', async ({ page }) => {
+      47 |       await page.goto('/vendor-dashboard/');
+    > 48 |       await expect(page.getByRole('link', { name: /^growth$/i })).toBeVisible();
+         |                                                                   ^
+      49 |     });
+      50 |   });
+      51 | });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-growth.spec.ts:48:67
+
+    Error Context: test-results\vendor-growth-Vendor-growt-d2ea7-ar-includes-Growth-nav-link-chromium\error-context.md
+
+
+
+(node:50548) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[145/182] [chromium] › tests\e2e\vendor-import.spec.ts:30:9 › Organizer vendor CSV import › authenticated organizer › upload CSV advances through map and review steps
+  55) [chromium] › tests\e2e\vendor-import.spec.ts:23:9 › Organizer vendor CSV import › authenticated organizer › import button opens wizard on vendors panel 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-import-step-upload')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-import-step-upload')
+
+
+      25 |       await page.getByTestId('lnkup-import-vendors-btn').click();
+      26 |       await expect(page.getByTestId('lnkup-vendor-import-wizard')).toBeVisible();
+    > 27 |       await expect(page.getByTestId('lnkup-import-step-upload')).toBeVisible();
+         |                                                                  ^
+      28 |     });
+      29 |
+      30 |     test('upload CSV advances through map and review steps', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-import.spec.ts:27:66
+
+    Error Context: test-results\vendor-import-Organizer-ve-ddc22-ens-wizard-on-vendors-panel-chromium\error-context.md
+
+
+
+(node:72388) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[146/182] [chromium] › tests\e2e\vendor-import.spec.ts:47:9 › Organizer vendor CSV import › authenticated organizer › import without invites completes and shows results
+  56) [chromium] › tests\e2e\vendor-import.spec.ts:30:9 › Organizer vendor CSV import › authenticated organizer › upload CSV advances through map and review steps 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-import-step-map')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-import-step-map')
+
+
+      37 |
+      38 |       await page.getByRole('button', { name: /continue/i }).click();
+    > 39 |       await expect(page.getByTestId('lnkup-import-step-map')).toBeVisible();
+         |                                                               ^
+      40 |       await expect(page.locator('#lnkup-import-mapping select[data-map-field="email"]')).toBeVisible();
+      41 |
+      42 |       await page.getByRole('button', { name: /continue/i }).click();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-import.spec.ts:39:63
+
+    Error Context: test-results\vendor-import-Organizer-ve-52ec4-hrough-map-and-review-steps-chromium\error-context.md
+
+
+
+
+(node:58144) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[147/182] [chromium] › tests\e2e\vendor-import.spec.ts:63:9 › Organizer vendor CSV import › authenticated organizer › imported scope tab loads in vendor directory
+[148/182] [chromium] › tests\e2e\vendor-operations.spec.ts:31:7 › Vendor Operations › operations command center requires login
+  57) [chromium] › tests\e2e\vendor-operations.spec.ts:31:7 › Vendor Operations › operations command center requires login 
+
+    Error: expect(page).toHaveURL(expected) failed
+
+    Expected pattern: /wp-login|login/
+    Received string:  "http://localhost:8888/log-in/?redirect=http%3A%2F%2Flocalhost%3A8888%2Forganizer-dashboard%2F%3Fevent%3D1%26ops%3D1"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toHaveURL" with timeout 5000ms
+        14 × unexpected value "http://localhost:8888/log-in/?redirect=http%3A%2F%2Flocalhost%3A8888%2Forganizer-dashboard%2F%3Fevent%3D1%26ops%3D1"
+
+
+      31 |   test('operations command center requires login', async ({ page }) => {
+      32 |     await page.goto('/organizer-dashboard/?event=1&ops=1');
+    > 33 |     await expect(page).toHaveURL(/wp-login|login/);
+         |                        ^
+      34 |   });
+      35 |
+      36 |   test.describe('authenticated organizer', () => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-operations.spec.ts:33:24
+
+    Error Context: test-results\vendor-operations-Vendor-O-c1dbd-mmand-center-requires-login-chromium\error-context.md
+
+
+
+
+(node:62992) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[149/182] [chromium] › tests\e2e\vendor-operations.spec.ts:42:9 › Vendor Operations › authenticated organizer › events table shows Operations button
+  58) [chromium] › tests\e2e\vendor-import.spec.ts:47:9 › Organizer vendor CSV import › authenticated organizer › import without invites completes and shows results 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-import-step-review')
+    Expected: visible
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 15000ms
+      - waiting for getByTestId('lnkup-import-step-review')
+
+
+      53 |       await page.getByRole('button', { name: /continue/i }).click();
+      54 |       await page.getByRole('button', { name: /continue/i }).click();
+    > 55 |       await expect(page.getByTestId('lnkup-import-step-review')).toBeVisible({ timeout: 15000 });
+         |                                                                  ^
+      56 |
+      57 |       await expect(page.locator('#lnkup-import-send-invites')).not.toBeChecked();
+      58 |       await page.getByRole('button', { name: /run import/i }).click();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-import.spec.ts:55:66
+
+    Error Context: test-results\vendor-import-Organizer-ve-5b910-completes-and-shows-results-chromium\error-context.md
+
+
+
+(node:45140) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[150/182] [chromium] › tests\e2e\vendor-operations.spec.ts:50:9 › Vendor Operations › authenticated organizer › command center shell loads when event exists
+[151/182] [chromium] › tests\e2e\vendor-operations.spec.ts:64:9 › Vendor Operations › authenticated organizer › command center kanban tab switches panels
+[152/182] [chromium] › tests\e2e\vendor-operations.spec.ts:78:9 › Vendor Operations › authenticated organizer › CRM widgets include operations metrics
+[153/182] [chromium] › tests\e2e\vendor-operations.spec.ts:87:9 › Vendor Operations › authenticated organizer › command center mobile sticky bar visible at narrow viewport
+[154/182] [chromium] › tests\e2e\vendor-operations.spec.ts:106:9 › Vendor Operations › authenticated vendor › vendor operations view loads from sidebar
+  59) [chromium] › tests\e2e\vendor-operations.spec.ts:78:9 › Vendor Operations › authenticated organizer › CRM widgets include operations metrics 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('#lnkup-crm-widgets-grid')
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 15000ms
+      - waiting for locator('#lnkup-crm-widgets-grid')
+
+
+      78 |     test('CRM widgets include operations metrics', async ({ page }) => {
+      79 |       await page.goto('/organizer-dashboard/');
+    > 80 |       await expect(page.locator('#lnkup-crm-widgets-grid')).toBeVisible({ timeout: 15000 });
+         |                                                             ^
+      81 |       const opsWidget = page.locator('.lnkup-crm-widget--ops').first();
+      82 |       if (await opsWidget.count()) {
+      83 |         await expect(opsWidget).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-operations.spec.ts:80:61
+
+    Error Context: test-results\vendor-operations-Vendor-O-b951f--include-operations-metrics-chromium\error-context.md
+
+
+
+(node:70464) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[155/182] [chromium] › tests\e2e\vendor-operations.spec.ts:112:9 › Vendor Operations › authenticated vendor › vendor operations shows five tabs and full overview when bookings exist
+[156/182] [chromium] › tests\e2e\vendor-operations.spec.ts:133:7 › Vendor Operations regression › marketplace and CRM pages still load
+  60) [chromium] › tests\e2e\vendor-operations.spec.ts:112:9 › Vendor Operations › authenticated vendor › vendor operations shows five tabs and full overview when bookings exist 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('tab', { name: /^overview$/i })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByRole('tab', { name: /^overview$/i })
+
+
+      117 |         return;
+      118 |       }
+    > 119 |       await expect(page.getByRole('tab', { name: /^overview$/i })).toBeVisible();
+          |                                                                    ^
+      120 |       await expect(page.getByRole('tab', { name: /event pass/i })).toBeVisible();
+      121 |       await expect(page.getByRole('tab', { name: /^readiness$/i })).toBeVisible();
+      122 |       await expect(page.getByRole('tab', { name: /venue map/i })).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-operations.spec.ts:119:68
+
+    Error Context: test-results\vendor-operations-Vendor-O-4e77c-verview-when-bookings-exist-chromium\error-context.md
+
+
+
+
+(node:60932) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[157/182] [chromium] › tests\e2e\vendor-profile-strength.spec.ts:31:9 › Vendor profile strength › authenticated vendor › dashboard shows profile strength card or empty state
+[158/182] [chromium] › tests\e2e\vendor-profile-strength.spec.ts:40:9 › Vendor profile strength › authenticated vendor › profile editor shows sectioned resume layout
+[159/182] [chromium] › tests\e2e\vendor-profile-strength.spec.ts:47:9 › Vendor profile strength › authenticated vendor › business basics save updates profile strength preview
+  61) [chromium] › tests\e2e\vendor-profile-strength.spec.ts:31:9 › Vendor profile strength › authenticated vendor › dashboard shows profile strength card or empty state 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-vendor-strength-card')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-vendor-strength-card')
+
+
+      32 |       await page.goto('/vendor-dashboard/');
+      33 |       const card = page.getByTestId('lnkup-vendor-strength-card');
+    > 34 |       await expect(card).toBeVisible();
+         |                          ^
+      35 |       await expect(
+      36 |         card.getByText(/build your vendor profile|your vendor profile|booking ready/i)
+      37 |       ).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-profile-strength.spec.ts:34:26
+
+    Error Context: test-results\vendor-profile-strength-Ve-aa030-trength-card-or-empty-state-chromium\error-context.md
+
+
+
+(node:75452) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[160/182] [chromium] › tests\e2e\vendor-profile-strength.spec.ts:59:9 › Vendor profile strength › authenticated vendor › documents section shows status labels
+  62) [chromium] › tests\e2e\vendor-profile-strength.spec.ts:47:9 › Vendor profile strength › authenticated vendor › business basics save updates profile strength preview 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('#lnkup-preview-strength')
+    Expected pattern: /%/
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toContainText" with timeout 5000ms
+      - waiting for locator('#lnkup-preview-strength')
+
+
+      54 |       await section.getByRole('button', { name: /save section/i }).click();
+      55 |       await expect(section.getByText(/section saved/i)).toBeVisible({ timeout: 15000 });
+    > 56 |       await expect(page.locator('#lnkup-preview-strength')).toContainText(/%/);
+         |                                                             ^
+      57 |     });
+      58 |
+      59 |     test('documents section shows status labels', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-profile-strength.spec.ts:56:61
+
+    Error Context: test-results\vendor-profile-strength-Ve-257d9-es-profile-strength-preview-chromium\error-context.md
+
+
+
+
+(node:68240) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[161/182] [chromium] › tests\e2e\vendor-profile-strength.spec.ts:65:9 › Vendor profile strength › authenticated vendor › mobile profile editor does not overflow horizontally
+[162/182] [chromium] › tests\e2e\vendor-profile-strength.spec.ts:81:9 › Vendor profile strength › organizer application scan › application cards may show profile strength badge
+[163/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:31:7 › Vendor Reputation › public vendor profile page handles missing slug gracefully
+[164/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:52:9 › Vendor Reputation › authenticated vendor › vendor dashboard shows reputation panel
+  63) [chromium] › tests\e2e\vendor-reputation.spec.ts:52:9 › Vendor Reputation › authenticated vendor › vendor dashboard shows reputation panel 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.lnkup-rep-score, .lnkup-rep-score--new').first()
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('.lnkup-rep-score, .lnkup-rep-score--new').first()
+
+
+      53 |       await page.goto('/vendor-dashboard/?view=reviews');
+      54 |       await expect(page.locator('#reviews')).toBeVisible();
+    > 55 |       await expect(page.locator('.lnkup-rep-score, .lnkup-rep-score--new').first()).toBeVisible();
+         |                                                                                     ^
+      56 |     });
+      57 |
+      58 |     test('reputation panel shows reliability meter or tips', async ({ page }) => {
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-reputation.spec.ts:55:85
+
+    Error Context: test-results\vendor-reputation-Vendor-R-05119-oard-shows-reputation-panel-chromium\error-context.md
+
+
+
+(node:75516) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[165/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:58:9 › Vendor Reputation › authenticated vendor › reputation panel shows reliability meter or tips
+  64) [chromium] › tests\e2e\vendor-reputation.spec.ts:31:7 › Vendor Reputation › public vendor profile page handles missing slug gracefully 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText(/vendor not found/i).or(locator('#lnkup-public-vendor-profile'))
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 15000ms
+      - waiting for getByText(/vendor not found/i).or(locator('#lnkup-public-vendor-profile'))
+
+
+      37 |     await expect(
+      38 |       page.getByText(/vendor not found/i).or(page.locator('#lnkup-public-vendor-profile'))
+    > 39 |     ).toBeVisible({ timeout: 15000 });
+         |       ^
+      40 |     if (await page.locator('#lnkup-public-vendor-profile').count()) {
+      41 |       return;
+      42 |     }
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-reputation.spec.ts:39:7
+
+    Error Context: test-results\vendor-reputation-Vendor-R-dc2c2-les-missing-slug-gracefully-chromium\error-context.md
+
+
+
+
+(node:70060) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[166/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:72:9 › Vendor Reputation › authenticated organizer reputation intel › vendor directory has reputation sort control
+[167/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:78:9 › Vendor Reputation › authenticated organizer reputation intel › application cards show score intel when applications exist
+[168/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:93:7 › Vendor Reputation regression › opportunities marketplace still loads
+[169/182] [chromium] › tests\e2e\vendor-reputation.spec.ts:99:7 › Vendor Reputation regression › vendor dashboard route responds
+[170/182] [chromium] › tests\e2e\verification-trust.spec.ts:31:9 › Trust and verification › vendor dashboard › home shows trust status card
+  65) [chromium] › tests\e2e\vendor-reputation.spec.ts:78:9 › Vendor Reputation › authenticated organizer reputation intel › application cards show score intel when applications exist 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.lnkup-crm-app-card').first().locator('.lnkup-crm-app-card__intel')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for locator('.lnkup-crm-app-card').first().locator('.lnkup-crm-app-card__intel')
+
+
+      84 |         return;
+      85 |       }
+    > 86 |       await expect(cards.first().locator('.lnkup-crm-app-card__intel')).toBeVisible();
+         |                                                                         ^
+      87 |       await expect(cards.first().locator('.lnkup-crm-app-card__intel')).toContainText(/score/i);
+      88 |     });
+      89 |   });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\vendor-reputation.spec.ts:86:73
+
+    Error Context: test-results\vendor-reputation-Vendor-R-aef73-tel-when-applications-exist-chromium\error-context.md
+
+
+(node:34472) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[171/182] [chromium] › tests\e2e\verification-trust.spec.ts:41:9 › Trust and verification › vendor dashboard › verification REST returns vendor status JSON
+  66) [chromium] › tests\e2e\verification-trust.spec.ts:31:9 › Trust and verification › vendor dashboard › home shows trust status card 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-vendor-trust-card').getByText(/your trust status/i)
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-vendor-trust-card').getByText(/your trust status/i)
+
+
+      33 |       const card = page.getByTestId('lnkup-vendor-trust-card');
+      34 |       await expect(card).toBeVisible();
+    > 35 |       await expect(card.getByText(/your trust status/i)).toBeVisible();
+         |                                                          ^
+      36 |       await expect(card.getByText(/basic vendor|profile complete|documents ready|verified|trust status/i)).toBeVisible({
+      37 |         timeout: 15000,
+      38 |       });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\verification-trust.spec.ts:35:58
+
+    Error Context: test-results\verification-trust-Trust-a-c7b4a-ome-shows-trust-status-card-chromium\error-context.md
+
+
+
+
+(node:12080) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[172/182] [chromium] › tests\e2e\verification-trust.spec.ts:53:9 › Trust and verification › vendor dashboard › mobile trust card does not overflow
+[173/182] [chromium] › tests\e2e\verification-trust.spec.ts:69:9 › Trust and verification › organizer dashboard › overview shows organizer trust strip
+[174/182] [chromium] › tests\e2e\verification-trust.spec.ts:78:9 › Trust and verification › organizer dashboard › organizer verification REST returns payout fields
+[175/182] [chromium] › tests\e2e\verification-trust.spec.ts:89:9 › Trust and verification › organizer dashboard › create event form exposes document mode options
+  67) [chromium] › tests\e2e\verification-trust.spec.ts:69:9 › Trust and verification › organizer dashboard › overview shows organizer trust strip 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-organizer-trust-strip')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 5000ms
+      - waiting for getByTestId('lnkup-organizer-trust-strip')
+
+
+      70 |       await page.goto('/organizer-dashboard/');
+      71 |       const strip = page.getByTestId('lnkup-organizer-trust-strip');
+    > 72 |       await expect(strip).toBeVisible();
+         |                           ^
+      73 |       await expect(strip.getByText(/organizer|payout|verification unavailable|trust/i)).toBeVisible({
+      74 |         timeout: 15000,
+      75 |       });
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\verification-trust.spec.ts:72:27
+
+    Error Context: test-results\verification-trust-Trust-a-f7907-shows-organizer-trust-strip-chromium\error-context.md
+
+
+
+
+(node:65196) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[176/182] [chromium] › tests\e2e\verification-trust.spec.ts:105:9 › Trust and verification › application review trust signals › application cards may show trust badges and document context
+[177/182] [chromium] › tests\e2e\verification-trust.spec.ts:124:9 › Trust and verification › marketplace opportunity cards › public feed may show organizer trust badges when opportunities exist
+[178/182] [chromium] › tests\e2e\verification-trust.spec.ts:137:9 › Trust and verification › authorization › unauthenticated verification vendor route is forbidden
+  68) [chromium] › tests\e2e\verification-trust.spec.ts:89:9 › Trust and verification › organizer dashboard › create event form exposes document mode options 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  getByTestId('lnkup-document-mode')
+    Expected: visible
+    Received: hidden
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toBeVisible" with timeout 15000ms
+      - waiting for getByTestId('lnkup-document-mode')
+        33 × locator resolved to <div class="lnkup-form-row" data-testid="lnkup-document-mode">…</div>
+           - unexpected value "hidden"
+
+
+      90 |       await page.goto('/organizer-dashboard/#create');
+      91 |       const mode = page.getByTestId('lnkup-document-mode');
+    > 92 |       await expect(mode).toBeVisible({ timeout: 15000 });
+         |                          ^
+      93 |       await expect(page.getByTestId('lnkup-doc-mode-none')).toBeVisible();
+      94 |       await expect(page.getByTestId('lnkup-doc-mode-defaults')).toBeVisible();
+      95 |       await expect(page.getByTestId('lnkup-doc-mode-custom')).toBeVisible();
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\verification-trust.spec.ts:92:26
+
+    Error Context: test-results\verification-trust-Trust-a-465a0-poses-document-mode-options-chromium\error-context.md
+
+
+
+
+(node:63776) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[179/182] [chromium] › tests\e2e\weather-intelligence.spec.ts:15:7 › Event Weather Intelligence › weather REST admin status requires auth
+[180/182] [chromium] › tests\e2e\weather-intelligence.spec.ts:26:9 › Event Weather Intelligence › authenticated organizer › organizer dashboard shows weather readiness card
+[181/182] [chromium] › tests\e2e\weather-intelligence.spec.ts:33:9 › Event Weather Intelligence › authenticated organizer › operations command center weather panel does not 500
+[182/182] [chromium] › tests\e2e\weather-intelligence.spec.ts:53:9 › Event Weather Intelligence › authenticated organizer › insights tab includes weather intelligence block when configured
+  69) [chromium] › tests\e2e\weather-intelligence.spec.ts:26:9 › Event Weather Intelligence › authenticated organizer › organizer dashboard shows weather readiness card 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByTestId('lnkup-weather-readiness-card')
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 15000ms
+      - waiting for getByTestId('lnkup-weather-readiness-card')
+
+
+      27 |       await page.goto('/organizer-dashboard/');
+      28 |       const card = page.getByTestId('lnkup-weather-readiness-card');
+    > 29 |       await expect(card).toBeVisible({ timeout: 15000 });
+         |                          ^
+      30 |       await expect(card).not.toContainText('Loading', { timeout: 15000 });
+      31 |     });
+      32 |
+        at C:\Users\darke\Downloads\lnk-up-marketplace-platform\tests\e2e\weather-intelligence.spec.ts:29:26
+
+    Error Context: test-results\weather-intelligence-Event-13df2-hows-weather-readiness-card-chromium\error-context.md
+
+
+  69 failed
+    [chromium] › tests\e2e\app-promo.spec.ts:57:7 › Optional iPhone app prompts › homepage offers the app without blocking the page 
+    [chromium] › tests\e2e\connector-program.spec.ts:4:7 › City Connector program › connector interest page renders form with market context 
+    [chromium] › tests\e2e\connector-program.spec.ts:41:7 › City Connector program › connector dashboard requires login 
+    [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 320px 
+    [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 320px 
+    [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 320px 
+    [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 375px 
+    [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 375px 
+    [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 375px 
+    [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 768px 
+    [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 768px 
+    [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 768px 
+    [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 1024px 
+    [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 1024px 
+    [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 1024px 
+    [chromium] › tests\e2e\connector-program.spec.ts:95:9 › City Connector program › connector dashboard does not overflow at 1440px 
+    [chromium] › tests\e2e\connector-program.spec.ts:106:9 › City Connector program › connector studio view does not overflow at 1440px 
+    [chromium] › tests\e2e\connector-program.spec.ts:117:9 › City Connector program › connector ranks view does not overflow at 1440px 
+    [chromium] › tests\e2e\connector-program.spec.ts:129:7 › City Connector program › logged-in connector Get Started shows a launch plan without generic Continue 
+    [chromium] › tests\e2e\connector-program.spec.ts:143:7 › City Connector program › logged-in connector can open a studio template and submit a URL 
+    [chromium] › tests\e2e\connector-program.spec.ts:161:7 › City Connector program › logged-in connector rank card and roadmap stay on-page 
+    [chromium] › tests\e2e\connector-program.spec.ts:174:7 › City Connector program › logged-in connector Share sheet opens without reload 
+    [chromium] › tests\e2e\connector-program.spec.ts:187:7 › City Connector program › logged-in connector referrals filters and earnings calculator stay on-page 
+    [chromium] › tests\e2e\dashboard-enhancements.spec.ts:93:7 › Organizer dashboard enhancements › Edit view links back to the workspace for requests and vendors 
+    [chromium] › tests\e2e\event-intelligence.spec.ts:25:7 › Event Intelligence › intelligence panel requires login 
+    [chromium] › tests\e2e\event-intelligence.spec.ts:45:9 › Event Intelligence › authenticated organizer › organizer intelligence expand button clears skeleton 
+    [chromium] › tests\e2e\event-intelligence.spec.ts:86:9 › Event Intelligence › authenticated vendor › vendor intelligence panel loads 
+    [chromium] › tests\e2e\external-events.spec.ts:46:7 › External event discovery › external events dashboard REST returns JSON 
+    [chromium] › tests\e2e\external-events.spec.ts:72:9 › External event discovery › admin › external events admin import tab loads 
+    [chromium] › tests\e2e\external-events.spec.ts:105:9 › External event discovery › admin › external events review queue tab loads 
+    [chromium] › tests\e2e\external-events.spec.ts:118:9 › External event discovery › admin › external events analytics tab loads 
+    [chromium] › tests\e2e\external-events.spec.ts:123:9 › External event discovery › admin › external events auto sync tab loads 
+    [chromium] › tests\e2e\external-events.spec.ts:132:9 › External event discovery › admin › external events needs-email filter and published email form 
+    [chromium] › tests\e2e\interactive-maps.spec.ts:4:7 › Interactive Maps › opportunities page has grid map and split view toggles when phase 1c 
+    [chromium] › tests\e2e\landing-launch.spec.ts:12:7 › Launch homepage › homepage launch chrome matches marketplace state 
+    [chromium] › tests\e2e\landing-launch.spec.ts:55:7 › Launch homepage › opportunities nav targets the homepage section 
+    [chromium] › tests\e2e\landing-launch.spec.ts:116:7 › Launch homepage › hero avoids fake vendor counts 
+    [chromium] › tests\e2e\landing-launch.spec.ts:132:7 › Launch homepage › login and lost-password pages are LNKup branded 
+    [chromium] › tests\e2e\marketplace-v2.spec.ts:33:7 › Marketplace V2 › quick chip filters by event type 
+    [chromium] › tests\e2e\marketplace-v2.spec.ts:55:7 › Marketplace V2 › phase 1A hides map toggle, compare tray, and intelligence rails 
+    [chromium] › tests\e2e\outreach-invite.spec.ts:12:7 › Outreach invite sign-up › invalid outreach token shows normal editable sign-up form 
+    [chromium] › tests\e2e\saved-searches.spec.ts:56:9 › Saved searches › vendor flows › vendor can save current Find Events filters 
+    [chromium] › tests\e2e\saved-searches.spec.ts:72:9 › Saved searches › vendor flows › empty filter search shows warning 
+    [chromium] › tests\e2e\saved-searches.spec.ts:83:9 › Saved searches › vendor flows › saved search appears in favorites dashboard section 
+    [chromium] › tests\e2e\seo-rankmath.spec.ts:25:7 › Rank Math SEO › homepage og:image uses block-party illustration 
+    [chromium] › tests\e2e\stripe-connect.spec.ts:105:9 › Stripe Connect marketplace › organizer Connect REST › connect status returns JSON with settlement_mode 
+    [chromium] › tests\e2e\stripe-connect.spec.ts:187:9 › Stripe Connect marketplace › organizer Connect REST › connect refresh endpoint returns JSON 
+    [chromium] › tests\e2e\stripe-connect.spec.ts:204:9 › Stripe Connect marketplace › vendor isolation from Connect › vendor financial shell has no Connect onboarding CTA 
+    [chromium] › tests\e2e\vendor-event-pass.spec.ts:60:9 › Vendor Event Pass › authenticated vendor › unlocked pass shows hero when confirmed booking exists 
+    [chromium] › tests\e2e\vendor-financial.spec.ts:18:7 › Vendor financial dashboard › payments view requires login when unauthenticated 
+    [chromium] › tests\e2e\vendor-financial.spec.ts:29:9 › Vendor financial dashboard › authenticated vendor › payments hub renders tabs and balance hero without connect onboarding on load 
+    [chromium] › tests\e2e\vendor-financial.spec.ts:48:9 › Vendor financial dashboard › authenticated vendor › refunds tab shows request form 
+    [chromium] › tests\e2e\vendor-growth.spec.ts:18:7 › Vendor growth dashboard › growth view requires login when unauthenticated 
+    [chromium] › tests\e2e\vendor-growth.spec.ts:46:9 › Vendor growth dashboard › authenticated vendor › sidebar includes Growth nav link 
+    [chromium] › tests\e2e\vendor-import.spec.ts:23:9 › Organizer vendor CSV import › authenticated organizer › import button opens wizard on vendors panel 
+    [chromium] › tests\e2e\vendor-import.spec.ts:30:9 › Organizer vendor CSV import › authenticated organizer › upload CSV advances through map and review steps 
+    [chromium] › tests\e2e\vendor-import.spec.ts:47:9 › Organizer vendor CSV import › authenticated organizer › import without invites completes and shows results 
+    [chromium] › tests\e2e\vendor-operations.spec.ts:31:7 › Vendor Operations › operations command center requires login 
+    [chromium] › tests\e2e\vendor-operations.spec.ts:78:9 › Vendor Operations › authenticated organizer › CRM widgets include operations metrics 
+    [chromium] › tests\e2e\vendor-operations.spec.ts:112:9 › Vendor Operations › authenticated vendor › vendor operations shows five tabs and full overview when bookings exist 
+    [chromium] › tests\e2e\vendor-profile-strength.spec.ts:31:9 › Vendor profile strength › authenticated vendor › dashboard shows profile strength card or empty state 
+    [chromium] › tests\e2e\vendor-profile-strength.spec.ts:47:9 › Vendor profile strength › authenticated vendor › business basics save updates profile strength preview 
+    [chromium] › tests\e2e\vendor-reputation.spec.ts:31:7 › Vendor Reputation › public vendor profile page handles missing slug gracefully 
+    [chromium] › tests\e2e\vendor-reputation.spec.ts:52:9 › Vendor Reputation › authenticated vendor › vendor dashboard shows reputation panel 
+    [chromium] › tests\e2e\vendor-reputation.spec.ts:78:9 › Vendor Reputation › authenticated organizer reputation intel › application cards show score intel when applications exist 
+    [chromium] › tests\e2e\verification-trust.spec.ts:31:9 › Trust and verification › vendor dashboard › home shows trust status card 
+    [chromium] › tests\e2e\verification-trust.spec.ts:69:9 › Trust and verification › organizer dashboard › overview shows organizer trust strip 
+    [chromium] › tests\e2e\verification-trust.spec.ts:89:9 › Trust and verification › organizer dashboard › create event form exposes document mode options 
+    [chromium] › tests\e2e\weather-intelligence.spec.ts:26:9 › Event Weather Intelligence › authenticated organizer › organizer dashboard shows weather readiness card 
+  21 skipped
+  92 passed (13.6m)

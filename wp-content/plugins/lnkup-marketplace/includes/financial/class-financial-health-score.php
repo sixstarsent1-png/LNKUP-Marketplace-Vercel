@@ -66,13 +66,14 @@ class LNKup_Financial_Health_Score {
 		$wpdb->insert(
 			$table,
 			array(
-				'user_id'    => absint( $user_id ),
-				'role_type'  => sanitize_key( $role ),
-				'score'      => absint( $score ),
-				'reasons'    => wp_json_encode( $reasons ),
-				'computed_at' => current_time( 'mysql' ),
-				'created_at' => current_time( 'mysql' ),
-			)
+				'user_id'      => absint( $user_id ),
+				'role_type'    => sanitize_key( $role ),
+				'score'        => absint( $score ),
+				'risk_level'   => $score >= 70 ? 'low' : ( $score >= 40 ? 'medium' : 'high' ),
+				'reasons_json' => wp_json_encode( $reasons ),
+				'computed_at'  => current_time( 'mysql' ),
+			),
+			array( '%d', '%s', '%d', '%s', '%s', '%s' )
 		);
 	}
 
@@ -102,7 +103,7 @@ class LNKup_Financial_Health_Score {
 		}
 		return array(
 			'score'   => (int) $row['score'],
-			'reasons' => json_decode( $row['reasons'] ?? '[]', true ) ?: array(),
+			'reasons' => json_decode( (string) ( $row['reasons_json'] ?? '[]' ), true ) ?: array(),
 			'computed_at' => $row['computed_at'],
 		);
 	}

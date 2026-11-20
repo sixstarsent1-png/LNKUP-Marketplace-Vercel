@@ -15,6 +15,7 @@ class LNKup_Outreach_Admin {
 	public static function init() {
 		add_action( 'admin_menu', array( __CLASS__, 'add_menu' ), 25 );
 		add_action( 'admin_init', array( __CLASS__, 'handle_actions' ) );
+		add_action( 'admin_post_lnkup_export_vendor_contacts', array( __CLASS__, 'handle_export_contacts' ) );
 	}
 
 	/**
@@ -171,6 +172,23 @@ class LNKup_Outreach_Admin {
 	}
 
 	/**
+	 * Download every published vendor profile as a contact CSV.
+	 */
+	public static function handle_export_contacts() {
+		if ( ! LNKup_Capabilities::user_has_manage_all() && ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Permission denied.', 'lnkup-marketplace' ), 403 );
+		}
+		check_admin_referer( 'lnkup_export_vendor_contacts' );
+
+		$category = isset( $_GET['category'] ) ? sanitize_text_field( wp_unslash( $_GET['category'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$rows     = LNKup_Vendor_Directory::contact_rows_for_platform( $category );
+		$filename = '' !== $category
+			? 'lnkup-vendor-contacts-' . sanitize_title( $category ) . '.csv'
+			: 'lnkup-vendor-contacts.csv';
+		LNKup_Vendor_Directory::stream_contact_csv( $rows, $filename, false );
+	}
+
+	/**
 	 * Render admin page.
 	 */
 	public static function render_page() {
@@ -229,6 +247,35 @@ class LNKup_Outreach_Admin {
 					<p class="description" style="margin-top:0.75rem;"><?php esc_html_e( 'Tune limits under LNKup → Settings → Outreach throttling.', 'lnkup-marketplace' ); ?></p>
 				</div>
 			<?php endif; ?>
+
+			<div class="card" style="max-width:960px;padding:1rem 1.25rem;margin-top:1.5rem;">
+				<h2 style="margin-top:0;"><?php esc_html_e( 'Download vendor contacts', 'lnkup-marketplace' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'CSV of every vendor: business, categories, email, phone, and city. Use it to call or email vendors.', 'lnkup-marketplace' ); ?></p>
+				<form method="get" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="lnkup_export_vendor_contacts" />
+					<?php wp_nonce_field( 'lnkup_export_vendor_contacts' ); ?>
+					<label for="lnkup-export-category"><?php esc_html_e( 'Category', 'lnkup-marketplace' ); ?></label>
+					<select name="category" id="lnkup-export-category">
+						<option value=""><?php esc_html_e( 'All categories', 'lnkup-marketplace' ); ?></option>
+						<?php
+						$vendor_cats = get_terms(
+							array(
+								'taxonomy'   => 'lnkup_vendor_category',
+								'hide_empty' => false,
+							)
+						);
+						if ( $vendor_cats && ! is_wp_error( $vendor_cats ) ) :
+							foreach ( $vendor_cats as $cat ) :
+								?>
+								<option value="<?php echo esc_attr( $cat->name ); ?>"><?php echo esc_html( $cat->name ); ?></option>
+								<?php
+							endforeach;
+						endif;
+						?>
+					</select>
+					<button type="submit" class="button button-primary"><?php esc_html_e( 'Download CSV', 'lnkup-marketplace' ); ?></button>
+				</form>
+			</div>
 
 			<div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin-top:1.5rem;align-items:start;">
 				<div>

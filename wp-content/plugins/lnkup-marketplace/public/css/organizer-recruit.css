@@ -152,7 +152,7 @@
 }
 
 .lnkup-org-recruit-cta:hover {
-  border-color: #a3e635;
+  border-color: var(--lnkup-border-strong, #18181b);
 }
 
 .lnkup-org-recruit-cta__title {

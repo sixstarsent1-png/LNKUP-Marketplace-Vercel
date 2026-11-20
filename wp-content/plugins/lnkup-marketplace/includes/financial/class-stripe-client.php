@@ -90,11 +90,12 @@ class LNKup_Stripe_Client {
 	}
 
 	/**
-	 * @param array $params Params.
+	 * @param array  $params          Params.
+	 * @param string $idempotency_key Optional idempotency key.
 	 * @return array|WP_Error
 	 */
-	public function create_refund( $params ) {
-		return $this->request( 'POST', 'refunds', $params );
+	public function create_refund( $params, $idempotency_key = '' ) {
+		return $this->request( 'POST', 'refunds', $params, $idempotency_key );
 	}
 
 	/**
@@ -128,11 +129,12 @@ class LNKup_Stripe_Client {
 	}
 
 	/**
-	 * @param array $params Account params.
+	 * @param array  $params          Account params.
+	 * @param string $idempotency_key Optional idempotency key.
 	 * @return array|WP_Error
 	 */
-	public function create_connect_account( $params ) {
-		return $this->request( 'POST', 'accounts', $params );
+	public function create_connect_account( $params, $idempotency_key = '' ) {
+		return $this->request( 'POST', 'accounts', $params, $idempotency_key );
 	}
 
 	/**
@@ -153,11 +155,12 @@ class LNKup_Stripe_Client {
 	}
 
 	/**
-	 * @param array $params Transfer params.
+	 * @param array  $params          Transfer params.
+	 * @param string $idempotency_key Optional idempotency key.
 	 * @return array|WP_Error
 	 */
-	public function create_transfer( $params ) {
-		return $this->request( 'POST', 'transfers', $params );
+	public function create_transfer( $params, $idempotency_key = '' ) {
+		return $this->request( 'POST', 'transfers', $params, $idempotency_key );
 	}
 
 	/**
@@ -333,12 +336,13 @@ class LNKup_Stripe_Client {
 	}
 
 	/**
-	 * @param string $account_id Connect account ID.
-	 * @param array  $params     Payout params.
+	 * @param string $account_id      Connect account ID.
+	 * @param array  $params          Payout params.
+	 * @param string $idempotency_key Optional idempotency key.
 	 * @return array|WP_Error
 	 */
-	public function create_connect_payout( $account_id, $params ) {
-		return $this->request( 'POST', 'payouts', $params, '', array( 'Stripe-Account' => $account_id ) );
+	public function create_connect_payout( $account_id, $params, $idempotency_key = '' ) {
+		return $this->request( 'POST', 'payouts', $params, $idempotency_key, array( 'Stripe-Account' => $account_id ) );
 	}
 
 	/**
@@ -379,39 +383,75 @@ class LNKup_Stripe_Client {
 	/**
 	 * Verify Stripe webhook signature.
 	 *
-	 * @param string $payload   Raw body.
+	 * Never returns an unverified payload: a missing secret or header is a WP_Error.
+	 *
+	 * @param string $payload    Raw body.
 	 * @param string $sig_header Stripe-Signature header.
-	 * @param string $secret    Webhook secret.
+	 * @param string $secret     Webhook secret.
+	 * @param int    $tolerance  Max age of the signed timestamp, in seconds.
 	 * @return array|WP_Error Decoded event.
 	 */
-	public function verify_webhook( $payload, $sig_header, $secret ) {
-		if ( class_exists( '\Stripe\Webhook' ) && $secret && $sig_header ) {
+	public function verify_webhook( $payload, $sig_header, $secret, $tolerance = 300 ) {
+		$payload    = (string) $payload;
+		$sig_header = trim( (string) $sig_header );
+		$secret     = trim( (string) $secret );
+
+		if ( '' === $secret ) {
+			return new WP_Error( 'not_configured', __( 'Webhook signing secret is not configured.', 'lnkup-marketplace' ) );
+		}
+		if ( '' === $sig_header ) {
+			return new WP_Error( 'missing_signature', __( 'Missing Stripe signature header.', 'lnkup-marketplace' ) );
+		}
+
+		if ( class_exists( '\Stripe\Webhook' ) ) {
 			try {
-				$event = \Stripe\Webhook::constructEvent( $payload, $sig_header, $secret );
-				return json_decode( wp_json_encode( $event ), true );
+				\Stripe\Webhook::constructEvent( $payload, $sig_header, $secret, (int) $tolerance );
 			} catch ( Exception $e ) {
 				return new WP_Error( 'invalid_signature', $e->getMessage() );
 			}
+			return $this->decode_event_payload( $payload );
 		}
-		if ( ! $secret || ! $sig_header ) {
-			return json_decode( $payload, true );
-		}
-		$parts = array();
+
+		$timestamp  = 0;
+		$signatures = array();
 		foreach ( explode( ',', $sig_header ) as $item ) {
 			$pair = explode( '=', trim( $item ), 2 );
-			if ( 2 === count( $pair ) ) {
-				$parts[ $pair[0] ] = $pair[1];
+			if ( 2 !== count( $pair ) ) {
+				continue;
+			}
+			if ( 't' === $pair[0] ) {
+				$timestamp = (int) $pair[1];
+			} elseif ( 'v1' === $pair[0] && '' !== $pair[1] ) {
+				$signatures[] = $pair[1];
 			}
 		}
-		if ( empty( $parts['t'] ) || empty( $parts['v1'] ) ) {
+		if ( $timestamp < 1 || empty( $signatures ) ) {
 			return new WP_Error( 'invalid_signature', __( 'Invalid Stripe signature header.', 'lnkup-marketplace' ) );
 		}
-		$signed   = $parts['t'] . '.' . $payload;
-		$expected = hash_hmac( 'sha256', $signed, $secret );
-		if ( ! hash_equals( $expected, $parts['v1'] ) ) {
-			return new WP_Error( 'invalid_signature', __( 'Webhook signature mismatch.', 'lnkup-marketplace' ) );
+		if ( $tolerance > 0 && abs( time() - $timestamp ) > (int) $tolerance ) {
+			return new WP_Error( 'invalid_signature', __( 'Webhook timestamp is outside the allowed tolerance.', 'lnkup-marketplace' ) );
 		}
-		return json_decode( $payload, true );
+		$expected = hash_hmac( 'sha256', $timestamp . '.' . $payload, $secret );
+		foreach ( $signatures as $signature ) {
+			if ( hash_equals( $expected, $signature ) ) {
+				return $this->decode_event_payload( $payload );
+			}
+		}
+		return new WP_Error( 'invalid_signature', __( 'Webhook signature mismatch.', 'lnkup-marketplace' ) );
+	}
+
+	/**
+	 * Decode a verified webhook body.
+	 *
+	 * @param string $payload Raw body.
+	 * @return array|WP_Error
+	 */
+	private function decode_event_payload( $payload ) {
+		$event = json_decode( $payload, true );
+		if ( ! is_array( $event ) ) {
+			return new WP_Error( 'invalid_payload', __( 'Webhook payload is not valid JSON.', 'lnkup-marketplace' ) );
+		}
+		return $event;
 	}
 
 	/**

@@ -17,6 +17,23 @@ class LNKup_Post_Types {
 	}
 
 	/**
+	 * Post types exposed through core wp/v2 REST routes.
+	 *
+	 * Everything else (applications, payments, documents, packets, CRM records,
+	 * profiles, reviews) is served only through permission-checked lnkup/v1 routes.
+	 */
+	const REST_PUBLIC_TYPES = array( 'lnkup_event', 'lnkup_opportunity' );
+
+	/**
+	 * Whether a post type may appear in core wp/v2 REST routes.
+	 *
+	 * @param string $post_type Post type slug.
+	 */
+	public static function is_rest_public( $post_type ) {
+		return in_array( $post_type, self::REST_PUBLIC_TYPES, true );
+	}
+
+	/**
 	 * Register all CPTs.
 	 */
 	public static function register() {
@@ -126,7 +143,7 @@ class LNKup_Post_Types {
 						),
 						'public'       => $args['public'],
 						'show_ui'      => $args['show_ui'],
-						'show_in_rest' => true,
+						'show_in_rest' => self::is_rest_public( $slug ),
 						'menu_icon'    => $args['menu_icon'],
 						'supports'     => $args['supports'],
 						'capability_type' => 'post',

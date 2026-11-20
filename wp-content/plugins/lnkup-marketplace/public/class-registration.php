@@ -22,6 +22,8 @@ class LNKup_Registration {
 		'organizer-dashboard',
 		'opportunities',
 		'find-events',
+		'vendors',
+		'organizers',
 		'sign-up',
 	);
 
@@ -30,7 +32,11 @@ class LNKup_Registration {
 	 */
 	public static function init(): void {
 		add_shortcode( 'lnkup_register_form', array( __CLASS__, 'render_form' ) );
+		add_shortcode( 'lnkup_login_form', array( __CLASS__, 'render_login_form' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_handle_submission' ), 5 );
+		add_action( 'template_redirect', array( __CLASS__, 'maybe_handle_login' ), 5 );
+		add_action( 'template_redirect', array( __CLASS__, 'maybe_return_logged_in_user' ), 4 );
+		add_filter( 'login_redirect', array( __CLASS__, 'apply_stored_login_redirect' ), 10, 3 );
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_handle_claim_submission' ), 6 );
 		add_action( 'login_init', array( __CLASS__, 'redirect_core_register' ), 1 );
 	}
@@ -86,6 +92,117 @@ class LNKup_Registration {
 
 		wp_safe_redirect( $redirect );
 		exit;
+	}
+
+	/**
+	 * A signed-in person opening a notification link continues to that screen.
+	 */
+	public static function maybe_return_logged_in_user(): void {
+		if ( ! is_user_logged_in() || ! is_page( 'log-in' ) ) {
+			return;
+		}
+		$hint = self::get_request_redirect();
+		if ( '' === $hint ) {
+			return;
+		}
+		wp_safe_redirect( self::destination_for_user( $hint, wp_get_current_user() ) );
+		exit;
+	}
+
+	/**
+	 * Process branded login and lost-password posts.
+	 */
+	public static function maybe_handle_login(): void {
+		if ( ! empty( $_POST['lnkup_lost_submit'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			self::handle_lost_password();
+			return;
+		}
+		if ( empty( $_POST['lnkup_login_submit'] ) || is_user_logged_in() ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			return;
+		}
+		if ( ! isset( $_POST['lnkup_login_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( (string) $_POST['lnkup_login_nonce'] ) ), 'lnkup_login' ) ) {
+			return;
+		}
+		$login = isset( $_POST['log'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['log'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$pass  = isset( $_POST['pwd'] ) ? (string) wp_unslash( $_POST['pwd'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( is_email( $login ) ) {
+			$by_email = get_user_by( 'email', $login );
+			if ( $by_email instanceof WP_User ) {
+				$login = $by_email->user_login;
+			}
+		}
+		$user  = wp_signon(
+			array(
+				'user_login'    => $login,
+				'user_password' => $pass,
+				'remember'      => ! empty( $_POST['rememberme'] ), // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			),
+			is_ssl()
+		);
+		if ( is_wp_error( $user ) ) {
+			$GLOBALS['lnkup_login_errors'] = new WP_Error( 'login_failed', __( 'That email or password is not right.', 'lnkup-marketplace' ) );
+			return;
+		}
+		$requested = isset( $_POST['lnkup_redirect'] ) ? (string) wp_unslash( $_POST['lnkup_redirect'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		wp_safe_redirect( self::destination_for_user( $requested, $user ) );
+		exit;
+	}
+
+	/**
+	 * Send a password reset email and remember the apply return.
+	 */
+	private static function handle_lost_password(): void {
+		if ( ! isset( $_POST['lnkup_lost_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( (string) $_POST['lnkup_lost_nonce'] ) ), 'lnkup_lost_password' ) ) {
+			return;
+		}
+		$login = isset( $_POST['user_login'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['user_login'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$user  = get_user_by( 'email', $login );
+		if ( ! $user ) {
+			$user = get_user_by( 'login', $login );
+		}
+		$requested = isset( $_POST['lnkup_redirect'] ) ? (string) wp_unslash( $_POST['lnkup_redirect'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		if ( $user instanceof WP_User && '' !== $requested ) {
+			update_user_meta( $user->ID, '_lnkup_login_redirect', $requested );
+		}
+		retrieve_password( $login );
+		$GLOBALS['lnkup_login_notice'] = __( 'If an account matches that email, we sent a reset link.', 'lnkup-marketplace' );
+	}
+
+	/**
+	 * After a WordPress password reset, return to the saved apply URL.
+	 *
+	 * @param string           $redirect_to Default redirect.
+	 * @param string           $requested   Requested redirect.
+	 * @param WP_User|WP_Error $user        User.
+	 */
+	public static function apply_stored_login_redirect( $redirect_to, $requested, $user ) {
+		if ( ! $user instanceof WP_User ) {
+			return $redirect_to;
+		}
+		$stored = (string) get_user_meta( $user->ID, '_lnkup_login_redirect', true );
+		if ( '' === $stored ) {
+			return $redirect_to;
+		}
+		delete_user_meta( $user->ID, '_lnkup_login_redirect' );
+		$safe = self::destination_for_user( $stored, $user );
+		return $safe ? $safe : $redirect_to;
+	}
+
+	/**
+	 * Safe post-login URL for this user.
+	 *
+	 * @param string  $requested Raw redirect.
+	 * @param WP_User $user      Signed-in user.
+	 */
+	private static function destination_for_user( string $requested, WP_User $user ): string {
+		$role = in_array( 'lnkup_organizer', (array) $user->roles, true ) ? 'lnkup_organizer' : 'lnkup_vendor';
+		$safe = self::sanitize_redirect_target( $requested, $role );
+		if ( $safe ) {
+			return $safe;
+		}
+		return 'lnkup_organizer' === $role
+			? lnkup_organizer_view_url( 'home' )
+			: lnkup_page_url_helper( 'vendor-dashboard' );
 	}
 
 	/**
@@ -248,7 +365,7 @@ class LNKup_Registration {
 	 */
 	private static function resolve_post_signup_redirect( string $role ): string {
 		$default = 'lnkup_organizer' === $role
-			? lnkup_page_url_helper( 'organizer-dashboard' ) . '#overview'
+			? lnkup_organizer_view_url( 'home' )
 			: lnkup_page_url_helper( 'vendor-dashboard' );
 
 		$requested = '';
@@ -292,8 +409,9 @@ class LNKup_Registration {
 		$path_only = $path_only ? $path_only : '/';
 		$fragment  = '';
 		if ( false !== strpos( $path, '#' ) ) {
-			$bits     = explode( '#', $path, 2 );
-			$path_only = $bits[0];
+			$bits      = explode( '#', $path, 2 );
+			$path_only = strtok( (string) $bits[0], '?' );
+			$path_only = $path_only ? $path_only : '/';
 			$fragment  = $bits[1] ?? '';
 		}
 		$path_only = '/' . ltrim( (string) $path_only, '/' );
@@ -318,31 +436,158 @@ class LNKup_Registration {
 		$slug = trim( $path_only, '/' );
 		$slug = $slug ? strtok( $slug, '/' ) : '';
 		if ( ! $slug || ! in_array( $slug, self::$safe_page_slugs, true ) ) {
-			return '';
+			$event_url = self::published_event_url( $path_only );
+			if ( ! $event_url ) {
+				return '';
+			}
+			$event_url = self::append_follow_query( $event_url, $redirect );
+			if ( $fragment && preg_match( '/^[a-z0-9_-]+$/i', $fragment ) ) {
+				$event_url .= '#' . $fragment;
+			}
+			return $event_url;
 		}
 
-		// Role mismatch guard.
-		if ( 'lnkup_vendor' === $role && false !== strpos( $slug, 'organizer' ) ) {
-			return '';
-		}
-		if ( 'lnkup_organizer' === $role && false !== strpos( $slug, 'vendor' ) ) {
-			return '';
+		$dashboard_slugs = array( 'vendor-dashboard', 'vendor-profile', 'organizer-dashboard' );
+		if ( in_array( $slug, $dashboard_slugs, true ) ) {
+			if ( 'lnkup_vendor' === $role && false !== strpos( $slug, 'organizer' ) ) {
+				return '';
+			}
+			if ( 'lnkup_organizer' === $role && false !== strpos( $slug, 'vendor' ) ) {
+				return '';
+			}
 		}
 
-		$url = lnkup_page_url_helper( $slug );
-		$apply_id = 0;
-		if ( preg_match( '/[?&]apply=(\d+)/', $redirect, $apply_match ) ) {
-			$apply_id = (int) $apply_match[1];
-		}
-		if ( $apply_id > 0 && in_array( $slug, array( 'opportunities', 'find-events' ), true ) ) {
-			$url = add_query_arg( 'apply', $apply_id, $url );
-		}
+		$url = self::append_public_query( lnkup_page_url_helper( $slug ), $redirect, $slug );
 		if ( $fragment && preg_match( '/^[a-z0-9_-]+$/i', $fragment ) ) {
 			$url .= '#' . $fragment;
 		} elseif ( 'organizer-dashboard' === $slug ) {
 			$url .= '#overview';
 		}
 		return $url;
+	}
+
+	/**
+	 * Published event permalink, when the path is a public event.
+	 *
+	 * @param string $path_only Path without query or fragment.
+	 */
+	private static function published_event_url( string $path_only ): string {
+		$post_id = url_to_postid( home_url( $path_only ) );
+		if ( ! $post_id ) {
+			return '';
+		}
+		$post = get_post( $post_id );
+		if ( ! $post || 'lnkup_event' !== $post->post_type || 'publish' !== $post->post_status ) {
+			return '';
+		}
+		$url = get_permalink( $post );
+		return $url ? $url : '';
+	}
+
+	/**
+	 * Keep a follow target on an event permalink return.
+	 *
+	 * @param string $url Safe event URL.
+	 * @param string $raw Original redirect.
+	 */
+	private static function append_follow_query( string $url, string $raw ): string {
+		$parts = wp_parse_url( $raw );
+		$query = isset( $parts['query'] ) ? (string) $parts['query'] : '';
+		if ( '' === $query ) {
+			return $url;
+		}
+		parse_str( $query, $args );
+		$follow = isset( $args['follow'] ) ? absint( $args['follow'] ) : 0;
+		if ( $follow < 1 ) {
+			return $url;
+		}
+		return add_query_arg( 'follow', $follow, $url );
+	}
+
+	/**
+	 * Keep search and apply query args on a same-site return URL.
+	 *
+	 * @param string $url  Base URL.
+	 * @param string $raw  Original redirect.
+	 * @param string $slug Page slug, or empty for an event permalink.
+	 */
+	private static function append_public_query( string $url, string $raw, string $slug ): string {
+		$pages = array( 'opportunities', 'find-events', 'vendors', 'organizers' );
+		if ( ! in_array( $slug, $pages, true ) ) {
+			return $url;
+		}
+		$parts = wp_parse_url( $raw );
+		$query = isset( $parts['query'] ) ? (string) $parts['query'] : '';
+		if ( '' === $query ) {
+			$qpos = strpos( $raw, '?' );
+			if ( false !== $qpos ) {
+				$query = (string) strtok( substr( $raw, $qpos + 1 ), '#' );
+			}
+		}
+		if ( '' === $query ) {
+			return $url;
+		}
+		parse_str( $query, $args );
+		$allowed = array( 'apply', 'city', 'categories', 'date_from', 'date_to', 'q', 'state', 'organizer', 'follow' );
+		$keep    = array();
+		foreach ( $allowed as $key ) {
+			if ( ! isset( $args[ $key ] ) || is_array( $args[ $key ] ) ) {
+				continue;
+			}
+			if ( 'apply' === $key && ! in_array( $slug, array( 'opportunities', 'find-events' ), true ) ) {
+				continue;
+			}
+			if ( 'organizer' === $key && 'organizers' !== $slug ) {
+				continue;
+			}
+			if ( 'follow' === $key && 'organizers' !== $slug ) {
+				continue;
+			}
+			$value = 'organizer' === $key ? sanitize_title( (string) $args[ $key ] ) : sanitize_text_field( (string) $args[ $key ] );
+			if ( 'follow' === $key ) {
+				$value = (string) absint( $value );
+				if ( '0' === $value ) {
+					continue;
+				}
+			}
+			if ( 'apply' === $key ) {
+				$value = (string) absint( $value );
+				if ( '0' === $value ) {
+					continue;
+				}
+			}
+			if ( '' === $value ) {
+				continue;
+			}
+			$keep[ $key ] = $value;
+		}
+		if ( ! $keep ) {
+			return $url;
+		}
+		return add_query_arg( $keep, $url );
+	}
+
+	/**
+	 * One sentence describing where signup returns.
+	 *
+	 * @param string $url Safe return URL.
+	 */
+	private static function return_note_for_target( string $url ): string {
+		if ( preg_match( '/[?&]apply=\d+/', $url ) ) {
+			return __( 'After you create your account, you will return to this application.', 'lnkup-marketplace' );
+		}
+		$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+		if ( false !== strpos( $path, 'lnkup_event' ) ) {
+			return __( 'After you create your account, you will return to this event.', 'lnkup-marketplace' );
+		}
+		if ( preg_match( '#/(vendors|organizers)/?$#', $path ) ) {
+			return __( 'After you create your account, you will return to this directory.', 'lnkup-marketplace' );
+		}
+		$query = (string) wp_parse_url( $url, PHP_URL_QUERY );
+		if ( preg_match( '/(?:^|&)(city|categories|date_from|date_to|q|state)=/', $query ) ) {
+			return __( 'After you create your account, you will return to this search.', 'lnkup-marketplace' );
+		}
+		return __( 'After you create your account, you will return to these events.', 'lnkup-marketplace' );
 	}
 
 	/**
@@ -488,11 +733,20 @@ class LNKup_Registration {
 	 * Resolve redirect hint from request for form hidden field.
 	 */
 	private static function get_request_redirect(): string {
+		$raw = '';
 		if ( ! empty( $_POST['lnkup_redirect'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
-			return sanitize_text_field( wp_unslash( (string) $_POST['lnkup_redirect'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$raw = trim( (string) wp_unslash( $_POST['lnkup_redirect'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		} elseif ( ! empty( $_GET['redirect'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$raw = trim( (string) wp_unslash( $_GET['redirect'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		}
-		if ( ! empty( $_GET['redirect'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			return sanitize_text_field( wp_unslash( (string) $_GET['redirect'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( '' !== $raw ) {
+			if ( preg_match( '#^https?://#i', $raw ) ) {
+				return (string) esc_url_raw( $raw );
+			}
+			if ( 0 === strpos( $raw, '/' ) ) {
+				return sanitize_text_field( $raw );
+			}
+			return '';
 		}
 		if ( ! empty( $_GET['apply'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$apply_id = absint( wp_unslash( (string) $_GET['apply'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -599,6 +853,13 @@ class LNKup_Registration {
 			}
 		}
 		$redirect_hint = self::get_request_redirect();
+		$return_note   = '';
+		if ( $redirect_hint ) {
+			$safe_return = self::sanitize_redirect_target( $redirect_hint, $selected_role );
+			if ( $safe_return ) {
+				$return_note = self::return_note_for_target( $safe_return );
+			}
+		}
 		$org_inviter_name = '';
 		if ( $org_ref_code && class_exists( 'LNKup_Organizer_Recruit_Referrals' ) ) {
 			$resolved = LNKup_Organizer_Recruit_Referrals::resolve_code_public( $org_ref_code );
@@ -612,6 +873,9 @@ class LNKup_Registration {
 		ob_start();
 		?>
 		<div class="lnkup-signup-form-wrap" data-testid="lnkup-signup-form">
+			<?php if ( $return_note ) : ?>
+				<p class="lnkup-signup-form__return" data-testid="lnkup-signup-return"><?php echo esc_html( $return_note ); ?></p>
+			<?php endif; ?>
 			<?php if ( ! empty( $GLOBALS['lnkup_register_errors'] ) && is_wp_error( $GLOBALS['lnkup_register_errors'] ) ) : ?>
 				<div class="lnkup-alert lnkup-alert--error" role="alert">
 					<p><?php echo esc_html( $GLOBALS['lnkup_register_errors']->get_error_message() ); ?></p>
@@ -708,13 +972,19 @@ class LNKup_Registration {
 
 				<p class="lnkup-signup-form__field">
 					<label class="lnkup-signup-form__label" for="lnkup_user_pass"><?php esc_html_e( 'Password', 'lnkup-marketplace' ); ?></label>
-					<input type="password" class="lnkup-signup-form__input" id="lnkup_user_pass" name="user_pass" required autocomplete="new-password" minlength="8" />
+					<span class="lnkup-password-field">
+						<input type="password" class="lnkup-signup-form__input" id="lnkup_user_pass" name="user_pass" required autocomplete="new-password" minlength="8" />
+						<button type="button" class="lnkup-password-field__toggle" data-toggle-password="lnkup_user_pass" aria-pressed="false"><?php esc_html_e( 'Show', 'lnkup-marketplace' ); ?></button>
+					</span>
 					<span class="lnkup-signup-form__hint"><?php esc_html_e( 'At least 8 characters', 'lnkup-marketplace' ); ?></span>
 				</p>
 
 				<p class="lnkup-signup-form__field">
 					<label class="lnkup-signup-form__label" for="lnkup_user_pass_confirm"><?php esc_html_e( 'Confirm password', 'lnkup-marketplace' ); ?></label>
-					<input type="password" class="lnkup-signup-form__input" id="lnkup_user_pass_confirm" name="user_pass_confirm" required autocomplete="new-password" minlength="8" />
+					<span class="lnkup-password-field">
+						<input type="password" class="lnkup-signup-form__input" id="lnkup_user_pass_confirm" name="user_pass_confirm" required autocomplete="new-password" minlength="8" />
+						<button type="button" class="lnkup-password-field__toggle" data-toggle-password="lnkup_user_pass_confirm" aria-pressed="false"><?php esc_html_e( 'Show', 'lnkup-marketplace' ); ?></button>
+					</span>
 				</p>
 
 				<p class="lnkup-signup-form__field lnkup-signup-form__field--checkbox">
@@ -730,7 +1000,7 @@ class LNKup_Registration {
 
 				<p class="lnkup-signup-form__footer">
 					<?php esc_html_e( 'Already have an account?', 'lnkup-marketplace' ); ?>
-					<a href="<?php echo esc_url( wp_login_url( lnkup_registration_url() ) ); ?>"><?php esc_html_e( 'Log in', 'lnkup-marketplace' ); ?></a>
+					<a href="<?php echo esc_url( $redirect_hint ? lnkup_login_url_for( $redirect_hint ) : lnkup_login_page_url() ); ?>"><?php esc_html_e( 'Log in', 'lnkup-marketplace' ); ?></a>
 				</p>
 			</form>
 		</div>
@@ -772,6 +1042,95 @@ class LNKup_Registration {
 			<?php endif; ?>
 			<p class="lnkup-alert" id="lnkup-external-claim-status" hidden role="status"></p>
 			<button type="button" class="lnkup-btn lnkup-btn--primary" id="lnkup-external-claim-submit" data-testid="lnkup-external-claim-submit"><?php esc_html_e( 'Claim event on LNKup', 'lnkup-marketplace' ); ?></button>
+		</div>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Render branded login or lost-password form.
+	 *
+	 * @param array $atts Attributes.
+	 */
+	public static function render_login_form( $atts = array() ): string {
+		unset( $atts );
+		if ( is_user_logged_in() ) {
+			$user = wp_get_current_user();
+			$hint = self::get_request_redirect();
+			$dash = '' !== $hint
+				? self::destination_for_user( $hint, $user )
+				: ( in_array( 'lnkup_organizer', (array) $user->roles, true )
+					? lnkup_page_url_helper( 'organizer-dashboard' )
+					: lnkup_page_url_helper( 'vendor-dashboard' ) );
+			return '<div class="lnkup-signup-logged-in"><p>' . esc_html__( 'You are already signed in.', 'lnkup-marketplace' ) . '</p><a class="lnkup-btn lnkup-btn--primary" href="' . esc_url( $dash ) . '">' . esc_html__( 'Continue', 'lnkup-marketplace' ) . '</a></div>';
+		}
+
+		$redirect_hint = self::get_request_redirect();
+		$lost          = isset( $_GET['action'] ) && 'lostpassword' === sanitize_key( wp_unslash( (string) $_GET['action'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$signup        = $redirect_hint ? add_query_arg( 'redirect', rawurlencode( $redirect_hint ), lnkup_registration_url() ) : lnkup_registration_url();
+
+		ob_start();
+		?>
+		<div class="lnkup-signup-form-wrap" data-testid="lnkup-login-form">
+			<?php if ( ! empty( $GLOBALS['lnkup_login_notice'] ) ) : ?>
+				<div class="lnkup-alert lnkup-alert--info" role="status">
+					<p><?php echo esc_html( (string) $GLOBALS['lnkup_login_notice'] ); ?></p>
+				</div>
+			<?php endif; ?>
+			<?php if ( ! empty( $GLOBALS['lnkup_login_errors'] ) && is_wp_error( $GLOBALS['lnkup_login_errors'] ) ) : ?>
+				<div class="lnkup-alert lnkup-alert--error" role="alert">
+					<p><?php echo esc_html( $GLOBALS['lnkup_login_errors']->get_error_message() ); ?></p>
+				</div>
+			<?php endif; ?>
+			<?php if ( $lost ) : ?>
+				<form class="lnkup-signup-form" method="post" action="">
+					<?php wp_nonce_field( 'lnkup_lost_password', 'lnkup_lost_nonce' ); ?>
+					<input type="hidden" name="lnkup_lost_submit" value="1" />
+					<?php if ( $redirect_hint ) : ?>
+						<input type="hidden" name="lnkup_redirect" value="<?php echo esc_attr( $redirect_hint ); ?>" />
+					<?php endif; ?>
+					<p class="lnkup-signup-form__field">
+						<label class="lnkup-signup-form__label" for="lnkup_lost_login"><?php esc_html_e( 'Email', 'lnkup-marketplace' ); ?></label>
+						<input type="text" class="lnkup-signup-form__input" id="lnkup_lost_login" name="user_login" required autocomplete="username" />
+					</p>
+					<button type="submit" class="lnkup-btn lnkup-btn--primary lnkup-btn--lg lnkup-btn--block"><?php esc_html_e( 'Send reset link', 'lnkup-marketplace' ); ?></button>
+					<p class="lnkup-signup-form__footer">
+						<a href="<?php echo esc_url( $redirect_hint ? lnkup_login_url_for( $redirect_hint ) : lnkup_login_page_url() ); ?>"><?php esc_html_e( 'Back to log in', 'lnkup-marketplace' ); ?></a>
+					</p>
+				</form>
+			<?php else : ?>
+				<form class="lnkup-signup-form" method="post" action="">
+					<?php wp_nonce_field( 'lnkup_login', 'lnkup_login_nonce' ); ?>
+					<input type="hidden" name="lnkup_login_submit" value="1" />
+					<?php if ( $redirect_hint ) : ?>
+						<input type="hidden" name="lnkup_redirect" value="<?php echo esc_attr( $redirect_hint ); ?>" />
+					<?php endif; ?>
+					<p class="lnkup-signup-form__field">
+						<label class="lnkup-signup-form__label" for="lnkup_login_user"><?php esc_html_e( 'Email', 'lnkup-marketplace' ); ?></label>
+						<input type="text" class="lnkup-signup-form__input" id="lnkup_login_user" name="log" required autocomplete="username" />
+					</p>
+					<p class="lnkup-signup-form__field">
+						<label class="lnkup-signup-form__label" for="lnkup_login_pass"><?php esc_html_e( 'Password', 'lnkup-marketplace' ); ?></label>
+						<span class="lnkup-password-field">
+							<input type="password" class="lnkup-signup-form__input" id="lnkup_login_pass" name="pwd" required autocomplete="current-password" />
+							<button type="button" class="lnkup-password-field__toggle" data-toggle-password="lnkup_login_pass" aria-pressed="false"><?php esc_html_e( 'Show', 'lnkup-marketplace' ); ?></button>
+						</span>
+					</p>
+					<p class="lnkup-signup-form__field lnkup-signup-form__field--checkbox">
+						<label>
+							<input type="checkbox" name="rememberme" value="1" />
+							<?php esc_html_e( 'Remember me', 'lnkup-marketplace' ); ?>
+						</label>
+					</p>
+					<button type="submit" class="lnkup-btn lnkup-btn--primary lnkup-btn--lg lnkup-btn--block" data-testid="lnkup-login-submit"><?php esc_html_e( 'Log in', 'lnkup-marketplace' ); ?></button>
+					<p class="lnkup-signup-form__footer">
+						<a href="<?php echo esc_url( add_query_arg( array_filter( array( 'action' => 'lostpassword', 'redirect' => $redirect_hint ? rawurlencode( $redirect_hint ) : '' ) ), lnkup_login_page_url() ) ); ?>"><?php esc_html_e( 'Forgot password?', 'lnkup-marketplace' ); ?></a>
+						<br />
+						<?php esc_html_e( 'New to LNKup?', 'lnkup-marketplace' ); ?>
+						<a href="<?php echo esc_url( $signup ); ?>"><?php esc_html_e( 'Create a free account', 'lnkup-marketplace' ); ?></a>
+					</p>
+				</form>
+			<?php endif; ?>
 		</div>
 		<?php
 		return (string) ob_get_clean();

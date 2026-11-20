@@ -30,7 +30,7 @@ async function loginVendor(page: import('@playwright/test').Page) {
 test.describe('Vendor Operations', () => {
   test('operations command center requires login', async ({ page }) => {
     await page.goto('/organizer-dashboard/?event=1&ops=1');
-    await expect(page).toHaveURL(/wp-login|login/);
+    await expect(page).toHaveURL(/wp-login|log-?in/);
   });
 
   test.describe('authenticated organizer', () => {
@@ -116,11 +116,12 @@ test.describe('Vendor Operations', () => {
         test.skip(true, 'No confirmed vendor bookings in test environment');
         return;
       }
-      await expect(page.getByRole('tab', { name: /^overview$/i })).toBeVisible();
-      await expect(page.getByRole('tab', { name: /event pass/i })).toBeVisible();
-      await expect(page.getByRole('tab', { name: /^readiness$/i })).toBeVisible();
-      await expect(page.getByRole('tab', { name: /venue map/i })).toBeVisible();
-      await expect(page.getByRole('tab', { name: /^support$/i })).toBeVisible();
+      const sections = page.getByRole('navigation', { name: /event operations sections/i });
+      await expect(sections.getByRole('link', { name: /^overview$/i })).toBeVisible();
+      await expect(sections.getByRole('link', { name: /event pass/i })).toBeVisible();
+      await expect(sections.getByRole('link', { name: /^readiness/i })).toBeVisible();
+      await expect(sections.getByRole('link', { name: /venue map/i })).toBeVisible();
+      await expect(sections.getByRole('link', { name: /^support$/i })).toBeVisible();
       await expect(page.locator('.lnkup-ops-overview-grid')).toBeVisible();
       await expect(page.locator('.lnkup-ops-overview-grid .lnkup-ops-panel').first()).toBeVisible();
       const qrOnly = page.locator('.lnkup-ops-vendor-home > .lnkup-ops-qr');

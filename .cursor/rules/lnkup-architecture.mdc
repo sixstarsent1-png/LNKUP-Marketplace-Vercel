@@ -13,9 +13,12 @@ You are in the **LNK Marketplace** monorepo (`lnk-up-marketplace-platform`). Pro
 |-------|------|------|
 | Plugin | `wp-content/plugins/lnkup-marketplace/` | All business logic, REST, AJAX, CPTs, SQL, financial OS |
 | Theme | `wp-content/themes/lnkup-theme/` | Dashboard shell, landing page, layout, CSS — **no business logic** |
-| Reference UI | `app/`, `components/`, `lib/` | Next.js 16 design mock — **not wired to WordPress** |
+| Premium web app | `lnk-up-marketplace-ui/` | Next.js on Vercel; BFF proxies `lnkup/v1` (cookie session) |
+| Native mobile | `lnk-up-marketplace-mobile/` | Expo iOS/Android; WordPress REST + SecureStore Basic auth |
+| Design IA | `lnkup-app-reference/` | Mobile-web v0 mock for native IA — **not production** |
+| Legacy reference UI | `app/`, `components/`, `lib/` | Older Next.js design mock — **not wired to WordPress** |
 
-**Out of scope unless explicitly requested:** WooCommerce, attendee ticketing (Posh/Eventbrite/Universe), headless Next.js production.
+**Out of scope unless explicitly requested:** WooCommerce, attendee ticketing (Posh/Eventbrite/Universe), treating Next.js or Expo as a replacement system of record.
 
 **Platform:** WordPress 6.0+, PHP 7.4+ (plugin), PHP 8.0+ (theme). Plugin v12.1.0. ~200 REST routes under `lnkup/v1`.
 
@@ -45,10 +48,16 @@ wp-content/themes/lnkup-theme/
   page-templates/                # vendor-dashboard, organizer-dashboard
   assets/dist/                   # Compiled CSS (enqueued)
 
+lnk-up-marketplace-ui/           # Premium Next.js web app + BFF
+lnk-up-marketplace-mobile/       # Expo native (iOS/Android)
+lnkup-app-reference/             # Design IA for native (mock only)
+
 docs/SYSTEM_OVERVIEW.md          # Full architecture reference
 docs/CURRENT_STATE.md            # Inventory + changelog
 docs/CURSOR_CONTEXT.md           # Human-readable AI context
 ```
+
+**Native rule:** No Stripe SDK in Expo. Auth = Application Password in SecureStore → WP REST directly (not the web cookie BFF). See SYSTEM_OVERVIEW §14.3.
 
 ## Data Model
 
@@ -138,7 +147,9 @@ Every dashboard panel: **loading**, **empty**, and **error** states. Hide empty 
 
 ## What NOT To Do
 
-- Treat `app/` or `components/` as production
+- Treat `app/`, `components/`, or `lnkup-app-reference/` as production
+- Call Stripe from Expo / Next.js UI — Financial OS stays in WordPress
+- Reuse the web cookie BFF session on native (use SecureStore Application Password → WP REST)
 - Add WooCommerce or attendee ticketing
 - Create duplicate CPTs for existing domains
 - Call Stripe from UI/AJAX/REST controllers directly

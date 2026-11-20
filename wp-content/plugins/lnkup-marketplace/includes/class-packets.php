@@ -600,6 +600,51 @@ class LNKup_Packets {
 	}
 
 	/**
+	 * Organizer-facing packet stage, derived from existing data (no new state):
+	 * draft = arrival or booth details missing; ready = complete, no paid vendor unlocked yet;
+	 * published = at least one paid vendor can open their pass. Unlock stays tied to payment.
+	 *
+	 * @param int $event_id Event ID.
+	 * @return array{stage:string,label:string,hint:string,unlocked:int}
+	 */
+	public static function lifecycle( $event_id ) {
+		$completeness = self::get_pass_completeness( $event_id );
+		$required     = array();
+		foreach ( $completeness['items'] as $item ) {
+			$required[ $item['key'] ] = ! empty( $item['complete'] );
+		}
+		$unlocked = 0;
+		foreach ( get_posts( array( 'post_type' => 'lnkup_packet', 'post_status' => 'any', 'posts_per_page' => -1, 'fields' => 'ids', 'meta_key' => '_lnkup_event_id', 'meta_value' => absint( $event_id ) ) ) as $packet_id ) { // phpcs:ignore WordPress.DB.SlowDBQuery
+			if ( self::is_unlocked( $packet_id ) ) {
+				++$unlocked;
+			}
+		}
+		if ( $unlocked > 0 ) {
+			return array(
+				'stage'    => 'published',
+				'label'    => __( 'Published', 'lnkup-marketplace' ),
+				/* translators: %d: number of vendors */
+				'hint'     => sprintf( _n( '%d paid vendor can open their pass.', '%d paid vendors can open their pass.', $unlocked, 'lnkup-marketplace' ), $unlocked ),
+				'unlocked' => $unlocked,
+			);
+		}
+		if ( empty( $required['arrival'] ) || empty( $required['booths'] ) ) {
+			return array(
+				'stage'    => 'draft',
+				'label'    => __( 'Draft', 'lnkup-marketplace' ),
+				'hint'     => __( 'Add arrival and booth details before vendors pay.', 'lnkup-marketplace' ),
+				'unlocked' => 0,
+			);
+		}
+		return array(
+			'stage'    => 'ready',
+			'label'    => __( 'Ready', 'lnkup-marketplace' ),
+			'hint'     => __( 'Vendors see this pass as soon as they pay.', 'lnkup-marketplace' ),
+			'unlocked' => 0,
+		);
+	}
+
+	/**
 	 * Save organizer pass details.
 	 *
 	 * @param int   $packet_id     Packet ID.
@@ -614,8 +659,8 @@ class LNKup_Packets {
 		}
 		$event_id = (int) get_post_meta( $packet_id, '_lnkup_event_id', true );
 		$organizer_id = $organizer_id ?: get_current_user_id();
-		if ( ! LNKup_Capabilities::organizer_owns_event( $event_id, $organizer_id ) && ! LNKup_Capabilities::user_has_manage_all( $organizer_id ) ) {
-			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ) );
+		if ( ! LNKup_Capabilities::staff_can( $event_id, 'edit_packets', $organizer_id ) ) {
+			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 		}
 
 		if ( isset( $input['venue_address'] ) ) {
@@ -684,6 +729,51 @@ class LNKup_Packets {
 	}
 
 	/**
+	 * Current organizer packet fields for an event.
+	 *
+	 * @param int $event_id Event ID.
+	 * @return array<string, string>|WP_Error
+	 */
+	public static function get_event_pass_details( $event_id ) {
+		$event_id = absint( $event_id );
+		$event    = get_post( $event_id );
+		if ( ! $event || 'lnkup_event' !== $event->post_type ) {
+			return new WP_Error( 'not_found', __( 'Event not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+
+		$packets = get_posts(
+			array(
+				'post_type'      => 'lnkup_packet',
+				'posts_per_page' => 1,
+				'meta_key'       => '_lnkup_event_id',
+				'meta_value'     => $event_id,
+			)
+		);
+		$packet_id = $packets ? (int) $packets[0]->ID : 0;
+
+		$load_in = $packet_id ? (string) get_post_meta( $packet_id, '_lnkup_load_in_time', true ) : '';
+		if ( '' === $load_in ) {
+			$load_in = (string) get_post_meta( $event_id, '_lnkup_start_time', true );
+		}
+		$load_out = $packet_id ? (string) get_post_meta( $packet_id, '_lnkup_load_out_time', true ) : '';
+		if ( '' === $load_out ) {
+			$load_out = (string) get_post_meta( $event_id, '_lnkup_end_time', true );
+		}
+
+		return array(
+			'event_id'        => (string) $event_id,
+			'event_title'     => $event->post_title,
+			'venue_address'   => (string) get_post_meta( $event_id, '_lnkup_venue_address', true ),
+			'load_in_time'    => $load_in,
+			'load_out_time'   => $load_out,
+			'vendor_gate'     => (string) get_post_meta( $event_id, '_lnkup_vendor_gate', true ),
+			'loadin_entrance' => (string) get_post_meta( $event_id, '_lnkup_loadin_entrance', true ),
+			'parking_info'    => (string) ( $packet_id ? get_post_meta( $packet_id, '_lnkup_parking_info', true ) : '' ) ?: (string) get_post_meta( $event_id, '_lnkup_parking_notes', true ),
+			'vendor_rules'    => $packet_id ? (string) get_post_meta( $packet_id, '_lnkup_vendor_rules', true ) : '',
+		);
+	}
+
+	/**
 	 * Save pass details for an event (uses first packet when available).
 	 *
 	 * @param int   $event_id     Event ID.
@@ -704,8 +794,8 @@ class LNKup_Packets {
 			return self::save_pass_details( (int) $packets[0]->ID, $input, $organizer_id );
 		}
 		$organizer_id = $organizer_id ?: get_current_user_id();
-		if ( ! LNKup_Capabilities::organizer_owns_event( $event_id, $organizer_id ) && ! LNKup_Capabilities::user_has_manage_all( $organizer_id ) ) {
-			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ) );
+		if ( ! LNKup_Capabilities::staff_can( $event_id, 'edit_packets', $organizer_id ) ) {
+			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 		}
 		if ( isset( $input['venue_address'] ) ) {
 			update_post_meta( $event_id, '_lnkup_venue_address', sanitize_textarea_field( (string) $input['venue_address'] ) );

@@ -175,6 +175,27 @@ After payment succeeds, vendor should land on:
 | **15–21** | Admin → tutorials arc | **Built** | [SYSTEM_OVERVIEW.md §14.2](SYSTEM_OVERVIEW.md#142-app-roadmap-phases-126) |
 | **16** | Checkout return reliability | **Built** (supersedes optional embedded checkout) | [PHASE_16_CHECKOUT_RETURN_RELIABILITY.md](PHASE_16_CHECKOUT_RETURN_RELIABILITY.md) |
 | **22–26** | Launch hardening → Financial OS | Queued | [PHASES_22_26_ROADMAP.md](PHASES_22_26_ROADMAP.md) |
+| **Next** | Organizer event command (WordPress) | **Built** | This section |
+
+### WordPress organizer event flow (plugin 12.18.53 — shipped)
+
+This is the organizer dashboard, not the Next.js launch wizard. Live means the event has an open vendor slot. Draft means it has none.
+
+- Publish on a draft opens the vendor-slot panel. Saving a slot makes the event Live.
+- Edit event saves title, category, description, date, times, attendance, ticketing link, and venue.
+- Vendor slots on the card: add a preset or custom type, change price and spots, remove a slot that has no requests. Removing the last open slot returns the event to Draft.
+- Duplicate asks for a new name, date, city, state, venue, and address. Slots, fees, and documents copy. Applications and payments do not.
+- Share event copies `/opportunities/?event={id}`: category, attendance, indoor or outdoor, amenities, tickets, organizer about, and each slot with category, price, spots filled, deadline, and Apply.
+- Public organizer profile at `/organizers/?organizer={slug}`: organization name, about, and live events.
+- Vendor requests filter to one event. An empty Manage roster explains the next step (Review requests, Discover vendors, or Publish).
+
+### Next upcoming flow — Organizer event command
+
+Shipped on the WordPress event card (plugin 12.18.54).
+
+- Edit event saves photos, indoor or outdoor, and vendor amenities, so the public page matches what the organizer set.
+- A vendor slot can be renamed. A slot with requests can be closed: new applications stop and existing requests stay. The extra fee table under Events is no longer shown.
+- Review requests and Find vendors sit on the vendor slots panel.
 
 ### Phase 14A — Journey handoffs
 

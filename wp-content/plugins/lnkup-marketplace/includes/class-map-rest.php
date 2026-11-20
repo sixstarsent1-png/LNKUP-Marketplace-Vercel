@@ -138,7 +138,7 @@ class LNKup_Map_REST {
 		register_rest_route( self::NS, '/maps/templates/(?P<template_id>\d+)/apply', array(
 			'methods'             => 'POST',
 			'callback'            => array( __CLASS__, 'apply_template' ),
-			'permission_callback' => array( __CLASS__, 'edit_map_permission' ),
+			'permission_callback' => array( __CLASS__, 'apply_template_permission' ),
 		) );
 
 		register_rest_route( self::NS, '/maps/packet/(?P<application_id>\d+)', array(
@@ -186,6 +186,17 @@ class LNKup_Map_REST {
 
 	public static function edit_map_permission( WP_REST_Request $request ) {
 		return LNKup_Capabilities::can_edit_event_map( absint( $request['id'] ) );
+	}
+
+	/**
+	 * Template apply targets the event in the body (the route has no event in its path).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function apply_template_permission( WP_REST_Request $request ) {
+		$body     = $request->get_json_params() ?: $request->get_params();
+		$event_id = absint( $body['event_id'] ?? 0 );
+		return $event_id && LNKup_Capabilities::can_edit_event_map( $event_id );
 	}
 
 	public static function staff_map_permission( WP_REST_Request $request ) {
@@ -315,7 +326,11 @@ class LNKup_Map_REST {
 	}
 
 	public static function delete_element( WP_REST_Request $request ) {
-		LNKup_Map_Elements::delete( absint( $request['element_id'] ) );
+		$event_id = absint( $request['id'] );
+		if ( ! LNKup_Map_Elements::delete( absint( $request['element_id'] ), $event_id ) ) {
+			return new WP_Error( 'not_found', __( 'Map item not found for this event.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		delete_transient( 'lnkup_map_live_' . $event_id );
 		return rest_ensure_response( array( 'success' => true ) );
 	}
 
@@ -379,6 +394,9 @@ class LNKup_Map_REST {
 		if ( ! $source ) {
 			return new WP_Error( 'missing_source', __( 'Source event required.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
+		if ( ! LNKup_Capabilities::can_edit_event_map( $source ) ) {
+			return new WP_Error( 'forbidden', __( 'You can only copy maps from your own events.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
 		$result = LNKup_Maps::duplicate_from_event( $source, absint( $request['id'] ) );
 		if ( is_wp_error( $result ) ) {
 			return $result;
@@ -405,6 +423,9 @@ class LNKup_Map_REST {
 	public static function save_template( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
 		if ( ! empty( $body['from_event_id'] ) ) {
+			if ( ! LNKup_Capabilities::organizer_owns_event( absint( $body['from_event_id'] ) ) ) {
+				return new WP_Error( 'forbidden', __( 'You can only save templates from your own events.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+			}
 			return rest_ensure_response(
 				LNKup_Map_Templates::save_from_event(
 					absint( $body['from_event_id'] ),

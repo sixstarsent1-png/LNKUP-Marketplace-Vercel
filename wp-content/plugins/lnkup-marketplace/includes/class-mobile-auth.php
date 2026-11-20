@@ -46,6 +46,9 @@ class LNKup_Mobile_Auth {
 		}
 
 		$found = self::find_user_id_for_token( $token );
+		if ( $found && class_exists( 'LNKup_App_Promo' ) ) {
+			LNKup_App_Promo::mark_app_user( $found );
+		}
 		return $found ? $found : $user_id;
 	}
 
@@ -91,6 +94,9 @@ class LNKup_Mobile_Auth {
 		}
 
 		update_user_meta( $user_id, self::META_KEY, array_values( $tokens ) );
+		if ( class_exists( 'LNKup_App_Promo' ) ) {
+			LNKup_App_Promo::mark_app_user( $user_id );
+		}
 
 		return array(
 			'token'      => $raw,

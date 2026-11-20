@@ -8,7 +8,7 @@
 get_header();
 $launch_label     = lnkup_theme_launch_label();
 $marketplace_open = lnkup_theme_marketplace_open();
-$login_url        = wp_login_url( lnkup_theme_registration_url() );
+$login_url        = function_exists( 'lnkup_login_page_url' ) ? lnkup_login_page_url() : wp_login_url();
 ?>
 <div class="lnkup-site lnkup-site--signup">
 	<?php get_template_part( 'template-parts/landing/site-header' ); ?>

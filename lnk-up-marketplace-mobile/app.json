@@ -1,0 +1,130 @@
+{
+  "expo": {
+    "name": "LNKup",
+    "slug": "lnkup-marketplace",
+    "version": "1.0.1",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "lnkup",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e3dec314-3099-4f91-9cd6-b977650ca5bf"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lnkup.marketplace",
+      "associatedDomains": ["applinks:thelnkup.com"],
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "NSLocationWhenInUseUsageDescription": "LNKup uses your location to show nearby vendor opportunities.",
+        "NSCameraUsageDescription": "LNKup uses the camera so you can scan payment cards when paying booth fees with Stripe.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0A0A",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "package": "com.lnkup.marketplace",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "thelnkup.com",
+              "pathPrefix": "/vendors"
+            },
+            {
+              "scheme": "https",
+              "host": "thelnkup.com",
+              "pathPrefix": "/organizers"
+            },
+            {
+              "scheme": "https",
+              "host": "thelnkup.com",
+              "pathPrefix": "/opportunities"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#000000"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#B3EE55",
+          "defaultChannel": "default"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "LNKup uses your location to show nearby vendor opportunities."
+        }
+      ],
+      "react-native-maps",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.lnkup.marketplace",
+          "enableGooglePay": false
+        }
+      ],
+      "expo-sharing",
+      "@react-native-community/datetimepicker",
+      "expo-image"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "wordpressApiUrl": "https://thelnkup.com",
+      "liveApi": "true",
+      "privacyPolicyUrl": "https://thelnkup.com/privacy",
+      "supportUrl": "https://thelnkup.com/contact",
+      "termsOfServiceUrl": "https://thelnkup.com/terms",
+      "router": {},
+      "eas": {
+        "projectId": "e3dec314-3099-4f91-9cd6-b977650ca5bf"
+      }
+    },
+    "owner": "darkero12"
+  }
+}

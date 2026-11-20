@@ -30,12 +30,21 @@
     return document.getElementById('lnkup-organizer-expand-' + panelId);
   }
 
+  var expandedOnce = {};
+
   function onPanelExpanded(panelId) {
+    if (!panelId || expandedOnce[panelId]) {
+      return;
+    }
+    expandedOnce[panelId] = true;
     if (panelId === 'vendors' && typeof window.lnkupCrmLoadDirectory === 'function') {
       window.lnkupCrmLoadDirectory();
     }
     if (panelId === 'intelligence') {
-      document.dispatchEvent(new CustomEvent('lnkup-intel-expand'));
+      var intel = document.getElementById('lnkup-organizer-intelligence');
+      if (!intel || (intel.getAttribute('data-loaded') !== '1' && intel.getAttribute('data-intel-loading') !== '1')) {
+        document.dispatchEvent(new CustomEvent('lnkup-intel-expand'));
+      }
     }
     if (panelId === 'financial') {
       document.dispatchEvent(new CustomEvent('lnkup-financial-expand'));
@@ -65,10 +74,10 @@
       onPanelExpanded(panelId);
     }
     if (scrollToSection !== false) {
-      window.location.hash = panelId;
       var target = document.getElementById(panelId);
       if (target) {
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        var motion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        target.scrollIntoView({ behavior: motion ? 'auto' : 'smooth', block: 'start' });
       }
     }
   }
@@ -92,15 +101,11 @@
     if (!id) {
       return;
     }
-    var current = (window.location.hash || '').replace(/^#/, '');
-    var currentSection = current.split('&')[0];
-    if (currentSection !== id) {
-      window.location.hash = id;
-    }
     var target = document.getElementById(id);
     if (target) {
       ignoreObserverUntil = Date.now() + 1000;
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      var motion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      target.scrollIntoView({ behavior: motion ? 'auto' : 'smooth', block: 'start' });
     }
   }
 
@@ -416,21 +421,32 @@
     function syncOpenVendorAppsFields() {
       var openCb = document.getElementById('lnkup_open_vendor_applications');
       var pricing = document.getElementById('lnkup-create-vendor-pricing');
-      var fee = document.getElementById('create_vendor_fee');
-      var spots = document.getElementById('create_spots_total');
       var open = !openCb || openCb.checked;
       if (pricing) {
         pricing.hidden = !open;
       }
-      if (fee) {
-        fee.disabled = !open;
-        fee.required = open;
+      var appSettings = document.querySelector('[data-applications-settings]');
+      if (appSettings) {
+        appSettings.hidden = !open;
       }
-      if (spots) {
-        spots.disabled = !open;
-        spots.required = open;
-      }
+      var fields = document.querySelectorAll('#lnkup-create-vendor-pricing .lnkup-fee-row__category, #lnkup-create-vendor-pricing .lnkup-fee-row__fee, #lnkup-create-vendor-pricing .lnkup-fee-row__spots, #lnkup-create-vendor-pricing .lnkup-fee-row__custom');
+      fields.forEach(function (el) {
+        el.disabled = !open;
+        if (el.classList.contains('lnkup-fee-row__custom')) {
+          el.required = false;
+          return;
+        }
+        if (el.classList.contains('lnkup-fee-row__category')) {
+          var row = el.closest('[data-fee-row]');
+          var custom = row ? row.querySelector('.lnkup-fee-row__custom') : null;
+          var hasCustom = custom && String(custom.value || '').trim() !== '';
+          el.required = open && !hasCustom;
+          return;
+        }
+        el.required = open;
+      });
     }
+    window.lnkupSyncOpenVendorAppsFields = syncOpenVendorAppsFields;
 
     function setWizardStep(stepId) {
       var num = stepNums[stepId] || '1';
@@ -479,24 +495,84 @@
       return null;
     }
 
+    function fieldLabel(el) {
+      var label = el.id ? document.querySelector('label[for="' + el.id + '"]') : null;
+      if (!label) {
+        label = el.closest('label');
+      }
+      var text = label ? label.textContent : (el.getAttribute('aria-label') || el.placeholder || el.name || '');
+      return text.replace(/\s*\*\s*$/, '').replace(/\s+/g, ' ').trim();
+    }
+
+    function renderStepErrors(stepId, invalid) {
+      var section = document.getElementById(stepId);
+      if (!section) {
+        return;
+      }
+      section.querySelectorAll('[aria-invalid="true"]').forEach(function (el) {
+        el.removeAttribute('aria-invalid');
+      });
+      var box = section.querySelector('.lnkup-step-errors');
+      if (!invalid.length) {
+        if (box) {
+          box.remove();
+        }
+        return;
+      }
+      if (!box) {
+        box = document.createElement('div');
+        box.className = 'lnkup-alert lnkup-alert--error lnkup-step-errors';
+        box.setAttribute('role', 'alert');
+        section.insertBefore(box, section.firstChild);
+      }
+      box.innerHTML = '';
+      var title = document.createElement('p');
+      title.className = 'lnkup-step-errors__title';
+      title.textContent = invalid.length === 1 ? 'Fix 1 field to continue:' : 'Fix ' + invalid.length + ' fields to continue:';
+      var list = document.createElement('ul');
+      invalid.forEach(function (el) {
+        el.setAttribute('aria-invalid', 'true');
+        var li = document.createElement('li');
+        li.textContent = (fieldLabel(el) || 'This field') + ': ' + (el.validationMessage || 'Required');
+        list.appendChild(li);
+      });
+      box.appendChild(title);
+      box.appendChild(list);
+    }
+
+    function invalidFieldsInStep(stepId) {
+      var section = document.getElementById(stepId);
+      if (!section) {
+        return [];
+      }
+      return Array.prototype.filter.call(section.querySelectorAll('input, select, textarea'), function (el) {
+        if (el.disabled || el.type === 'hidden' || el.type === 'submit' || el.type === 'button') {
+          return false;
+        }
+        return typeof el.checkValidity === 'function' && !el.checkValidity();
+      });
+    }
+
     function validateStep(stepId) {
-      var bad = firstInvalidInStep(stepId);
-      if (!bad) {
+      var invalid = invalidFieldsInStep(stepId);
+      renderStepErrors(stepId, invalid);
+      if (!invalid.length) {
         return true;
       }
-      if (typeof bad.reportValidity === 'function') {
-        bad.reportValidity();
-      }
       try {
-        bad.focus();
+        invalid[0].focus();
       } catch (e) {
         // ignore
       }
-      if (window.lnkupShowToast) {
-        window.lnkupShowToast('Please complete the required fields before continuing.', 'error');
-      }
       return false;
     }
+
+    wizard.addEventListener('input', function (e) {
+      var section = e.target.closest('[id^="lnkup-create-step-"]');
+      if (section && section.querySelector('.lnkup-step-errors')) {
+        renderStepErrors(section.id, invalidFieldsInStep(section.id));
+      }
+    });
 
     document.querySelectorAll('.lnkup-organizer-wizard-steps [data-wizard-step]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -538,6 +614,12 @@
         if (typeof window.lnkupSyncPublishSummary === 'function') {
           window.lnkupSyncPublishSummary();
         }
+      });
+    }
+    var vendorPricing = document.getElementById('lnkup-create-vendor-pricing');
+    if (vendorPricing) {
+      vendorPricing.addEventListener('input', function () {
+        syncOpenVendorAppsFields();
       });
     }
     syncOpenVendorAppsFields();
@@ -596,6 +678,19 @@
     initSectionNavObserver();
     loadIntelSummary();
     loadVendorsPreview();
+    EXPAND_PANEL_IDS.forEach(function (id) {
+      var panel = getExpandPanel(id);
+      if (panel && !panel.hidden) {
+        onPanelExpanded(id);
+      }
+    });
+    var createWrap = document.getElementById('lnkup-create-panel-wrap');
+    if (createWrap && !createWrap.hidden) {
+      var launcher = document.getElementById('lnkup-create-launcher');
+      if (launcher) {
+        launcher.hidden = true;
+      }
+    }
     handleHashDeepLink();
     window.addEventListener('hashchange', function () {
       syncSectionNav();

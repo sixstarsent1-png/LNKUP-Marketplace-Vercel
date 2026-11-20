@@ -5,7 +5,7 @@
  * @package LNKup_Theme
  */
 
-$signup_url       = lnkup_theme_registration_url();
+$signup_url       = function_exists( 'lnkup_theme_signup_url' ) ? lnkup_theme_signup_url() : lnkup_theme_registration_url();
 $marketplace_open = lnkup_theme_marketplace_open();
 $launch_label     = lnkup_theme_launch_label();
 $footer_title     = (string) lnkup_landing_get( 'footer_title', '' );
@@ -19,7 +19,10 @@ $cta_label        = is_user_logged_in() ? __( 'Complete profile', 'lnkup-theme' 
 			<div>
 				<h2 class="lnkup-heading lnkup-heading--footer"><?php echo esc_html( $footer_title ); ?></h2>
 				<p><?php echo esc_html( $footer_blurb ); ?></p>
-				<a href="<?php echo esc_url( is_user_logged_in() ? lnkup_page_url( 'vendor-profile' ) : $signup_url ); ?>" class="lnkup-btn lnkup-btn--accent lnkup-btn--lg"><?php echo esc_html( $cta_label ); ?></a>
+				<div class="lnkup-footer__actions">
+					<a href="<?php echo esc_url( is_user_logged_in() ? lnkup_page_url( 'vendor-profile' ) : $signup_url ); ?>" class="lnkup-btn lnkup-btn--accent lnkup-btn--lg"><?php echo esc_html( $cta_label ); ?></a>
+					<?php lnkup_theme_app_store_badge( 'white', 'footer' ); ?>
+				</div>
 			</div>
 			<div class="lnkup-footer__cols">
 				<div>
@@ -27,6 +30,9 @@ $cta_label        = is_user_logged_in() ? __( 'Complete profile', 'lnkup-theme' 
 					<ul>
 						<li><a href="<?php echo esc_url( $marketplace_open ? lnkup_page_url( 'opportunities' ) : $signup_url ); ?>"><?php echo $marketplace_open ? esc_html__( 'Find Events', 'lnkup-theme' ) : esc_html__( 'Sign up', 'lnkup-theme' ); ?></a></li>
 						<li><a href="<?php echo esc_url( $signup_url ); ?>"><?php esc_html_e( 'Create Account', 'lnkup-theme' ); ?></a></li>
+						<?php if ( ! is_user_logged_in() ) : ?>
+							<li><a href="<?php echo esc_url( function_exists( 'lnkup_theme_login_url' ) ? lnkup_theme_login_url() : wp_login_url() ); ?>"><?php esc_html_e( 'Log in', 'lnkup-theme' ); ?></a></li>
+						<?php endif; ?>
 						<li><a href="<?php echo esc_url( lnkup_page_url( 'vendor-dashboard' ) ); ?>"><?php esc_html_e( 'Applications', 'lnkup-theme' ); ?></a></li>
 					</ul>
 				</div>
@@ -34,8 +40,8 @@ $cta_label        = is_user_logged_in() ? __( 'Complete profile', 'lnkup-theme' 
 					<h3><?php esc_html_e( 'For organizers', 'lnkup-theme' ); ?></h3>
 					<ul>
 						<li><a href="<?php echo esc_url( lnkup_page_url( 'organizer-dashboard' ) ); ?>"><?php esc_html_e( 'Organizer Home', 'lnkup-theme' ); ?></a></li>
-						<li><a href="<?php echo esc_url( lnkup_page_url( 'organizer-dashboard' ) ); ?>#create"><?php esc_html_e( 'Create Event', 'lnkup-theme' ); ?></a></li>
-						<li><a href="<?php echo esc_url( lnkup_page_url( 'organizer-dashboard' ) ); ?>#events"><?php esc_html_e( 'Build Opportunity', 'lnkup-theme' ); ?></a></li>
+						<li><a href="<?php echo esc_url( function_exists( 'lnkup_organizer_view_url' ) ? lnkup_organizer_view_url( 'create' ) : lnkup_page_url( 'organizer-dashboard' ) . '?view=create' ); ?>"><?php esc_html_e( 'Create Event', 'lnkup-theme' ); ?></a></li>
+						<li><a href="<?php echo esc_url( function_exists( 'lnkup_organizer_view_url' ) ? lnkup_organizer_view_url( 'events' ) : lnkup_page_url( 'organizer-dashboard' ) . '?view=events' ); ?>"><?php esc_html_e( 'Build Opportunity', 'lnkup-theme' ); ?></a></li>
 					</ul>
 				</div>
 				<div>

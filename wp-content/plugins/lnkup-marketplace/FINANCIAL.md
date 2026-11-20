@@ -16,6 +16,7 @@ Stripe-first financial OS with **Marketplace Treasury System** and **Stripe Conn
 2. Complete platform profile and branding.
 3. Register webhook endpoint (URL above) with events:
    - `account.updated`
+   - `account.application.deauthorized`
    - `checkout.session.completed`
    - `payment_intent.succeeded`
    - `payment_intent.processing` (ACH — marks processing; does **not** unlock packets)
@@ -24,7 +25,7 @@ Stripe-first financial OS with **Marketplace Treasury System** and **Stripe Conn
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
    - `transfer.created`
-   - `transfer.failed`
+   - `transfer.reversed`
    - `payout.created`
    - `payout.paid`
    - `payout.failed`
@@ -45,7 +46,9 @@ Apps/mobile checkout is **handoff-only** (`/financial/checkout/{id}/redirect-url
 
 **Checkout Session ACH contract:** `checkout.session.completed` finalizes only when `payment_status=paid`. Unpaid/unsettled sessions call `mark_payment_processing` and wait for `payment_intent.succeeded` (same unlock rules as PI ACH). Sessions receive the same `excluded_payment_method_types` as PaymentIntents when ACH is off.
 
-**Webhook signatures:** When `stripe_webhook_secret` is set, unsigned payloads are always rejected — `test_mode` does **not** bypass verification. Unsigned JSON is only allowed with no secret + test_mode (local/dev).
+**Webhook signatures:** `LNKup_Stripe_Client::verify_webhook()` never returns an unverified payload — a missing secret or `Stripe-Signature` header is a `WP_Error`. Signatures older than 300 seconds are rejected (replay protection), and any matching `v1` signature is accepted (secret rotation). When `stripe_webhook_secret` or `stripe_connect_webhook_secret` is set, unsigned payloads are always rejected — `test_mode` does **not** bypass verification. Unsigned JSON is only allowed with no secrets + test_mode (local/dev).
+
+**Connect webhook endpoint:** Events on connected accounts (`account.updated`, `account.application.deauthorized`, `payout.paid`, `payout.failed`) are delivered only to a Stripe destination that listens to connected accounts. Point it at the same `/wp-json/lnkup/v1/stripe-webhook` URL and save its signing secret as `stripe_connect_webhook_secret`; the handler tries the platform secret first, then the Connect secret.
 
 **Webhook evidence:** LNKup → Stripe Connect shows 7-day counts + recent `lnkup_webhook_events` rows (idempotent by Stripe `event_id`).
 
@@ -56,6 +59,7 @@ Apps/mobile checkout is **handoff-only** (`/financial/checkout/{id}/redirect-url
 | `stripe_secret_key` | Yes |
 | `stripe_public_key` | Yes |
 | `stripe_webhook_secret` | Yes (production) |
+| `stripe_connect_webhook_secret` | Yes when Connect is enabled (connected-account events) |
 | `stripe_connect_enabled` | Yes to activate Connect |
 | `connect_platform_country` | e.g. `US` |
 | `connect_platform_currency` | e.g. `usd` |

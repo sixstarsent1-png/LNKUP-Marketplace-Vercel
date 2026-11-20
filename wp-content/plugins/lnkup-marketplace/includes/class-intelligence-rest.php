@@ -65,10 +65,11 @@ class LNKup_Intelligence_REST {
 			'callback' => array( __CLASS__, 'event_report' ),
 		) ) );
 
-		register_rest_route( self::NS, '/intelligence/opportunities/(?P<id>\d+)/score', array_merge( $org, array(
-			'methods'  => 'GET',
-			'callback' => array( __CLASS__, 'opportunity_score' ),
-		) ) );
+		register_rest_route( self::NS, '/intelligence/opportunities/(?P<id>\d+)/score', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'opportunity_score' ),
+			'permission_callback' => array( __CLASS__, 'opportunity_permission' ),
+		) );
 
 		register_rest_route( self::NS, '/intelligence/trends/categories', array(
 			'methods'             => 'GET',
@@ -98,10 +99,11 @@ class LNKup_Intelligence_REST {
 			'callback' => array( __CLASS__, 'vendor_me' ),
 		) ) );
 
-		register_rest_route( self::NS, '/intelligence/vendors/(?P<id>\d+)/reliability', array_merge( $org, array(
-			'methods'  => 'GET',
-			'callback' => array( __CLASS__, 'vendor_reliability' ),
-		) ) );
+		register_rest_route( self::NS, '/intelligence/vendors/(?P<id>\d+)/reliability', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'vendor_reliability' ),
+			'permission_callback' => array( __CLASS__, 'organizer_role_permission' ),
+		) );
 
 		register_rest_route( self::NS, '/intelligence/applications/(?P<id>\d+)/intel', array(
 			'methods'             => 'GET',
@@ -134,6 +136,28 @@ class LNKup_Intelligence_REST {
 			|| ( class_exists( 'LNKup_Roles' ) && LNKup_Roles::is_organizer() )
 			|| current_user_can( 'manage_options' )
 			|| LNKup_Capabilities::user_has_manage_all();
+	}
+
+	/**
+	 * Organizer role without an event in the path (vendor-level intelligence).
+	 */
+	public static function organizer_role_permission() {
+		return current_user_can( 'lnkup_review_applications' )
+			|| ( class_exists( 'LNKup_Roles' ) && LNKup_Roles::is_organizer() )
+			|| LNKup_Capabilities::user_has_manage_all();
+	}
+
+	/**
+	 * Opportunity score: the opportunity's event must be viewable by the caller.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function opportunity_permission( WP_REST_Request $request ) {
+		$opp_id = absint( $request['id'] );
+		if ( 'lnkup_opportunity' !== get_post_type( $opp_id ) ) {
+			return false;
+		}
+		return LNKup_Capabilities::can_view_event_intelligence( (int) get_post_meta( $opp_id, '_lnkup_event_id', true ) );
 	}
 
 	public static function vendor_permission() {
@@ -335,7 +359,43 @@ class LNKup_Intelligence_REST {
 				'readiness'      => $readiness,
 				'reliability'    => $reliability,
 				'profile'        => $profile_id ? LNKup_Vendor_CRM_Profile::get( $profile_id, get_current_user_id() ) : null,
+				'status_label'   => lnkup_application_status_label( (string) get_post_meta( $app_id, '_lnkup_application_status', true ) ),
+				'info_history'   => LNKup_Applications::info_history( $app_id ),
+				'vendor_history' => self::vendor_history_with_organizer( $app_id ),
 			)
+		);
+	}
+
+	/**
+	 * This vendor's other applications to the same organizer (newest first, max 8).
+	 *
+	 * @param int $app_id Current application ID.
+	 * @return array<int, array{event:string,status:string,date:string}>
+	 */
+	private static function vendor_history_with_organizer( $app_id ) {
+		$ids = get_posts(
+			array(
+				'post_type'      => 'lnkup_application',
+				'post_status'    => 'any',
+				'posts_per_page' => 8,
+				'fields'         => 'ids',
+				'post__not_in'   => array( $app_id ),
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_vendor_user_id', 'value' => (string) get_post_meta( $app_id, '_lnkup_vendor_user_id', true ) ),
+					array( 'key' => '_lnkup_organizer_user_id', 'value' => (string) get_post_meta( $app_id, '_lnkup_organizer_user_id', true ) ),
+				),
+			)
+		);
+		return array_map(
+			static function ( $id ) {
+				$event_id = (int) get_post_meta( $id, '_lnkup_event_id', true );
+				return array(
+					'event'  => $event_id ? get_the_title( $event_id ) : '',
+					'status' => lnkup_application_status_label( (string) get_post_meta( $id, '_lnkup_application_status', true ) ),
+					'date'   => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
+				);
+			},
+			$ids
 		);
 	}
 

@@ -113,7 +113,7 @@ class LNKup_Organizer_CRM_REST {
 		register_rest_route( self::NS, '/crm/invites/respond', array(
 			'methods'  => 'POST',
 			'callback' => array( __CLASS__, 'respond_invite' ),
-			'permission_callback' => '__return_true',
+			'permission_callback' => 'is_user_logged_in',
 		) );
 
 		register_rest_route( self::NS, '/crm/outreach/bulk', array(
@@ -427,7 +427,7 @@ class LNKup_Organizer_CRM_REST {
 		$event_id  = absint( $body['event_id'] ?? 0 );
 		$org_id    = get_current_user_id();
 
-		if ( $event_id && ! LNKup_Capabilities::organizer_owns_event( $org_id, $event_id ) ) {
+		if ( $event_id && ! LNKup_Capabilities::organizer_owns_event( $event_id, $org_id ) ) {
 			return new WP_Error( 'forbidden', __( 'You do not own this event.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 		}
 
@@ -580,21 +580,35 @@ class LNKup_Organizer_CRM_REST {
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
-		return rest_ensure_response( array( 'success' => true ) );
+		return rest_ensure_response( $result );
 	}
 
 	public static function check_in( WP_REST_Request $request ) {
-		$app_id = absint( $request['id'] );
+		$app_id   = absint( $request['id'] );
 		$event_id = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
-		LNKup_Event_Roster::bulk_action( $event_id, get_current_user_id(), array( $app_id ), 'check_in' );
-		return rest_ensure_response( array( 'success' => true ) );
+		$result   = LNKup_Event_Roster::bulk_action( $event_id, get_current_user_id(), array( $app_id ), 'check_in' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$item = $result['results'][0] ?? $result;
+		if ( is_array( $item ) && empty( $item['success'] ) ) {
+			return LNKup_Checkins::rest_response( $item );
+		}
+		return rest_ensure_response( $result );
 	}
 
 	public static function no_show( WP_REST_Request $request ) {
-		$app_id = absint( $request['id'] );
+		$app_id   = absint( $request['id'] );
 		$event_id = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
-		LNKup_Event_Roster::bulk_action( $event_id, get_current_user_id(), array( $app_id ), 'no_show' );
-		return rest_ensure_response( array( 'success' => true ) );
+		$result   = LNKup_Event_Roster::bulk_action( $event_id, get_current_user_id(), array( $app_id ), 'no_show' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$item = $result['results'][0] ?? $result;
+		if ( is_array( $item ) && empty( $item['success'] ) ) {
+			return LNKup_Checkins::rest_response( $item );
+		}
+		return rest_ensure_response( $result );
 	}
 
 	public static function dashboard_widgets( WP_REST_Request $request ) {

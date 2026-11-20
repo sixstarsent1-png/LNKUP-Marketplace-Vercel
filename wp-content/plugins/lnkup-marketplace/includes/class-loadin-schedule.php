@@ -59,13 +59,16 @@ class LNKup_Loadin_Schedule {
 	 * @param int $window_id Window ID.
 	 * @param int $app_id    Application ID.
 	 */
-	public static function assign( $window_id, $app_id ) {
+	public static function assign( $window_id, $app_id, $event_id = 0 ) {
 		global $wpdb;
 		$windows = LNKup_Operations_Tables::loadin_windows_table();
 		$assign  = LNKup_Operations_Tables::loadin_assignments_table();
 		$window  = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$windows} WHERE id = %d", absint( $window_id ) ), ARRAY_A );
-		if ( ! $window ) {
-			return new WP_Error( 'not_found', __( 'Load-in window not found.', 'lnkup-marketplace' ) );
+		if ( ! $window || ( $event_id && (int) $window['event_id'] !== absint( $event_id ) ) ) {
+			return new WP_Error( 'not_found', __( 'Load-in window not found for this event.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		if ( ! LNKup_Capabilities::application_in_event( $app_id, (int) $window['event_id'] ) ) {
+			return new WP_Error( 'wrong_event', __( 'That vendor is not booked for this event.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
 		}
 		if ( self::count_assignments( $window_id ) >= (int) $window['max_slots'] ) {
 			return new WP_Error( 'full', __( 'Load-in window is full.', 'lnkup-marketplace' ) );

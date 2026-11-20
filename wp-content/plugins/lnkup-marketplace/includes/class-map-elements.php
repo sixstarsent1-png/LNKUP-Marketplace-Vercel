@@ -109,8 +109,11 @@ class LNKup_Map_Elements {
 			'sort_order'   => (int) ( $data['sort_order'] ?? 0 ),
 			'updated_at'   => $now,
 		);
+		if ( $id && (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$table} WHERE id = %d", $id ) ) !== absint( $event_id ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$id = 0;
+		}
 		if ( $id ) {
-			$wpdb->update( $table, $row, array( 'id' => $id ) );
+			$wpdb->update( $table, $row, array( 'id' => $id, 'event_id' => absint( $event_id ) ) );
 			$row['id'] = $id;
 		} else {
 			$row['created_at'] = $now;
@@ -118,7 +121,7 @@ class LNKup_Map_Elements {
 			$row['id'] = (int) $wpdb->insert_id;
 		}
 		if ( 'booth' === $row['element_type'] && $row['linked_id'] ) {
-			self::sync_booth_position( $row['linked_id'], $row['pos_x'], $row['pos_y'] );
+			self::sync_booth_position( $row['linked_id'], $row['pos_x'], $row['pos_y'], absint( $event_id ) );
 		}
 		return self::format( $row );
 	}
@@ -140,22 +143,29 @@ class LNKup_Map_Elements {
 	 *
 	 * @param int $element_id Element ID.
 	 */
-	public static function delete( $element_id ) {
+	public static function delete( $element_id, $event_id = 0 ) {
 		global $wpdb;
 		$table = LNKup_Map_Tables::elements_table();
-		$wpdb->delete( $table, array( 'id' => absint( $element_id ) ) );
-		return true;
+		$where = array( 'id' => absint( $element_id ) );
+		if ( $event_id ) {
+			$where['event_id'] = absint( $event_id );
+		}
+		return (bool) $wpdb->delete( $table, $where );
 	}
 
 	/**
 	 * Sync booth table position from element.
 	 */
-	public static function sync_booth_position( $booth_id, $pos_x, $pos_y ) {
+	public static function sync_booth_position( $booth_id, $pos_x, $pos_y, $event_id = 0 ) {
 		if ( ! class_exists( 'LNKup_Booths' ) ) {
 			return;
 		}
 		global $wpdb;
 		$table = LNKup_Operations_Tables::booths_table();
+		$where = array( 'id' => absint( $booth_id ) );
+		if ( $event_id ) {
+			$where['event_id'] = absint( $event_id );
+		}
 		$wpdb->update(
 			$table,
 			array(
@@ -163,7 +173,7 @@ class LNKup_Map_Elements {
 				'pos_y'      => (float) $pos_y,
 				'updated_at' => current_time( 'mysql' ),
 			),
-			array( 'id' => absint( $booth_id ) )
+			$where
 		);
 	}
 

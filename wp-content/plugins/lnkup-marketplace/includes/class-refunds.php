@@ -9,11 +9,86 @@ defined( 'ABSPATH' ) || exit;
 
 class LNKup_Refunds {
 
+	/** Refund types accepted from callers; `marketplace_credit` is a legacy alias of `credit`. */
+	const TYPES = array( 'full', 'partial', 'credit', 'marketplace_credit' );
+
+	/** Statuses that block a second request on the same payment. */
+	const OPEN_STATUSES = array( 'pending', 'processing' );
+
+	/**
+	 * Amount already returned to the vendor as marketplace credit (card refunds live in `_lnkup_refund_amount`).
+	 *
+	 * @param int $payment_id Payment ID.
+	 */
+	public static function credited_amount( $payment_id ) {
+		return (float) get_post_meta( $payment_id, '_lnkup_credit_refund_amount', true );
+	}
+
+	/**
+	 * Whether a refund type returns marketplace credit instead of money to the card.
+	 *
+	 * @param string $type Refund type.
+	 */
+	public static function is_credit_type( $type ) {
+		return in_array( (string) $type, array( 'credit', 'marketplace_credit' ), true );
+	}
+
 	public static function request( $payment_id, $amount, $reason, $refund_type = 'full' ) {
 		$payment = get_post( $payment_id );
 		if ( ! $payment || 'lnkup_payment' !== $payment->post_type ) {
-			return new WP_Error( 'invalid', __( 'Invalid payment.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'invalid', __( 'Invalid payment.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}
+		$refund_type = sanitize_key( (string) $refund_type );
+		if ( ! in_array( $refund_type, self::TYPES, true ) ) {
+			return new WP_Error( 'invalid_refund_type', __( 'Choose a full, partial, or credit refund.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		return self::with_payment_lock(
+			$payment_id,
+			static function () use ( $payment_id, $amount, $reason, $refund_type ) {
+				if ( self::open_request_for_payment( $payment_id ) ) {
+					return new WP_Error( 'refund_pending', __( 'A refund for this booking is already waiting for a decision.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+				}
+				return self::insert_request( $payment_id, $amount, $reason, $refund_type );
+			}
+		);
+	}
+
+	/**
+	 * Open (pending or processing) refund row for a payment, if any.
+	 *
+	 * @param int $payment_id Payment ID.
+	 */
+	public static function open_request_for_payment( $payment_id ) {
+		global $wpdb;
+		$table = LNKup_Financial_Tables::refunds_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE payment_post_id = %d AND status IN ('pending','processing') ORDER BY id DESC LIMIT 1", $payment_id ), ARRAY_A );
+	}
+
+	/**
+	 * Serialize refund writes per payment.
+	 *
+	 * @param int      $payment_id Payment ID.
+	 * @param callable $callback   Work.
+	 * @return mixed|WP_Error
+	 */
+	private static function with_payment_lock( $payment_id, $callback ) {
+		global $wpdb;
+		$lock = 'lnkup_refund_pay_' . absint( $payment_id );
+		if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return new WP_Error( 'busy', __( 'This refund is already being processed. Refresh in a moment.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
+		}
+		try {
+			return $callback();
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/**
+	 * Insert a pending refund row after rule calculation (caller holds the payment lock).
+	 */
+	private static function insert_request( $payment_id, $amount, $reason, $refund_type ) {
 		if ( class_exists( 'LNKup_Refund_Rules' ) ) {
 			$calc = LNKup_Refund_Rules::calculate( $payment_id, $refund_type, $amount );
 			if ( is_wp_error( $calc ) ) {
@@ -21,6 +96,9 @@ class LNKup_Refunds {
 			}
 			$amount      = (float) $calc['amount'];
 			$refund_type = $calc['refund_type'];
+		}
+		if ( $amount <= 0 ) {
+			return new WP_Error( 'invalid_amount', __( 'There is nothing left to refund on this booking.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
 		}
 		$txn = LNKup_Transactions::get_by_payment_post( $payment_id );
 		global $wpdb;
@@ -51,56 +129,123 @@ class LNKup_Refunds {
 		global $wpdb;
 		$table  = LNKup_Financial_Tables::refunds_table();
 		$refund = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $refund_id ), ARRAY_A );
-		if ( ! $refund || 'pending' !== $refund['status'] ) {
-			return new WP_Error( 'invalid', __( 'Invalid refund request.', 'lnkup-marketplace' ) );
+		if ( ! $refund ) {
+			return new WP_Error( 'not_found', __( 'Refund request not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}
-		$provider = LNKup_Payment_Provider::get_instance();
-		$result   = $provider->refund( (int) $refund['payment_post_id'], (float) $refund['amount'] );
-		if ( is_wp_error( $result ) ) {
-			return $result;
+		return self::with_payment_lock(
+			(int) $refund['payment_post_id'],
+			static function () use ( $refund_id, $approver_id ) {
+				return self::approve_locked( (int) $refund_id, (int) $approver_id );
+			}
+		);
+	}
+
+	/**
+	 * Issue an approved refund exactly once. The row is claimed (pending → processing) before
+	 * any money moves, so a double click or a second approver gets 409 instead of a second refund.
+	 */
+	private static function approve_locked( $refund_id, $approver_id ) {
+		global $wpdb;
+		$table   = LNKup_Financial_Tables::refunds_table();
+		$claimed = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'processing', updated_at = %s WHERE id = %d AND status = 'pending'", current_time( 'mysql' ), $refund_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( 1 !== (int) $claimed ) {
+			return new WP_Error( 'refund_not_pending', __( 'This refund was already handled.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
 		}
-		$provider_ref = is_array( $result ) ? ( $result['provider_ref'] ?? '' ) : '';
+		$refund     = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $refund_id ), ARRAY_A );
+		$payment_id = (int) $refund['payment_post_id'];
+		$is_credit  = self::is_credit_type( $refund['refund_type'] );
+		$total      = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
+		$card_done  = (float) get_post_meta( $payment_id, '_lnkup_refund_amount', true );
+		$remaining  = max( 0, round( $total - $card_done - self::credited_amount( $payment_id ), 2 ) );
+		$amount     = min( (float) $refund['amount'], $remaining );
+		$pay_status = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
+
+		if ( $amount <= 0 || ! in_array( $pay_status, array( 'paid', 'partially_refunded' ), true ) ) {
+			self::set_status( $refund_id, 'failed' );
+			LNKup_Financial_Audit::log( 'refund_failed', 'refund', $refund_id, array( 'reason' => 'nothing_refundable' ) );
+			return new WP_Error( 'fully_refunded', __( 'There is nothing left to refund on this booking.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+
+		$provider_ref = '';
+		if ( $is_credit ) {
+			$granted = LNKup_Credits::grant( (int) $refund['vendor_user_id'], $amount, 'refund', 'refund', $refund_id );
+			if ( is_wp_error( $granted ) || ! $granted ) {
+				self::set_status( $refund_id, 'pending' );
+				return new WP_Error( 'credit_failed', __( 'The credit could not be added. Try again shortly.', 'lnkup-marketplace' ), array( 'status' => 500 ) );
+			}
+			update_post_meta( $payment_id, '_lnkup_credit_refund_amount', round( self::credited_amount( $payment_id ) + $amount, 2 ) );
+			$provider_ref = 'credit_' . $refund_id;
+		} else {
+			$result = LNKup_Financial_Service::refund( $payment_id, $amount );
+			if ( is_wp_error( $result ) ) {
+				self::set_status( $refund_id, 'pending' );
+				LNKup_Financial_Audit::log( 'refund_provider_error', 'refund', $refund_id, array( 'code' => $result->get_error_code() ) );
+				return new WP_Error( 'refund_failed', __( 'The refund could not be sent. Nothing was charged back; try again shortly.', 'lnkup-marketplace' ), array( 'status' => 502 ) );
+			}
+			$provider_ref = is_array( $result ) ? (string) ( $result['provider_ref'] ?? '' ) : '';
+			update_post_meta( $payment_id, '_lnkup_refund_amount', round( $card_done + $amount, 2 ) );
+		}
+
 		$wpdb->update(
 			$table,
 			array(
 				'status'       => 'approved',
+				'amount'       => $amount,
 				'approved_by'  => $approver_id ?: get_current_user_id(),
 				'provider_ref' => $provider_ref,
 				'updated_at'   => current_time( 'mysql' ),
 			),
 			array( 'id' => $refund_id ),
-			array( '%s', '%d', '%s', '%s' ),
+			array( '%s', '%f', '%d', '%s', '%s' ),
 			array( '%d' )
 		);
-		update_post_meta( (int) $refund['payment_post_id'], '_lnkup_payment_status', 'refunded' );
-		if ( 'credit' === $refund['refund_type'] || 'marketplace_credit' === $refund['refund_type'] ) {
-			LNKup_Credits::grant( (int) $refund['vendor_user_id'], (float) $refund['amount'], 'refund', 'refund', $refund_id );
-		}
+		self::sync_payment_refund_status( $payment_id );
 		LNKup_Transactions::create( array(
 			'type'              => 'refund',
 			'status'            => 'completed',
-			'amount'            => (float) $refund['amount'],
+			'amount'            => $amount,
 			'vendor_user_id'    => (int) $refund['vendor_user_id'],
 			'organizer_user_id' => (int) $refund['organizer_user_id'],
-			'payment_post_id'   => (int) $refund['payment_post_id'],
+			'payment_post_id'   => $payment_id,
 			'provider_ref'      => $provider_ref,
 		) );
-		LNKup_Financial_Audit::log( 'refund_issued', 'refund', $refund_id, array( 'amount' => (float) $refund['amount'] ) );
+		LNKup_Financial_Audit::log( 'refund_issued', 'refund', $refund_id, array( 'amount' => $amount, 'type' => $refund['refund_type'] ) );
 		do_action( 'lnkup_refund_completed', $refund_id );
 		return true;
 	}
 
+	/**
+	 * Set the payment to refunded / partially_refunded from card refunds plus credit refunds.
+	 *
+	 * @param int $payment_id Payment ID.
+	 */
+	public static function sync_payment_refund_status( $payment_id ) {
+		$total    = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
+		$returned = (float) get_post_meta( $payment_id, '_lnkup_refund_amount', true ) + self::credited_amount( $payment_id );
+		if ( $returned <= 0 ) {
+			return;
+		}
+		update_post_meta( $payment_id, '_lnkup_payment_status', $returned + 0.004 >= $total ? 'refunded' : 'partially_refunded' );
+	}
+
 	public static function deny( $refund_id ) {
 		global $wpdb;
-		$table = LNKup_Financial_Tables::refunds_table();
-		$wpdb->update(
-			$table,
-			array( 'status' => 'denied', 'updated_at' => current_time( 'mysql' ) ),
-			array( 'id' => $refund_id ),
-			array( '%s', '%s' ),
-			array( '%d' )
-		);
+		$table   = LNKup_Financial_Tables::refunds_table();
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'denied', updated_at = %s WHERE id = %d AND status = 'pending'", current_time( 'mysql' ), $refund_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( 1 !== (int) $updated ) {
+			return new WP_Error( 'refund_not_pending', __( 'This refund was already handled.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
 		LNKup_Financial_Audit::log( 'refund_denied', 'refund', $refund_id );
+		return true;
+	}
+
+	/**
+	 * @param int    $refund_id Refund ID.
+	 * @param string $status    New status.
+	 */
+	private static function set_status( $refund_id, $status ) {
+		global $wpdb;
+		$wpdb->update( LNKup_Financial_Tables::refunds_table(), array( 'status' => $status, 'updated_at' => current_time( 'mysql' ) ), array( 'id' => $refund_id ), array( '%s', '%s' ), array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	}
 
 	public static function list_for_user( $user_id, $role = 'vendor', $limit = 25 ) {

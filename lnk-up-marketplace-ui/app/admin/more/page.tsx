@@ -28,6 +28,9 @@ const groups: SettingsGroup[] = [
       { icon: Users, label: "Admin team", hint: "5 members" },
       { icon: FileText, label: "Audit log" },
       { icon: Database, label: "Data & exports" },
+      { icon: Flag, label: "External events queue", href: "/admin/external-events" },
+      { icon: ShieldCheck, label: "Verification queue", href: "/admin/verification" },
+      { icon: Users, label: "Connector approvals", href: "/admin/connectors" },
     ],
   },
   {

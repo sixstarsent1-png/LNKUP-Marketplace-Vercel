@@ -1,12 +1,22 @@
 import { Star, MapPin, CheckCircle2, Plus } from "lucide-react"
 import type { Vendor } from "@/lib/data"
+import type { PublicVendorReputation } from "@/lib/api/vendor-reputation"
+import { PublicVendorReputationModule } from "@/components/reputation/public-vendor-reputation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { VerificationBadge } from "@/components/marketplace/badges"
 
-export function VendorCard({ vendor }: { vendor: Vendor }) {
+export function VendorCard({
+  vendor,
+  reputation,
+  onViewProfile,
+}: {
+  vendor: Vendor
+  reputation?: PublicVendorReputation
+  onViewProfile?: (vendorId: string) => void
+}) {
   return (
     <Card className="gap-3 rounded-2xl p-4">
       <div className="flex items-start gap-3">
@@ -42,11 +52,19 @@ export function VendorCard({ vendor }: { vendor: Vendor }) {
         {vendor.documentsVerified && <VerificationBadge label="Docs" type="doc" />}
       </div>
 
+      {reputation && <PublicVendorReputationModule reputation={reputation} />}
+
       <div className="flex gap-2">
-        <Button variant="outline" className="flex-1">
+        <Button
+          variant="outline"
+          className="flex-1"
+          type="button"
+          onClick={() => onViewProfile?.(vendor.id)}
+          data-testid="vendor-card-view-profile"
+        >
           View profile
         </Button>
-        <Button className="flex-1">
+        <Button className="flex-1" type="button" disabled title="Invite from LNKup CRM">
           <Plus data-icon="inline-start" />
           Invite
         </Button>

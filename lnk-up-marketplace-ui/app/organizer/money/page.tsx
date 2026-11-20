@@ -1,216 +1,355 @@
 "use client"
 
-import { Suspense } from "react"
-import {
-  DollarSign,
-  TrendingUp,
-  Clock,
-  Download,
-  ArrowUpRight,
-  Receipt,
-  Wallet,
-  RotateCcw,
-  FileBarChart,
-  CheckCircle2,
-} from "lucide-react"
-import { events } from "@/lib/data"
-import { usePanelState } from "@/lib/use-panel-state"
+import { Suspense, useEffect, useMemo, useState } from "react"
+import Link from "next/link"
+import { ExternalLink, Loader2, Wallet } from "lucide-react"
+import { isLiveApiEnabled } from "@/lib/api/config"
+import { getOrganizerFinancialUrl } from "@/lib/api/config"
+import { useOrganizerMoney } from "@/lib/hooks/use-organizer-money"
+import { useOrganizerMoneyActivity } from "@/lib/hooks/use-organizer-money-activity"
+import { useOrganizerMoneyEvents } from "@/lib/hooks/use-organizer-event-money"
+import { usePanelState, type PanelState } from "@/lib/use-panel-state"
+import { trackLnkupEvent } from "@/lib/analytics/track-event"
+import { parseApiResponse } from "@/lib/api/parse-api-error"
 import { PageHeader } from "@/components/marketplace/page-header"
-import { StatCard } from "@/components/marketplace/stat-card"
-import { PanelContent, EmptyState, SkeletonList } from "@/components/marketplace/states"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { OrganizerFinancialSnapshot } from "@/components/organizer/organizer-financial-snapshot"
+import { PaymentActivityList } from "@/components/financial/payment-activity-list"
+import { MoneyStatCard } from "@/components/financial/money-stat-card"
+import { PanelContent, SkeletonList, EmptyState } from "@/components/marketplace/states"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
-import { StatusBadge } from "@/components/marketplace/badges"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-const payouts = [
-  { id: "p1", event: "Charlotte Night Market", date: "Jul 20, 2026", amount: 4070, status: "paid" as const },
-  { id: "p2", event: "Atlanta Food Fest", date: "Aug 4, 2026", amount: 8320, status: "due" as const },
-  { id: "p3", event: "Greensboro Summer Block Party", date: "Jul 27, 2026", amount: 3750, status: "paid" as const },
-  { id: "p4", event: "Houston Rodeo Weekend Market", date: "Sep 22, 2026", amount: 12245, status: "due" as const },
-]
+function payoutCopy(status?: string) {
+  switch (status) {
+    case "active":
+      return "Payouts active"
+    case "setup_required":
+      return "Finish payout setup"
+    case "pending":
+      return "Payout setup pending"
+    default:
+      return "Payout status unavailable"
+  }
+}
 
-const refunds = [
-  { id: "rf1", event: "Charlotte Night Market", vendor: "The Rolling Dessert Co.", amount: 185, date: "Jun 14, 2026" },
-]
+function OrganizerPayoutActions({
+  payoutStatus,
+  availableBalance,
+  currency,
+  onCashoutSuccess,
+}: {
+  payoutStatus?: string
+  availableBalance?: number
+  currency?: string
+  onCashoutSuccess: () => void
+}) {
+  const [amount, setAmount] = useState(
+    availableBalance && availableBalance > 0 ? String(availableBalance) : "",
+  )
+  const [cashoutType, setCashoutType] = useState<"standard" | "instant">("standard")
+  const [busy, setBusy] = useState<"cashout" | "login" | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-function OrganizerMoneyContent() {
-  const { state, retry } = usePanelState()
-  const myEvents = events.filter((e) => e.organizer === "CultureWave Events" || e.organizer === "Southern Social Co.")
-  const total = myEvents.reduce((s, e) => s + e.revenue, 0)
-  const pending = payouts.filter((p) => p.status === "due").reduce((s, p) => s + p.amount, 0)
-  const available = payouts.filter((p) => p.status === "paid").reduce((s, p) => s + p.amount, 0)
-  const payoutsActive = true
+  useEffect(() => {
+    if (availableBalance != null && availableBalance > 0) {
+      setAmount(String(availableBalance))
+    }
+  }, [availableBalance])
+
+  async function handleCashout() {
+    setBusy("cashout")
+    setError(null)
+    setMessage(null)
+    try {
+      const response = await fetch("/api/organizer/financial/cashout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ amount: Number(amount), type: cashoutType }),
+      })
+      const { data, error: apiError } = await parseApiResponse<{ message?: string }>(response)
+      if (apiError || !response.ok) {
+        setError(apiError?.message ?? "Cashout could not be completed.")
+        return
+      }
+      setMessage(data?.message ?? "Cashout requested.")
+      trackLnkupEvent({
+        event: "wordpress_financial_center_opened",
+        source: "organizer_money_cashout",
+        metadata: { type: cashoutType },
+      })
+      onCashoutSuccess()
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function handleLoginLink() {
+    setBusy("login")
+    setError(null)
+    setMessage(null)
+    try {
+      const response = await fetch("/api/organizer/financial/login-link", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      const { data, error: apiError } = await parseApiResponse<{ url?: string; message?: string }>(response)
+      if (apiError || !response.ok || !data?.url) {
+        setError(apiError?.message ?? data?.message ?? "Could not open payout account.")
+        return
+      }
+      trackLnkupEvent({
+        event: "financial_handoff_clicked",
+        source: "organizer_money_login_link",
+      })
+      window.open(data.url, "_blank", "noopener,noreferrer")
+      setMessage(data.message ?? "Opened Stripe Express.")
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const canCashout = payoutStatus === "active"
 
   return (
-    <PanelContent state={state} retry={retry}>
-      <div className="flex flex-col gap-6">
+    <Card className="rounded-2xl" data-testid="organizer-payout-actions">
+      <CardHeader>
+        <CardTitle className="text-base">Payouts & cashout</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <p className="text-sm font-semibold">{payoutCopy(payoutStatus)}</p>
+        <p className="text-sm text-muted-foreground">
+          Available balance:{" "}
+          {availableBalance != null
+            ? new Intl.NumberFormat("en-US", {
+                style: "currency",
+                currency: currency ?? "USD",
+              }).format(availableBalance)
+            : "—"}
+        </p>
+
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+          <label className="grid gap-1 text-sm">
+            <span className="text-muted-foreground">Cashout amount</span>
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              disabled={!canCashout || busy !== null}
+              data-testid="organizer-cashout-amount"
+            />
+          </label>
+          <select
+            className="h-9 rounded-md border bg-background px-2 text-sm"
+            value={cashoutType}
+            onChange={(e) => setCashoutType(e.target.value === "instant" ? "instant" : "standard")}
+            disabled={!canCashout || busy !== null}
+          >
+            <option value="standard">Standard</option>
+            <option value="instant">Instant</option>
+          </select>
+          <Button
+            type="button"
+            onClick={handleCashout}
+            disabled={!canCashout || busy !== null || !(Number(amount) > 0)}
+            data-testid="organizer-cashout-submit"
+          >
+            {busy === "cashout" && <Loader2 className="animate-spin" data-icon="inline-start" />}
+            Request cashout
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleLoginLink}
+            disabled={busy !== null}
+            data-testid="organizer-connect-login-link"
+          >
+            {busy === "login" && <Loader2 className="animate-spin" data-icon="inline-start" />}
+            Open payout account
+          </Button>
+        </div>
+
+        {!canCashout && (
+          <p className="text-sm text-muted-foreground">
+            Finish payout setup in LNKup to request cashouts. You can still open Stripe Express if your
+            account is already connected.
+          </p>
+        )}
+        {message && <p className="text-sm text-emerald-700">{message}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
+      </CardContent>
+    </Card>
+  )
+}
+
+function OrganizerMoneyContent() {
+  const live = isLiveApiEnabled()
+  const { state: qaState, retry: qaRetry } = usePanelState()
+  const { summary, loading, error, retry } = useOrganizerMoney()
+  const activity = useOrganizerMoneyActivity()
+  const events = useOrganizerMoneyEvents()
+  const financialUrl = getOrganizerFinancialUrl()
+
+  const panelState: PanelState = useMemo(() => {
+    if (qaState === "error") return "error"
+    if (qaState === "loading") return "loading"
+    if (qaState === "empty") return "empty"
+    if (live && loading) return "loading"
+    if (live && error) return "error"
+    if (!summary) return "empty"
+    return "content"
+  }, [qaState, live, loading, error, summary])
+
+  const handleRetry = () => {
+    if (qaState === "error") {
+      qaRetry()
+      return
+    }
+    retry()
+    activity.retry()
+    events.retry()
+  }
+
+  function handleActivityClick(item: { href?: string; eventId?: string }) {
+    if (typeof window === "undefined") return
+    if (item.href) {
+      window.location.href = item.href
+      return
+    }
+    if (item.eventId) {
+      window.location.href = `/organizer/events/${item.eventId}`
+    }
+  }
+
+  useEffect(() => {
+    trackLnkupEvent({ event: "organizer_money_viewed", source: "organizer_money_page" })
+  }, [])
+
+  return (
+    <PanelContent state={panelState} retry={handleRetry}>
+      <div className="flex flex-col gap-6" data-testid="organizer-money">
         <PageHeader
           title="Money"
-          subtitle="Track vendor fees and payouts across your events."
+          subtitle="Vendor fees, cashouts, and payout account access."
           action={
-            <Button variant="outline">
-              <Download data-icon="inline-start" />
-              Export
-            </Button>
+            financialUrl ? (
+              <Button
+                variant="outline"
+                nativeButton={false}
+                render={<Link href={financialUrl} target="_blank" rel="noopener noreferrer" />}
+                onClick={() =>
+                  trackLnkupEvent({
+                    event: "wordpress_financial_center_opened",
+                    source: "organizer_money_header",
+                  })
+                }
+              >
+                <ExternalLink data-icon="inline-start" />
+                More on web
+              </Button>
+            ) : undefined
           }
         />
 
         <Tabs defaultValue="overview">
-          <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-            <TabsList variant="line" className="w-max">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="wallet">Wallet</TabsTrigger>
-              <TabsTrigger value="payouts">Payouts</TabsTrigger>
-              <TabsTrigger value="revenue">Revenue</TabsTrigger>
-              <TabsTrigger value="refunds">Refunds</TabsTrigger>
-              <TabsTrigger value="reports">Reports</TabsTrigger>
-            </TabsList>
-          </div>
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsTrigger value="events">Events</TabsTrigger>
+            <TabsTrigger value="payouts">Payouts</TabsTrigger>
+          </TabsList>
 
           <TabsContent value="overview" className="mt-4 flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-              <StatCard label="Total collected" value={`$${total.toLocaleString()}`} hint="Across your events" icon={DollarSign} accent />
-              <StatCard label="Available balance" value={`$${available.toLocaleString()}`} hint="Ready to withdraw" icon={Wallet} />
-              <StatCard label="Pending payout" value={`$${pending.toLocaleString()}`} hint="Clears after events" icon={Clock} />
-            </div>
-
-            <Card className="rounded-2xl bg-primary text-primary-foreground">
-              <CardContent className="flex items-center gap-4 py-5">
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent">
-                  <CheckCircle2 className="size-5 text-accent-foreground" />
-                </span>
-                <div className="flex flex-1 flex-col">
-                  <span className="font-heading font-semibold">
-                    {payoutsActive ? "Payouts active" : "Finish payout setup"}
-                  </span>
-                  <span className="text-sm text-primary-foreground/70">
-                    {payoutsActive
-                      ? "Vendor fees land in your LNKup balance after each event. Payouts typically clear in 3 business days."
-                      : "Connect your bank account to receive vendor fee payouts after events."}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
+            {summary && <OrganizerFinancialSnapshot snapshot={summary} />}
+            <OrganizerPayoutActions
+              payoutStatus={summary?.payoutStatus}
+              availableBalance={summary?.availableBalance}
+              currency={summary?.currency}
+              onCashoutSuccess={() => {
+                retry()
+                activity.retry()
+              }}
+            />
           </TabsContent>
 
-          <TabsContent value="wallet" className="mt-4 flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3">
-              <StatCard label="Available" value={`$${available.toLocaleString()}`} hint="Withdraw anytime" icon={Wallet} accent />
-              <StatCard label="Pending" value={`$${pending.toLocaleString()}`} hint="After event close" icon={Clock} />
-            </div>
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle className="text-base">LNKup balance</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                Your balance holds vendor fees until events complete. No need to manage payment processors
-                directly — LNKup handles collection and payout timing for you.
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="payouts" className="mt-4">
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle className="text-base">Payout history</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col">
-                {payouts.map((p, i) => (
-                  <div key={p.id}>
-                    {i > 0 && <Separator />}
-                    <div className="flex items-center gap-3 py-3">
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted">
-                        <ArrowUpRight className="size-5 text-muted-foreground" />
-                      </span>
-                      <div className="flex flex-1 flex-col">
-                        <span className="text-sm font-semibold">{p.event}</span>
-                        <span className="text-xs text-muted-foreground">{p.date}</span>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="font-heading font-bold">${p.amount.toLocaleString()}</span>
-                        <StatusBadge variant={p.status === "paid" ? "paid" : "due"}>
-                          {p.status === "paid" ? "Paid" : "Due"}
-                        </StatusBadge>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="revenue" className="mt-4 flex flex-col gap-4">
-            <StatCard label="Avg. per event" value={`$${Math.round(total / myEvents.length).toLocaleString()}`} hint="Vendor fees" icon={TrendingUp} accent />
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle className="text-base">Revenue by event</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col">
-                {myEvents.map((e, i) => (
-                  <div key={e.id}>
-                    {i > 0 && <Separator />}
-                    <div className="flex items-center justify-between py-3">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-semibold">{e.name}</span>
-                        <span className="text-xs text-muted-foreground">{e.paidVendors} paid vendors</span>
-                      </div>
-                      <span className="font-heading font-bold">${e.revenue.toLocaleString()}</span>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="refunds" className="mt-4">
-            {refunds.length > 0 ? (
-              <Card className="rounded-2xl">
-                <CardHeader>
-                  <CardTitle className="text-base">Refund history</CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col">
-                  {refunds.map((r, i) => (
-                    <div key={r.id}>
-                      {i > 0 && <Separator />}
-                      <div className="flex items-center gap-3 py-3">
-                        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted">
-                          <RotateCcw className="size-5 text-muted-foreground" />
-                        </span>
-                        <div className="flex flex-1 flex-col">
-                          <span className="text-sm font-semibold">{r.event}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {r.vendor} · {r.date}
-                          </span>
-                        </div>
-                        <span className="font-heading font-bold">-${r.amount}</span>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+          <TabsContent value="activity" className="mt-4" data-testid="organizer-money-activity">
+            {activity.loading ? (
+              <SkeletonList count={3} />
+            ) : activity.error ? (
+              <EmptyState icon={Wallet} title="Couldn't load activity" description={activity.error} />
             ) : (
-              <EmptyState
-                icon={RotateCcw}
-                title="No refunds"
-                description="Refunds appear here when a vendor booking is canceled and fees are returned."
+              <PaymentActivityList
+                items={activity.items}
+                emptyMessage="Financial activity will appear here."
+                onItemClick={handleActivityClick}
               />
             )}
           </TabsContent>
 
-          <TabsContent value="reports" className="mt-4">
-            <EmptyState
-              icon={FileBarChart}
-              title="Reports coming soon"
-              description="Download monthly revenue summaries and vendor fee breakdowns for your accountant."
-              action={
-                <Button variant="outline">
-                  <Download data-icon="inline-start" />
-                  Request early access
-                </Button>
-              }
+          <TabsContent value="events" className="mt-4 flex flex-col gap-3" data-testid="organizer-money-events">
+            {events.loading ? (
+              <SkeletonList count={2} />
+            ) : events.items.length === 0 ? (
+              <EmptyState icon={Wallet} title="No event finances yet" description="Event payment summaries appear here." />
+            ) : (
+              events.items.map((event) => (
+                <Card key={event.eventId} className="rounded-2xl">
+                  <CardContent className="flex flex-col gap-3 py-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold">{event.eventName ?? "Event"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {event.paidVendorCount ?? 0} paid · {event.paymentRequiredCount ?? 0} payment required
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        nativeButton={false}
+                        render={<Link href={`/organizer/events/${event.eventId}`} />}
+                      >
+                        View event
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <MoneyStatCard label="Collected" amount={event.collected} currency={event.currency} />
+                      <MoneyStatCard label="Pending" amount={event.pending} currency={event.currency} tone="warning" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </TabsContent>
+
+          <TabsContent value="payouts" className="mt-4">
+            <OrganizerPayoutActions
+              payoutStatus={summary?.payoutStatus}
+              availableBalance={summary?.availableBalance}
+              currency={summary?.currency}
+              onCashoutSuccess={() => {
+                retry()
+                activity.retry()
+              }}
             />
+            {financialUrl && (
+              <div className="mt-4">
+                <Button
+                  variant="outline"
+                  nativeButton={false}
+                  render={<Link href={financialUrl} target="_blank" rel="noopener noreferrer" />}
+                >
+                  Advanced settings on LNKup web
+                </Button>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </div>

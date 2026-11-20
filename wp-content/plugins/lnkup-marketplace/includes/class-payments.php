@@ -15,6 +15,25 @@ class LNKup_Payments {
 	 * @param int $app_id Application ID.
 	 */
 	public static function create_from_application( $app_id ) {
+		global $wpdb;
+		$lock = 'lnkup_payment_app_' . absint( $app_id );
+		if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return 0;
+		}
+		try {
+			return self::create_from_application_locked( $app_id );
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/**
+	 * Body of create_from_application; caller holds the per-application lock so the
+	 * existing-payment check and insert cannot interleave.
+	 *
+	 * @param int $app_id Application ID.
+	 */
+	private static function create_from_application_locked( $app_id ) {
 		$existing = get_posts(
 			array(
 				'post_type'      => 'lnkup_payment',
@@ -98,7 +117,9 @@ class LNKup_Payments {
 			}
 		}
 
-		LNKup_Notifications::send_payment_required( $app_id, $payment_id );
+		if ( LNKup_Financial_Service::get_checkout_amount( $payment_id ) > 0 ) {
+			LNKup_Notifications::send_payment_required( $app_id, $payment_id );
+		}
 
 		return $payment_id;
 	}

@@ -73,7 +73,9 @@ class LNKup_Receipts {
 		if ( ! $row ) {
 			return null;
 		}
-		$meta = ! empty( $row['metadata'] ) ? json_decode( $row['metadata'], true ) : array();
+		$meta     = ! empty( $row['metadata'] ) ? json_decode( $row['metadata'], true ) : array();
+		$meta     = is_array( $meta ) ? $meta : array();
+		$event_id = (int) ( $meta['event_id'] ?? 0 );
 		return array(
 			'id'              => (int) $row['id'],
 			'receipt_number'  => $row['receipt_number'],
@@ -82,7 +84,37 @@ class LNKup_Receipts {
 			'status'          => $row['status'],
 			'payment_post_id' => (int) $row['payment_post_id'],
 			'created_at'      => $row['created_at'],
-			'metadata'        => is_array( $meta ) ? $meta : array(),
+			'event_title'     => $event_id ? get_the_title( $event_id ) : '',
+			'view_url'        => rest_url( 'lnkup/v1/financial/receipts/' . (int) $row['id'] . '/view' ),
+			'metadata'        => $meta,
 		);
+	}
+
+	/**
+	 * Printable receipt page.
+	 *
+	 * @param array $row Receipt row.
+	 */
+	public static function render_html( $row ) {
+		$formatted = self::format( $row );
+		$title     = $formatted['event_title'] ? $formatted['event_title'] : $formatted['receipt_number'];
+		ob_start();
+		?>
+		<!DOCTYPE html>
+		<html><head><meta charset="utf-8"><title><?php echo esc_html( $formatted['receipt_number'] ); ?></title>
+		<style>
+			body{font-family:system-ui,-apple-system,sans-serif;color:#171717;max-width:640px;margin:2rem auto;padding:1.5rem}
+			h1{font-size:1.5rem;margin:0 0 .25rem}
+			p{margin:.35rem 0;color:#444}
+			.total{margin-top:1.5rem;font-size:1.25rem;font-weight:700;color:#171717}
+		</style></head><body>
+		<p>LNKup receipt</p>
+		<h1><?php echo esc_html( $title ); ?></h1>
+		<p><?php echo esc_html( $formatted['receipt_number'] ); ?></p>
+		<p><?php echo esc_html( $formatted['payment_method'] ); ?> · <?php echo esc_html( mysql2date( 'M j, Y', $formatted['created_at'] ) ); ?></p>
+		<p class="total"><?php echo esc_html( function_exists( 'lnkup_currency' ) ? lnkup_currency( $formatted['amount'] ) : (string) $formatted['amount'] ); ?></p>
+		</body></html>
+		<?php
+		return ob_get_clean();
 	}
 }

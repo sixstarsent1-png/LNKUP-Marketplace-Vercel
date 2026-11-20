@@ -1,0 +1,78 @@
+name: Deploy WordPress to SiteGround
+
+on:
+  workflow_dispatch:
+  # After one successful manual run, you can enable:
+  # push:
+  #   branches: [main, master]
+  #   paths:
+  #     - "wp-content/plugins/lnkup-marketplace/**"
+  #     - "wp-content/themes/lnkup-theme/**"
+  #     - ".github/workflows/deploy-wordpress.yml"
+
+concurrency:
+  group: deploy-wordpress-siteground
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SG_SSH_KEY }}
+
+      - name: Trust SiteGround host key
+        env:
+          SG_SSH_HOST: ${{ secrets.SG_SSH_HOST }}
+          SG_SSH_PORT: ${{ secrets.SG_SSH_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -p "$SG_SSH_PORT" "$SG_SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Rsync plugin and theme
+        env:
+          SG_SSH_HOST: ${{ secrets.SG_SSH_HOST }}
+          SG_SSH_PORT: ${{ secrets.SG_SSH_PORT }}
+          SG_SSH_USER: ${{ secrets.SG_SSH_USER }}
+          SG_WP_ROOT: ${{ secrets.SG_WP_ROOT }}
+        run: |
+          set -euo pipefail
+          SSH="ssh -p ${SG_SSH_PORT} -o StrictHostKeyChecking=yes"
+          PLUGIN_DEST="${SG_SSH_USER}@${SG_SSH_HOST}:${SG_WP_ROOT}/wp-content/plugins/lnkup-marketplace/"
+          THEME_DEST="${SG_SSH_USER}@${SG_SSH_HOST}:${SG_WP_ROOT}/wp-content/themes/lnkup-theme/"
+
+          rsync -az --delete \
+            --exclude node_modules \
+            --exclude .git \
+            --exclude tests \
+            --exclude vendor \
+            -e "$SSH" \
+            wp-content/plugins/lnkup-marketplace/ \
+            "$PLUGIN_DEST"
+
+          rsync -az --delete \
+            --exclude node_modules \
+            --exclude .git \
+            --exclude tests \
+            -e "$SSH" \
+            wp-content/themes/lnkup-theme/ \
+            "$THEME_DEST"
+
+      - name: Composer install on server
+        env:
+          SG_SSH_HOST: ${{ secrets.SG_SSH_HOST }}
+          SG_SSH_PORT: ${{ secrets.SG_SSH_PORT }}
+          SG_SSH_USER: ${{ secrets.SG_SSH_USER }}
+          SG_WP_ROOT: ${{ secrets.SG_WP_ROOT }}
+        run: |
+          set -euo pipefail
+          ssh -p "$SG_SSH_PORT" -o StrictHostKeyChecking=yes \
+            "${SG_SSH_USER}@${SG_SSH_HOST}" \
+            "cd '${SG_WP_ROOT}/wp-content/plugins/lnkup-marketplace' && (composer install --no-dev --optimize-autoloader || php -d detect_unicode=0 \$(command -v composer) install --no-dev --optimize-autoloader)"

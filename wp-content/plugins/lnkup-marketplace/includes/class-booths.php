@@ -60,8 +60,15 @@ class LNKup_Booths {
 	 */
 	public static function save( $event_id, $data ) {
 		global $wpdb;
-		$table = LNKup_Operations_Tables::booths_table();
-		$id    = absint( $data['id'] ?? 0 );
+		$table    = LNKup_Operations_Tables::booths_table();
+		$id       = absint( $data['id'] ?? 0 );
+		$event_id = absint( $event_id );
+		if ( $id && (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$table} WHERE id = %d", $id ) ) !== $event_id ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return new WP_Error( 'not_found', __( 'Booth not found for this event.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		if ( ! empty( $data['application_id'] ) && ! LNKup_Capabilities::application_in_event( $data['application_id'], $event_id ) ) {
+			return new WP_Error( 'wrong_event', __( 'That vendor is not booked for this event.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
 		$row   = array(
 			'event_id'       => absint( $event_id ),
 			'booth_number'   => sanitize_text_field( $data['booth_number'] ?? '' ),
@@ -76,7 +83,7 @@ class LNKup_Booths {
 			'updated_at'     => current_time( 'mysql' ),
 		);
 		if ( $id ) {
-			$wpdb->update( $table, $row, array( 'id' => $id ), null, array( '%d' ) );
+			$wpdb->update( $table, $row, array( 'id' => $id, 'event_id' => $event_id ), null, array( '%d', '%d' ) );
 			$booth_id = $id;
 		} else {
 			$row['created_at'] = current_time( 'mysql' );
@@ -103,25 +110,49 @@ class LNKup_Booths {
 	 * @param int $booth_id Booth row ID.
 	 * @param int $app_id   Application ID.
 	 */
-	public static function assign( $booth_id, $app_id ) {
+	public static function assign( $booth_id, $app_id, $event_id = 0 ) {
 		global $wpdb;
 		$table = LNKup_Operations_Tables::booths_table();
-		$booth = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", absint( $booth_id ) ), ARRAY_A );
-		if ( ! $booth ) {
-			return new WP_Error( 'not_found', __( 'Booth not found.', 'lnkup-marketplace' ) );
+		$lock  = 'lnkup_booth_' . absint( $booth_id );
+		if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return new WP_Error( 'busy', __( 'Another change to this booth is in progress. Try again.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
 		}
-		if ( $booth['application_id'] && (int) $booth['application_id'] !== (int) $app_id ) {
-			return new WP_Error( 'conflict', __( 'Booth already assigned.', 'lnkup-marketplace' ) );
+		try {
+			$booth = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", absint( $booth_id ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( ! $booth || ( $event_id && (int) $booth['event_id'] !== absint( $event_id ) ) ) {
+				return new WP_Error( 'not_found', __( 'Booth not found for this event.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+			}
+			if ( ! LNKup_Capabilities::application_in_event( $app_id, (int) $booth['event_id'] ) ) {
+				return new WP_Error( 'wrong_event', __( 'That vendor is not booked for this event.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+			}
+			if ( $booth['application_id'] && (int) $booth['application_id'] !== (int) $app_id ) {
+				return new WP_Error( 'conflict', __( 'Booth already assigned.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+			}
+			$app_status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+			if ( ! in_array( $app_status, array( 'approved', 'payment_required', 'paid', 'completed' ), true ) ) {
+				return new WP_Error( 'not_booked', __( 'Approve this vendor before assigning a booth.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+			}
+			$previous = $wpdb->get_col( $wpdb->prepare( "SELECT booth_number FROM {$table} WHERE event_id = %d AND application_id = %d AND id <> %d", (int) $booth['event_id'], absint( $app_id ), absint( $booth_id ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( $previous ) {
+				// One booth per vendor per event: moving a vendor frees the old booth.
+				$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET application_id = 0, updated_at = %s WHERE event_id = %d AND application_id = %d AND id <> %d", current_time( 'mysql' ), (int) $booth['event_id'], absint( $app_id ), absint( $booth_id ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			}
+			$wpdb->update(
+				$table,
+				array( 'application_id' => absint( $app_id ), 'updated_at' => current_time( 'mysql' ) ),
+				array( 'id' => absint( $booth_id ) ),
+				array( '%d', '%s' ),
+				array( '%d' )
+			);
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
-		$wpdb->update(
-			$table,
-			array( 'application_id' => absint( $app_id ), 'updated_at' => current_time( 'mysql' ) ),
-			array( 'id' => absint( $booth_id ) ),
-			array( '%d', '%s' ),
-			array( '%d' )
-		);
+		$changed = (string) get_post_meta( $app_id, '_lnkup_booth_placeholder', true ) !== (string) $booth['booth_number'];
 		self::sync_packet( $app_id, $booth['booth_number'] );
 		update_post_meta( $app_id, '_lnkup_booth_placeholder', $booth['booth_number'] );
+		if ( $changed && in_array( $app_status, array( 'paid', 'completed' ), true ) ) {
+			LNKup_Notifications::send_pass_details_updated( $app_id );
+		}
 		LNKup_Vendor_Readiness::refresh( $app_id );
 		LNKup_Operations_Log::log(
 			(int) $booth['event_id'],

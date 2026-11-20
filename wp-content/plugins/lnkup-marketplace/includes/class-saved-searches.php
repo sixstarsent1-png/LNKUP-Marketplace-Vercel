@@ -222,9 +222,20 @@ class LNKup_Saved_Searches {
 	 * @param string $search_id Search UUID.
 	 */
 	public static function get_by_id( $user_id, $search_id ) {
+		$row = self::find_row( $user_id, $search_id );
+		return $row ? self::enrich_row( $row, $user_id ) : null;
+	}
+
+	/**
+	 * Normalized stored row without computed fields (enrich_row runs searches, so run() must not enrich).
+	 *
+	 * @param int    $user_id   User ID.
+	 * @param string $search_id Search UUID.
+	 */
+	private static function find_row( $user_id, $search_id ) {
 		foreach ( self::get_raw( $user_id ) as $search ) {
 			if ( ( $search['id'] ?? '' ) === $search_id && self::STATUS_DELETED !== ( $search['status'] ?? '' ) ) {
-				return self::enrich_row( self::normalize_row( $search, $user_id ), $user_id );
+				return self::normalize_row( $search, $user_id );
 			}
 		}
 		return null;
@@ -439,7 +450,7 @@ class LNKup_Saved_Searches {
 
 			$row['updated_at'] = current_time( 'mysql' );
 			$rows[ $i ]        = $row;
-			$updated           = self::enrich_row( $row, $user_id );
+			$updated           = self::STATUS_DELETED === $row['status'] ? $row : self::enrich_row( $row, $user_id );
 			$found             = true;
 			break;
 		}
@@ -470,7 +481,7 @@ class LNKup_Saved_Searches {
 	 * @param array  $args      created_after, per_page, page, count_only.
 	 */
 	public static function run( $user_id, $search_id, $args = array() ) {
-		$search = self::get_by_id( $user_id, $search_id );
+		$search = self::find_row( $user_id, $search_id );
 		if ( ! $search ) {
 			return new WP_Error( 'not_found', __( 'Saved search not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}

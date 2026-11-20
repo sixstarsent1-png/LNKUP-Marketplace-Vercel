@@ -2,9 +2,21 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Bell, ChevronsUpDown, Zap, Check } from "lucide-react"
+import { Check, ChevronsUpDown, MoreHorizontal, Zap } from "lucide-react"
+import { NotificationBell } from "@/components/notifications/notification-bell"
 import type { Role } from "@/lib/data"
-import { roleNav, roleLabels, roleHome } from "@/lib/nav"
+import {
+  roleLabels,
+  roleHome,
+  getDesktopNav,
+  getMobileNav,
+  isNavActive,
+  type NavItem,
+} from "@/lib/nav"
+import { isLiveApiEnabled, getVendorLoginUrl } from "@/lib/api/config"
+import { writeLastUsedRole } from "@/lib/auth/app-user"
+import { useAuth } from "@/lib/hooks/use-auth"
+import { isOpsAnalyticsEnabled } from "@/lib/ops/gate"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -19,11 +31,19 @@ import {
 
 const roles: Role[] = ["vendor", "organizer", "admin"]
 
-function isActive(pathname: string, href: string) {
-  if (href === roleHome.vendor || href === roleHome.organizer || href === roleHome.admin) {
-    return pathname === href
-  }
-  return pathname === href || pathname.startsWith(href + "/")
+const vendorMoreNav: NavItem = {
+  label: "More",
+  href: "/vendor/more",
+  icon: MoreHorizontal,
+  activePaths: [
+    "/vendor/more",
+    "/vendor/documents",
+    "/vendor/growth",
+    "/vendor/reviews",
+    "/vendor/favorites",
+    "/vendor/operations",
+    "/vendor/pass",
+  ],
 }
 
 const roleProfile: Record<Role, { name: string; meta: string; initials: string }> = {
@@ -43,8 +63,56 @@ function Logo({ href, className }: { href: string; className?: string }) {
   )
 }
 
-function RoleSwitcher({ role }: { role: Role }) {
+function getSwitchableRoles(
+  role: Role,
+  liveApi: boolean,
+  canAccessVendor: boolean,
+  canAccessOrganizer: boolean,
+  canAccessAdmin: boolean,
+): Role[] {
+  if (!liveApi) {
+    return isOpsAnalyticsEnabled() ? roles : roles.filter((item) => item !== "admin")
+  }
+  const next: Role[] = []
+  if (canAccessVendor) {
+    next.push("vendor")
+  }
+  if (canAccessOrganizer) {
+    next.push("organizer")
+  }
+  if (canAccessAdmin && isOpsAnalyticsEnabled()) {
+    next.push("admin")
+  }
+  if (next.length === 0) {
+    return [role]
+  }
+  return next
+}
+
+function RoleSwitcher({
+  role,
+  liveApi,
+  canAccessVendor,
+  canAccessOrganizer,
+  canAccessAdmin,
+}: {
+  role: Role
+  liveApi: boolean
+  canAccessVendor: boolean
+  canAccessOrganizer: boolean
+  canAccessAdmin: boolean
+}) {
   const router = useRouter()
+  const available = getSwitchableRoles(
+    role,
+    liveApi,
+    canAccessVendor,
+    canAccessOrganizer,
+    canAccessAdmin,
+  )
+  if (available.length <= 1) {
+    return null
+  }
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -57,10 +125,16 @@ function RoleSwitcher({ role }: { role: Role }) {
         }
       />
       <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuLabel>Switch role (demo)</DropdownMenuLabel>
         <DropdownMenuGroup>
-          {roles.map((r) => (
-            <DropdownMenuItem key={r} onClick={() => router.push(roleHome[r])}>
+          <DropdownMenuLabel>{liveApi ? "Switch workspace" : "Switch role (demo)"}</DropdownMenuLabel>
+          {available.map((r) => (
+            <DropdownMenuItem
+              key={r}
+              onClick={() => {
+                writeLastUsedRole(r)
+                router.push(roleHome[r])
+              }}
+            >
               {roleLabels[r]}
               {r === role && <Check data-icon="inline-end" />}
             </DropdownMenuItem>
@@ -68,6 +142,59 @@ function RoleSwitcher({ role }: { role: Role }) {
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+function NavLink({
+  item,
+  role,
+  pathname,
+  mobile,
+}: {
+  item: NavItem
+  role: Role
+  pathname: string
+  mobile?: boolean
+}) {
+  const active = isNavActive(pathname, item, role)
+  const label = mobile ? (item.mobileLabel ?? item.label) : item.label
+
+  if (mobile) {
+    return (
+      <Link
+        href={item.href}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "flex min-h-11 flex-1 flex-col items-center justify-center gap-1 rounded-lg py-1.5 text-[11px] font-medium transition-colors",
+          active ? "text-foreground" : "text-muted-foreground",
+        )}
+      >
+        <span
+          className={cn(
+            "flex h-7 w-12 items-center justify-center rounded-full transition-colors",
+            active && "bg-accent",
+          )}
+        >
+          <item.icon className={cn("size-5", active && "text-accent-foreground")} />
+        </span>
+        {label}
+      </Link>
+    )
+  }
+
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+        active
+          ? "bg-primary text-primary-foreground"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+      )}
+    >
+      <item.icon className="size-5" />
+      {label}
+    </Link>
   )
 }
 
@@ -79,38 +206,48 @@ export function AppShell({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const nav = roleNav[role]
+  const desktopNav = getDesktopNav(role)
+  const mobileNav = getMobileNav(role)
   const profile = roleProfile[role]
+  const moreActive = role === "vendor" && isNavActive(pathname, vendorMoreNav, role)
+  const liveApi = isLiveApiEnabled()
+  const { user, isAuthenticated, logout, canAccessVendor, canAccessOrganizer, canAccessAdmin } = useAuth()
+  const switcherProps = {
+    role,
+    liveApi,
+    canAccessVendor: liveApi ? canAccessVendor : true,
+    canAccessOrganizer: liveApi ? canAccessOrganizer : true,
+    canAccessAdmin: liveApi ? canAccessAdmin : true,
+  }
 
   return (
     <div className="min-h-dvh bg-background md:flex">
-      {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r bg-sidebar p-4 md:flex">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <Logo href={roleHome[role]} />
+          {(role === "vendor" || role === "organizer") && <NotificationBell className="hidden md:inline-flex" />}
         </div>
         <div className="mt-6">
-          <RoleSwitcher role={role} />
+          <RoleSwitcher {...switcherProps} />
         </div>
         <nav className="mt-6 flex flex-col gap-1">
-          {nav.map((item) => {
-            const active = isActive(pathname, item.href)
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <item.icon className="size-5" />
-                {item.label}
-              </Link>
-            )
-          })}
+          {desktopNav.map((item) => (
+            <NavLink key={item.href} item={item} role={role} pathname={pathname} />
+          ))}
+          {role === "vendor" && (
+            <Link
+              href="/vendor/more"
+              className={cn(
+                "mt-2 flex items-center gap-3 rounded-xl border border-dashed px-3 py-2.5 text-sm font-medium transition-colors",
+                moreActive
+                  ? "border-accent bg-accent/10 text-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <MoreHorizontal className="size-5" />
+              More
+            </Link>
+          )}
         </nav>
         <div className="mt-auto flex items-center gap-3 rounded-xl bg-muted p-3">
           <Avatar className="size-9">
@@ -125,51 +262,55 @@ export function AppShell({
         </div>
       </aside>
 
-      {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Mobile header */}
-        <header className="sticky top-0 z-40 flex items-center justify-between border-b bg-background/80 px-4 py-3 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-40 flex items-center justify-between border-b bg-background/80 px-4 py-3 pt-safe backdrop-blur md:hidden">
           <Logo href={roleHome[role]} />
           <div className="flex items-center gap-2">
-            <RoleSwitcher role={role} />
-            <Button variant="outline" size="icon" aria-label="Notifications" className="relative">
-              <Bell />
-              <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-accent" />
-            </Button>
+            {(role === "vendor" || role === "organizer") && liveApi && (
+              isAuthenticated ? (
+                <Button variant="outline" size="sm" className="min-h-11" onClick={() => logout()}>
+                  {user?.name?.split(" ")[0] ?? "Account"}
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11"
+                  nativeButton={false}
+                  render={
+                    <Link
+                      href={
+                        role === "organizer"
+                          ? "/login?redirect=/organizer"
+                          : getVendorLoginUrl({ intent: "vendor", redirect: pathname })
+                      }
+                    />
+                  }
+                >
+                  Sign in
+                </Button>
+              )
+            )}
+            <RoleSwitcher {...switcherProps} />
+            {(role === "vendor" || role === "organizer") && <NotificationBell className="md:hidden" />}
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-2xl flex-1 px-4 pt-4 pb-28 md:max-w-5xl md:px-8 md:pt-8 md:pb-12">
+        <main
+          className={cn(
+            "mx-auto w-full max-w-2xl flex-1 px-4 pb-shell md:max-w-5xl md:px-8 md:pb-12",
+            role === "vendor" ? "pt-5 md:pt-8" : "pt-4 md:pt-8",
+          )}
+        >
           {children}
         </main>
       </div>
 
-      {/* Mobile bottom nav */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/90 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/90 pb-safe backdrop-blur md:hidden">
         <div className="mx-auto flex max-w-2xl items-stretch justify-around px-2 py-1.5">
-          {nav.map((item) => {
-            const active = isActive(pathname, item.href)
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex flex-1 flex-col items-center gap-1 rounded-lg py-1.5 text-[11px] font-medium transition-colors",
-                  active ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                <span
-                  className={cn(
-                    "flex h-7 w-12 items-center justify-center rounded-full transition-colors",
-                    active && "bg-accent",
-                  )}
-                >
-                  <item.icon className={cn("size-5", active && "text-accent-foreground")} />
-                </span>
-                {item.label}
-              </Link>
-            )
-          })}
+          {mobileNav.map((item) => (
+            <NavLink key={item.href} item={item} role={role} pathname={pathname} mobile />
+          ))}
         </div>
       </nav>
     </div>

@@ -23,9 +23,6 @@ $vendor_bullets   = lnkup_landing_lines( (string) lnkup_landing_get( 'aud_vendor
 $vendor_cta       = (string) lnkup_landing_get( 'aud_vendor_cta', __( 'Sign up as vendor', 'lnkup-theme' ) );
 $vendor_image     = lnkup_landing_image_url( 'aud_vendor_image_id', 'images/events/block-party.svg' );
 $org_title        = (string) lnkup_landing_get( 'aud_org_title', '' );
-$org_desc         = (string) lnkup_landing_get( 'aud_org_desc', '' );
-$org_bullets      = lnkup_landing_lines( (string) lnkup_landing_get( 'aud_org_bullets', '' ) );
-$org_cta          = (string) lnkup_landing_get( 'aud_org_cta', __( 'Sign up as organizer', 'lnkup-theme' ) );
 $org_image        = lnkup_landing_image_url( 'aud_org_image_id', 'images/events/greek-picnic.svg' );
 ?>
 <section class="lnkup-section lnkup-section--editorial lnkup-reveal" id="for-audiences">
@@ -61,15 +58,12 @@ $org_image        = lnkup_landing_image_url( 'aud_org_image_id', 'images/events/
 				</div>
 				<div class="lnkup-audience-card__body">
 					<h3 class="lnkup-audience-card__title"><?php echo esc_html( $org_title ); ?></h3>
-					<p class="lnkup-audience-card__desc"><?php echo esc_html( $org_desc ); ?></p>
-					<?php if ( $org_bullets ) : ?>
-						<ul class="lnkup-audience-card__list">
-							<?php foreach ( $org_bullets as $bullet ) : ?>
-								<li><?php echo esc_html( $bullet ); ?></li>
-							<?php endforeach; ?>
-						</ul>
-					<?php endif; ?>
-					<a href="<?php echo esc_url( is_user_logged_in() ? $organizer_url : $organizer_signup ); ?>" class="lnkup-btn lnkup-btn--outline"><?php echo esc_html( $org_cta ); ?></a>
+					<ol class="lnkup-audience-card__list">
+						<li><?php esc_html_e( 'List the vendor slots you need.', 'lnkup-theme' ); ?></li>
+						<li><?php esc_html_e( 'Review applications in one place.', 'lnkup-theme' ); ?></li>
+						<li><?php esc_html_e( 'Collect the vendor fee only after you approve.', 'lnkup-theme' ); ?></li>
+					</ol>
+					<a href="<?php echo esc_url( is_user_logged_in() ? ( function_exists( 'lnkup_organizer_view_url' ) ? lnkup_organizer_view_url( 'create' ) : $organizer_url . '?view=create' ) : $organizer_signup ); ?>" class="lnkup-btn lnkup-btn--outline"><?php esc_html_e( 'List Your Event', 'lnkup-theme' ); ?></a>
 				</div>
 			</article>
 		</div>

@@ -28,6 +28,9 @@ if ( function_exists( 'lnkup_get_featured_opportunities' ) ) {
 						: esc_html( $launch_label ? sprintf( __( 'Full marketplace opens %s', 'lnkup-theme' ), $launch_label ) : __( 'Full marketplace opening soon', 'lnkup-theme' ) );
 					?>
 				</h2>
+				<?php if ( $marketplace_open ) : ?>
+					<p class="lnkup-section__lead"><?php esc_html_e( 'Explore upcoming events looking for food, retail, merchandise, and service vendors.', 'lnkup-theme' ); ?></p>
+				<?php endif; ?>
 			</div>
 			<?php if ( $marketplace_open ) : ?>
 				<a href="<?php echo esc_url( $opportunities_url ); ?>" class="lnkup-btn lnkup-btn--outline"><?php esc_html_e( 'View all events', 'lnkup-theme' ); ?></a>
@@ -37,9 +40,14 @@ if ( function_exists( 'lnkup_get_featured_opportunities' ) ) {
 		</div>
 		<div class="lnkup-event-grid<?php echo $marketplace_open ? '' : ' lnkup-event-grid--preview'; ?>">
 			<?php if ( ! empty( $featured ) ) : ?>
-				<?php foreach ( $featured as $opp ) : ?>
+				<?php
+				$featured_groups = function_exists( 'lnkup_group_opportunities_by_event' )
+					? lnkup_group_opportunities_by_event( $featured )
+					: array();
+				foreach ( $featured_groups as $slots ) :
+					?>
 					<div class="lnkup-featured-card-wrap<?php echo $marketplace_open ? '' : ' is-locked'; ?>" data-testid="lnkup-featured-card">
-						<?php echo function_exists( 'lnkup_render_opportunity_card_v2' ) ? lnkup_render_opportunity_card_v2( $opp ) : lnkup_render_event_card( $opp ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php echo function_exists( 'lnkup_render_homepage_event_card' ) ? lnkup_render_homepage_event_card( $slots ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 						<?php if ( ! $marketplace_open ) : ?>
 							<div class="lnkup-featured-card-wrap__lock" aria-hidden="true">
 								<span><?php echo esc_html( $launch_label ? sprintf( __( 'Opens %s', 'lnkup-theme' ), $launch_label ) : __( 'Opens soon', 'lnkup-theme' ) ); ?></span>
@@ -47,7 +55,7 @@ if ( function_exists( 'lnkup_get_featured_opportunities' ) ) {
 						<?php endif; ?>
 					</div>
 				<?php endforeach; ?>
-			<?php else : ?>
+			<?php elseif ( ! $marketplace_open ) : ?>
 				<?php
 				$fallback = array(
 					array( 'name' => 'Dirty South Rodeo Charlotte', 'city' => 'Charlotte', 'state' => 'NC', 'fee' => 250, 'spots' => 6, 'total' => 40, 'image' => 'rodeo.svg' ),
@@ -59,7 +67,7 @@ if ( function_exists( 'lnkup_get_featured_opportunities' ) ) {
 					<div class="lnkup-featured-card-wrap<?php echo $marketplace_open ? '' : ' is-locked'; ?>">
 						<article class="lnkup-event-card">
 							<div class="lnkup-event-card__media">
-								<img src="<?php echo esc_url( lnkup_theme_asset( 'images/events/' . $event['image'] ) ); ?>" alt="<?php echo esc_attr( $event['name'] ); ?>" />
+								<img src="<?php echo esc_url( lnkup_theme_asset( 'images/events/' . $event['image'] ) ); ?>" alt="<?php echo esc_attr( $event['name'] ); ?>" width="640" height="400" loading="lazy" decoding="async" />
 								<span class="lnkup-badge">$<?php echo esc_html( (string) $event['fee'] ); ?> vendor fee</span>
 							</div>
 							<div class="lnkup-event-card__body">
@@ -73,41 +81,9 @@ if ( function_exists( 'lnkup_get_featured_opportunities' ) ) {
 						<?php endif; ?>
 					</div>
 				<?php endforeach; ?>
+			<?php else : ?>
+				<p class="lnkup-muted"><?php esc_html_e( 'No events are open right now.', 'lnkup-theme' ); ?></p>
 			<?php endif; ?>
 		</div>
 	</div>
 </section>
-<?php if ( $marketplace_open && function_exists( 'lnkup_marketplace_phase_at_least' ) && lnkup_marketplace_phase_at_least( '1b' ) && class_exists( 'LNKup_Trending' ) ) : ?>
-	<?php
-	$closing = function_exists( 'lnkup_curate_trending_section' ) ? lnkup_curate_trending_section( LNKup_Trending::get_section( 'closing_soon', 8 ), 4 ) : LNKup_Trending::get_section( 'closing_soon', 4 );
-	$applied = function_exists( 'lnkup_curate_trending_section' ) ? lnkup_curate_trending_section( LNKup_Trending::get_section( 'most_applied', 8 ), 4 ) : LNKup_Trending::get_section( 'most_applied', 4 );
-	?>
-	<?php if ( $closing || $applied ) : ?>
-<section class="lnkup-section lnkup-section--bordered lnkup-reveal">
-	<div class="lnkup-container">
-		<?php if ( $closing ) : ?>
-		<div class="lnkup-section__intro" style="margin-bottom:1.5rem;">
-			<p class="lnkup-eyebrow"><?php esc_html_e( 'Closing soon', 'lnkup-theme' ); ?></p>
-			<h2 class="lnkup-heading lnkup-heading--section"><?php esc_html_e( 'Apply before deadlines pass', 'lnkup-theme' ); ?></h2>
-		</div>
-		<div class="lnkup-event-grid" style="margin-bottom:2.5rem;">
-			<?php foreach ( $closing as $opp ) : ?>
-				<?php echo function_exists( 'lnkup_render_opportunity_card_v2' ) ? lnkup_render_opportunity_card_v2( $opp ) : lnkup_render_event_card( $opp ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-			<?php endforeach; ?>
-		</div>
-		<?php endif; ?>
-		<?php if ( $applied ) : ?>
-		<div class="lnkup-section__intro" style="margin-bottom:1.5rem;">
-			<p class="lnkup-eyebrow"><?php esc_html_e( 'Most applied', 'lnkup-theme' ); ?></p>
-			<h2 class="lnkup-heading lnkup-heading--section"><?php esc_html_e( 'Popular with vendors', 'lnkup-theme' ); ?></h2>
-		</div>
-		<div class="lnkup-event-grid">
-			<?php foreach ( $applied as $opp ) : ?>
-				<?php echo function_exists( 'lnkup_render_opportunity_card_v2' ) ? lnkup_render_opportunity_card_v2( $opp ) : lnkup_render_event_card( $opp ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-			<?php endforeach; ?>
-		</div>
-		<?php endif; ?>
-	</div>
-</section>
-	<?php endif; ?>
-<?php endif; ?>

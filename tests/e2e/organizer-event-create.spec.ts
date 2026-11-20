@@ -1,123 +1,105 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+import { loginPage } from './helpers/wp-session';
 
-const organizerUser = process.env.PLAYWRIGHT_ORGANIZER_USER;
-const organizerPass = process.env.PLAYWRIGHT_ORGANIZER_PASS;
-
-/**
- * Log into WordPress with organizer credentials.
- */
-async function loginOrganizer(page: import('@playwright/test').Page) {
-  await page.goto('/wp-login.php');
-  await page.getByLabel(/username or email/i).fill(organizerUser!);
-  await page.getByLabel(/^password$/i).fill(organizerPass!);
-  await page.getByRole('button', { name: /log in/i }).click();
-  await expect(page).not.toHaveURL(/wp-login/);
-}
+const organizerUser = process.env.PLAYWRIGHT_ORGANIZER_USER ?? '';
+const organizerPass = process.env.PLAYWRIGHT_ORGANIZER_PASS ?? '';
+const CREATE_URL = '/organizer-dashboard/?view=create';
 
 /**
- * Open create event wizard from organizer dashboard.
+ * Fill the required Create Event fields with a unique title and one custom vendor slot.
  */
-async function openCreateWizard(page: import('@playwright/test').Page) {
-  await page.goto('/organizer-dashboard/#create');
-  const startBtn = page.getByRole('button', { name: /start event setup/i });
-  if (await startBtn.isVisible()) {
-    await startBtn.click();
-  }
-  await expect(page.locator('#lnkup-create-event-form')).toBeVisible();
-}
-
-/**
- * Fill minimal required event fields for publish.
- */
-async function fillMinimalEventForm(page: import('@playwright/test').Page, suffix: string) {
-  await page.getByTestId('lnkup-event-name').fill(`E2E Test Event ${suffix}`);
-  const parentSelect = page.locator('#event_type_parent');
-  await parentSelect.selectOption({ index: 1 });
-  await page.waitForFunction(() => {
-    const el = document.getElementById('event_type') as HTMLSelectElement | null;
-    return el && !el.disabled && el.options.length > 1;
-  });
+async function fillEvent(page: Page, title: string) {
+  const next = page.locator('[data-wizard-nav="next"]');
+  await page.getByTestId('lnkup-event-name').fill(title);
+  await page.locator('#event_type_parent').selectOption({ index: 1 });
+  await expect(page.locator('#event_type')).toBeEnabled();
   await page.locator('#event_type').selectOption({ index: 1 });
-  await page.getByTestId('lnkup-event-date').fill('2026-12-15');
+  await next.click();
+  await page.getByTestId('lnkup-event-date').fill('2027-06-15');
   await page.locator('#event_city').fill('Austin');
+  await next.click();
+  await page.locator('.lnkup-fee-row__custom').first().fill('E2E Food');
+  await page.getByTestId('lnkup-create-opp-fee').fill('125');
+  await page.getByTestId('lnkup-create-opp-spots').fill('4');
+  await expect(page.getByTestId('lnkup-create-app-deadline')).toBeVisible();
+  await next.click();
 }
 
-test.describe('Organizer event create flow', () => {
-  test('create wizard requires login when unauthenticated', async ({ page }) => {
-    await page.goto('/organizer-dashboard/#create');
-    await expect(page).toHaveURL(/wp-login|login/);
+/**
+ * Wait for the next lnkup_create_event AJAX response and return its JSON body.
+ */
+async function nextCreateResponse(page: Page): Promise<{ success: boolean; data: Record<string, unknown> }> {
+  let done = false;
+  return new Promise((resolve) => {
+    void page.route('**/admin-ajax.php', async (route) => {
+      if (done || !(route.request().postData() ?? '').includes('lnkup_create_event')) {
+        await route.fallback();
+        return;
+      }
+      done = true;
+      const response = await route.fetch();
+      const body = await response.json();
+      await route.fulfill({ response });
+      resolve(body);
+    });
+  });
+}
+
+test.describe('Organizer Create Event', () => {
+  test('create wizard requires login', async ({ page }) => {
+    await page.goto(CREATE_URL);
+    await expect(page).toHaveURL(/log-?in/);
   });
 
   test.describe('authenticated organizer', () => {
     test.beforeEach(async ({ page }) => {
-      test.skip(!organizerUser || !organizerPass, 'Set PLAYWRIGHT_ORGANIZER_USER and PLAYWRIGHT_ORGANIZER_PASS');
-      await loginOrganizer(page);
+      test.skip(!organizerUser || !organizerPass, 'Run scripts/e2e/seed.php');
+      await loginPage(page, organizerUser, organizerPass);
+      await page.goto(CREATE_URL);
+      await expect(page.locator('#lnkup-create-event-form')).toBeAttached();
     });
 
-    test('event only — skip vendor onboarding', async ({ page }) => {
-      const suffix = Date.now().toString();
-      await openCreateWizard(page);
-      await fillMinimalEventForm(page, suffix);
-      await page.getByTestId('lnkup-publish-event').click();
-      await expect(page.getByTestId('lnkup-vendor-onboarding')).toBeVisible({ timeout: 15000 });
-      await page.getByTestId('lnkup-skip-vendors').click();
+    test('publishes an event with a vendor slot', async ({ page }) => {
+      await fillEvent(page, `E2E Publish ${Date.now()}`);
+      const created = nextCreateResponse(page);
+      await page.getByTestId('lnkup-publish-event-sidebar').click();
+      const body = await created;
+      expect(body.success).toBe(true);
+      expect(Number(body.data.event_id)).toBeGreaterThan(0);
+      expect(body.data.opportunity_created).toBe(true);
       await expect(page.locator('#lnkup-launch-success-root')).toBeVisible();
-      await expect(page.locator('#lnkup-launch-success-root')).toContainText(/event created/i);
     });
 
-    test('event + opportunity — accept vendors and publish', async ({ page }) => {
-      const suffix = Date.now().toString();
-      await openCreateWizard(page);
-      await fillMinimalEventForm(page, suffix);
-      await page.getByTestId('lnkup-publish-event').click();
-      await expect(page.getByTestId('lnkup-vendor-onboarding')).toBeVisible({ timeout: 15000 });
-      await page.getByTestId('lnkup-accept-vendors').click();
-      await expect(page.getByTestId('lnkup-first-opportunity-form')).toBeVisible();
-      await page.getByTestId('lnkup-opp-fee').fill('300');
-      await page.getByTestId('lnkup-opp-spots').fill('5');
-      await page.getByTestId('lnkup-publish-opportunity').click();
-      await expect(page.locator('#lnkup-launch-success-root')).toBeVisible({ timeout: 15000 });
-      await expect(page.locator('#lnkup-launch-success-root')).toContainText(/opportunity published/i);
+    test('saves a draft without opening applications', async ({ page }) => {
+      await fillEvent(page, `E2E Draft ${Date.now()}`);
+      const created = nextCreateResponse(page);
+      await page.getByTestId('lnkup-save-event-draft').click();
+      const body = await created;
+      expect(body.success).toBe(true);
+      expect(body.data.draft).toBe(true);
+      expect(body.data.opportunity_created).toBeFalsy();
+      await expect(page).toHaveURL(/[?&]event=\d+/);
     });
 
-    test('onboarding UI stacks on mobile viewport', async ({ page }) => {
-      await page.setViewportSize({ width: 390, height: 844 });
-      const suffix = Date.now().toString();
-      await openCreateWizard(page);
-      await fillMinimalEventForm(page, suffix);
-      await page.getByTestId('lnkup-publish-event').click();
-      await expect(page.getByTestId('lnkup-vendor-onboarding')).toBeVisible({ timeout: 15000 });
-      const acceptBtn = page.getByTestId('lnkup-accept-vendors');
-      const skipBtn = page.getByTestId('lnkup-skip-vendors');
-      await expect(acceptBtn).toBeVisible();
-      await expect(skipBtn).toBeVisible();
-      const acceptBox = await acceptBtn.boundingBox();
-      const skipBox = await skipBtn.boundingBox();
-      expect(acceptBox).not.toBeNull();
-      expect(skipBox).not.toBeNull();
-      if (acceptBox && skipBox) {
-        expect(skipBox.y).toBeGreaterThan(acceptBox.y);
-      }
-      await acceptBtn.click();
-      await expect(page.getByTestId('lnkup-first-opportunity-form')).toBeVisible();
-    });
+    test('partial failure keeps the event and retry does not duplicate it', async ({ page }) => {
+      await fillEvent(page, `E2E Partial ${Date.now()}`);
+      await page.locator('#lnkup-create-event-form').evaluate((form) => form.setAttribute('data-test-block-opp', '1'));
+      const first = nextCreateResponse(page);
+      await page.getByTestId('lnkup-publish-event-sidebar').click();
+      const partial = await first;
+      expect(partial.data.partial).toBe(true);
+      const warning = page.getByTestId('lnkup-create-partial');
+      await expect(warning).toBeVisible();
+      await expect(warning).toContainText(/event was saved/i);
 
-    test('opportunity failure after event success shows partial error', async ({ page }) => {
-      const suffix = Date.now().toString();
-      await openCreateWizard(page);
-      await fillMinimalEventForm(page, suffix);
-      await page.getByTestId('lnkup-publish-event').click();
-      await expect(page.getByTestId('lnkup-vendor-onboarding')).toBeVisible({ timeout: 15000 });
-      await page.getByTestId('lnkup-accept-vendors').click();
-      await page.evaluate(() => {
-        const form = document.getElementById('lnkup-create-first-opportunity-form');
-        if (form) {
-          form.setAttribute('data-test-block-opp', '1');
-        }
-      });
-      await page.getByTestId('lnkup-publish-opportunity').click();
-      await expect(page.getByTestId('lnkup-onboarding-opp-error')).toBeVisible({ timeout: 15000 });
-      await expect(page.getByTestId('lnkup-onboarding-opp-error')).toContainText(/could not be created/i);
+      await page.locator('#lnkup-create-event-form').evaluate((form) => form.removeAttribute('data-test-block-opp'));
+      const second = nextCreateResponse(page);
+      await warning.getByRole('button', { name: /retry vendor slots/i }).click();
+      const retried = await second;
+      expect(retried.success).toBe(true);
+      expect(retried.data.event_id).toBe(partial.data.event_id);
+      expect(retried.data.idempotent).toBe(true);
+      expect(retried.data.opportunity_created).toBe(true);
     });
   });
 });

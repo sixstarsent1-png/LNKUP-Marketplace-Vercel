@@ -21,7 +21,21 @@ class LNKup_Manual_Provider extends LNKup_Payment_Provider {
 		return $this->create_checkout_session( $payment_id );
 	}
 
+	/**
+	 * Safe error when no real payment processor is available and simulation is off.
+	 */
+	public static function unavailable_error() {
+		return new WP_Error(
+			'payments_unavailable',
+			__( 'Online payments are temporarily unavailable. Please try again later or contact support.', 'lnkup-marketplace' ),
+			array( 'status' => 503 )
+		);
+	}
+
 	public function create_checkout_session( $payment_id, $args = array() ) {
+		if ( ! LNKup_Financial_Service::simulation_enabled() ) {
+			return self::unavailable_error();
+		}
 		$payment = get_post( $payment_id );
 		if ( ! $payment || 'lnkup_payment' !== $payment->post_type ) {
 			return new WP_Error( 'invalid', __( 'Invalid payment.', 'lnkup-marketplace' ) );
@@ -45,6 +59,9 @@ class LNKup_Manual_Provider extends LNKup_Payment_Provider {
 
 	public function create_payment_intent( $payment_id, $args = array() ) {
 		unset( $args );
+		if ( ! LNKup_Financial_Service::simulation_enabled() ) {
+			return self::unavailable_error();
+		}
 		$check = $this->validate_payment_access( $payment_id );
 		if ( is_wp_error( $check ) ) {
 			return $check;
@@ -96,6 +113,9 @@ class LNKup_Manual_Provider extends LNKup_Payment_Provider {
 	}
 
 	public function confirm_payment_intent( $intent_id ) {
+		if ( ! LNKup_Financial_Service::simulation_enabled() ) {
+			return self::unavailable_error();
+		}
 		return array( 'id' => $intent_id, 'status' => 'succeeded' );
 	}
 

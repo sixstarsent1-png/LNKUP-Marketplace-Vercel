@@ -287,7 +287,7 @@ class LNKup_Market_Pages {
 			'vendor_signup_url' => self::get_market_signup_url( $slug, 'vendor' ),
 			'organizer_signup_url' => self::get_market_signup_url( $slug, 'organizer' ),
 			'connector_url'     => self::get_connector_url( $market ),
-			'organizer_create_url' => lnkup_page_url_helper( 'organizer-dashboard' ) . '#create',
+			'organizer_create_url' => lnkup_organizer_view_url( 'create' ),
 		);
 	}
 

@@ -9,6 +9,33 @@
     }
   }
 
+  function buildNoteItem(id, content, when) {
+    var li = document.createElement('li');
+    li.className = 'lnkup-crm-note';
+    li.setAttribute('data-note-id', String(id));
+    var body = document.createElement('p');
+    body.className = 'lnkup-crm-note__body';
+    body.setAttribute('data-note-body', '');
+    body.textContent = content;
+    var stamp = document.createElement('span');
+    stamp.className = 'lnkup-muted lnkup-type-caption';
+    stamp.textContent = when || '';
+    var actions = document.createElement('span');
+    actions.className = 'lnkup-crm-note__actions';
+    [['data-note-edit', 'Edit'], ['data-note-delete', 'Delete']].forEach(function (pair) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'lnkup-btn lnkup-btn--sm lnkup-btn--ghost';
+      btn.setAttribute(pair[0], '');
+      btn.textContent = pair[1];
+      actions.appendChild(btn);
+    });
+    li.appendChild(body);
+    li.appendChild(stamp);
+    li.appendChild(actions);
+    return li;
+  }
+
   function crmFetchJson(path, options) {
     options = options || {};
     if (!base) {
@@ -21,6 +48,12 @@
     }
     return fetch(base + path, Object.assign({ credentials: 'same-origin', headers: headers }, options))
       .then(function (r) {
+        var type = r.headers.get('content-type') || '';
+        if (type.indexOf('application/json') === -1) {
+          var bad = new Error('Something went wrong. Refresh and try again.');
+          bad.status = r.status;
+          throw bad;
+        }
         return r.json().then(function (body) {
           if (!r.ok) {
             var err = new Error((body && body.message) || 'Request failed');
@@ -33,12 +66,29 @@
       });
   }
 
+  /**
+   * CRM request for actions. Failed writes always surface a toast (callers that skip .catch
+   * still give feedback); the rejection is marked handled so it is not reported twice.
+   */
   function crmFetch(path, options) {
+    var method = String((options && options.method) || 'GET').toUpperCase();
     return crmFetchJson(path, options).catch(function (err) {
       console.error('[LNKup CRM]', path, err);
+      if (method !== 'GET') {
+        toast((err && err.message) ? err.message : 'Something went wrong. Try again.', 'error');
+        if (err && typeof err === 'object') {
+          err.lnkupToasted = true;
+        }
+      }
       throw err;
     });
   }
+
+  window.addEventListener('unhandledrejection', function (event) {
+    if (event.reason && event.reason.lnkupToasted) {
+      event.preventDefault();
+    }
+  });
 
   function panelMessage(el, type, title, desc) {
     if (window.LNKupUI) {
@@ -51,6 +101,10 @@
     var cls = type === 'error' ? 'lnkup-alert lnkup-alert--error' : 'lnkup-empty-state lnkup-empty-state--compact';
     el.innerHTML = '<div class="' + cls + '"><p class="lnkup-empty-state__title">' + escapeHtml(title) + '</p>' +
       (desc ? '<p class="lnkup-empty-state__desc">' + escapeHtml(desc) + '</p>' : '') + '</div>';
+  }
+
+  function isScopeTab(el) {
+    return el.classList.contains('lnkup-btn') || el.classList.contains('lnkup-dash-tabs__btn');
   }
 
   function debounce(fn, ms) {
@@ -84,7 +138,12 @@
       section = 'create';
     }
     if (!section) {
+      // ?view= pages: keep the server-rendered data-active-section.
       return;
+    }
+    var crmRoot = document.getElementById('lnkup-organizer-crm');
+    if (crmRoot) {
+      crmRoot.setAttribute('data-active-section', section);
     }
     document.querySelectorAll('.lnkup-organizer-section-nav a[href], .lnkup-organizer-section-nav [data-hash], .lnkup-organizer-section-nav [data-section]').forEach(function (link) {
       var hash = (link.getAttribute('data-section') || link.getAttribute('data-hash') || '').split('&')[0];
@@ -132,7 +191,7 @@
       }
       panelMessage(el, 'empty', 'No vendors found', 'Try adjusting search or filters.');
     }).catch(function () {
-      panelMessage(el, 'error', 'Could not load directory', 'Please refresh and try again.');
+      showRetryError(el, 'Could not load vendors', loadDirectory);
     });
   }
 
@@ -216,7 +275,7 @@
       var summary = document.getElementById('lnkup-organizer-lists-summary');
       if (summary) {
         if (!items.length) {
-          summary.textContent = 'No lists yet. Create one to organize vendors.';
+          summary.textContent = 'Save vendors from Discover, then invite the list to an event.';
         } else {
           var first = items[0];
           summary.textContent = items.length === 1
@@ -228,10 +287,10 @@
         if (window.LNKupUI && LNKupUI.panelEmpty) {
           var copy = (window.lnkupAjax && window.lnkupAjax.copy) || {};
           LNKupUI.panelEmpty(el, {
-            title: copy.empty_vendor_lists || 'No lists yet',
-            description: copy.empty_vendor_lists || 'Create a list to save vendor segments for future events.',
+            title: 'No lists yet',
+            desc: copy.empty_vendor_lists || 'Create a list to save vendor segments for future events.',
             ctaLabel: copy.discover_vendors || 'Discover vendors',
-            ctaHref: (ajax.organizerDashboardUrl || '') + '#vendors'
+            ctaHref: (ajax.organizerDashboardUrl || window.location.pathname) + '?view=vendors'
           });
         } else {
           panelMessage(el, 'empty', 'No lists yet', 'Create a list to save vendor segments for future events.');
@@ -254,8 +313,27 @@
       html += '</div>';
       el.innerHTML = html;
     }).catch(function () {
-      panelMessage(el, 'error', 'Could not load lists', 'Please refresh and try again.');
+      showRetryError(el, 'Could not load lists', loadLists);
     });
+  }
+
+  function showRetryError(el, title, retryFn) {
+    if (window.LNKupUI && LNKupUI.panelError) {
+      LNKupUI.panelError(el, { title: title, desc: 'Check your connection and try again.', onRetry: retryFn });
+      return;
+    }
+    panelMessage(el, 'error', title, 'Please refresh and try again.');
+  }
+
+  function inviteStatusKey(status) {
+    var s = (status || '').toLowerCase();
+    if (s.indexOf('accept') > -1) {
+      return 'accepted';
+    }
+    if (s.indexOf('open') > -1) {
+      return 'opened';
+    }
+    return 'sent';
   }
 
   function inviteStatusClass(status) {
@@ -291,21 +369,29 @@
         if (window.LNKupUI && LNKupUI.panelEmpty) {
           var copy = (window.lnkupAjax && window.lnkupAjax.copy) || {};
           LNKupUI.panelEmpty(el, {
-            title: copy.empty_vendor_invites || 'No invites sent yet',
-            description: copy.empty_vendor_invites || 'Discover vendors and send your first invite.',
+            title: 'No invites sent yet',
+            desc: copy.empty_vendor_invites || 'Discover vendors and send your first invite.',
             ctaLabel: copy.discover_vendors || 'Discover vendors',
-            ctaHref: (ajax.organizerDashboardUrl || '') + '#vendors'
+            ctaHref: (ajax.organizerDashboardUrl || window.location.pathname) + '?view=vendors'
           });
         } else {
           panelMessage(el, 'empty', 'No invites sent yet', 'Invite vendors from the directory or vendor profiles.');
         }
         return;
       }
-      var html = '';
+      var statusCounts = { sent: 0, opened: 0, accepted: 0 };
+      items.forEach(function (inv) {
+        statusCounts[inviteStatusKey(inv.status)]++;
+      });
+      var html = '<div class="lnkup-crm-invite-filters" role="group" aria-label="Filter invites">';
+      [['all', 'All', items.length], ['sent', 'Sent', statusCounts.sent], ['opened', 'Opened', statusCounts.opened], ['accepted', 'Accepted', statusCounts.accepted]].forEach(function (f) {
+        html += '<button type="button" class="lnkup-badge' + (f[0] === 'all' ? ' is-active' : '') + '" data-invite-filter="' + f[0] + '" aria-pressed="' + (f[0] === 'all' ? 'true' : 'false') + '">' + f[1] + ' (' + f[2] + ')</button>';
+      });
+      html += '</div><p class="lnkup-muted" data-invite-filter-empty hidden>No invites with this status.</p>';
       items.forEach(function (inv) {
         var link = inv.link || inv.invite_link || '';
         var eventLine = inv.event_title ? escapeHtml(inv.event_title) + ' · ' : '';
-        html += '<article class="lnkup-crm-invite-card">';
+        html += '<article class="lnkup-crm-invite-card" data-invite-status="' + inviteStatusKey(inv.status) + '">';
         html += '<div class="lnkup-crm-invite-card__header"><strong>' + escapeHtml(inv.vendor) + '</strong>';
         html += '<span class="lnkup-status-pill ' + inviteStatusClass(inv.status) + '">' + escapeHtml(inv.status || 'sent') + '</span></div>';
         html += '<p class="lnkup-muted">' + eventLine + escapeHtml(inv.created || '') + '</p>';
@@ -319,8 +405,34 @@
         html += '</div></article>';
       });
       el.innerHTML = html;
+      if (!el.getAttribute('data-filter-bound')) {
+        el.setAttribute('data-filter-bound', '1');
+        el.addEventListener('click', function (e) {
+          var chip = e.target.closest('[data-invite-filter]');
+          if (!chip) {
+            return;
+          }
+          var key = chip.getAttribute('data-invite-filter');
+          var shown = 0;
+          el.querySelectorAll('[data-invite-filter]').forEach(function (b) {
+            b.classList.toggle('is-active', b === chip);
+            b.setAttribute('aria-pressed', b === chip ? 'true' : 'false');
+          });
+          el.querySelectorAll('.lnkup-crm-invite-card').forEach(function (card) {
+            var match = key === 'all' || card.getAttribute('data-invite-status') === key;
+            card.hidden = !match;
+            if (match) {
+              shown++;
+            }
+          });
+          var empty = el.querySelector('[data-invite-filter-empty]');
+          if (empty) {
+            empty.hidden = shown !== 0;
+          }
+        });
+      }
     }).catch(function () {
-      panelMessage(el, 'error', 'Could not load invites', 'Please refresh and try again.');
+      showRetryError(el, 'Could not load invites', loadInvites);
     });
   }
 
@@ -513,6 +625,72 @@
       empty.hidden = true;
     }
     syncExternalInterestVisibility(statusFilter);
+    syncAppEventControls();
+  }
+
+  function syncAppEventControls() {
+    var eventFilter = appFilterState.event || 'all';
+    var select = document.getElementById('lnkup-org-app-event');
+    if (select && select.value !== String(eventFilter)) {
+      select.value = String(eventFilter);
+    }
+    var context = document.getElementById('lnkup-org-app-event-context');
+    var pending = 0;
+    var counts = { all: 0, pending: 0, approved: 0, unpaid: 0, paid: 0, waitlisted: 0, rejected: 0, missing_docs: 0 };
+    document.querySelectorAll('.lnkup-crm-app-card').forEach(function (card) {
+      if (eventFilter !== 'all' && String(card.getAttribute('data-event-id') || '') !== String(eventFilter)) {
+        return;
+      }
+      var status = card.getAttribute('data-org-app-status') || '';
+      counts.all++;
+      if (card.getAttribute('data-org-app-filter') === 'pending') {
+        counts.pending++;
+        pending++;
+      }
+      if (status === 'approved' || status === 'payment_required') {
+        counts.approved++;
+      }
+      if (card.getAttribute('data-org-app-paid') === 'no' && (status === 'approved' || status === 'payment_required')) {
+        counts.unpaid++;
+      }
+      if (status === 'paid' || status === 'completed') {
+        counts.paid++;
+      }
+      if (status === 'waitlisted') {
+        counts.waitlisted++;
+      }
+      if (status === 'rejected') {
+        counts.rejected++;
+      }
+      if (card.getAttribute('data-org-app-docs') === 'missing') {
+        counts.missing_docs++;
+      }
+    });
+    document.querySelectorAll('[data-org-app-filter]').forEach(function (btn) {
+      if (btn.tagName !== 'BUTTON') {
+        return;
+      }
+      var key = btn.getAttribute('data-org-app-filter');
+      var badge = btn.querySelector('.lnkup-dash-tabs__badge');
+      if (badge && Object.prototype.hasOwnProperty.call(counts, key)) {
+        badge.textContent = String(counts[key]);
+      }
+    });
+    if (!context) {
+      return;
+    }
+    if (eventFilter === 'all') {
+      context.hidden = true;
+      context.textContent = '';
+      return;
+    }
+    var name = '';
+    if (select) {
+      var opt = select.querySelector('option[value="' + eventFilter + '"]');
+      name = opt ? (opt.getAttribute('data-event-name') || opt.textContent) : '';
+    }
+    context.hidden = false;
+    context.textContent = 'Showing requests for ' + name + ' · ' + pending + ' pending';
   }
 
   function syncExternalInterestVisibility(statusFilter) {
@@ -525,23 +703,22 @@
   }
 
   function setAppsHash(statusFilter, eventFilter) {
-    var parts = ['applications'];
+    var url = new URL(window.location.href);
+    url.hash = '';
+    url.searchParams.set('view', 'applications');
+    url.searchParams.delete('lnkup_page');
     if (statusFilter && statusFilter !== 'all') {
-      parts.push('filter=' + encodeURIComponent(statusFilter));
+      url.searchParams.set('filter', statusFilter);
+    } else {
+      url.searchParams.delete('filter');
     }
     if (eventFilter && eventFilter !== 'all') {
-      parts.push('event=' + encodeURIComponent(eventFilter));
-    }
-    var next = parts.join('&');
-    var current = (window.location.hash || '').replace(/^#/, '');
-    if (current === next) {
-      return;
-    }
-    if (window.history.replaceState) {
-      window.history.replaceState(null, '', '#' + next);
+      url.searchParams.set('event_filter', eventFilter);
+      url.searchParams.delete('event');
     } else {
-      window.location.hash = next;
+      url.searchParams.delete('event_filter');
     }
+    window.location.assign(url.toString());
   }
 
   function applyAppsDeepLink() {
@@ -579,7 +756,7 @@
 
   function openCompare(ids) {
     if (ids.length < 2) {
-      alert('Select at least 2 applications to compare.');
+      toast('Select at least 2 applications to compare.', 'error');
       return;
     }
     crmFetch('/applications/compare?ids=' + ids.join(',')).then(function (res) {
@@ -589,7 +766,7 @@
         modal = document.createElement('div');
         modal.id = 'lnkup-crm-compare-modal';
         modal.className = 'lnkup-crm-modal';
-        modal.innerHTML = '<div class="lnkup-crm-modal__inner"><button type="button" class="lnkup-crm-modal__close">&times;</button><div id="lnkup-crm-compare-body"></div></div>';
+        modal.innerHTML = '<div class="lnkup-crm-modal__inner"><button type="button" class="lnkup-crm-modal__close" aria-label="Close comparison">&times;</button><div id="lnkup-crm-compare-body"></div></div>';
         document.body.appendChild(modal);
         modal.addEventListener('click', function (e) {
           if (e.target === modal || e.target.classList.contains('lnkup-crm-modal__close')) {
@@ -653,9 +830,10 @@
       if (String(ev.event_id) !== String(eventId)) {
         return;
       }
-      (ev.opportunities || []).forEach(function (opp) {
+      var opps = ev.opportunities || [];
+      opps.forEach(function (opp) {
         var label = opp.label + ' — $' + (opp.vendor_fee || 0) + ' · ' + (opp.spots_remaining || 0) + ' spots';
-        html += '<option value="' + opp.id + '">' + escapeHtml(label) + '</option>';
+        html += '<option value="' + escapeHtml(String(opp.id)) + '"' + (opps.length === 1 ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
       });
     });
     return html;
@@ -670,7 +848,10 @@
     var prefillOpportunityId = opts.prefillOpportunityId || 0;
 
     if (!vendorUserId && !bulkVendors) {
-      window.location.hash = 'vendors';
+      if (!document.getElementById('vendors')) {
+        window.location.assign(window.location.pathname + '?view=vendors');
+        return;
+      }
       if (window.lnkupOrganizerExpandPanel) {
         window.lnkupOrganizerExpandPanel('vendors', true);
       }
@@ -695,7 +876,7 @@
       var bodyHtml = '';
       if (options.needs_event || !options.items || !options.items.length) {
         bodyHtml = '<div class="lnkup-alert lnkup-alert--info"><p>Launch an event with a vendor opportunity before sending invites.</p>';
-        bodyHtml += '<a href="#create" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm">Launch event</a></div>';
+        bodyHtml += '<a href="' + window.location.pathname + '?view=create" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm">Launch event</a></div>';
       } else {
         var eventOptions = '<option value="">Select event…</option>';
         options.items.forEach(function (ev) {
@@ -720,8 +901,7 @@
         bodyHtml += '</div></form>';
       }
 
-      overlay.innerHTML = '<div class="lnkup-crm-slide__panel"><button type="button" class="lnkup-crm-slide__close" aria-label="Close">&times;</button>';
-      overlay.innerHTML += '<h2 class="lnkup-crm-slide__title">' + escapeHtml(title) + '</h2>' + bodyHtml + '</div>';
+      overlay.innerHTML = '<div class="lnkup-crm-slide__panel"><button type="button" class="lnkup-crm-slide__close" aria-label="Close">&times;</button><h2 class="lnkup-crm-slide__title">' + escapeHtml(title) + '</h2>' + bodyHtml + '</div>';
       document.body.appendChild(overlay);
 
       function close() {
@@ -763,7 +943,7 @@
           }
 
           function sendOne(uid) {
-            return crmFetch('/invites', {
+            return crmFetchJson('/invites', {
               method: 'POST',
               body: {
                 vendor_user_id: uid,
@@ -772,32 +952,50 @@
                 message: message,
                 type: 'apply'
               }
+            }).then(function (res) {
+              return { ok: true, res: res };
+            }, function (err) {
+              return { ok: false, duplicate: err && err.status === 409, message: (err && err.message) || 'Could not send invite.' };
             });
           }
 
+          var uids = (bulkVendors && bulkVendors.length)
+            ? bulkVendors.map(function (v) { return parseInt(v.vendor_user_id, 10); })
+            : [vendorUserId];
+          var outcomes = [];
           var chain = Promise.resolve();
-          if (bulkVendors && bulkVendors.length) {
-            bulkVendors.forEach(function (v) {
-              chain = chain.then(function () {
-                return sendOne(parseInt(v.vendor_user_id, 10));
-              });
+          uids.forEach(function (uid) {
+            chain = chain.then(function () {
+              return sendOne(uid).then(function (o) { outcomes.push(o); });
             });
-          } else {
-            chain = sendOne(vendorUserId);
-          }
+          });
 
-          chain.then(function (res) {
+          chain.then(function () {
+            var sent = outcomes.filter(function (o) { return o.ok; });
+            var dupes = outcomes.filter(function (o) { return o.duplicate; }).length;
+            var failed = outcomes.length - sent.length - dupes;
+            if (!sent.length) {
+              var first = outcomes[0] || {};
+              toast(dupes && !failed ? (uids.length > 1 ? 'Every selected vendor already has an open invite.' : first.message) : (first.message || 'Could not send invite.'), 'error');
+              if (submitBtn) {
+                submitBtn.disabled = false;
+              }
+              return;
+            }
             close();
-            toast(bulkVendors ? 'Invites sent.' : 'Invite sent.');
-            if (res && res.link && navigator.clipboard) {
-              navigator.clipboard.writeText(res.link).catch(function () {});
+            var parts = [sent.length === 1 ? 'Invite sent.' : sent.length + ' invites sent.'];
+            if (dupes) {
+              parts.push(dupes + ' already invited.');
+            }
+            if (failed) {
+              parts.push(failed + ' failed.');
+            }
+            toast(parts.join(' '), failed ? 'error' : 'success');
+            var last = sent[sent.length - 1].res;
+            if (sent.length === 1 && last && last.link && navigator.clipboard) {
+              navigator.clipboard.writeText(last.link).catch(function () {});
             }
             loadInvites();
-          }).catch(function (err) {
-            toast((err && err.message) || 'Could not send invite.', 'error');
-            if (submitBtn) {
-              submitBtn.disabled = false;
-            }
           });
         });
       }
@@ -998,8 +1196,10 @@
           }
           banner.innerHTML = '<p class="lnkup-alert lnkup-alert--success">' + (accept ? 'Invite accepted!' : 'Invite declined.') + '</p>';
         } else {
-          alert((res && res.message) ? res.message : 'Could not update invite.');
+          toast((res && res.message) ? res.message : 'Could not update invite.', 'error');
         }
+      }).catch(function () {
+        // crmFetch already showed the error.
       });
     }
     if (acceptBtn) {
@@ -1010,34 +1210,155 @@
     }
   }
 
-  function rosterBulk(action, eventId) {
-    var ids = [];
-    document.querySelectorAll('.lnkup-roster-pick:checked').forEach(function (cb) {
-      ids.push(parseInt(cb.value, 10));
-    });
-    if (!ids.length) {
-      alert('Select at least one vendor.');
+  var rosterToken = 0;
+
+  function applyRosterItem(item) {
+    if (!item || !item.application_id) {
       return;
     }
-    crmFetch('/events/' + eventId + '/roster/bulk', {
+    var card = document.querySelector('.lnkup-roster-card[data-app-id="' + item.application_id + '"]');
+    if (!card) {
+      return;
+    }
+    var status = card.querySelector('.lnkup-roster-card__status');
+    if (status && item.ops_label) {
+      status.textContent = item.ops_label;
+    }
+    var note = card.querySelector('.lnkup-roster-card__note');
+    if (note) {
+      note.textContent = item.message || '';
+    }
+    var activity = card.querySelector('.lnkup-roster-card__activity');
+    if (activity && item.activity && item.activity.label) {
+      activity.textContent = item.activity.label + (item.activity.created_at ? ' · ' + item.activity.created_at : '');
+    }
+    if (item.actions) {
+      var actions = card.querySelector('.lnkup-roster-card__actions');
+      var review = actions ? actions.querySelector('.lnkup-crm-review-open') : null;
+      var labels = {
+        checked_in: 'Checked In',
+        no_show: 'No Show',
+        late_arrival: 'Late Arrival',
+        setup_started: 'Setup Started',
+        setup_complete: 'Setup Complete',
+        checked_out: 'Checked Out'
+      };
+      var bulk = {
+        checked_in: 'check_in',
+        no_show: 'no_show',
+        late_arrival: 'late_arrival',
+        setup_started: 'setup_started',
+        setup_complete: 'setup_complete',
+        checked_out: 'mark_complete'
+      };
+      var html = '';
+      item.actions.forEach(function (action) {
+        if (!bulk[action]) {
+          return;
+        }
+        html += '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-roster-action" data-roster-action="' + bulk[action] + '" data-app-id="' + item.application_id + '">' + (labels[action] || action) + '</button>';
+      });
+      if (actions) {
+        actions.innerHTML = html + (review ? review.outerHTML : '');
+      }
+    }
+    var feed = document.getElementById('lnkup-ops-feed-list');
+    if (feed && item.activity && item.activity.label) {
+      var li = document.createElement('li');
+      var strong = document.createElement('strong');
+      var when = document.createElement('span');
+      strong.textContent = item.activity.label;
+      when.className = 'lnkup-muted';
+      when.textContent = item.activity.created_at || '';
+      li.appendChild(strong);
+      li.appendChild(document.createTextNode(' '));
+      li.appendChild(when);
+      feed.insertBefore(li, feed.firstChild);
+    }
+  }
+
+  function rosterRequest(action, eventId, ids, buttons) {
+    var token = ++rosterToken;
+    var scroll = window.scrollY;
+    (buttons || []).forEach(function (btn) {
+      btn.disabled = true;
+      btn.setAttribute('aria-busy', 'true');
+    });
+    return crmFetch('/events/' + eventId + '/roster/bulk', {
       method: 'POST',
       body: { action: action, application_ids: ids }
+    }).then(function (res) {
+      if (token !== rosterToken) {
+        return;
+      }
+      ((res && res.results) || []).forEach(applyRosterItem);
+      window.scrollTo(0, scroll);
+    }).catch(function (err) {
+      if (token !== rosterToken) {
+        return;
+      }
+      var message = (err && err.body && err.body.message) || (err && err.message) || 'Could not update the roster.';
+      ids.forEach(function (id) {
+        var card = document.querySelector('.lnkup-roster-card[data-app-id="' + id + '"]');
+        var note = card && card.querySelector('.lnkup-roster-card__note');
+        if (note) {
+          note.textContent = message;
+        }
+      });
     }).then(function () {
-      location.reload();
+      (buttons || []).forEach(function (btn) {
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+      });
+      syncRosterSelection();
     });
   }
 
-  function rosterSingle(action, appId) {
+  function selectedRosterIds() {
+    var ids = [];
+    document.querySelectorAll('.lnkup-roster-pick:checked').forEach(function (cb) {
+      if (!cb.closest('.lnkup-roster-card[hidden]')) {
+        ids.push(parseInt(cb.value, 10));
+      }
+    });
+    return ids;
+  }
+
+  function syncRosterSelection() {
+    var count = selectedRosterIds().length;
+    var label = document.getElementById('lnkup-roster-selected-count');
+    if (label) {
+      label.textContent = count + ' selected';
+    }
+    document.querySelectorAll('[data-roster-bulk]').forEach(function (btn) {
+      if (btn.getAttribute('aria-busy') !== 'true') {
+        btn.disabled = count === 0;
+      }
+    });
+    var selectAll = document.getElementById('lnkup-roster-select-all');
+    if (selectAll) {
+      var visible = document.querySelectorAll('.lnkup-roster-card:not([hidden]) .lnkup-roster-pick');
+      selectAll.checked = visible.length > 0 && count === visible.length;
+      selectAll.indeterminate = count > 0 && count < visible.length;
+    }
+  }
+
+  function rosterBulk(action, eventId) {
+    var ids = selectedRosterIds();
+    if (!ids.length) {
+      syncRosterSelection();
+      return;
+    }
+    var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-roster-bulk="' + action + '"]'));
+    rosterRequest(action, eventId, ids, buttons);
+  }
+
+  function rosterSingle(action, appId, button) {
     var rosterEl = document.getElementById('lnkup-event-roster');
     if (!rosterEl || !base) {
       return;
     }
-    crmFetch('/events/' + rosterEl.getAttribute('data-event-id') + '/roster/bulk', {
-      method: 'POST',
-      body: { action: action, application_ids: [parseInt(appId, 10)] }
-    }).then(function () {
-      location.reload();
-    });
+    rosterRequest(action, rosterEl.getAttribute('data-event-id'), [parseInt(appId, 10)], button ? [button] : []);
   }
 
   function handleInviteDeepLink() {
@@ -1352,6 +1673,24 @@
     }
   }
 
+  /**
+   * Active CRM section: the legacy #hash wins, otherwise the server-rendered ?view= page.
+   *
+   * @returns {string}
+   */
+  function currentCrmSection() {
+    var hash = (window.location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
+    if (hash) {
+      return hash;
+    }
+    var root = document.getElementById('lnkup-organizer-crm');
+    var active = root ? root.getAttribute('data-active-section') || '' : '';
+    if (active) {
+      return active;
+    }
+    return new URLSearchParams(window.location.search).get('view') || '';
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     syncHashNav();
     window.addEventListener('hashchange', function () {
@@ -1381,7 +1720,7 @@
       if (window.LNKupUI && typeof LNKupUI.animateKpiCards === 'function') {
         LNKupUI.animateKpiCards(document.getElementById('lnkup-crm-stats'));
       }
-      var hash = (window.location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
+      var hash = currentCrmSection();
       if (hash === 'vendors') {
         loadDirectory();
       }
@@ -1427,6 +1766,24 @@
       });
     }
 
+    document.addEventListener('click', function (e) {
+      var rebook = e.target.closest('[data-rebook-vendors]');
+      if (!rebook) {
+        return;
+      }
+      var vendors = [];
+      try {
+        vendors = JSON.parse(rebook.getAttribute('data-rebook-vendors') || '[]');
+      } catch (err) {
+        vendors = [];
+      }
+      if (!vendors.length) {
+        toast('No confirmed vendors to rebook from this event.', 'error');
+        return;
+      }
+      openInviteModal({ bulkVendors: vendors });
+    });
+
     var inviteFromPanel = document.getElementById('lnkup-crm-invite-from-panel');
     if (inviteFromPanel) {
       inviteFromPanel.addEventListener('click', function () {
@@ -1438,8 +1795,7 @@
       var priorityTrigger = e.target.closest('[data-org-app-filter-trigger]');
       if (priorityTrigger) {
         e.preventDefault();
-        window.location.hash = 'applications&filter=missing_docs';
-        applyAppsDeepLink();
+        window.location.assign(window.location.pathname + '?view=applications&filter=missing_docs');
       }
     });
 
@@ -1471,6 +1827,18 @@
         setAppsHash(appFilterState.status || 'all', appFilterState.event || 'all');
       });
     });
+
+    var appEventSelect = document.getElementById('lnkup-org-app-event');
+    if (appEventSelect) {
+      appEventSelect.addEventListener('change', function () {
+        var eventId = appEventSelect.value || 'all';
+        document.querySelectorAll('[data-org-app-event]').forEach(function (b) {
+          b.classList.toggle('is-active', b.getAttribute('data-org-app-event') === eventId);
+        });
+        filterApplications(appFilterState.status || 'all', eventId);
+        setAppsHash(appFilterState.status || 'all', appFilterState.event || 'all');
+      });
+    }
 
     window.addEventListener('hashchange', function () {
       applyAppsDeepLink();
@@ -1562,8 +1930,7 @@
       if (smartBtn) {
         var appFilter = smartBtn.getAttribute('data-org-app-filter');
         if (appFilter) {
-          window.location.hash = 'applications&filter=' + encodeURIComponent(appFilter);
-          applyAppsDeepLink();
+          window.location.assign(window.location.pathname + '?view=applications&filter=' + encodeURIComponent(appFilter));
           return;
         }
         var scope = smartBtn.getAttribute('data-crm-scope');
@@ -1571,8 +1938,10 @@
         if (scope) {
           crmState.scope = scope;
           document.querySelectorAll('[data-crm-scope]').forEach(function (b) {
-            if (b.hasAttribute('data-crm-scope') && b.classList.contains('lnkup-btn')) {
-              b.classList.toggle('is-active', b.getAttribute('data-crm-scope') === scope);
+            if (isScopeTab(b)) {
+              var isActive = b.getAttribute('data-crm-scope') === scope;
+              b.classList.toggle('is-active', isActive);
+              b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
             }
           });
         }
@@ -1583,7 +1952,6 @@
             sortEl.value = sort;
           }
         }
-        window.location.hash = 'vendors';
         loadDirectory();
         return;
       }
@@ -1613,13 +1981,15 @@
       }
 
       var scopeBtn = e.target.closest('[data-crm-scope]');
-      if (scopeBtn && scopeBtn.classList.contains('lnkup-btn')) {
+      if (scopeBtn && isScopeTab(scopeBtn)) {
         document.querySelectorAll('[data-crm-scope]').forEach(function (b) {
-          if (b.classList.contains('lnkup-btn')) {
+          if (isScopeTab(b)) {
             b.classList.remove('is-active');
+            b.setAttribute('aria-pressed', 'false');
           }
         });
         scopeBtn.classList.add('is-active');
+        scopeBtn.setAttribute('aria-pressed', 'true');
         crmState.scope = scopeBtn.getAttribute('data-crm-scope');
         loadDirectory();
         return;
@@ -1644,9 +2014,20 @@
       if (delList) {
         e.stopPropagation();
         var listId = delList.getAttribute('data-list-id');
-        if (confirm('Delete this list?')) {
-          crmFetch('/lists/' + listId, { method: 'DELETE' }).then(function () { loadLists(); });
+        if (!delList.classList.contains('is-armed')) {
+          delList.setAttribute('data-label', delList.textContent);
+          delList.classList.add('is-armed');
+          delList.textContent = 'Confirm delete';
+          window.setTimeout(function () {
+            delList.classList.remove('is-armed');
+            delList.textContent = delList.getAttribute('data-label') || 'Delete';
+          }, 4000);
+          return;
         }
+        delList.disabled = true;
+        crmFetch('/lists/' + listId, { method: 'DELETE' })
+          .then(function () { toast('List deleted.'); loadLists(); })
+          .catch(function () { delList.disabled = false; });
         return;
       }
 
@@ -1701,27 +2082,32 @@
         return;
       }
 
-      var checkin = e.target.closest('.lnkup-crm-checkin');
-      if (checkin) {
-        var appId = checkin.getAttribute('data-app-id');
-        crmFetch('/applications/' + appId + '/check-in', { method: 'POST' }).then(function () {
-          location.reload();
-        });
+      var rosterAction = e.target.closest('.lnkup-roster-action, .lnkup-crm-checkin, .lnkup-crm-noshow, .lnkup-crm-late');
+      if (rosterAction) {
+        var rosterName = rosterAction.getAttribute('data-roster-action');
+        if (!rosterName && rosterAction.classList.contains('lnkup-crm-checkin')) {
+          rosterName = 'check_in';
+        } else if (!rosterName && rosterAction.classList.contains('lnkup-crm-noshow')) {
+          rosterName = 'no_show';
+        } else if (!rosterName && rosterAction.classList.contains('lnkup-crm-late')) {
+          rosterName = 'late_arrival';
+        }
+        rosterSingle(rosterName, rosterAction.getAttribute('data-app-id'), rosterAction);
         return;
       }
 
-      var noshow = e.target.closest('.lnkup-crm-noshow');
-      if (noshow) {
-        var app = noshow.getAttribute('data-app-id');
-        crmFetch('/applications/' + app + '/no-show', { method: 'POST' }).then(function () {
-          location.reload();
+      var rosterFilter = e.target.closest('[data-roster-filter]');
+      if (rosterFilter && document.getElementById('lnkup-event-roster')) {
+        var filterKey = rosterFilter.getAttribute('data-roster-filter') || '';
+        document.querySelectorAll('[data-roster-filter]').forEach(function (btn) {
+          btn.classList.toggle('is-active', btn === rosterFilter);
+          btn.setAttribute('aria-pressed', btn === rosterFilter ? 'true' : 'false');
         });
-        return;
-      }
-
-      var lateBtn = e.target.closest('.lnkup-crm-late');
-      if (lateBtn) {
-        rosterSingle('late_arrival', lateBtn.getAttribute('data-app-id'));
+        document.querySelectorAll('.lnkup-roster-card').forEach(function (card) {
+          var groups = (card.getAttribute('data-groups') || '').split(' ');
+          card.hidden = filterKey !== '' && groups.indexOf(filterKey) === -1;
+        });
+        syncRosterSelection();
         return;
       }
 
@@ -1738,10 +2124,19 @@
     var selectAll = document.getElementById('lnkup-roster-select-all');
     if (selectAll) {
       selectAll.addEventListener('change', function () {
-        document.querySelectorAll('.lnkup-roster-pick').forEach(function (cb) {
+        document.querySelectorAll('.lnkup-roster-card:not([hidden]) .lnkup-roster-pick').forEach(function (cb) {
           cb.checked = selectAll.checked;
         });
+        syncRosterSelection();
       });
+    }
+    document.addEventListener('change', function (e) {
+      if (e.target.classList && e.target.classList.contains('lnkup-roster-pick')) {
+        syncRosterSelection();
+      }
+    });
+    if (document.getElementById('lnkup-event-roster')) {
+      syncRosterSelection();
     }
 
     var noteForm = document.getElementById('lnkup-crm-note-form');
@@ -1754,17 +2149,216 @@
         if (!profileId || !input || !input.value.trim()) {
           return;
         }
+        var content = input.value.trim();
         crmFetch('/vendors/' + profileId + '/notes', {
           method: 'POST',
-          body: { content: input.value.trim() }
+          body: { content: content }
         }).then(function (res) {
           if (res && res.id) {
             var list = document.getElementById('lnkup-crm-notes-list');
-            var li = document.createElement('li');
-            li.textContent = input.value.trim();
-            list.appendChild(li);
+            if (list) {
+              list.insertBefore(buildNoteItem(res.id, content, new Date().toLocaleString()), list.firstChild);
+            }
             input.value = '';
           }
+        }).catch(function (err) {
+          toast((err && err.message) || 'Could not save the note.', 'error');
+        });
+      });
+    }
+
+    var notesList = document.getElementById('lnkup-crm-notes-list');
+    if (notesList) {
+      notesList.addEventListener('click', function (e) {
+        var item = e.target.closest('[data-note-id]');
+        if (!item) {
+          return;
+        }
+        var noteId = item.getAttribute('data-note-id');
+        if (e.target.closest('[data-note-delete]')) {
+          var delBtn = e.target.closest('[data-note-delete]');
+          if (!delBtn.classList.contains('is-armed')) {
+            delBtn.classList.add('is-armed');
+            delBtn.textContent = 'Confirm delete';
+            window.setTimeout(function () {
+              delBtn.classList.remove('is-armed');
+              delBtn.textContent = 'Delete';
+            }, 4000);
+            return;
+          }
+          delBtn.disabled = true;
+          crmFetch('/notes/' + noteId, { method: 'DELETE' }).then(function () {
+            item.remove();
+          }).catch(function (err) {
+            delBtn.disabled = false;
+            toast((err && err.message) || 'Could not delete the note.', 'error');
+          });
+          return;
+        }
+        if (e.target.closest('[data-note-edit]')) {
+          var body = item.querySelector('[data-note-body]');
+          if (!body || item.querySelector('textarea')) {
+            return;
+          }
+          var editor = document.createElement('textarea');
+          editor.rows = 3;
+          editor.value = body.textContent;
+          editor.setAttribute('aria-label', 'Edit note');
+          var save = document.createElement('button');
+          save.type = 'button';
+          save.className = 'lnkup-btn lnkup-btn--sm lnkup-btn--primary';
+          save.textContent = 'Save';
+          var cancel = document.createElement('button');
+          cancel.type = 'button';
+          cancel.className = 'lnkup-btn lnkup-btn--sm lnkup-btn--ghost';
+          cancel.textContent = 'Cancel';
+          var wrap = document.createElement('div');
+          wrap.className = 'lnkup-crm-note__editor';
+          wrap.appendChild(editor);
+          wrap.appendChild(save);
+          wrap.appendChild(cancel);
+          body.hidden = true;
+          body.parentNode.insertBefore(wrap, body.nextSibling);
+          editor.focus();
+          cancel.addEventListener('click', function () {
+            wrap.remove();
+            body.hidden = false;
+          });
+          save.addEventListener('click', function () {
+            var next = editor.value.trim();
+            if (!next) {
+              editor.focus();
+              return;
+            }
+            save.disabled = true;
+            crmFetch('/notes/' + noteId, { method: 'PUT', body: { content: next } }).then(function () {
+              body.textContent = next;
+              wrap.remove();
+              body.hidden = false;
+            }).catch(function (err) {
+              save.disabled = false;
+              toast((err && err.message) || 'Could not update the note.', 'error');
+            });
+          });
+        }
+      });
+    }
+
+    var tagsRoot = document.querySelector('[data-crm-tags]');
+    var crmProfileEl = document.getElementById('lnkup-crm-profile');
+    if (tagsRoot && crmProfileEl) {
+      var tagProfileId = crmProfileEl.getAttribute('data-profile-id');
+      var tagList = tagsRoot.querySelector('[data-crm-tag-list]');
+      var tagForm = tagsRoot.querySelector('[data-crm-tag-form]');
+      var tagStatus = tagsRoot.querySelector('[data-crm-tag-status]');
+      tagsRoot.addEventListener('click', function (e) {
+        var remove = e.target.closest('[data-crm-tag-remove]');
+        if (!remove) {
+          return;
+        }
+        var slug = remove.getAttribute('data-crm-tag-remove');
+        remove.disabled = true;
+        crmFetch('/vendors/' + tagProfileId + '/tags?slug=' + encodeURIComponent(slug), { method: 'DELETE' }).then(function () {
+          var chip = remove.closest('li');
+          if (chip) {
+            chip.remove();
+          }
+          if (tagStatus) {
+            tagStatus.textContent = 'Tag removed.';
+          }
+        }).catch(function (err) {
+          remove.disabled = false;
+          if (tagStatus) {
+            tagStatus.textContent = (err && err.message) || 'Could not remove the tag.';
+          }
+        });
+      });
+      if (tagForm) {
+        tagForm.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var input = tagForm.querySelector('input');
+          var label = input ? input.value.trim() : '';
+          if (!label) {
+            return;
+          }
+          var slug = '';
+          tagForm.querySelectorAll('datalist option').forEach(function (opt) {
+            if (opt.value.toLowerCase() === label.toLowerCase()) {
+              slug = opt.getAttribute('data-slug') || '';
+              label = opt.value;
+            }
+          });
+          if (!slug) {
+            slug = label.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+          }
+          if (!slug || tagList.querySelector('[data-tag-slug="' + slug + '"]')) {
+            input.value = '';
+            return;
+          }
+          crmFetch('/vendors/' + tagProfileId + '/tags', { method: 'POST', body: { slug: slug, label: label } }).then(function () {
+            var li = document.createElement('li');
+            li.className = 'lnkup-badge lnkup-badge--secondary';
+            li.setAttribute('data-tag-slug', slug);
+            var text = document.createElement('span');
+            text.textContent = label;
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'lnkup-crm-tags__remove';
+            btn.setAttribute('data-crm-tag-remove', slug);
+            btn.setAttribute('aria-label', 'Remove tag ' + label);
+            btn.textContent = '\u00d7';
+            li.appendChild(text);
+            li.appendChild(btn);
+            tagList.appendChild(li);
+            input.value = '';
+            if (tagStatus) {
+              tagStatus.textContent = 'Tag added.';
+            }
+          }).catch(function (err) {
+            if (tagStatus) {
+              tagStatus.textContent = (err && err.message) || 'Could not add the tag.';
+            }
+          });
+        });
+      }
+    }
+
+    var timelineBtn = document.querySelector('[data-crm-timeline-full]');
+    if (timelineBtn && crmProfileEl) {
+      timelineBtn.addEventListener('click', function () {
+        var container = crmProfileEl.querySelector('.lnkup-crm-timeline');
+        if (!container) {
+          return;
+        }
+        timelineBtn.disabled = true;
+        timelineBtn.textContent = 'Loading…';
+        crmFetch('/vendors/' + crmProfileEl.getAttribute('data-profile-id') + '/timeline').then(function (res) {
+          var items = (res && res.items) || [];
+          var list = document.createElement('ul');
+          list.className = 'lnkup-crm-timeline__list';
+          items.forEach(function (item) {
+            var li = document.createElement('li');
+            var strong = document.createElement('strong');
+            strong.textContent = item.label || '';
+            li.appendChild(strong);
+            if (item.event_title) {
+              li.appendChild(document.createTextNode(' — ' + item.event_title));
+            }
+            if (item.created_at) {
+              li.appendChild(document.createElement('br'));
+              var when = document.createElement('span');
+              when.className = 'lnkup-muted';
+              when.textContent = item.created_at;
+              li.appendChild(when);
+            }
+            list.appendChild(li);
+          });
+          container.innerHTML = '';
+          container.appendChild(list);
+          timelineBtn.parentNode.remove();
+        }).catch(function () {
+          timelineBtn.disabled = false;
+          timelineBtn.textContent = 'Could not load history. Try again';
         });
       });
     }
@@ -1787,9 +2381,13 @@
         if (vendorSearch) {
           vendorSearch.value = crmState.q;
         }
-        window.location.hash = 'vendors';
-        syncHashNav();
-        loadDirectory();
+        var searchUrl = new URL(window.location.href);
+        searchUrl.hash = '';
+        searchUrl.searchParams.set('view', 'vendors');
+        if (crmState.q) {
+          searchUrl.searchParams.set('crm_q', crmState.q);
+        }
+        window.location.assign(searchUrl.toString());
       });
       var params = new URLSearchParams(window.location.search);
       if (params.get('crm_q')) {

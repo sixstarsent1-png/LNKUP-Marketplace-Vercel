@@ -217,7 +217,7 @@ class LNKup_Organizer_Launch_Checklist {
 			'description' => lnkup_copy( 'launch_checklist_create_event_desc' ),
 			'status'      => $complete ? self::STATUS_COMPLETE : self::STATUS_NOT_STARTED,
 			'cta_label'   => lnkup_copy( 'launch_checklist_create_event_cta' ),
-			'cta_url'     => $dash_url . '#create',
+			'cta_url'     => lnkup_organizer_view_url( 'create' ),
 		);
 	}
 
@@ -238,7 +238,8 @@ class LNKup_Organizer_Launch_Checklist {
 			'description' => lnkup_copy( 'launch_checklist_vendor_categories_desc' ),
 			'status'      => $status,
 			'cta_label'   => lnkup_copy( 'launch_checklist_vendor_categories_cta' ),
-			'cta_url'     => $dash_url . '#create',
+			'cta_url'     => lnkup_organizer_view_url( 'create' ),
+			'event_id'    => $opp ? (int) get_post_meta( $opp->ID, '_lnkup_event_id', true ) : 0,
 		);
 	}
 
@@ -259,7 +260,8 @@ class LNKup_Organizer_Launch_Checklist {
 			'description' => lnkup_copy( 'launch_checklist_booth_fee_desc' ),
 			'status'      => $status,
 			'cta_label'   => lnkup_copy( 'launch_checklist_booth_fee_cta' ),
-			'cta_url'     => $dash_url . '#create',
+			'cta_url'     => lnkup_organizer_view_url( 'create' ),
+			'event_id'    => $opp ? (int) get_post_meta( $opp->ID, '_lnkup_event_id', true ) : 0,
 		);
 	}
 
@@ -270,7 +272,7 @@ class LNKup_Organizer_Launch_Checklist {
 	 */
 	private static function item_vendor_packet( ?WP_Post $event, string $dash_url ): array {
 		$status  = self::STATUS_NOT_STARTED;
-		$cta_url = $dash_url . '#events';
+		$cta_url = lnkup_organizer_view_url( 'events' );
 		if ( $event ) {
 			$event_id = (int) $event->ID;
 			$cta_url  = add_query_arg( array( 'event' => $event_id, 'ops' => 1, 'ops_tab' => 'vendor-pass' ), $dash_url );
@@ -296,6 +298,7 @@ class LNKup_Organizer_Launch_Checklist {
 			'status'      => $status,
 			'cta_label'   => lnkup_copy( 'launch_checklist_vendor_packet_cta' ),
 			'cta_url'     => $cta_url,
+			'event_id'    => $event ? (int) $event->ID : 0,
 		);
 	}
 
@@ -335,7 +338,7 @@ class LNKup_Organizer_Launch_Checklist {
 			'description' => lnkup_copy( 'launch_checklist_payout_account_desc' ),
 			'status'      => $status,
 			'cta_label'   => lnkup_copy( 'launch_checklist_payout_account_cta' ),
-			'cta_url'     => $dash_url . '#financial',
+			'cta_url'     => lnkup_organizer_view_url( 'financial' ),
 		);
 	}
 
@@ -358,7 +361,7 @@ class LNKup_Organizer_Launch_Checklist {
 			'description' => lnkup_copy( 'launch_checklist_invite_vendors_desc' ),
 			'status'      => $status,
 			'cta_label'   => lnkup_copy( 'launch_checklist_invite_vendors_cta' ),
-			'cta_url'     => $dash_url . '#vendors',
+			'cta_url'     => function_exists( 'lnkup_organizer_view_url' ) ? lnkup_organizer_view_url( 'vendors' ) : add_query_arg( 'view', 'vendors', $dash_url ),
 		);
 	}
 
@@ -426,7 +429,7 @@ class LNKup_Organizer_Launch_Checklist {
 			'description' => lnkup_copy( 'launch_checklist_review_applications_desc' ),
 			'status'      => $status,
 			'cta_label'   => lnkup_copy( 'launch_checklist_review_applications_cta' ),
-			'cta_url'     => $dash_url . '#applications',
+			'cta_url'     => lnkup_organizer_view_url( 'applications' ),
 		);
 	}
 
@@ -457,7 +460,7 @@ class LNKup_Organizer_Launch_Checklist {
 			'description' => lnkup_copy( 'launch_checklist_approve_vendor_desc' ),
 			'status'      => $status,
 			'cta_label'   => lnkup_copy( 'launch_checklist_approve_vendor_cta' ),
-			'cta_url'     => $dash_url . '#applications',
+			'cta_url'     => lnkup_organizer_view_url( 'applications' ),
 		);
 	}
 
@@ -490,7 +493,7 @@ class LNKup_Organizer_Launch_Checklist {
 			'description' => lnkup_copy( 'launch_checklist_collect_payment_desc' ),
 			'status'      => $status,
 			'cta_label'   => lnkup_copy( 'launch_checklist_collect_payment_cta' ),
-			'cta_url'     => $dash_url . '#financial',
+			'cta_url'     => lnkup_organizer_view_url( 'financial' ),
 		);
 	}
 

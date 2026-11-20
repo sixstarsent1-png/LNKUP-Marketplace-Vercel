@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="LNKup">
+  <!--
+    Official LNKup logo (raster). Source of truth for store icons:
+    assets/brand/lnkup-logo.png — regenerate with: npm run icons
+    Colors: black #000000 · white #FFFFFF · accent orange #F58220
+  -->
+  <rect width="1024" height="1024" fill="#000000"/>
+  <image href="lnkup-logo.png" width="1024" height="1024" preserveAspectRatio="xMidYMid meet"/>
+</svg>

@@ -37,6 +37,7 @@ add_filter(
 		$templates['page-templates/sign-up.php']                 = __( 'Sign Up', 'lnkup-theme' );
 		$templates['page-templates/vendor-shell.php']            = __( 'Vendor Shell', 'lnkup-theme' );
 		$templates['page-templates/market-landing.php']          = __( 'City Market Landing', 'lnkup-theme' );
+		$templates['page-templates/public-storefront.php']       = __( 'Public Storefront', 'lnkup-theme' );
 		return $templates;
 	}
 );

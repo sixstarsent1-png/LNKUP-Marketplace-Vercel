@@ -29,6 +29,15 @@ class LNKup_Financial_Service {
 	 */
 	public static function get_checkout_amount( $payment_id ) {
 		LNKup_Payments::refresh_pending_fees( $payment_id );
+		return self::stored_amount_due( $payment_id );
+	}
+
+	/**
+	 * Amount due from stored payment meta, without recalculating fees.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 */
+	public static function stored_amount_due( $payment_id ) {
 		$total       = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
 		$credit      = (float) get_post_meta( $payment_id, '_lnkup_credit_applied', true );
 		$installment = (float) get_post_meta( $payment_id, '_lnkup_installment_amount', true );
@@ -48,6 +57,13 @@ class LNKup_Financial_Service {
 		LNKup_Payments::refresh_pending_fees( $payment_id );
 		$mode = $args['mode'] ?? 'embedded';
 		if ( 'redirect' === $mode ) {
+			$zero = self::maybe_finalize_zero_amount( $payment_id, 'free_booth' );
+			if ( is_wp_error( $zero ) ) {
+				return $zero;
+			}
+			if ( null !== $zero ) {
+				return array( 'mode' => 'no_payment_due', 'paid' => true, 'url' => '' );
+			}
 			return self::provider()->create_checkout_session( $payment_id, $args );
 		}
 		return LNKup_Checkout::prepare( $payment_id, $args );
@@ -163,8 +179,8 @@ class LNKup_Financial_Service {
 		if ( 'paid' !== $status ) {
 			$intent_id = $intent_id ?: (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
 			if ( $intent_id && 0 === strpos( $intent_id, 'pi_' ) ) {
-				$si_status = self::stripe_intent_status( $intent_id );
-				if ( 'processing' === $si_status ) {
+				$verified = self::verify_intent_for_payment( $payment_id, $intent_id );
+				if ( 'processing' === $verified ) {
 					self::mark_payment_processing( $payment_id, $intent_id, array( 'source' => 'reconcile' ) );
 					return new WP_Error(
 						'payment_processing',
@@ -172,15 +188,23 @@ class LNKup_Financial_Service {
 						array( 'status' => 409 )
 					);
 				}
-				if ( 'succeeded' !== $si_status ) {
-					return new WP_Error(
-						'payment_incomplete',
-						__( 'Stripe payment is not complete yet.', 'lnkup-marketplace' ),
-						array( 'status' => 400 )
-					);
+				if ( is_wp_error( $verified ) ) {
+					return $verified;
 				}
+				return self::finalize_payment( $payment_id, $intent_id, array( 'source' => 'reconcile' ) );
 			}
-			return self::finalize_payment( $payment_id, $intent_id, array( 'source' => 'reconcile' ) );
+			if ( $intent_id && 0 === strpos( $intent_id, 'sim_' ) && self::simulation_enabled() ) {
+				return self::finalize_payment( $payment_id, $intent_id, array( 'source' => 'reconcile_simulation' ) );
+			}
+			$zero = self::maybe_finalize_zero_amount( $payment_id );
+			if ( null !== $zero ) {
+				return $zero;
+			}
+			return new WP_Error(
+				'payment_incomplete',
+				__( 'No completed payment was found for this booking yet.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
 		}
 
 		$mode = get_post_meta( $payment_id, '_lnkup_settlement_mode', true );
@@ -304,6 +328,11 @@ class LNKup_Financial_Service {
 		if ( is_wp_error( $intent ) ) {
 			return $intent;
 		}
+		$meta_payment = absint( $intent['metadata']['payment_post_id'] ?? 0 );
+		$stored       = (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
+		if ( $meta_payment ? $meta_payment !== (int) $payment_id : $stored !== $intent_id ) {
+			return false;
+		}
 
 		$amount_cents    = (int) ( $intent['amount'] ?? 0 );
 		$app_fee_cents   = (int) ( $intent['application_fee_amount'] ?? 0 );
@@ -387,10 +416,11 @@ class LNKup_Financial_Service {
 	 *
 	 * @param int    $user_id Organizer user ID.
 	 * @param float  $amount  Amount.
-	 * @param string $type    Payout type.
+	 * @param string $type         Payout type.
+	 * @param string $client_token Optional idempotency key from the client.
 	 */
-	public static function request_organizer_cashout( $user_id, $amount, $type = 'standard' ) {
-		return LNKup_Organizer_Payouts::request_cashout( $user_id, $amount, $type );
+	public static function request_organizer_cashout( $user_id, $amount, $type = 'standard', $client_token = '' ) {
+		return LNKup_Organizer_Payouts::request_cashout( $user_id, $amount, $type, $client_token );
 	}
 
 	/**
@@ -609,15 +639,150 @@ class LNKup_Financial_Service {
 			);
 		}
 
-		if ( 0 === strpos( $intent_id, 'sim_' ) || self::stripe_intent_is_paid( $intent_id ) ) {
-			return self::finalize_payment( $payment_id, $intent_id, array( 'source' => 'client_confirm' ) );
+		if ( 0 === strpos( $intent_id, 'sim_' ) ) {
+			if ( ! self::simulation_enabled() ) {
+				self::log_rejected_confirm( $payment_id, $intent_id, 'simulation_disabled' );
+				return new WP_Error( 'payment_incomplete', __( 'Payment not completed yet.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+			}
+			return self::finalize_payment( $payment_id, $intent_id, array( 'source' => 'client_confirm_simulation' ) );
 		}
 
-		return new WP_Error(
+		$verified = self::verify_intent_for_payment( $payment_id, $intent_id );
+		if ( is_wp_error( $verified ) ) {
+			return $verified;
+		}
+		if ( 'processing' === $verified ) {
+			self::mark_payment_processing( $payment_id, $intent_id, array( 'source' => 'client_confirm' ) );
+			return new WP_Error(
+				'payment_processing',
+				__( 'Bank payment is still processing. Packet unlocks when funds clear.', 'lnkup-marketplace' ),
+				array( 'status' => 409 )
+			);
+		}
+		return self::finalize_payment( $payment_id, $intent_id, array( 'source' => 'client_confirm' ) );
+	}
+
+	/**
+	 * Whether simulated (sim_) payments may be finalized.
+	 *
+	 * Only when test mode is on and live Stripe is not fully configured, or when
+	 * a developer explicitly defines LNKUP_ALLOW_PAYMENT_SIMULATION.
+	 */
+	public static function simulation_enabled() {
+		if ( defined( 'LNKUP_ALLOW_PAYMENT_SIMULATION' ) ) {
+			return (bool) LNKUP_ALLOW_PAYMENT_SIMULATION;
+		}
+		$settings = lnkup_get_settings();
+		if ( empty( $settings['test_mode'] ) ) {
+			return false;
+		}
+		$provider = self::provider();
+		return 'manual' === $provider->get_id() || ! $provider->is_configured();
+	}
+
+	/**
+	 * Retrieve a Stripe PaymentIntent and confirm it belongs to this payment.
+	 *
+	 * @param int    $payment_id Payment post ID.
+	 * @param string $intent_id  PaymentIntent ID (pi_…).
+	 * @return string|WP_Error 'succeeded' | 'processing', or an error.
+	 */
+	public static function verify_intent_for_payment( $payment_id, $intent_id ) {
+		$incomplete = new WP_Error(
 			'payment_incomplete',
 			__( 'Payment not completed yet. If you were charged, wait a moment and refresh, or contact support.', 'lnkup-marketplace' ),
 			array( 'status' => 400 )
 		);
+		if ( 0 !== strpos( (string) $intent_id, 'pi_' ) || ! class_exists( 'LNKup_Stripe_Client' ) ) {
+			return $incomplete;
+		}
+		$client = new LNKup_Stripe_Client();
+		$intent = $client->retrieve_payment_intent( $intent_id );
+		if ( is_wp_error( $intent ) || ! is_array( $intent ) ) {
+			return $incomplete;
+		}
+
+		$meta_payment = absint( $intent['metadata']['payment_post_id'] ?? 0 );
+		$stored       = (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
+		$bound        = $meta_payment ? ( $meta_payment === (int) $payment_id ) : ( $stored === $intent_id );
+		if ( ! $bound ) {
+			self::log_rejected_confirm( $payment_id, $intent_id, 'intent_not_for_payment' );
+			return new WP_Error( 'payment_mismatch', __( 'That payment does not match this booking.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+
+		$status = (string) ( $intent['status'] ?? '' );
+		if ( 'processing' === $status ) {
+			return 'processing';
+		}
+		if ( 'succeeded' !== $status ) {
+			return $incomplete;
+		}
+
+		$expected_cents = (int) round( self::stored_amount_due( $payment_id ) * 100 );
+		$received_cents = (int) ( $intent['amount_received'] ?? $intent['amount'] ?? 0 );
+		if ( 'usd' !== strtolower( (string) ( $intent['currency'] ?? 'usd' ) ) || $received_cents <= 0 || $received_cents < $expected_cents ) {
+			self::log_rejected_confirm(
+				$payment_id,
+				$intent_id,
+				'amount_mismatch',
+				array(
+					'expected_cents' => $expected_cents,
+					'received_cents' => $received_cents,
+				)
+			);
+			return new WP_Error( 'payment_mismatch', __( 'The amount paid does not match this booking. Contact support.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+
+		return 'succeeded';
+	}
+
+	/**
+	 * Finalize a pending payment whose amount due is zero (free booth or fully covered by credits).
+	 *
+	 * @param int    $payment_id Payment post ID.
+	 * @param string $source     Audit source label.
+	 * @return array|WP_Error|null Null when the payment still has an amount due.
+	 */
+	public static function maybe_finalize_zero_amount( $payment_id, $source = 'zero_amount' ) {
+		$payment_id = absint( $payment_id );
+		if ( ! $payment_id || 'lnkup_payment' !== get_post_type( $payment_id ) ) {
+			return null;
+		}
+		if ( 'pending' !== (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ) ) {
+			return null;
+		}
+		if ( self::get_checkout_amount( $payment_id ) > 0 ) {
+			return null;
+		}
+		$total  = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
+		$source = $total > 0 ? 'credit_covered' : sanitize_key( $source );
+		return self::finalize_payment( $payment_id, '', array( 'source' => $source ) );
+	}
+
+	/**
+	 * Audit a refused client-side confirmation attempt.
+	 *
+	 * @param int    $payment_id Payment ID.
+	 * @param string $intent_id  Submitted intent ID.
+	 * @param string $reason     Reason code.
+	 * @param array  $extra      Extra context.
+	 */
+	private static function log_rejected_confirm( $payment_id, $intent_id, $reason, $extra = array() ) {
+		if ( class_exists( 'LNKup_Financial_Audit' ) ) {
+			LNKup_Financial_Audit::log(
+				'confirm_rejected',
+				'payment',
+				$payment_id,
+				array_merge(
+					$extra,
+					array(
+						'reason'    => $reason,
+						'intent_id' => (string) $intent_id,
+						'user_id'   => get_current_user_id(),
+					)
+				)
+			);
+		}
 	}
 
 	/**
@@ -667,22 +832,34 @@ class LNKup_Financial_Service {
 		$payload  = $request->get_body();
 		$sig      = $request->get_header( 'stripe-signature' );
 		$client   = new LNKup_Stripe_Client();
-		$secret   = trim( (string) ( $settings['stripe_webhook_secret'] ?? '' ) );
-		$event    = $client->verify_webhook( $payload, $sig, $secret );
+		// Platform endpoint and Connect endpoint each have their own signing secret.
+		$secrets  = array_values(
+			array_filter(
+				array(
+					trim( (string) ( $settings['stripe_webhook_secret'] ?? '' ) ),
+					trim( (string) ( $settings['stripe_connect_webhook_secret'] ?? '' ) ),
+				)
+			)
+		);
+
+		$event = new WP_Error( 'not_configured', __( 'Webhook signing secret is not configured.', 'lnkup-marketplace' ) );
+		foreach ( $secrets as $secret ) {
+			$event = $client->verify_webhook( $payload, $sig, $secret );
+			if ( ! is_wp_error( $event ) ) {
+				break;
+			}
+		}
 
 		if ( is_wp_error( $event ) ) {
-			// Signing secret configured ⇒ never accept unsigned payloads (even in test_mode).
-			if ( '' !== $secret ) {
-				return new WP_REST_Response( array( 'error' => $event->get_error_message() ), 400 );
-			}
+			// Any signing secret configured ⇒ never accept unsigned payloads (even in test_mode).
 			// Dev-only: unsigned JSON allowed only when no secret AND test_mode is on.
-			if ( empty( $settings['test_mode'] ) ) {
+			if ( ! empty( $secrets ) || empty( $settings['test_mode'] ) ) {
 				return new WP_REST_Response( array( 'error' => $event->get_error_message() ), 400 );
 			}
 			$event = json_decode( $payload, true );
 		}
 
-		if ( empty( $event['type'] ) ) {
+		if ( ! is_array( $event ) || empty( $event['type'] ) ) {
 			return new WP_REST_Response( array( 'received' => true ), 200 );
 		}
 
@@ -800,11 +977,24 @@ class LNKup_Financial_Service {
 				$health = array();
 			}
 		}
+		$gross_collected = max( (float) ( $reports['gross_revenue'] ?? 0 ), (float) ( $data['vendor_revenue'] ?? 0 ) );
+		$platform_fees   = (float) ( $reports['platform_fees'] ?? 0 );
+		$refunds_total   = (float) ( $reports['refunds'] ?? 0 );
+		$categories      = self::organizer_money_categories(
+			array(
+				'gross'      => $gross_collected,
+				'fees'       => $platform_fees,
+				'refunds'    => $refunds_total,
+				'pending'    => (float) ( $display_balances['pending'] ?? $wallet['pending'] ?? 0 ),
+				'available'  => (float) ( $display_balances['available'] ?? $wallet['available'] ?? 0 ),
+				'in_transit' => (float) ( $display_balances['processing'] ?? $wallet['processing'] ?? 0 ),
+				'paid_out'   => $payouts_paid,
+				'synced'     => ! empty( $stripe_balance ) && empty( $stripe_balance['error'] ),
+			)
+		);
 		return array_merge( $data, array(
-			'gross_revenue'       => max(
-				(float) ( $reports['gross_revenue'] ?? 0 ),
-				(float) ( $data['vendor_revenue'] ?? 0 )
-			),
+			'money_categories'    => $categories,
+			'gross_revenue'       => $gross_collected,
 			'platform_fees'       => $reports['platform_fees'] ?? 0,
 			'collected'           => (float) ( $data['vendor_revenue'] ?? 0 ),
 			'refunds'             => $reports['refunds'] ?? 0,
@@ -835,6 +1025,39 @@ class LNKup_Financial_Service {
 				'completion_rate'   => $reports['completion_rate'] ?? 0,
 			),
 		) );
+	}
+
+	/**
+	 * Organizer money in flow order. Values come from the booking ledger (gross, fees, refunds)
+	 * and the payout account / wallet (pending, available, in transit, paid out); nothing is estimated.
+	 *
+	 * @param array<string, float|bool> $v Raw values.
+	 * @return array<int, array{key:string,label:string,amount:float,source:string,hint:string}>
+	 */
+	private static function organizer_money_categories( $v ) {
+		$balance_source = ! empty( $v['synced'] ) ? 'payout_account' : 'ledger';
+		$rows           = array(
+			array( 'gross', __( 'Gross collected', 'lnkup-marketplace' ), $v['gross'], 'ledger', __( 'Booth fees vendors have paid, before fees and refunds.', 'lnkup-marketplace' ) ),
+			array( 'fees', __( 'Platform fees', 'lnkup-marketplace' ), $v['fees'], 'ledger', __( 'LNKup fees on those bookings.', 'lnkup-marketplace' ) ),
+			array( 'refunds', __( 'Refunds', 'lnkup-marketplace' ), $v['refunds'], 'ledger', __( 'Money returned to vendors.', 'lnkup-marketplace' ) ),
+			array( 'net', __( 'Net earnings', 'lnkup-marketplace' ), max( 0, $v['gross'] - $v['fees'] - $v['refunds'] ), 'ledger', __( 'Gross collected minus platform fees and refunds.', 'lnkup-marketplace' ) ),
+			array( 'pending', __( 'Pending', 'lnkup-marketplace' ), $v['pending'], $balance_source, __( 'Still settling. Pending money is not available to cash out yet.', 'lnkup-marketplace' ) ),
+			array( 'available', __( 'Available to cash out', 'lnkup-marketplace' ), $v['available'], $balance_source, __( 'Ready to send to your bank.', 'lnkup-marketplace' ) ),
+			array( 'in_transit', __( 'In transit', 'lnkup-marketplace' ), $v['in_transit'], $balance_source, __( 'Cashouts on the way to your bank.', 'lnkup-marketplace' ) ),
+			array( 'paid_out', __( 'Paid out', 'lnkup-marketplace' ), $v['paid_out'], 'ledger', __( 'Cashouts that reached your bank.', 'lnkup-marketplace' ) ),
+		);
+		return array_map(
+			static function ( $row ) {
+				return array(
+					'key'    => $row[0],
+					'label'  => $row[1],
+					'amount' => round( (float) $row[2], 2 ),
+					'source' => $row[3],
+					'hint'   => $row[4],
+				);
+			},
+			$rows
+		);
 	}
 
 	/**

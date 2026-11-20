@@ -143,6 +143,17 @@ class LNKup_Financial_REST {
 			'methods'  => 'POST',
 			'callback' => array( __CLASS__, 'checkout_redirect_url' ),
 		) ) );
+		// Public bounce from Stripe Checkout back into the native app. Changes no state;
+		// the app re-reads payment status from authenticated routes after it reopens.
+		register_rest_route( self::NS, '/financial/checkout/native-return', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'checkout_native_return' ),
+			'permission_callback' => '__return_true',
+			'args'                => array(
+				'payment'        => array( 'sanitize_callback' => 'sanitize_key' ),
+				'application_id' => array( 'sanitize_callback' => 'absint' ),
+			),
+		) );
 
 		register_rest_route( self::NS, '/financial/activity', array_merge( $fin, array(
 			'methods'  => 'GET',
@@ -195,6 +206,10 @@ class LNKup_Financial_REST {
 		register_rest_route( self::NS, '/financial/receipts/(?P<id>\d+)', array_merge( $vendor, array(
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'receipt_detail' ),
+		) ) );
+		register_rest_route( self::NS, '/financial/receipts/(?P<id>\d+)/view', array_merge( $vendor, array(
+			'methods'  => 'GET',
+			'callback' => array( __CLASS__, 'receipt_view' ),
 		) ) );
 
 		register_rest_route( self::NS, '/financial/refunds/(?P<id>\d+)/deny', array_merge( $org, array(
@@ -426,10 +441,13 @@ class LNKup_Financial_REST {
 			}
 			return wp_check_invalid_utf8( $data );
 		}
-		if ( is_int( $data ) || is_float( $data ) || is_bool( $data ) || null === $data ) {
+		if ( is_float( $data ) ) {
+			return is_finite( $data ) ? $data : 0.0;
+		}
+		if ( is_int( $data ) || is_bool( $data ) || null === $data ) {
 			return $data;
 		}
-		return (string) $data;
+		return null;
 	}
 
 	/**
@@ -528,7 +546,30 @@ class LNKup_Financial_REST {
 				try {
 					return LNKup_Financial_Service::organizer_dashboard();
 				} catch ( Throwable $e ) {
-					return self::organizer_zero_dashboard();
+					if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+						// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+						error_log( 'LNKup organizer dashboard: ' . $e->getMessage() );
+					}
+					try {
+						return self::organizer_zero_dashboard();
+					} catch ( Throwable $fallback_error ) {
+						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+							// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+							error_log( 'LNKup organizer dashboard fallback: ' . $fallback_error->getMessage() );
+						}
+						return array(
+							'gross_revenue'    => 0,
+							'available_balance'=> 0,
+							'pending_balance'  => 0,
+							'platform_fees'    => 0,
+							'payouts_paid'     => 0,
+							'refunds'          => 0,
+							'charts'           => array(
+								'revenue_by_month' => array(),
+								'revenue_by_event' => array(),
+							),
+						);
+					}
 				}
 			}
 			try {
@@ -638,6 +679,7 @@ class LNKup_Financial_REST {
 
 	public static function payouts() {
 		$rows = LNKup_Payouts::list_for_organizer( get_current_user_id() );
+		$rows = is_array( $rows ) ? $rows : array();
 		return rest_ensure_response( array_map( array( 'LNKup_Payouts', 'format' ), $rows ) );
 	}
 
@@ -822,7 +864,10 @@ class LNKup_Financial_REST {
 
 		$params = $request->get_json_params() ?: array();
 		$checkout_args = array( 'mode' => 'redirect' );
-		if ( ! empty( $params['return_to'] ) && 'app' === $params['return_to'] ) {
+		if ( ! empty( $params['return_to'] ) && 'native' === $params['return_to'] ) {
+			$checkout_args['return_to']      = 'native';
+			$checkout_args['application_id'] = isset( $params['application_id'] ) ? absint( $params['application_id'] ) : 0;
+		} elseif ( ! empty( $params['return_to'] ) && 'app' === $params['return_to'] ) {
 			$checkout_args['return_to']      = 'app';
 			$checkout_args['app_base_url']   = isset( $params['app_base_url'] ) ? (string) $params['app_base_url'] : '';
 			$checkout_args['application_id'] = isset( $params['application_id'] ) ? absint( $params['application_id'] ) : 0;
@@ -835,6 +880,15 @@ class LNKup_Financial_REST {
 					'status'     => 'unavailable',
 					'payment_id' => $payment_id,
 					'message'    => $result->get_error_message(),
+				)
+			);
+		}
+
+		if ( is_array( $result ) && ! empty( $result['paid'] ) ) {
+			return rest_ensure_response(
+				array(
+					'status'     => 'already_paid',
+					'payment_id' => $payment_id,
 				)
 			);
 		}
@@ -856,6 +910,27 @@ class LNKup_Financial_REST {
 				'payment_id'   => $payment_id,
 			)
 		);
+	}
+
+	/**
+	 * Redirect Stripe Checkout success/cancel back to lnkup://stripe-redirect.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function checkout_native_return( $request ) {
+		$state = (string) $request->get_param( 'payment' );
+		if ( ! in_array( $state, array( 'success', 'cancelled' ), true ) ) {
+			$state = 'cancelled';
+		}
+		$query = array( 'payment' => $state );
+		$app   = absint( $request->get_param( 'application_id' ) );
+		if ( $app ) {
+			$query['applicationId'] = $app;
+		}
+		$response = new WP_REST_Response( null, 302 );
+		$response->header( 'Location', 'lnkup://stripe-redirect?' . http_build_query( $query, '', '&', PHP_QUERY_RFC3986 ) );
+		$response->header( 'Cache-Control', 'no-store' );
+		return $response;
 	}
 
 	public static function activity( $request ) {
@@ -936,8 +1011,25 @@ class LNKup_Financial_REST {
 		if ( ! $invoice || ! self::can_access_invoice( $invoice ) ) {
 			return new WP_Error( 'not_found', __( 'Invoice not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}
-		$html = LNKup_Invoices::render_html( $invoice );
-		return new WP_REST_Response( $html, 200, array( 'Content-Type' => 'text/html; charset=utf-8' ) );
+		return self::serve_html( LNKup_Invoices::render_html( $invoice ) );
+	}
+
+	/**
+	 * Send an HTML document instead of a JSON-encoded string.
+	 *
+	 * @param string $html Document markup.
+	 * @return WP_REST_Response
+	 */
+	private static function serve_html( $html ) {
+		add_filter(
+			'rest_pre_serve_request',
+			static function () use ( $html ) {
+				header( 'Content-Type: text/html; charset=UTF-8' );
+				echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				return true;
+			}
+		);
+		return new WP_REST_Response( null, 200 );
 	}
 
 	public static function invoice_email( $request ) {
@@ -947,6 +1039,18 @@ class LNKup_Financial_REST {
 		}
 		$sent = LNKup_Invoices::email_invoice( $invoice );
 		return rest_ensure_response( array( 'sent' => (bool) $sent ) );
+	}
+
+	public static function receipt_view( $request ) {
+		global $wpdb;
+		$row = $wpdb->get_row(
+			$wpdb->prepare( 'SELECT * FROM ' . LNKup_Financial_Tables::receipts_table() . ' WHERE id = %d', absint( $request['id'] ) ),
+			ARRAY_A
+		);
+		if ( ! $row || ( (int) $row['vendor_user_id'] !== get_current_user_id() && ! LNKup_Capabilities::user_has_manage_all() ) ) {
+			return new WP_Error( 'not_found', __( 'Receipt not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		return self::serve_html( LNKup_Receipts::render_html( $row ) );
 	}
 
 	public static function receipt_detail( $request ) {
@@ -966,7 +1070,10 @@ class LNKup_Financial_REST {
 		if ( ! self::can_organizer_access_refund( $refund_id ) ) {
 			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 		}
-		LNKup_Refunds::deny( $refund_id );
+		$result = LNKup_Refunds::deny( $refund_id );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
 		return rest_ensure_response( array( 'success' => true ) );
 	}
 
@@ -1102,7 +1209,8 @@ class LNKup_Financial_REST {
 		$result  = LNKup_Financial_Service::request_organizer_cashout(
 			$user_id,
 			$amount,
-			$params['type'] ?? 'standard'
+			$params['type'] ?? 'standard',
+			sanitize_text_field( (string) ( $params['client_token'] ?? '' ) )
 		);
 		if ( is_wp_error( $result ) ) {
 			$code    = $result->get_error_code() ? $result->get_error_code() : 'cashout_failed';
@@ -1217,11 +1325,12 @@ class LNKup_Financial_REST {
 	}
 
 	public static function credits_apply( $request ) {
-		$params = $request->get_json_params() ?: array();
-		$result = LNKup_Financial_Service::apply_wallet_credits(
-			absint( $params['payment_id'] ?? 0 ),
-			(float) ( $params['amount'] ?? 0 )
-		);
+		$params     = $request->get_json_params() ?: array();
+		$payment_id = absint( $params['payment_id'] ?? 0 );
+		if ( ! $payment_id || (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true ) !== get_current_user_id() ) {
+			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+		$result = LNKup_Financial_Service::apply_wallet_credits( $payment_id, (float) ( $params['amount'] ?? 0 ) );
 		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
 	}
 
@@ -1231,8 +1340,18 @@ class LNKup_Financial_REST {
 
 	public static function sponsor_invoices_create( $request ) {
 		$params = $request->get_json_params() ?: array();
+		$event_id = absint( $params['event_id'] ?? 0 );
+		if ( $event_id && ! LNKup_Capabilities::can_manage_event_financials( $event_id ) ) {
+			return new WP_Error( 'forbidden', __( 'You can only invoice sponsors for your own events.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+		if ( (float) ( $params['total_amount'] ?? 0 ) <= 0 ) {
+			return new WP_Error( 'invalid_amount', __( 'Enter an invoice amount greater than zero.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
 		$params['organizer_user_id'] = get_current_user_id();
 		$id = LNKup_Sponsor_Payments::create_invoice( $params );
+		if ( is_wp_error( $id ) ) {
+			return $id;
+		}
 		return rest_ensure_response( array( 'id' => $id ) );
 	}
 
@@ -1342,10 +1461,17 @@ class LNKup_Financial_REST {
 	}
 
 	public static function refunds_calculate( $request ) {
-		$params = $request->get_json_params() ?: array();
+		$params     = $request->get_json_params() ?: array();
+		$payment_id = absint( $params['payment_id'] ?? 0 );
+		if ( ! $payment_id || 'lnkup_payment' !== get_post_type( $payment_id ) ) {
+			return new WP_Error( 'invalid_payment', __( 'Payment not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		if ( ! self::can_access_payment( $payment_id ) ) {
+			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
 		$result = LNKup_Refund_Rules::calculate(
-			absint( $params['payment_id'] ?? 0 ),
-			$params['refund_type'] ?? 'full',
+			$payment_id,
+			sanitize_key( (string) ( $params['refund_type'] ?? 'full' ) ),
 			(float) ( $params['amount'] ?? 0 )
 		);
 		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );

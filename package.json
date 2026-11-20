@@ -7,7 +7,22 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test:e2e": "playwright test tests/e2e/marketplace-v2.spec.ts"
+    "test:e2e": "playwright test tests/e2e/marketplace-v2.spec.ts",
+    "e2e:env": "npx -y @wordpress/env@10 start",
+    "e2e:env:stop": "npx -y @wordpress/env@10 stop",
+    "e2e:seed": "npx -y @wordpress/env@10 run cli wp eval-file /var/www/html/wp-content/lnkup-e2e/seed.php",
+    "e2e:lint": "npx -y @wordpress/env@10 run cli php /var/www/html/wp-content/lnkup-e2e/lint.php",
+    "e2e:run": "powershell -NoProfile -File scripts/e2e/run-specs.ps1",
+    "test:e2e:app": "playwright test --project=lnkup-app",
+    "test:e2e:app:mobile": "playwright test --project=lnkup-app-mobile",
+    "phase15-20:report": "node scripts/qa/phase15-20-gate-report.mjs",
+    "phase22:report": "node scripts/qa/phase15-20-gate-report.mjs",
+    "phase20:verify": "npm --prefix lnk-up-marketplace-mobile run phase20:verify",
+    "organizer-vendor-profile:verify": "node scripts/organizer-vendor-profile-enrichment-verify.mjs",
+    "find-media-wallet:verify": "node scripts/find-media-wallet-verify.mjs",
+    "money-path:verify": "node scripts/money-path-verify.mjs",
+    "money-path:smoke": "node scripts/live-wp-money-path-smoke.mjs",
+    "gap-close:verify": "node scripts/gap-close-verify.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

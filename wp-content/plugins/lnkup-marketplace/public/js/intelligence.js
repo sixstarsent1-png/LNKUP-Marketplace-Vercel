@@ -517,6 +517,7 @@
       }
     });
     renderVendor();
+    }
   }
 
   function weatherInsightsHtml(weather) {
@@ -546,7 +547,15 @@
     function renderEvent() {
       intelFetch('/events/' + eventId).then(function (data) {
       if (!data || data.code) {
-        container.innerHTML = '<p class="lnkup-muted">Insights unavailable.</p>';
+        if (window.LNKupUI && LNKupUI.panelEmpty) {
+          LNKupUI.panelEmpty(container, {
+            title: 'Insights are not ready yet',
+            desc: 'They appear once this event has applications and payments.',
+            compact: true
+          });
+        } else {
+          container.innerHTML = '<p class="lnkup-muted">Insights are not ready yet.</p>';
+        }
         return;
       }
       var html = '';
@@ -633,9 +642,14 @@
     if (!drawer || !content) {
       return;
     }
+    intelDrawerReturnFocus = document.activeElement;
     drawer.hidden = false;
     drawer.setAttribute('aria-hidden', 'false');
     document.body.classList.add('lnkup-intel-drawer-open');
+    var closeEl = document.getElementById('lnkup-intel-drawer-close');
+    if (closeEl) {
+      closeEl.focus();
+    }
     content.innerHTML = '<div class="lnkup-intel-drawer__loading"><p class="lnkup-muted">Loading application intelligence…</p></div>';
     intelFetch('/applications/' + appId + '/intel').then(function (data) {
       if (!data || data.code) {
@@ -655,6 +669,32 @@
       html += intelStatusBadge(payStatus, 'payment');
       html += intelStatusBadge(readiness + ' ready', 'readiness');
       html += '</div></header>';
+
+      var card = document.querySelector('.lnkup-request-row[data-app-id="' + String(appId).replace(/[^0-9]/g, '') + '"]');
+      var decisions = card ? card.querySelectorAll('.lnkup-review-btn, [data-request-info]') : [];
+      if (decisions.length) {
+        html += '<section class="lnkup-intel-drawer__card" data-testid="lnkup-intel-decide"><h3>Decide</h3><div class="lnkup-intel-drawer__actions">';
+        Array.prototype.forEach.call(decisions, function (btn, i) {
+          html += '<button type="button" class="lnkup-btn lnkup-btn--sm ' + (btn.getAttribute('data-action') === 'approve' ? 'lnkup-btn--primary' : 'lnkup-btn--outline') + '" data-drawer-proxy="' + i + '">' + escapeHtml(btn.textContent.trim()) + '</button>';
+        });
+        html += '</div><p class="lnkup-muted">Decisions apply to the request card and notify the vendor.</p></section>';
+      }
+
+      if (data.info_history && data.info_history.length) {
+        html += '<section class="lnkup-intel-drawer__card"><h3>Questions &amp; replies</h3><ul class="lnkup-intel-drawer__timeline">';
+        data.info_history.forEach(function (entry) {
+          html += '<li><strong>' + (entry.type === 'response' ? 'Vendor' : 'You') + '</strong> ' + escapeHtml(entry.message || '') + '<span class="lnkup-muted">' + escapeHtml(entry.at || '') + '</span></li>';
+        });
+        html += '</ul></section>';
+      }
+
+      if (data.vendor_history && data.vendor_history.length) {
+        html += '<section class="lnkup-intel-drawer__card"><h3>History with you</h3><ul class="lnkup-intel-drawer__list">';
+        data.vendor_history.forEach(function (row) {
+          html += '<li><span>' + escapeHtml(row.event || 'Event') + (row.date ? ' · ' + escapeHtml(row.date) : '') + '</span><strong>' + escapeHtml(row.status || '') + '</strong></li>';
+        });
+        html += '</ul></section>';
+      }
 
       html += '<section class="lnkup-intel-drawer__card"><h3>Payment summary</h3>';
       if (data.payment_summary) {
@@ -720,19 +760,42 @@
 
       html += '</div>';
       content.innerHTML = html;
+      Array.prototype.forEach.call(content.querySelectorAll('[data-drawer-proxy]'), function (proxy) {
+        proxy.addEventListener('click', function () {
+          var target = decisions[Number(proxy.getAttribute('data-drawer-proxy'))];
+          if (!target) {
+            return;
+          }
+          closeIntelDrawer();
+          target.scrollIntoView({ block: 'center' });
+          target.click();
+        });
+      });
     }).catch(function () {
       content.innerHTML = '<div class="lnkup-intel-drawer__body"><p class="lnkup-alert lnkup-alert--error">' + escapeHtml(t('error_load_section', 'We could not load this section.')) + '</p></div>';
     });
   }
 
+  var intelDrawerReturnFocus = null;
+
   function closeIntelDrawer() {
     var drawer = document.getElementById('lnkup-intel-drawer');
-    if (drawer) {
+    if (drawer && !drawer.hidden) {
       drawer.hidden = true;
       drawer.setAttribute('aria-hidden', 'true');
       document.body.classList.remove('lnkup-intel-drawer-open');
+      if (intelDrawerReturnFocus && typeof intelDrawerReturnFocus.focus === 'function') {
+        intelDrawerReturnFocus.focus();
+      }
+      intelDrawerReturnFocus = null;
     }
   }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      closeIntelDrawer();
+    }
+  });
 
   function initOpsInsightsTab() {
     document.addEventListener('click', function (e) {

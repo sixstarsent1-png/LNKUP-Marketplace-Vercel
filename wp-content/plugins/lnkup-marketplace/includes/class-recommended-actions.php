@@ -85,8 +85,8 @@ class LNKup_Recommended_Actions {
 			'view_support'          => array( 'label' => __( 'Support queue', 'lnkup-marketplace' ), 'url' => add_query_arg( array( 'event' => $event_id, 'ops' => 1 ), $dash ) . '#support' ),
 			'view_incidents'        => array( 'label' => __( 'Incidents', 'lnkup-marketplace' ), 'url' => add_query_arg( array( 'event' => $event_id, 'ops' => 1 ), $dash ) . '#incidents' ),
 			'open_qr_scan'          => array( 'label' => __( 'QR scan', 'lnkup-marketplace' ), 'url' => add_query_arg( array( 'event' => $event_id, 'scan' => 1 ), $dash ) ),
-			'improve_opportunity'   => array( 'label' => __( 'Edit event', 'lnkup-marketplace' ), 'url' => $dash . '#events' ),
-			'approve_waitlisted'    => array( 'label' => __( 'Review apps', 'lnkup-marketplace' ), 'url' => $dash . '#applications' ),
+			'improve_opportunity'   => array( 'label' => __( 'Edit event', 'lnkup-marketplace' ), 'url' => lnkup_organizer_view_url( 'events' ) ),
+			'approve_waitlisted'    => array( 'label' => __( 'Review apps', 'lnkup-marketplace' ), 'url' => lnkup_organizer_view_url( 'applications' ) ),
 			'view_compliance'       => array( 'label' => __( 'Compliance', 'lnkup-marketplace' ), 'url' => add_query_arg( array( 'event' => $event_id, 'ops' => 1 ), $dash ) ),
 		);
 		return $map[ $key ] ?? array( 'label' => __( 'View', 'lnkup-marketplace' ), 'url' => $dash . '#intelligence' );

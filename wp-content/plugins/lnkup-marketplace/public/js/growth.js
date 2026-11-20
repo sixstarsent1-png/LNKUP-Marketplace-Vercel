@@ -149,9 +149,15 @@
 
   function loadKpiStrip(data) {
     var strip = document.getElementById('lnkup-growth-kpis');
-    if (!strip || !data || !data.kpis) {
+    if (!strip) {
       return;
     }
+    if (!data || !data.kpis) {
+      strip.innerHTML = '';
+      strip.hidden = true;
+      return;
+    }
+    strip.hidden = false;
     var k = data.kpis;
     strip.innerHTML =
       kpiCard('Lifetime Revenue', currency(k.lifetime_revenue), '', k.lifetime_revenue) +
@@ -257,6 +263,7 @@
         panel.innerHTML = panel.innerHTML + checklist;
       }).catch(function () {});
     }).catch(function () {
+      loadKpiStrip(null);
       failPanel(panel);
     });
   }
@@ -308,13 +315,18 @@
       return;
     }
     panel.innerHTML = '<div class="lnkup-growth-skeleton"></div>';
-    Promise.all([
+    Promise.allSettled([
       growthFetch('/market-expansion'),
       growthFetch('/market-insights'),
       growthFetch('/relationships'),
       growthFetch('/roi'),
       growthFetch('/calendar')
-    ]).then(function (res) {
+    ]).then(function (settled) {
+      if (settled.every(function (r) { return r.status !== 'fulfilled'; })) {
+        failPanel(panel);
+        return;
+      }
+      var res = settled.map(function (r) { return r.status === 'fulfilled' ? r.value : null; });
       panel.dataset.loaded = '1';
       var exp = res[0] || {};
       var ins = res[1] || {};

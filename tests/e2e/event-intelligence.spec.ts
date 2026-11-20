@@ -24,7 +24,7 @@ async function loginVendor(page: import('@playwright/test').Page) {
 test.describe('Event Intelligence', () => {
   test('intelligence panel requires login', async ({ page }) => {
     await page.goto('/organizer-dashboard/#intelligence');
-    await expect(page).toHaveURL(/wp-login|login/);
+    await expect(page).toHaveURL(/wp-login|log-?in/);
   });
 
   test.describe('authenticated organizer', () => {

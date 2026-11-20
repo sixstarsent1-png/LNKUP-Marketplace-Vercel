@@ -146,7 +146,11 @@
   }
 
   function refresh() {
-    panel.innerHTML = '<div class="lnkup-saved-searches-dashboard__loading lnkup-muted">Loading saved searches…</div>';
+    if (window.LNKupUI && LNKupUI.panelSkeleton) {
+      LNKupUI.panelSkeleton(panel, 2);
+    } else {
+      panel.innerHTML = '<div class="lnkup-skeleton lnkup-skeleton--card" aria-hidden="true"></div>';
+    }
     return api('/saved-searches').then(function (res) {
       var rows = Array.isArray(res) ? res : (res && res.searches ? res.searches : []);
       renderCards(rows);

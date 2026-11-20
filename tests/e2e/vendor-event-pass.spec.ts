@@ -1,24 +1,23 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+import { loginPage } from './helpers/wp-session';
 
 const vendorUser = process.env.PLAYWRIGHT_VENDOR_USER;
 const vendorPass = process.env.PLAYWRIGHT_VENDOR_PASS;
 const organizerUser = process.env.PLAYWRIGHT_ORGANIZER_USER;
 const organizerPass = process.env.PLAYWRIGHT_ORGANIZER_PASS;
 
-async function loginVendor(page: import('@playwright/test').Page) {
-  await page.goto('/wp-login.php');
-  await page.getByLabel(/username or email/i).fill(vendorUser!);
-  await page.getByLabel(/^password$/i).fill(vendorPass!);
-  await page.getByRole('button', { name: /log in/i }).click();
-  await expect(page).not.toHaveURL(/wp-login/);
+/**
+ * Log in as the seeded vendor.
+ */
+async function loginVendor(page: Page) {
+  await loginPage(page, vendorUser!, vendorPass!);
 }
 
-async function loginOrganizer(page: import('@playwright/test').Page) {
-  await page.goto('/wp-login.php');
-  await page.getByLabel(/username or email/i).fill(organizerUser!);
-  await page.getByLabel(/^password$/i).fill(organizerPass!);
-  await page.getByRole('button', { name: /log in/i }).click();
-  await expect(page).not.toHaveURL(/wp-login/);
+/**
+ * Log in as the seeded organizer.
+ */
+async function loginOrganizer(page: Page) {
+  await loginPage(page, organizerUser!, organizerPass!);
 }
 
 test.describe('Vendor Event Pass', () => {
@@ -64,7 +63,7 @@ test.describe('Vendor Event Pass', () => {
         test.skip(true, 'No pass-viewable vendor bookings');
         return;
       }
-      await page.getByRole('tab', { name: /event pass/i }).click();
+      await page.getByRole('navigation', { name: /event operations sections/i }).getByRole('link', { name: /event pass/i }).click();
       const locked = page.getByTestId('lnkup-pass-locked');
       if (await locked.isVisible().catch(() => false)) {
         test.skip(true, 'Only locked pass in environment — need paid booking for unlocked hero');

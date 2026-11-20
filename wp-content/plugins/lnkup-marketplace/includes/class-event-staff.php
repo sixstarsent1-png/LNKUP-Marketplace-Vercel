@@ -18,6 +18,41 @@ class LNKup_Event_Staff {
 			'power'       => __( 'Power Team', 'lnkup-marketplace' ),
 			'medical'     => __( 'Medical', 'lnkup-marketplace' ),
 			'security'    => __( 'Security', 'lnkup-marketplace' ),
+			'finance'     => __( 'Finance', 'lnkup-marketplace' ),
+		);
+	}
+
+	/**
+	 * What each staff role may do on its event. The event owner (and manage-all admins)
+	 * always have every capability; staff get only what is listed here.
+	 *
+	 * @return array<string, string[]>
+	 */
+	public static function capability_matrix() {
+		$floor = array( 'view_roster', 'check_in' );
+		return array(
+			'operations'  => array( 'view_roster', 'check_in', 'edit_ops', 'edit_packets', 'edit_map', 'broadcast', 'view_intelligence' ),
+			'coordinator' => array( 'view_roster', 'check_in', 'edit_packets', 'broadcast' ),
+			'finance'     => array( 'view_roster', 'view_financials' ),
+			'parking'     => $floor,
+			'load_in'     => $floor,
+			'power'       => $floor,
+			'medical'     => $floor,
+			'security'    => $floor,
+		);
+	}
+
+	/**
+	 * Staff role on an event, or '' when the user is not staff there.
+	 *
+	 * @param int $event_id Event ID.
+	 * @param int $user_id  User ID.
+	 */
+	public static function role_for( $event_id, $user_id ) {
+		global $wpdb;
+		$table = LNKup_Operations_Tables::staff_table();
+		return (string) $wpdb->get_var(
+			$wpdb->prepare( "SELECT staff_role FROM {$table} WHERE event_id = %d AND user_id = %d LIMIT 1", absint( $event_id ), absint( $user_id ) )
 		);
 	}
 
@@ -60,7 +95,14 @@ class LNKup_Event_Staff {
 		global $wpdb;
 		$role = sanitize_key( $role );
 		if ( ! isset( self::roles()[ $role ] ) ) {
-			return new WP_Error( 'invalid_role', __( 'Invalid staff role.', 'lnkup-marketplace' ) );
+			return new WP_Error( 'invalid_role', __( 'Invalid staff role.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$user_id = absint( $user_id );
+		if ( ! $user_id || ! get_userdata( $user_id ) ) {
+			return new WP_Error( 'invalid_user', __( 'That person does not have a LNKup account.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		if ( (int) get_post_meta( $event_id, '_lnkup_organizer_user_id', true ) === $user_id ) {
+			return new WP_Error( 'owner_not_staff', __( 'The event owner already has full access.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 		$wpdb->replace(
 			LNKup_Operations_Tables::staff_table(),

@@ -12,14 +12,23 @@ class LNKup_Notifications {
 	/**
 	 * Send branded email.
 	 *
-	 * @param string $to      Recipient.
-	 * @param string $subject Subject.
-	 * @param string $body    HTML body.
+	 * @param string   $to            Recipient.
+	 * @param string   $subject       Subject.
+	 * @param string   $body          HTML body.
+	 * @param string[] $extra_headers Optional extra mail headers.
 	 */
-	public static function send( $to, $subject, $body ) {
+	public static function send( $to, $subject, $body, $extra_headers = array() ) {
 		$settings = lnkup_get_settings();
 		$html     = self::wrap_template( $body );
 		$headers  = array( 'Content-Type: text/html; charset=UTF-8' );
+		if ( is_array( $extra_headers ) ) {
+			foreach ( $extra_headers as $header ) {
+				$header = trim( (string) $header );
+				if ( '' !== $header ) {
+					$headers[] = $header;
+				}
+			}
+		}
 		return wp_mail( $to, $subject, $html, $headers );
 	}
 
@@ -32,6 +41,492 @@ class LNKup_Notifications {
 		ob_start();
 		include LNKUP_PLUGIN_DIR . 'templates/emails/wrapper.php';
 		return ob_get_clean();
+	}
+
+	/**
+	 * Retry hook for temporary mail failures.
+	 */
+	public static function init() {
+		add_action( 'lnkup_notification_retry', array( __CLASS__, 'retry_delivery' ) );
+	}
+
+	/**
+	 * Website link that returns to the screen after login.
+	 *
+	 * @param string $url Destination.
+	 * @return string
+	 */
+	private static function web_link( $url ) {
+		$url = (string) $url;
+		if ( '' === $url || ! function_exists( 'lnkup_login_url_for' ) ) {
+			return $url;
+		}
+		return lnkup_login_url_for( $url );
+	}
+
+	/**
+	 * Claim one delivery. Repeats return 0.
+	 *
+	 * @param string $event     Event key.
+	 * @param int    $ref_id    Application or invoice id.
+	 * @param int    $user_id   Recipient.
+	 * @param string $channel   email, inbox, or push.
+	 * @param string $window    Reminder window.
+	 * @return int Delivery id, or 0 when already claimed.
+	 */
+	public static function claim_delivery( $event, $ref_id, $user_id, $channel, $window = '' ) {
+		global $wpdb;
+
+		$event   = sanitize_key( $event );
+		$channel = sanitize_key( $channel );
+		$window  = sanitize_key( $window );
+		$ref_id  = absint( $ref_id );
+		$user_id = absint( $user_id );
+		if ( '' === $event || '' === $channel || $user_id < 1 || ! self::delivery_table_ready() ) {
+			return 0;
+		}
+
+		$table = LNKup_Inbox_Tables::delivery_table();
+		$key   = substr( $event . '|' . $ref_id . '|' . $user_id . '|' . $channel . '|' . $window, 0, 191 );
+		$now   = current_time( 'mysql' );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->query(
+			$wpdb->prepare(
+				"INSERT IGNORE INTO {$table} (dedupe_key, event_key, ref_id, recipient_id, channel, window_key, status, attempts, last_error, created_at, updated_at) VALUES (%s, %s, %d, %d, %s, %s, 'queued', 1, '', %s, %s)",
+				$key,
+				$event,
+				$ref_id,
+				$user_id,
+				$channel,
+				$window,
+				$now,
+				$now
+			)
+		);
+		if ( 1 === (int) $wpdb->rows_affected ) {
+			return (int) $wpdb->insert_id;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, status, attempts, next_attempt_at FROM {$table} WHERE dedupe_key = %s", $key ), ARRAY_A );
+		if ( ! is_array( $row ) || 'failed' !== ( $row['status'] ?? '' ) || (int) $row['attempts'] >= 4 ) {
+			return 0;
+		}
+		if ( self::delivery_time_is_future( (string) ( $row['next_attempt_at'] ?? '' ) ) ) {
+			return 0;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$claimed = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = 'queued', attempts = attempts + 1, updated_at = %s WHERE id = %d AND status = 'failed' AND attempts = %d",
+				$now,
+				(int) $row['id'],
+				(int) $row['attempts']
+			)
+		);
+		return 1 === (int) $claimed ? (int) $row['id'] : 0;
+	}
+
+	/**
+	 * @param int    $id     Delivery id.
+	 * @param string $status queued, accepted, failed, or suppressed.
+	 * @param string $error  Short reason. Never a message body.
+	 */
+	public static function finish_delivery( $id, $status, $error = '' ) {
+		global $wpdb;
+
+		$id     = absint( $id );
+		$status = sanitize_key( $status );
+		if ( $id < 1 || ! in_array( $status, array( 'queued', 'accepted', 'failed', 'suppressed' ), true ) ) {
+			return;
+		}
+		$table = LNKup_Inbox_Tables::delivery_table();
+		$data  = array(
+			'status'     => $status,
+			'last_error' => sanitize_text_field( substr( (string) $error, 0, 255 ) ),
+			'updated_at' => current_time( 'mysql' ),
+		);
+		if ( 'failed' === $status ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$attempts = (int) $wpdb->get_var( $wpdb->prepare( "SELECT attempts FROM {$table} WHERE id = %d", $id ) );
+			$delays   = array(
+				1 => 15 * MINUTE_IN_SECONDS,
+				2 => HOUR_IN_SECONDS,
+				3 => 6 * HOUR_IN_SECONDS,
+			);
+			if ( isset( $delays[ $attempts ] ) ) {
+				$data['next_attempt_at'] = self::delivery_time_after( $delays[ $attempts ] );
+				wp_schedule_single_event( time() + $delays[ $attempts ], 'lnkup_notification_retry', array( $id ) );
+			}
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update( $table, $data, array( 'id' => $id ) );
+	}
+
+	/**
+	 * Send one recipient across the channels their settings allow.
+	 *
+	 * @param array $args event, ref_id, user_id, audience, window, subject, html, title, plain, href, push.
+	 */
+	private static function deliver( $args ) {
+		$user_id = absint( $args['user_id'] ?? 0 );
+		$user    = $user_id ? get_userdata( $user_id ) : false;
+		$event   = sanitize_key( $args['event'] ?? '' );
+		$ref_id  = absint( $args['ref_id'] ?? 0 );
+		$window  = sanitize_key( $args['window'] ?? '' );
+		if ( '' === $event || ! $user ) {
+			return;
+		}
+
+		$settings = lnkup_get_settings();
+		$audience = sanitize_key( $args['audience'] ?? '' );
+		$allowed  = array(
+			'vendor'    => 'notify_vendor',
+			'organizer' => 'notify_organizer',
+			'admin'     => 'notify_admin',
+		);
+		$role_on = isset( $allowed[ $audience ] ) ? ! empty( $settings[ $allowed[ $audience ] ] ) : false;
+
+		if ( $role_on ) {
+			$email_id = self::claim_delivery( $event, $ref_id, $user_id, 'email', $window );
+			if ( $email_id ) {
+				if ( ! is_email( $user->user_email ) ) {
+					self::finish_delivery( $email_id, 'suppressed', 'invalid_address' );
+				} else {
+					$sent = self::send( $user->user_email, (string) ( $args['subject'] ?? '' ), (string) ( $args['html'] ?? '' ) );
+					self::finish_delivery( $email_id, $sent ? 'accepted' : 'failed', $sent ? '' : 'mail_transport' );
+				}
+			} elseif ( ! self::delivery_table_ready() && is_email( $user->user_email ) ) {
+				self::send( $user->user_email, (string) ( $args['subject'] ?? '' ), (string) ( $args['html'] ?? '' ) );
+			}
+
+			$inbox_id = self::claim_delivery( $event, $ref_id, $user_id, 'inbox', $window );
+			if ( ( $inbox_id || ! self::delivery_table_ready() ) && class_exists( 'LNKup_Inbox_Service' ) ) {
+				LNKup_Inbox_Service::record_from_push(
+					$user_id,
+					(string) ( $args['title'] ?? '' ),
+					(string) ( $args['plain'] ?? '' ),
+					array(
+						'type'          => sanitize_key( $args['inbox_type'] ?? $event ),
+						'href'          => self::web_link( (string) ( $args['href'] ?? '' ) ),
+						'applicationId' => (string) $ref_id,
+						'client_id'     => $event . '-' . $ref_id . '-' . $window,
+					)
+				);
+				if ( $inbox_id ) {
+					self::finish_delivery( $inbox_id, 'accepted', '' );
+				}
+			}
+		}
+
+		if ( class_exists( 'LNKup_Push_Service' ) && LNKup_Push_Service::user_push_enabled( $user_id ) && ! empty( $args['push'] ) && is_array( $args['push'] ) ) {
+			$push_id = self::claim_delivery( $event, $ref_id, $user_id, 'push', $window );
+			if ( $push_id || ! self::delivery_table_ready() ) {
+				LNKup_Push_Service::notify_user(
+					$user_id,
+					(string) ( $args['title'] ?? '' ),
+					(string) ( $args['plain'] ?? '' ),
+					$args['push']
+				);
+				if ( $push_id ) {
+					self::finish_delivery( $push_id, 'accepted', '' );
+				}
+			}
+		}
+	}
+
+	/**
+	 * @return bool
+	 */
+	private static function delivery_table_ready() {
+		static $ready = null;
+		if ( null !== $ready ) {
+			return $ready;
+		}
+		global $wpdb;
+		$table = LNKup_Inbox_Tables::delivery_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		$ready = ( $found === $table );
+		return $ready;
+	}
+
+	/**
+	 * Site-local datetime after a delay.
+	 *
+	 * @param int $seconds Delay.
+	 * @return string
+	 */
+	private static function delivery_time_after( $seconds ) {
+		$at = new DateTimeImmutable( 'now', wp_timezone() );
+		return $at->modify( '+' . absint( $seconds ) . ' seconds' )->format( 'Y-m-d H:i:s' );
+	}
+
+	/**
+	 * @param string $mysql Site-local datetime.
+	 * @return bool
+	 */
+	private static function delivery_time_is_future( $mysql ) {
+		$mysql = trim( (string) $mysql );
+		if ( '' === $mysql ) {
+			return false;
+		}
+		$due = date_create_immutable( $mysql, wp_timezone() );
+		$now = new DateTimeImmutable( 'now', wp_timezone() );
+		return $due instanceof DateTimeImmutable && $due > $now;
+	}
+
+	/**
+	 * Pick up failed deliveries whose retry time has arrived.
+	 */
+	public static function resume_due_retries() {
+		global $wpdb;
+		if ( ! self::delivery_table_ready() ) {
+			return;
+		}
+		$table  = LNKup_Inbox_Tables::delivery_table();
+		$now    = current_time( 'mysql' );
+		$cutoff = ( new DateTimeImmutable( 'now', wp_timezone() ) )->modify( '-30 minutes' )->format( 'Y-m-d H:i:s' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = 'failed', last_error = 'interrupted', next_attempt_at = %s, updated_at = %s WHERE status = 'queued' AND attempts < 4 AND updated_at < %s",
+				$now,
+				$now,
+				$cutoff
+			)
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT id FROM {$table} WHERE status = 'failed' AND attempts < 4 AND (next_attempt_at IS NULL OR next_attempt_at <= %s) ORDER BY id ASC LIMIT 50",
+				$now
+			)
+		);
+		if ( ! is_array( $ids ) ) {
+			return;
+		}
+		foreach ( $ids as $id ) {
+			self::retry_delivery( (int) $id );
+		}
+	}
+
+	/**
+	 * Replay a failed delivery without storing the original body.
+	 *
+	 * @param int $delivery_id Delivery row.
+	 */
+	public static function retry_delivery( $delivery_id ) {
+		global $wpdb;
+
+		$delivery_id = absint( $delivery_id );
+		if ( $delivery_id < 1 ) {
+			return;
+		}
+		$table = LNKup_Inbox_Tables::delivery_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $delivery_id ), ARRAY_A );
+		if ( ! is_array( $row ) || 'failed' !== ( $row['status'] ?? '' ) ) {
+			return;
+		}
+		$due = date_create_immutable( (string) ( $row['next_attempt_at'] ?? '' ), wp_timezone() );
+		$now = new DateTimeImmutable( 'now', wp_timezone() );
+		if ( $due instanceof DateTimeImmutable && $due > $now ) {
+			$wait = $due->getTimestamp() - $now->getTimestamp();
+			if ( $wait > 0 ) {
+				wp_schedule_single_event( time() + $wait, 'lnkup_notification_retry', array( $delivery_id ) );
+			}
+			return;
+		}
+
+		$ref = (int) $row['ref_id'];
+		switch ( (string) $row['event_key'] ) {
+			case 'application_submitted':
+				self::send_application_submitted( $ref );
+				break;
+			case 'application_approved':
+				self::send_application_approved( $ref );
+				break;
+			case 'payment_required':
+				self::send_payment_required( $ref, 0 );
+				break;
+			case 'payment_confirmed':
+				self::send_payment_confirmed( $ref );
+				break;
+			case 'packet_unlocked':
+				self::send_packet_unlocked( $ref );
+				break;
+			case 'documents_needed':
+				self::send_documents_needed( $ref );
+				break;
+			case 'arrival_reminder':
+				self::send_arrival_reminder( $ref );
+				break;
+			case 'payment_reminder':
+				self::resend_invoice_reminder( $ref, (string) ( $row['window_key'] ?? '' ) );
+				break;
+			default:
+				break;
+		}
+	}
+
+	/**
+	 * Recent failed or suppressed deliveries for administrators.
+	 *
+	 * @param int $limit Max rows.
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function recent_failures( $limit = 20 ) {
+		global $wpdb;
+
+		if ( ! self::delivery_table_ready() ) {
+			return array();
+		}
+		$table = LNKup_Inbox_Tables::delivery_table();
+		$limit = max( 1, min( 50, absint( $limit ) ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT event_key, channel, window_key, status, attempts, last_error, updated_at FROM {$table} WHERE status IN ('failed','suppressed') ORDER BY updated_at DESC LIMIT %d",
+				$limit
+			),
+			ARRAY_A
+		);
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Whether this booking still needs a payment.
+	 *
+	 * @param int $app_id Application ID.
+	 * @return bool
+	 */
+	private static function payment_is_due( $app_id ) {
+		$app_id = absint( $app_id );
+		if ( class_exists( 'LNKup_Vendor_Readiness' ) && LNKup_Vendor_Readiness::application_payment_satisfied( $app_id ) ) {
+			return false;
+		}
+		if ( self::payment_is_processing( $app_id ) ) {
+			return false;
+		}
+		$payment = class_exists( 'LNKup_Payments' ) ? LNKup_Payments::get_for_application( $app_id ) : null;
+		if ( ! $payment ) {
+			$status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+			return in_array( $status, array( 'approved', 'payment_required' ), true );
+		}
+		$status = (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true );
+		return in_array( $status, array( '', 'pending', 'sent' ), true );
+	}
+
+	/**
+	 * Whether stored payment status confirms the booking.
+	 *
+	 * @param int $app_id Application ID.
+	 * @return bool
+	 */
+	private static function payment_is_confirmed( $app_id ) {
+		$payment = class_exists( 'LNKup_Payments' ) ? LNKup_Payments::get_for_application( absint( $app_id ) ) : null;
+		if ( ! $payment ) {
+			return class_exists( 'LNKup_Vendor_Readiness' ) && LNKup_Vendor_Readiness::application_payment_satisfied( $app_id );
+		}
+		$status = (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true );
+		return in_array( $status, array( 'paid', 'completed', 'succeeded' ), true );
+	}
+
+	/**
+	 * @param int $app_id Application ID.
+	 * @return bool
+	 */
+	private static function payment_is_processing( $app_id ) {
+		$payment = class_exists( 'LNKup_Payments' ) ? LNKup_Payments::get_for_application( absint( $app_id ) ) : null;
+		if ( ! $payment ) {
+			return false;
+		}
+		return 'processing' === (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true );
+	}
+
+	/**
+	 * Confirmed booking whose arrival moment is inside the next 24 hours.
+	 *
+	 * @param int $app_id Application ID.
+	 * @return bool
+	 */
+	private static function arrival_is_due( $app_id ) {
+		$app_id = absint( $app_id );
+		$status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+		if ( in_array( $status, array( 'rejected', 'cancelled', 'canceled', 'refunded', 'waitlisted', 'pending' ), true ) ) {
+			return false;
+		}
+		if ( ! class_exists( 'LNKup_Vendor_Readiness' ) || ! LNKup_Vendor_Readiness::application_payment_satisfied( $app_id ) ) {
+			return false;
+		}
+		$moment = self::arrival_moment( $app_id );
+		if ( ! $moment ) {
+			return false;
+		}
+		$now = new DateTimeImmutable( 'now', wp_timezone() );
+		return $now >= $moment->modify( '-24 hours' ) && $now < $moment;
+	}
+
+	/**
+	 * Stored load-in start, or the event start when load-in is missing.
+	 *
+	 * @param int $app_id Application ID.
+	 * @return DateTimeImmutable|null
+	 */
+	private static function arrival_moment( $app_id ) {
+		$event_id = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
+		$tz       = wp_timezone();
+		if ( class_exists( 'LNKup_Loadin_Schedule' ) ) {
+			$assigned = LNKup_Loadin_Schedule::get_for_application( $app_id );
+			$start    = is_array( $assigned ) ? (string) ( $assigned['start_at'] ?? '' ) : '';
+			if ( '' !== $start ) {
+				$parsed = date_create_immutable( $start, $tz );
+				if ( $parsed instanceof DateTimeImmutable ) {
+					return $parsed;
+				}
+			}
+		}
+		$date = $event_id ? (string) get_post_meta( $event_id, '_lnkup_event_date', true ) : '';
+		$time = $event_id ? (string) get_post_meta( $event_id, '_lnkup_start_time', true ) : '';
+		if ( '' === $date ) {
+			return null;
+		}
+		$parsed = date_create_immutable( trim( $date . ' ' . ( '' !== $time ? $time : '00:00' ) ), $tz );
+		return $parsed instanceof DateTimeImmutable ? $parsed : null;
+	}
+
+	/**
+	 * Skip reminders for paid, cancelled, refunded, or missing bookings.
+	 *
+	 * @param array $row Invoice row.
+	 * @return bool
+	 */
+	public static function invoice_can_remind( $row ) {
+		$app_id = absint( $row['application_id'] ?? 0 );
+		if ( $app_id && 'lnkup_application' !== get_post_type( $app_id ) ) {
+			return false;
+		}
+		if ( $app_id ) {
+			$status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+			if ( in_array( $status, array( 'rejected', 'cancelled', 'canceled', 'refunded', 'waitlisted' ), true ) ) {
+				return false;
+			}
+			if ( class_exists( 'LNKup_Vendor_Readiness' ) && LNKup_Vendor_Readiness::application_payment_satisfied( $app_id ) ) {
+				return false;
+			}
+			$payment = class_exists( 'LNKup_Payments' ) ? LNKup_Payments::get_for_application( $app_id ) : null;
+			if ( $payment ) {
+				$pay = (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true );
+				if ( in_array( $pay, array( 'paid', 'completed', 'succeeded', 'processing', 'refunded', 'cancelled', 'canceled', 'failed' ), true ) ) {
+					return false;
+				}
+			}
+		}
+		$user_id = absint( $row['vendor_user_id'] ?? 0 );
+		return $user_id > 0 && (bool) get_userdata( $user_id );
 	}
 
 	/**
@@ -82,6 +577,15 @@ class LNKup_Notifications {
 
 		$vendor_dashboard    = lnkup_page_url_helper( 'vendor-dashboard' );
 		$organizer_dashboard = lnkup_page_url_helper( 'organizer-dashboard' );
+		$review_url          = function_exists( 'lnkup_organizer_view_url' )
+			? lnkup_organizer_view_url(
+				'applications',
+				array(
+					'event_filter' => $event_id ? $event_id : '',
+					'filter'       => 'pending',
+				)
+			)
+			: add_query_arg( 'view', 'applications', $organizer_dashboard );
 
 		return array(
 			'app_id'                => $app_id,
@@ -97,6 +601,7 @@ class LNKup_Notifications {
 			'vendor_business'       => (string) $vendor_business,
 			'vendor_apps_url'       => add_query_arg( 'view', 'applications', $vendor_dashboard ),
 			'vendor_payments_url'   => add_query_arg( 'view', 'payments', $vendor_dashboard ),
+			'vendor_documents_url'  => add_query_arg( 'view', 'documents', $vendor_dashboard ),
 			'vendor_pass_url'       => add_query_arg(
 				array(
 					'view' => 'operations',
@@ -106,8 +611,8 @@ class LNKup_Notifications {
 				$vendor_dashboard
 			),
 			'vendor_ops_url'        => add_query_arg( 'view', 'operations', $vendor_dashboard ),
-			'organizer_vendors_url' => add_query_arg( 'view', 'applications', $organizer_dashboard ),
-			'organizer_money_url'   => $organizer_dashboard . '#financial',
+			'organizer_vendors_url' => $review_url,
+			'organizer_money_url'   => lnkup_organizer_view_url( 'financial' ),
 			'organizer_roster_url'  => add_query_arg(
 				array(
 					'event'  => $event_id,
@@ -144,7 +649,7 @@ class LNKup_Notifications {
 	 * @return string
 	 */
 	private static function email_cta_block( $url, $label ) {
-		$url = (string) $url;
+		$url = self::web_link( (string) $url );
 		if ( '' === $url ) {
 			return '';
 		}
@@ -201,52 +706,69 @@ class LNKup_Notifications {
 	 * @param int $app_id Application ID.
 	 */
 	public static function send_application_submitted( $app_id ) {
-		$settings = lnkup_get_settings();
-		if ( empty( $settings['notify_vendor'] ) ) {
-			return;
-		}
-		$ctx  = self::application_context( $app_id );
-		$user = $ctx['vendor'];
-		if ( ! $user ) {
-			return;
-		}
-
-		$body  = self::email_paragraphs(
-			__( 'Your application has been submitted. The organizer will review it soon.', 'lnkup-marketplace' )
-		);
-		$body .= self::email_event_meta( $ctx );
-		$body .= self::email_cta_block( $ctx['vendor_apps_url'], __( 'View your requests', 'lnkup-marketplace' ) );
-		self::send( $user->user_email, __( 'Application submitted — LNKup', 'lnkup-marketplace' ), $body );
-
-		$organizer = $ctx['organizer'];
-		if ( $organizer && ! empty( $settings['notify_organizer'] ) ) {
-			$org_body  = self::email_paragraphs(
-				sprintf(
-					/* translators: %s: vendor business name */
-					__( '%s applied to one of your opportunities.', 'lnkup-marketplace' ),
-					$ctx['vendor_business']
-				)
-			);
-			$org_body .= self::email_event_meta( $ctx );
-			$org_body .= self::email_cta_block( $ctx['organizer_vendors_url'], __( 'Review applications', 'lnkup-marketplace' ) );
-			self::send( $organizer->user_email, __( 'New vendor application — LNKup', 'lnkup-marketplace' ), $org_body );
-
-			$push_body = sprintf(
-				/* translators: 1: vendor name, 2: event title */
-				__( '%1$s applied to %2$s.', 'lnkup-marketplace' ),
-				$ctx['vendor_business'],
-				$ctx['display_title']
-			);
-			self::push_user(
-				$ctx['organizer_user_id'],
-				__( 'New vendor application', 'lnkup-marketplace' ),
-				$push_body,
-				array(
-					'type'          => 'organizer_new_vendor_request',
-					'applicationId' => (string) $ctx['app_id'],
-					'href'          => '/(organizer)/vendors',
-				)
-			);
+		try {
+			$ctx = self::application_context( $app_id );
+			if ( $ctx['vendor_user_id'] ) {
+				$html  = self::email_paragraphs( __( 'Your request was submitted. The organizer reviews it before any payment.', 'lnkup-marketplace' ) );
+				$html .= self::email_event_meta( $ctx );
+				$html .= self::email_cta_block( $ctx['vendor_apps_url'], __( 'View your requests', 'lnkup-marketplace' ) );
+				self::deliver(
+					array(
+						'event'    => 'application_submitted',
+						'ref_id'   => $ctx['app_id'],
+						'user_id'  => $ctx['vendor_user_id'],
+						'audience' => 'vendor',
+						'subject'  => __( 'Request submitted — LNKup', 'lnkup-marketplace' ),
+						'html'     => $html,
+						'title'    => __( 'Request submitted', 'lnkup-marketplace' ),
+						'plain'    => sprintf(
+							/* translators: %s: event title */
+							__( 'Your request for %s was submitted.', 'lnkup-marketplace' ),
+							$ctx['display_title']
+						),
+						'href'     => $ctx['vendor_apps_url'],
+						'inbox_type' => 'system',
+					)
+				);
+			}
+			if ( $ctx['organizer_user_id'] ) {
+				$html  = self::email_paragraphs(
+					sprintf(
+						/* translators: %s: vendor business name */
+						__( '%s applied and is waiting for your review.', 'lnkup-marketplace' ),
+						$ctx['vendor_business']
+					)
+				);
+				$html .= self::email_event_meta( $ctx );
+				$html .= self::email_cta_block( $ctx['organizer_vendors_url'], __( 'Review application', 'lnkup-marketplace' ) );
+				$plain = sprintf(
+					/* translators: 1: vendor name, 2: event title */
+					__( '%1$s applied to %2$s.', 'lnkup-marketplace' ),
+					$ctx['vendor_business'],
+					$ctx['display_title']
+				);
+				self::deliver(
+					array(
+						'event'      => 'application_submitted',
+						'ref_id'     => $ctx['app_id'],
+						'user_id'    => $ctx['organizer_user_id'],
+						'audience'   => 'organizer',
+						'subject'    => __( 'New vendor request — LNKup', 'lnkup-marketplace' ),
+						'html'       => $html,
+						'title'      => __( 'New vendor request', 'lnkup-marketplace' ),
+						'plain'      => $plain,
+						'href'       => $ctx['organizer_vendors_url'],
+						'inbox_type' => 'organizer_new_vendor_request',
+						'push'       => array(
+							'type'          => 'organizer_new_vendor_request',
+							'applicationId' => (string) $ctx['app_id'],
+							'href'          => '/(organizer)/vendors',
+						),
+					)
+				);
+			}
+		} catch ( Throwable $e ) {
+			// A mail failure must not undo the application.
 		}
 	}
 
@@ -256,38 +778,66 @@ class LNKup_Notifications {
 	 * @param int $app_id Application ID.
 	 */
 	public static function send_application_approved( $app_id ) {
-		$settings = lnkup_get_settings();
-		if ( empty( $settings['notify_vendor'] ) ) {
-			return;
+		try {
+			if ( self::payment_is_due( $app_id ) ) {
+				self::send_payment_required( $app_id, 0 );
+				return;
+			}
+			$ctx = self::application_context( $app_id );
+			if ( self::payment_is_processing( $app_id ) ) {
+				$html  = self::email_paragraphs( __( 'Your request was approved. Payment is still being confirmed, so your pass is not ready yet.', 'lnkup-marketplace' ) );
+				$html .= self::email_event_meta( $ctx );
+				$html .= self::email_cta_block( $ctx['vendor_apps_url'], __( 'View your requests', 'lnkup-marketplace' ) );
+				self::deliver(
+					array(
+						'event'      => 'application_approved',
+						'window'     => 'processing',
+						'ref_id'     => $ctx['app_id'],
+						'user_id'    => $ctx['vendor_user_id'],
+						'audience'   => 'vendor',
+						'subject'    => __( 'Request approved — LNKup', 'lnkup-marketplace' ),
+						'html'       => $html,
+						'title'      => __( 'Request approved', 'lnkup-marketplace' ),
+						'plain'      => sprintf(
+							/* translators: %s: event title */
+							__( 'Your request for %s was approved. Payment is still being confirmed.', 'lnkup-marketplace' ),
+							$ctx['display_title']
+						),
+						'href'       => $ctx['vendor_apps_url'],
+						'inbox_type' => 'system',
+					)
+				);
+				return;
+			}
+			$html  = self::email_paragraphs( __( 'Your request was approved. There is nothing to pay. Your event pass is the next step.', 'lnkup-marketplace' ) );
+			$html .= self::email_event_meta( $ctx );
+			$html .= self::email_cta_block( $ctx['vendor_pass_url'], __( 'View event pass', 'lnkup-marketplace' ) );
+			self::deliver(
+				array(
+					'event'      => 'application_approved',
+					'ref_id'     => $ctx['app_id'],
+					'user_id'    => $ctx['vendor_user_id'],
+					'audience'   => 'vendor',
+					'subject'    => __( 'Request approved — LNKup', 'lnkup-marketplace' ),
+					'html'       => $html,
+					'title'      => __( 'Request approved', 'lnkup-marketplace' ),
+					'plain'      => sprintf(
+						/* translators: %s: event title */
+						__( 'Your request for %s was approved.', 'lnkup-marketplace' ),
+						$ctx['display_title']
+					),
+					'href'       => $ctx['vendor_pass_url'],
+					'inbox_type' => 'packet_unlocked',
+					'push'       => array(
+						'type'          => 'packet_unlocked',
+						'applicationId' => (string) $ctx['app_id'],
+						'href'          => '/pass/' . $ctx['app_id'],
+					),
+				)
+			);
+		} catch ( Throwable $e ) {
+			// A mail failure must not undo the approval.
 		}
-		$ctx  = self::application_context( $app_id );
-		$user = $ctx['vendor'];
-		if ( ! $user ) {
-			return;
-		}
-
-		$body  = self::email_paragraphs(
-			__( 'Congratulations! You have been approved. Complete payment to secure your spot.', 'lnkup-marketplace' )
-		);
-		$body .= self::email_event_meta( $ctx );
-		$body .= self::email_cta_block( $ctx['vendor_payments_url'], __( 'Complete payment', 'lnkup-marketplace' ) );
-		self::send( $user->user_email, __( 'Application approved — payment required', 'lnkup-marketplace' ), $body );
-
-		$push_body = sprintf(
-			/* translators: %s: event title */
-			__( 'Complete payment to secure your spot for %s.', 'lnkup-marketplace' ),
-			$ctx['display_title']
-		);
-		self::push_user(
-			$ctx['vendor_user_id'],
-			__( 'Application approved', 'lnkup-marketplace' ),
-			$push_body,
-			array(
-				'type'          => 'payment_required',
-				'applicationId' => (string) $ctx['app_id'],
-				'href'          => '/(vendor)/wallet',
-			)
-		);
 	}
 
 	/**
@@ -297,7 +847,41 @@ class LNKup_Notifications {
 	 * @param int $payment_id Payment ID.
 	 */
 	public static function send_payment_required( $app_id, $payment_id ) {
-		self::send_application_approved( $app_id );
+		unset( $payment_id );
+		try {
+			if ( ! self::payment_is_due( $app_id ) ) {
+				return;
+			}
+			$ctx   = self::application_context( $app_id );
+			$html  = self::email_paragraphs( __( 'Your request was approved. Complete payment to hold your spot.', 'lnkup-marketplace' ) );
+			$html .= self::email_event_meta( $ctx );
+			$html .= self::email_cta_block( $ctx['vendor_payments_url'], __( 'Complete payment', 'lnkup-marketplace' ) );
+			self::deliver(
+				array(
+					'event'      => 'payment_required',
+					'ref_id'     => $ctx['app_id'],
+					'user_id'    => $ctx['vendor_user_id'],
+					'audience'   => 'vendor',
+					'subject'    => __( 'Payment due — LNKup', 'lnkup-marketplace' ),
+					'html'       => $html,
+					'title'      => __( 'Payment due', 'lnkup-marketplace' ),
+					'plain'      => sprintf(
+						/* translators: %s: event title */
+						__( 'Complete payment for %s.', 'lnkup-marketplace' ),
+						$ctx['display_title']
+					),
+					'href'       => $ctx['vendor_payments_url'],
+					'inbox_type' => 'payment_required',
+					'push'       => array(
+						'type'          => 'payment_required',
+						'applicationId' => (string) $ctx['app_id'],
+						'href'          => '/(vendor)/wallet',
+					),
+				)
+			);
+		} catch ( Throwable $e ) {
+			// A mail failure must not undo the payment record.
+		}
 	}
 
 	/**
@@ -306,38 +890,7 @@ class LNKup_Notifications {
 	 * @param int $app_id Application ID.
 	 */
 	public static function send_payment_confirmed( $app_id ) {
-		$settings = lnkup_get_settings();
-		if ( empty( $settings['notify_vendor'] ) ) {
-			return;
-		}
-		$ctx  = self::application_context( $app_id );
-		$user = $ctx['vendor'];
-		if ( ! $user ) {
-			return;
-		}
-
-		$body  = self::email_paragraphs(
-			__( 'Your payment has been received. Your vendor packet and event pass are unlocked.', 'lnkup-marketplace' )
-		);
-		$body .= self::email_event_meta( $ctx );
-		$body .= self::email_cta_block( $ctx['vendor_pass_url'], __( 'Open your pass', 'lnkup-marketplace' ) );
-		self::send( $user->user_email, __( 'Payment confirmed — LNKup', 'lnkup-marketplace' ), $body );
-
-		$push_body = sprintf(
-			/* translators: %s: event title */
-			__( 'Your spot for %s is confirmed. Packet unlocked.', 'lnkup-marketplace' ),
-			$ctx['display_title']
-		);
-		self::push_user(
-			$ctx['vendor_user_id'],
-			__( 'Payment confirmed', 'lnkup-marketplace' ),
-			$push_body,
-			array(
-				'type'          => 'payment_paid',
-				'applicationId' => (string) $ctx['app_id'],
-				'href'          => '/pass/' . $ctx['app_id'],
-			)
-		);
+		self::send_booking_confirmed( $app_id );
 	}
 
 	/**
@@ -346,38 +899,224 @@ class LNKup_Notifications {
 	 * @param int $app_id Application ID.
 	 */
 	public static function send_packet_unlocked( $app_id ) {
-		$settings = lnkup_get_settings();
-		if ( empty( $settings['notify_vendor'] ) ) {
+		self::send_booking_confirmed( $app_id );
+	}
+
+	/**
+	 * One confirmed-booking message for payment and pass availability.
+	 *
+	 * @param int $app_id Application ID.
+	 */
+	private static function send_booking_confirmed( $app_id ) {
+		try {
+			if ( ! self::payment_is_confirmed( $app_id ) ) {
+				return;
+			}
+			if ( ! class_exists( 'LNKup_Packets' ) || ! LNKup_Packets::is_pass_unlocked_for_application( $app_id ) ) {
+				return;
+			}
+			$ctx   = self::application_context( $app_id );
+			$html  = self::email_paragraphs( __( 'Your payment is confirmed and your event pass is available.', 'lnkup-marketplace' ) );
+			$html .= self::email_event_meta( $ctx );
+			$html .= self::email_cta_block( $ctx['vendor_pass_url'], __( 'View event pass', 'lnkup-marketplace' ) );
+			self::deliver(
+				array(
+					'event'      => 'payment_confirmed',
+					'ref_id'     => $ctx['app_id'],
+					'user_id'    => $ctx['vendor_user_id'],
+					'audience'   => 'vendor',
+					'subject'    => __( 'Payment confirmed — LNKup', 'lnkup-marketplace' ),
+					'html'       => $html,
+					'title'      => __( 'Payment confirmed', 'lnkup-marketplace' ),
+					'plain'      => sprintf(
+						/* translators: %s: event title */
+						__( 'Your spot for %s is confirmed.', 'lnkup-marketplace' ),
+						$ctx['display_title']
+					),
+					'href'       => $ctx['vendor_pass_url'],
+					'inbox_type' => 'payment_paid',
+					'push'       => array(
+						'type'          => 'payment_paid',
+						'applicationId' => (string) $ctx['app_id'],
+						'href'          => '/pass/' . $ctx['app_id'],
+					),
+				)
+			);
+		} catch ( Throwable $e ) {
+			// A mail failure must not undo the payment or check-in.
+		}
+	}
+
+	/**
+	 * One document reminder while required documents are still unmet.
+	 *
+	 * @param int    $app_id Application ID.
+	 * @param string $window Dedupe window. Organizer reminders pass a per-day key so they can repeat.
+	 * @return bool Whether a reminder was handed to delivery.
+	 */
+	public static function send_documents_needed( $app_id, $window = 'once' ) {
+		try {
+			$app_id = absint( $app_id );
+			$status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+			if ( in_array( $status, array( 'rejected', 'cancelled', 'canceled', 'refunded', 'waitlisted' ), true ) ) {
+				return false;
+			}
+			if ( ! class_exists( 'LNKup_Verification' ) ) {
+				return false;
+			}
+			$context = LNKup_Verification::get_application_document_context( $app_id );
+			if ( ! in_array( (string) ( $context['code'] ?? '' ), array( 'pending', 'missing' ), true ) ) {
+				return false;
+			}
+			$ctx   = self::application_context( $app_id );
+			$html  = self::email_paragraphs( __( 'Required documents for this booking still need attention.', 'lnkup-marketplace' ) );
+			$html .= self::email_event_meta( $ctx );
+			$html .= self::email_cta_block( $ctx['vendor_documents_url'], __( 'Review documents', 'lnkup-marketplace' ) );
+			self::deliver(
+				array(
+					'event'      => 'documents_needed',
+					'window'     => $window,
+					'ref_id'     => $ctx['app_id'],
+					'user_id'    => $ctx['vendor_user_id'],
+					'audience'   => 'vendor',
+					'subject'    => __( 'Documents need attention — LNKup', 'lnkup-marketplace' ),
+					'html'       => $html,
+					'title'      => __( 'Documents need attention', 'lnkup-marketplace' ),
+					'plain'      => sprintf(
+						/* translators: %s: event title */
+						__( 'Documents for %s still need attention.', 'lnkup-marketplace' ),
+						$ctx['display_title']
+					),
+					'href'       => $ctx['vendor_documents_url'],
+					'inbox_type' => 'document_missing',
+				)
+			);
+			return true;
+		} catch ( Throwable $e ) {
+			// A reminder failure must not change the booking.
+			return false;
+		}
+	}
+
+	/**
+	 * One arrival reminder 24 hours before load-in, or the event start.
+	 *
+	 * @param int $app_id Application ID.
+	 */
+	public static function send_arrival_reminder( $app_id ) {
+		try {
+			$app_id = absint( $app_id );
+			if ( ! self::arrival_is_due( $app_id ) ) {
+				return;
+			}
+			$ctx   = self::application_context( $app_id );
+			$html  = self::email_paragraphs( __( 'Your arrival window is coming up. Review the instructions on your event pass.', 'lnkup-marketplace' ) );
+			$html .= self::email_event_meta( $ctx );
+			$html .= self::email_cta_block( $ctx['vendor_pass_url'], __( 'View arrival instructions', 'lnkup-marketplace' ) );
+			self::deliver(
+				array(
+					'event'      => 'arrival_reminder',
+					'window'     => 'once',
+					'ref_id'     => $ctx['app_id'],
+					'user_id'    => $ctx['vendor_user_id'],
+					'audience'   => 'vendor',
+					'subject'    => __( 'Arrival coming up — LNKup', 'lnkup-marketplace' ),
+					'html'       => $html,
+					'title'      => __( 'Arrival coming up', 'lnkup-marketplace' ),
+					'plain'      => sprintf(
+						/* translators: %s: event title */
+						__( 'Arrival instructions for %s are ready.', 'lnkup-marketplace' ),
+						$ctx['display_title']
+					),
+					'href'       => $ctx['vendor_pass_url'],
+					'inbox_type' => 'system',
+					'push'       => array(
+						'type'          => 'system',
+						'applicationId' => (string) $ctx['app_id'],
+						'href'          => '/pass/' . $ctx['app_id'],
+					),
+				)
+			);
+		} catch ( Throwable $e ) {
+			// A reminder failure must not change the booking.
+		}
+	}
+
+	/**
+	 * Payment reminder for one invoice window.
+	 *
+	 * @param array  $row    Invoice row.
+	 * @param string $window 7_days, 3_days, 24_hours, or past_due.
+	 */
+	public static function send_invoice_reminder( $row, $window ) {
+		try {
+			if ( ! is_array( $row ) || ! self::invoice_can_remind( $row ) ) {
+				return;
+			}
+			$window = sanitize_key( $window );
+			$labels = array(
+				'7_days'   => __( 'Payment due in 7 days — LNKup', 'lnkup-marketplace' ),
+				'3_days'   => __( 'Payment due in 3 days — LNKup', 'lnkup-marketplace' ),
+				'24_hours' => __( 'Payment due tomorrow — LNKup', 'lnkup-marketplace' ),
+				'past_due' => __( 'Payment past due — LNKup', 'lnkup-marketplace' ),
+			);
+			if ( ! isset( $labels[ $window ] ) ) {
+				return;
+			}
+			$user_id = (int) ( $row['vendor_user_id'] ?? 0 );
+			$ref_id  = (int) ( $row['id'] ?? 0 );
+			$amount  = isset( $row['total_amount'] ) && function_exists( 'lnkup_currency' ) ? lnkup_currency( $row['total_amount'] ) : '';
+			$plain   = $amount
+				? sprintf(
+					/* translators: %s: amount */
+					__( 'A payment of %s still needs to be completed.', 'lnkup-marketplace' ),
+					$amount
+				)
+				: __( 'A payment still needs to be completed.', 'lnkup-marketplace' );
+			$url  = add_query_arg( 'view', 'payments', lnkup_page_url_helper( 'vendor-dashboard' ) );
+			$html = self::email_paragraphs( $plain );
+			$html .= self::email_cta_block( $url, __( 'Complete payment', 'lnkup-marketplace' ) );
+			self::deliver(
+				array(
+					'event'      => 'payment_reminder',
+					'window'     => $window,
+					'ref_id'     => $ref_id,
+					'user_id'    => $user_id,
+					'audience'   => 'vendor',
+					'subject'    => $labels[ $window ],
+					'html'       => $html,
+					'title'      => $labels[ $window ],
+					'plain'      => $plain,
+					'href'       => $url,
+					'inbox_type' => 'payment_due_soon',
+					'push'       => array(
+						'type' => 'payment_due_soon',
+						'href' => '/(vendor)/wallet',
+					),
+				)
+			);
+		} catch ( Throwable $e ) {
+			// A reminder failure must not change the invoice.
+		}
+	}
+
+	/**
+	 * Replay an invoice reminder from its stored id and window.
+	 *
+	 * @param int    $invoice_id Invoice id.
+	 * @param string $window     Window key.
+	 */
+	public static function resend_invoice_reminder( $invoice_id, $window ) {
+		global $wpdb;
+		if ( ! class_exists( 'LNKup_Financial_Tables' ) ) {
 			return;
 		}
-		$ctx  = self::application_context( $app_id );
-		$user = $ctx['vendor'];
-		if ( ! $user ) {
-			return;
+		$table = LNKup_Financial_Tables::invoices_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", absint( $invoice_id ) ), ARRAY_A );
+		if ( is_array( $row ) ) {
+			self::send_invoice_reminder( $row, $window );
 		}
-
-		$body  = self::email_paragraphs(
-			__( 'Your load-in details and QR pass are now available.', 'lnkup-marketplace' )
-		);
-		$body .= self::email_event_meta( $ctx );
-		$body .= self::email_cta_block( $ctx['vendor_pass_url'], __( 'View your pass', 'lnkup-marketplace' ) );
-		self::send( $user->user_email, __( 'Vendor packet unlocked — LNKup', 'lnkup-marketplace' ), $body );
-
-		$push_body = sprintf(
-			/* translators: %s: event title */
-			__( 'Load-in details and QR pass are ready for %s.', 'lnkup-marketplace' ),
-			$ctx['display_title']
-		);
-		self::push_user(
-			$ctx['vendor_user_id'],
-			__( 'Packet unlocked', 'lnkup-marketplace' ),
-			$push_body,
-			array(
-				'type'          => 'packet_unlocked',
-				'applicationId' => (string) $ctx['app_id'],
-				'href'          => '/pass/' . $ctx['app_id'],
-			)
-		);
 	}
 
 	/**
@@ -418,6 +1157,140 @@ class LNKup_Notifications {
 				'href'          => '/pass/' . $ctx['app_id'],
 			)
 		);
+	}
+
+	/**
+	 * Tell a booked vendor the event date, time, or location changed.
+	 *
+	 * @param int      $app_id  Application ID.
+	 * @param string[] $changed Human-readable labels of changed fields.
+	 */
+	public static function send_event_logistics_changed( $app_id, $changed ) {
+		$ctx  = self::application_context( $app_id );
+		$user = $ctx['vendor'];
+		if ( ! $user || ! $changed ) {
+			return;
+		}
+		$list = implode( ', ', array_map( 'sanitize_text_field', (array) $changed ) );
+		$body = self::email_paragraphs(
+			/* translators: 1: event title, 2: list of changed fields */
+			sprintf( __( 'The organizer of %1$s updated the %2$s. Your booking and booth fee are unchanged.', 'lnkup-marketplace' ), $ctx['display_title'], $list )
+		);
+		$body .= self::email_event_meta( $ctx );
+		$body .= self::email_cta_block( $ctx['vendor_pass_url'], __( 'View updated details', 'lnkup-marketplace' ) );
+		self::deliver(
+			array(
+				'event'      => 'event_logistics_changed',
+				'ref_id'     => $ctx['app_id'],
+				'user_id'    => $ctx['vendor_user_id'],
+				'audience'   => 'vendor',
+				'window'     => 'w' . gmdate( 'YmdHi' ),
+				/* translators: %s: event title */
+				'subject'    => sprintf( __( 'Event details changed: %s', 'lnkup-marketplace' ), $ctx['display_title'] ),
+				'html'       => $body,
+				'title'      => __( 'Event details changed', 'lnkup-marketplace' ),
+				/* translators: 1: event title, 2: changed fields */
+				'plain'      => sprintf( __( '%1$s: %2$s updated.', 'lnkup-marketplace' ), $ctx['display_title'], $list ),
+				'href'       => $ctx['vendor_pass_url'],
+				'inbox_type' => 'system',
+				'push'       => array(
+					'type'          => 'system',
+					'applicationId' => (string) $ctx['app_id'],
+					'href'          => '/pass/' . $ctx['app_id'],
+				),
+			)
+		);
+	}
+
+	/**
+	 * Organizer asked the vendor for more information.
+	 *
+	 * @param int   $app_id Application ID.
+	 * @param array $entry  History entry (message, documents, at).
+	 */
+	public static function send_info_requested( $app_id, $entry ) {
+		try {
+			$ctx = self::application_context( $app_id );
+			if ( ! $ctx['vendor_user_id'] ) {
+				return;
+			}
+			$docs  = array_filter( (array) ( $entry['documents'] ?? array() ) );
+			$html  = self::email_paragraphs(
+				/* translators: %s: event title */
+				sprintf( __( 'The organizer of %s needs a bit more information before deciding on your request:', 'lnkup-marketplace' ), $ctx['display_title'] ),
+				(string) $entry['message'],
+				/* translators: %s: comma-separated document types */
+				$docs ? sprintf( __( 'Documents requested: %s', 'lnkup-marketplace' ), implode( ', ', $docs ) ) : ''
+			);
+			$html .= self::email_cta_block( $ctx['vendor_apps_url'], __( 'Reply to the organizer', 'lnkup-marketplace' ) );
+			self::deliver(
+				array(
+					'event'      => 'info_requested',
+					'ref_id'     => $ctx['app_id'],
+					'user_id'    => $ctx['vendor_user_id'],
+					'audience'   => 'vendor',
+					'window'     => 'r' . preg_replace( '/\D/', '', (string) $entry['at'] ),
+					'subject'    => __( 'More information needed — LNKup', 'lnkup-marketplace' ),
+					'html'       => $html,
+					'title'      => __( 'More information needed', 'lnkup-marketplace' ),
+					/* translators: %s: event title */
+					'plain'      => sprintf( __( 'The organizer of %s asked you a question.', 'lnkup-marketplace' ), $ctx['display_title'] ),
+					'href'       => $ctx['vendor_apps_url'],
+					'inbox_type' => 'system',
+					'push'       => array(
+						'type'          => 'info_requested',
+						'applicationId' => (string) $ctx['app_id'],
+						'href'          => '/requests',
+					),
+				)
+			);
+		} catch ( Throwable $e ) {
+			// Delivery failure must not undo the status change.
+		}
+	}
+
+	/**
+	 * Vendor replied to an information request.
+	 *
+	 * @param int   $app_id Application ID.
+	 * @param array $entry  History entry (message, at).
+	 */
+	public static function send_info_response( $app_id, $entry ) {
+		try {
+			$ctx = self::application_context( $app_id );
+			if ( ! $ctx['organizer_user_id'] ) {
+				return;
+			}
+			$html  = self::email_paragraphs(
+				/* translators: 1: vendor name, 2: event title */
+				sprintf( __( '%1$s replied to your question about %2$s:', 'lnkup-marketplace' ), $ctx['vendor_business'], $ctx['display_title'] ),
+				(string) $entry['message']
+			);
+			$html .= self::email_cta_block( $ctx['organizer_vendors_url'], __( 'Review application', 'lnkup-marketplace' ) );
+			self::deliver(
+				array(
+					'event'      => 'info_responded',
+					'ref_id'     => $ctx['app_id'],
+					'user_id'    => $ctx['organizer_user_id'],
+					'audience'   => 'organizer',
+					'window'     => 'r' . preg_replace( '/\D/', '', (string) $entry['at'] ),
+					'subject'    => __( 'Vendor replied — LNKup', 'lnkup-marketplace' ),
+					'html'       => $html,
+					'title'      => __( 'Vendor replied', 'lnkup-marketplace' ),
+					/* translators: 1: vendor name, 2: event title */
+					'plain'      => sprintf( __( '%1$s replied about %2$s.', 'lnkup-marketplace' ), $ctx['vendor_business'], $ctx['display_title'] ),
+					'href'       => $ctx['organizer_vendors_url'],
+					'inbox_type' => 'organizer_new_vendor_request',
+					'push'       => array(
+						'type'          => 'organizer_new_vendor_request',
+						'applicationId' => (string) $ctx['app_id'],
+						'href'          => '/(organizer)/vendors',
+					),
+				)
+			);
+		} catch ( Throwable $e ) {
+			// Delivery failure must not undo the status change.
+		}
 	}
 
 	/**
@@ -528,7 +1401,7 @@ class LNKup_Notifications {
 
 		$event_title = $ctx ? $ctx['display_title'] : __( 'your event', 'lnkup-marketplace' );
 		$vendor_name = $ctx ? $ctx['vendor_business'] : __( 'A vendor', 'lnkup-marketplace' );
-		$money_url   = $ctx ? $ctx['organizer_money_url'] : ( lnkup_page_url_helper( 'organizer-dashboard' ) . '#financial' );
+		$money_url   = $ctx ? $ctx['organizer_money_url'] : ( lnkup_organizer_view_url( 'financial' ) );
 
 		$body  = self::email_paragraphs(
 			sprintf(
@@ -1428,7 +2301,7 @@ class LNKup_Notifications {
 			return false;
 		}
 		$dash_url   = lnkup_page_url_helper( 'organizer-dashboard' );
-		$create_url = $dash_url . '#create';
+		$create_url = lnkup_organizer_view_url( 'create' );
 
 		$body  = self::email_paragraphs(
 			__( 'Welcome to LNKup — list vendor opportunities for your events.', 'lnkup-marketplace' ),
@@ -1466,7 +2339,7 @@ class LNKup_Notifications {
 		if ( ! $user ) {
 			return false;
 		}
-		$create_url = lnkup_page_url_helper( 'organizer-dashboard' ) . '#create';
+		$create_url = lnkup_organizer_view_url( 'create' );
 
 		$body  = self::email_paragraphs(
 			__( 'You have not published an event on LNKup yet.', 'lnkup-marketplace' ),

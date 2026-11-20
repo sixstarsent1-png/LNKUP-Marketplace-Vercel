@@ -27,14 +27,19 @@ class LNKup_Financial_Cron {
 	}
 
 	public static function run_daily() {
-		if ( get_transient( 'lnkup_fin_daily_' . gmdate( 'Y-m-d' ) ) ) {
+		$today = current_time( 'Y-m-d' );
+		if ( get_transient( 'lnkup_fin_daily_' . $today ) ) {
 			return;
 		}
-		set_transient( 'lnkup_fin_daily_' . gmdate( 'Y-m-d' ), 1, DAY_IN_SECONDS );
+		set_transient( 'lnkup_fin_daily_' . $today, 1, DAY_IN_SECONDS );
 		self::check_overdue_invoices();
 		self::check_payment_reminders();
+		self::check_document_reminders();
+		self::check_arrival_reminders();
+		LNKup_Notifications::resume_due_retries();
 		self::check_installment_due();
 		self::check_deposit_due();
+		self::release_expired_payment_holds();
 		self::mark_expired_payment_methods();
 		if ( class_exists( 'LNKup_Reserves' ) ) {
 			LNKup_Reserves::release_expired();
@@ -46,10 +51,46 @@ class LNKup_Financial_Cron {
 		delete_transient( 'lnkup_fin_market_summary' );
 	}
 
+	/**
+	 * Release spots held by approvals that were never paid. Off unless the
+	 * `payment_hold_expiry_days` setting is a positive number of days past the due date.
+	 */
+	public static function release_expired_payment_holds() {
+		$settings = lnkup_get_settings();
+		$grace    = absint( $settings['payment_hold_expiry_days'] ?? 0 );
+		if ( ! $grace ) {
+			return 0;
+		}
+		$cutoff = gmdate( 'Y-m-d H:i:s', time() - $grace * DAY_IN_SECONDS );
+		$apps   = get_posts(
+			array(
+				'post_type'      => 'lnkup_application',
+				'post_status'    => 'any',
+				'posts_per_page' => 200,
+				'fields'         => 'ids',
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_application_status', 'value' => 'payment_required' ),
+					array( 'key' => '_lnkup_payment_due_at', 'value' => $cutoff, 'compare' => '<', 'type' => 'DATETIME' ),
+				),
+			)
+		);
+		$released = 0;
+		foreach ( $apps as $app_id ) {
+			$payment = LNKup_Payments::get_for_application( $app_id );
+			if ( $payment && 'pending' !== (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true ) ) {
+				continue;
+			}
+			if ( true === LNKup_Applications::transition( $app_id, 'cancelled', array( 'reason' => 'payment_expired' ) ) ) {
+				++$released;
+			}
+		}
+		return $released;
+	}
+
 	public static function check_overdue_invoices() {
 		global $wpdb;
 		$table = LNKup_Financial_Tables::invoices_table();
-		$today = gmdate( 'Y-m-d' );
+		$today = current_time( 'Y-m-d' );
 		$rows  = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT * FROM {$table} WHERE status IN ('pending','sent','partially_paid') AND due_date < %s",
@@ -66,7 +107,7 @@ class LNKup_Financial_Cron {
 	public static function check_installment_due() {
 		global $wpdb;
 		$table = LNKup_Financial_Tables::installments_table();
-		$today = gmdate( 'Y-m-d' );
+		$today = current_time( 'Y-m-d' );
 		$rows  = $wpdb->get_results(
 			$wpdb->prepare( "SELECT * FROM {$table} WHERE status = 'pending' AND due_date <= %s", $today ),
 			ARRAY_A
@@ -79,7 +120,7 @@ class LNKup_Financial_Cron {
 	public static function check_deposit_due() {
 		global $wpdb;
 		$table = LNKup_Financial_Tables::deposits_table();
-		$today = gmdate( 'Y-m-d' );
+		$today = current_time( 'Y-m-d' );
 		$rows  = $wpdb->get_results(
 			$wpdb->prepare( "SELECT * FROM {$table} WHERE status IN ('required','partial') AND deadline <= %s", $today ),
 			ARRAY_A
@@ -96,34 +137,78 @@ class LNKup_Financial_Cron {
 	public static function check_payment_reminders() {
 		global $wpdb;
 		$table = LNKup_Financial_Tables::invoices_table();
-		$today = gmdate( 'Y-m-d' );
-		$windows = array(
-			'7_days'  => gmdate( 'Y-m-d', strtotime( '+7 days' ) ),
-			'3_days'  => gmdate( 'Y-m-d', strtotime( '+3 days' ) ),
-			'24_hours'=> gmdate( 'Y-m-d', strtotime( '+1 day' ) ),
-		);
-		foreach ( $windows as $type => $due_match ) {
-			$rows = $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT * FROM {$table} WHERE status IN ('pending','sent','partially_paid') AND due_date = %s",
-					$due_match
-				),
-				ARRAY_A
-			);
-			foreach ( $rows as $row ) {
-				do_action( 'lnkup_financial_reminder', 'payment_reminder_' . $type, $row );
-			}
-		}
-		$past_due = $wpdb->get_results(
+		$today = new DateTimeImmutable( 'today', wp_timezone() );
+		$until = $today->modify( '+7 days' )->format( 'Y-m-d' );
+		$rows  = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE status IN ('pending','sent','partially_paid','overdue') AND due_date < %s",
-				$today
+				"SELECT * FROM {$table} WHERE status IN ('pending','sent','partially_paid','overdue') AND due_date IS NOT NULL AND due_date <= %s LIMIT 500",
+				$until
 			),
 			ARRAY_A
 		);
-		foreach ( $past_due as $row ) {
-			do_action( 'lnkup_financial_reminder', 'payment_past_due', $row );
+		if ( ! is_array( $rows ) ) {
+			return;
 		}
+		foreach ( $rows as $row ) {
+			$due = DateTimeImmutable::createFromFormat( 'Y-m-d', (string) ( $row['due_date'] ?? '' ), wp_timezone() );
+			if ( ! $due instanceof DateTimeImmutable ) {
+				continue;
+			}
+			$due  = $due->setTime( 0, 0 );
+			$days = (int) $today->diff( $due )->format( '%r%a' );
+			if ( $days < 0 ) {
+				$window = 'past_due';
+			} elseif ( $days <= 1 ) {
+				$window = '24_hours';
+			} elseif ( $days <= 3 ) {
+				$window = '3_days';
+			} elseif ( $days <= 7 ) {
+				$window = '7_days';
+			} else {
+				continue;
+			}
+			LNKup_Notifications::send_invoice_reminder( $row, $window );
+		}
+	}
+
+	/**
+	 * One document reminder per application with unmet required documents.
+	 */
+	public static function check_document_reminders() {
+		foreach ( self::reminder_application_ids() as $app_id ) {
+			LNKup_Notifications::send_documents_needed( $app_id );
+		}
+	}
+
+	/**
+	 * One arrival reminder inside the 24 hours before load-in or event start.
+	 */
+	public static function check_arrival_reminders() {
+		foreach ( self::reminder_application_ids() as $app_id ) {
+			LNKup_Notifications::send_arrival_reminder( $app_id );
+		}
+	}
+
+	/**
+	 * @return int[]
+	 */
+	private static function reminder_application_ids() {
+		$ids = get_posts(
+			array(
+				'post_type'      => 'lnkup_application',
+				'post_status'    => array( 'publish', 'private' ),
+				'posts_per_page' => 200,
+				'fields'         => 'ids',
+				'meta_query'     => array(
+					array(
+						'key'     => '_lnkup_application_status',
+						'value'   => array( 'approved', 'payment_required', 'paid', 'completed' ),
+						'compare' => 'IN',
+					),
+				),
+			)
+		);
+		return array_map( 'absint', is_array( $ids ) ? $ids : array() );
 	}
 
 	/**
@@ -131,6 +216,14 @@ class LNKup_Financial_Cron {
 	 * @param array  $row  Invoice or payment row.
 	 */
 	public static function send_reminder_email( $type, $row ) {
+		if ( in_array( $type, array( 'overdue_invoice', 'payment_past_due' ), true ) ) {
+			LNKup_Notifications::send_invoice_reminder( $row, 'past_due' );
+			return;
+		}
+		if ( 0 === strpos( (string) $type, 'payment_reminder_' ) ) {
+			LNKup_Notifications::send_invoice_reminder( $row, substr( (string) $type, strlen( 'payment_reminder_' ) ) );
+			return;
+		}
 		$vendor_id = (int) ( $row['vendor_user_id'] ?? 0 );
 		$user      = get_userdata( $vendor_id );
 		if ( ! $user ) {

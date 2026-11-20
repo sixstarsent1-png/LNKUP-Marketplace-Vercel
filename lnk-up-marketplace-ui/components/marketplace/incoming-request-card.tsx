@@ -15,7 +15,7 @@ export function IncomingRequestCard({ request }: { request: IncomingRequest }) {
   )
 
   return (
-    <Card className="gap-3 rounded-2xl p-4">
+    <Card className="gap-3 rounded-2xl p-4 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex items-start gap-3">
         <Avatar className="size-12 rounded-xl">
           <AvatarFallback className="rounded-xl bg-primary font-heading font-semibold text-primary-foreground">

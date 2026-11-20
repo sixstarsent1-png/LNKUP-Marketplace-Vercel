@@ -17,7 +17,7 @@ class LNKup_Event_Operations {
 	 */
 	public static function snapshot( $event_id, $organizer_id = 0 ) {
 		$organizer_id = $organizer_id ?: get_current_user_id();
-		if ( ! LNKup_Capabilities::organizer_owns_event( $event_id, $organizer_id ) ) {
+		if ( ! LNKup_Capabilities::staff_can( $event_id, 'view_roster', $organizer_id ) ) {
 			return null;
 		}
 		$event = get_post( $event_id );
@@ -373,8 +373,9 @@ class LNKup_Event_Operations {
 		}
 		$user_id = $user_id ? absint( $user_id ) : get_current_user_id();
 		$profile_id = (int) get_post_meta( $app_id, '_lnkup_vendor_profile_id', true );
-		$owner      = $profile_id ? (int) get_post_meta( $profile_id, '_lnkup_user_id', true ) : 0;
-		if ( $owner !== $user_id && ! user_can( $user_id, 'manage_options' ) ) {
+		$is_owner   = LNKup_Capabilities::vendor_owns_profile( $profile_id, $user_id )
+			|| (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true ) === $user_id;
+		if ( ! $is_owner && ! user_can( $user_id, 'manage_options' ) ) {
 			return array( 'has_event' => false );
 		}
 		$status = get_post_meta( $app_id, '_lnkup_application_status', true );

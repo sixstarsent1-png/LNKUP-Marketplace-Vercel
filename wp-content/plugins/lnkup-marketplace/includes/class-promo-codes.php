@@ -72,6 +72,15 @@ class LNKup_Promo_Codes {
 			return $promo;
 		}
 		global $wpdb;
+		$already = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				'SELECT COUNT(*) FROM ' . LNKup_Financial_Tables::promo_redemptions_table() . ' WHERE payment_post_id = %d',
+				(int) $payment_id
+			)
+		);
+		if ( $already > 0 ) {
+			return new WP_Error( 'promo_already_applied', __( 'A promo code is already applied to this booking.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
 		$wpdb->insert(
 			LNKup_Financial_Tables::promo_redemptions_table(),
 			array(

@@ -1,0 +1,126 @@
+name: Phase 15-22 Quality Gate
+
+on:
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+jobs:
+  phase15-22-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install mobile dependencies
+        run: npm ci
+        working-directory: lnk-up-marketplace-mobile
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Create artifact directory
+        run: mkdir -p artifacts
+
+      - name: Lint web app
+        run: |
+          npm run lint
+          echo "lint=0" >> "$GITHUB_OUTPUT"
+        id: lint
+        continue-on-error: true
+
+      - name: Typecheck mobile app
+        run: |
+          npm run typecheck
+          echo "mobileTypecheck=0" >> "$GITHUB_OUTPUT"
+        id: mobile_typecheck
+        working-directory: lnk-up-marketplace-mobile
+        continue-on-error: true
+
+      - name: Run Phase 16-22 suites
+        run: |
+          npx playwright test \
+            tests/e2e/lnkup-app-phase16-return-reliability.spec.ts \
+            tests/e2e/lnkup-app-phase17-organizer-crm-depth.spec.ts \
+            tests/e2e/lnkup-app-phase18-readiness-reliability.spec.ts \
+            tests/e2e/lnkup-app-phase19-intelligence-experiments.spec.ts \
+            tests/e2e/lnkup-app-phase21-tutorials.spec.ts \
+            tests/e2e/lnkup-app-phase22-launch-smoke.spec.ts \
+            --project=lnkup-app
+          echo "phaseSuites=0" >> "$GITHUB_OUTPUT"
+        id: phase_suites
+        continue-on-error: true
+
+      - name: Run analytics regression smoke
+        run: |
+          npx playwright test tests/e2e/lnkup-app-phase14-analytics.spec.ts --project=lnkup-app
+          echo "analyticsSmoke=0" >> "$GITHUB_OUTPUT"
+        id: analytics_smoke
+        continue-on-error: true
+
+      - name: Run Phase 20 mobile verification
+        run: |
+          npm run phase20:verify
+          echo "mobileVerify=0" >> "$GITHUB_OUTPUT"
+        id: mobile_verify
+        continue-on-error: true
+
+      - name: Write command status payload
+        run: |
+          cat <<'EOF' > artifacts/phase15-20-command-status.json
+          {
+            "lint": ${{ steps.lint.outcome == 'success' && '0' || '1' }},
+            "mobileTypecheck": ${{ steps.mobile_typecheck.outcome == 'success' && '0' || '1' }},
+            "phaseSuites": ${{ steps.phase_suites.outcome == 'success' && '0' || '1' }},
+            "analyticsSmoke": ${{ steps.analytics_smoke.outcome == 'success' && '0' || '1' }},
+            "mobileVerify": ${{ steps.mobile_verify.outcome == 'success' && '0' || '1' }}
+          }
+          EOF
+
+      - name: Build deterministic gate report
+        run: node scripts/qa/phase15-20-gate-report.mjs
+
+      - name: Enforce gate
+        run: |
+          if [ "${{ steps.lint.outcome }}" != "success" ] || \
+             [ "${{ steps.mobile_typecheck.outcome }}" != "success" ] || \
+             [ "${{ steps.phase_suites.outcome }}" != "success" ] || \
+             [ "${{ steps.analytics_smoke.outcome }}" != "success" ] || \
+             [ "${{ steps.mobile_verify.outcome }}" != "success" ]; then
+            echo "Phase 15-22 quality gate failed."
+            exit 1
+          fi
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase15-22-playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
+
+      - name: Upload Playwright test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase15-22-test-results
+          path: test-results
+          if-no-files-found: ignore
+
+      - name: Upload gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase15-22-gate-artifacts
+          path: artifacts
+          if-no-files-found: ignore

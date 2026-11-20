@@ -12,5 +12,23 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', use: { ...devices['iPhone 13'] } },
+    {
+      name: 'lnkup-app',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.PLAYWRIGHT_APP_URL || 'http://localhost:3000',
+      },
+      testMatch: /lnkup-app-.*\.spec\.ts/,
+      testIgnore: /lnkup-app-phase5-mobile\.spec\.ts/,
+    },
+    {
+      name: 'lnkup-app-mobile',
+      use: {
+        ...devices['iPhone 13'],
+        browserName: 'chromium',
+        baseURL: process.env.PLAYWRIGHT_APP_URL || 'http://localhost:3000',
+      },
+      testMatch: /lnkup-app-phase5-mobile\.spec\.ts/,
+    },
   ],
 });

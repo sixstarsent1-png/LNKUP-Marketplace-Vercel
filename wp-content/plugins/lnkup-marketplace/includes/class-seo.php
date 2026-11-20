@@ -22,9 +22,160 @@ function lnkup_seo_is_rankmath_active() {
  * Default OG image (theme block-party illustration).
  */
 function lnkup_seo_default_og_image() {
-	$ver = defined( 'LNKUP_THEME_VERSION' ) ? LNKUP_THEME_VERSION : LNKUP_VERSION;
-	$url = get_theme_file_uri( 'assets/images/events/block-party.svg' );
-	return add_query_arg( 'ver', $ver, $url );
+	$icon = get_site_icon_url( 512 );
+	if ( is_string( $icon ) && lnkup_seo_is_raster_url( $icon ) ) {
+		return $icon;
+	}
+	return '';
+}
+
+/**
+ * Query flags that are tracking, not content.
+ *
+ * @return string[]
+ */
+function lnkup_seo_tracking_params() {
+	return array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id', 'fbclid', 'gclid', 'gbraid', 'wbraid', 'mc_cid', 'mc_eid' );
+}
+
+/**
+ * Find Events filters. Pagination and profile selectors are not filters.
+ *
+ * @return string[]
+ */
+function lnkup_seo_filter_params() {
+	return array(
+		'q',
+		'city',
+		'state',
+		'date_preset',
+		'attendance_bucket',
+		'fee_bucket',
+		'environment',
+		'sort',
+		'category',
+		'categories',
+		'event_types',
+		'markets',
+		'fee_free',
+		'has_spots',
+		'verified_organizer',
+		'closing_soon',
+		'newly_added',
+		'show_closed',
+		'high_demand',
+		'search',
+	);
+}
+
+/**
+ * Whether this Find Events request is a filtered combination.
+ */
+function lnkup_seo_request_has_filters() {
+	if ( ! is_page( 'opportunities' ) ) {
+		return false;
+	}
+	foreach ( lnkup_seo_filter_params() as $key ) {
+		if ( ! isset( $_GET[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			continue;
+		}
+		$value = wp_unslash( $_GET[ $key ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( is_array( $value ) ) {
+			$value = array_filter( $value );
+		}
+		if ( ! empty( $value ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * JPEG, PNG, or WebP URL.
+ *
+ * @param string $url Image URL.
+ */
+function lnkup_seo_is_raster_url( $url ) {
+	$path = (string) wp_parse_url( (string) $url, PHP_URL_PATH );
+	$ext  = strtolower( pathinfo( $path, PATHINFO_EXTENSION ) );
+	return in_array( $ext, array( 'jpg', 'jpeg', 'png', 'webp' ), true );
+}
+
+/**
+ * Attachment URL when the file is a shareable raster.
+ *
+ * @param int    $attachment_id Attachment ID.
+ * @param string $size          Image size.
+ */
+function lnkup_seo_raster_attachment_url( $attachment_id, $size = 'large' ) {
+	$attachment_id = absint( $attachment_id );
+	if ( $attachment_id < 1 ) {
+		return '';
+	}
+	$mime = (string) get_post_mime_type( $attachment_id );
+	if ( ! in_array( $mime, array( 'image/jpeg', 'image/png', 'image/webp' ), true ) ) {
+		return '';
+	}
+	$url = wp_get_attachment_image_url( $attachment_id, $size );
+	return $url ? $url : '';
+}
+
+/**
+ * Canonical for the current public URL without tracking parameters.
+ */
+function lnkup_seo_public_canonical() {
+	if ( class_exists( 'LNKup_Market_Pages' ) && LNKup_Market_Pages::is_market_request() ) {
+		return LNKup_Market_Pages::market_url( LNKup_Market_Pages::current_slug() );
+	}
+	$event_id = isset( $_GET['event'] ) ? absint( wp_unslash( $_GET['event'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	if ( $event_id > 0 && ( is_page() || is_singular() ) ) {
+		$event = get_post( $event_id );
+		if ( $event && 'lnkup_event' === $event->post_type && 'publish' === $event->post_status ) {
+			$permalink = get_permalink( $event );
+			if ( $permalink ) {
+				return $permalink;
+			}
+		}
+	}
+	$base = '';
+	if ( is_front_page() ) {
+		$base = home_url( '/' );
+	} elseif ( is_singular() || is_page() ) {
+		$base = (string) get_permalink( get_queried_object_id() );
+	}
+	if ( '' === $base ) {
+		return '';
+	}
+	$allowed = array_merge( lnkup_seo_filter_params(), array( 'page', 'vendor', 'organizer' ) );
+	$keep    = array();
+	foreach ( $allowed as $key ) {
+		if ( ! isset( $_GET[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			continue;
+		}
+		$value = wp_unslash( $_GET[ $key ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( is_array( $value ) ) {
+			$value = array_values( array_filter( array_map( 'sanitize_text_field', $value ) ) );
+			if ( $value ) {
+				$keep[ $key ] = $value;
+			}
+			continue;
+		}
+		$value = sanitize_text_field( (string) $value );
+		if ( '' === $value ) {
+			continue;
+		}
+		if ( 'page' === $key && absint( $value ) < 2 ) {
+			continue;
+		}
+		if ( in_array( $key, array( 'vendor', 'organizer' ), true ) ) {
+			$value = sanitize_title( $value );
+			if ( '' === $value ) {
+				continue;
+			}
+		}
+		$keep[ $key ] = 'page' === $key ? absint( $value ) : $value;
+	}
+	return $keep ? add_query_arg( $keep, $base ) : $base;
 }
 
 /**
@@ -33,7 +184,7 @@ function lnkup_seo_default_og_image() {
  * @return string[]
  */
 function lnkup_seo_noindex_page_slugs() {
-	return array( 'vendor-dashboard', 'organizer-dashboard', 'vendor-profile', 'favorites' );
+	return array( 'vendor-dashboard', 'organizer-dashboard', 'connector-dashboard', 'vendor-profile', 'favorites', 'log-in' );
 }
 
 /**
@@ -207,6 +358,44 @@ function lnkup_seo_get_context_copy() {
 		);
 	}
 
+	if ( is_page( 'organizers' ) && ! empty( $_GET['organizer'] ) && class_exists( 'LNKup_Organizer_Onboarding' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$slug    = sanitize_title( wp_unslash( $_GET['organizer'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$user_id = LNKup_Organizer_Onboarding::organizer_id_from_public_slug( $slug );
+		if ( $user_id ) {
+			$name = (string) get_user_meta( $user_id, '_lnkup_organizer_public_name', true );
+			if ( '' === $name ) {
+				$user = get_userdata( $user_id );
+				$name = $user ? $user->display_name : '';
+			}
+			$city  = trim( (string) get_user_meta( $user_id, '_lnkup_organizer_city', true ) );
+			$state = trim( (string) get_user_meta( $user_id, '_lnkup_organizer_state', true ) );
+			$where = $city;
+			if ( $state ) {
+				$where = $where ? $where . ', ' . $state : $state;
+			}
+			$bio = (string) get_user_meta( $user_id, '_lnkup_organizer_bio', true );
+			if ( '' === trim( $bio ) ) {
+				$bio = (string) get_user_meta( $user_id, '_lnkup_organizer_tagline', true );
+			}
+			if ( '' === trim( $bio ) ) {
+				$bio = sprintf(
+					/* translators: %s: organizer name */
+					__( 'Events from %s on LNKup. See upcoming vendor opportunities and past events.', 'lnkup-marketplace' ),
+					$name
+				);
+			}
+			return array(
+				'title'       => sprintf(
+					/* translators: 1: organizer name, 2: location */
+					__( '%1$s — Organizer%2$s | LNKup', 'lnkup-marketplace' ),
+					$name,
+					$where ? ' · ' . $where : ''
+				),
+				'description' => wp_trim_words( $bio, 28, '…' ),
+			);
+		}
+	}
+
 	if ( is_page( 'vendors' ) && ! empty( $_GET['vendor'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$slug = sanitize_text_field( wp_unslash( $_GET['vendor'] ) );
 		$profile_id = class_exists( 'LNKup_Vendor_Reputation' ) ? LNKup_Vendor_Reputation::resolve_profile( $slug ) : 0;
@@ -276,10 +465,14 @@ class LNKup_SEO {
 			add_filter( 'rank_math/json_ld', array( __CLASS__, 'filter_json_ld' ), 99, 2 );
 			add_filter( 'rank_math/sitemap/urls', array( __CLASS__, 'append_market_sitemap_urls' ), 10, 2 );
 			add_filter( 'rank_math/frontend/canonical', array( __CLASS__, 'filter_canonical' ) );
+			add_filter( 'get_canonical_url', array( __CLASS__, 'filter_wp_canonical' ), 10, 2 );
 			add_filter( 'rank_math/sitemap/exclude_post', array( __CLASS__, 'exclude_sitemap_post' ), 10, 2 );
 			return;
 		}
 
+		add_filter( 'pre_get_document_title', array( __CLASS__, 'filter_title' ) );
+		add_filter( 'get_canonical_url', array( __CLASS__, 'filter_wp_canonical' ), 10, 2 );
+		add_action( 'wp_head', array( __CLASS__, 'print_fallback_meta' ), 1 );
 		add_action( 'admin_notices', array( __CLASS__, 'rankmath_missing_notice' ) );
 	}
 
@@ -313,7 +506,13 @@ class LNKup_SEO {
 	 */
 	public static function filter_title( $title ) {
 		if ( is_singular() && lnkup_seo_has_manual_override( get_queried_object_id() ) ) {
-			return $title;
+			if ( lnkup_seo_is_rankmath_active() ) {
+				return $title;
+			}
+			$manual = get_post_meta( get_queried_object_id(), 'rank_math_title', true );
+			if ( is_string( $manual ) && '' !== trim( $manual ) ) {
+				return $manual;
+			}
 		}
 		$copy = lnkup_seo_get_context_copy();
 		return ! empty( $copy['title'] ) ? $copy['title'] : $title;
@@ -326,7 +525,13 @@ class LNKup_SEO {
 	 */
 	public static function filter_description( $description ) {
 		if ( is_singular() && lnkup_seo_has_manual_override( get_queried_object_id() ) ) {
-			return $description;
+			if ( lnkup_seo_is_rankmath_active() ) {
+				return $description;
+			}
+			$manual = get_post_meta( get_queried_object_id(), 'rank_math_description', true );
+			if ( is_string( $manual ) && '' !== trim( $manual ) ) {
+				return $manual;
+			}
 		}
 		$copy = lnkup_seo_get_context_copy();
 		return ! empty( $copy['description'] ) ? $copy['description'] : $description;
@@ -338,62 +543,51 @@ class LNKup_SEO {
 	 * @param string $image Image URL.
 	 */
 	public static function filter_og_image( $image ) {
-		if ( is_string( $image ) && '' !== trim( $image ) ) {
+		if ( is_string( $image ) && lnkup_seo_is_raster_url( $image ) ) {
 			return $image;
 		}
+		$chosen = '';
 		if ( class_exists( 'LNKup_Market_Pages' ) && LNKup_Market_Pages::is_market_request() ) {
 			$data = LNKup_Market_Pages::get_context();
 			if ( ! $data ) {
 				$data = LNKup_Market_Pages::get_market_page_data( LNKup_Market_Pages::current_slug() );
 			}
-			if ( $data && ! empty( $data['market']['og_image'] ) ) {
-				return esc_url_raw( $data['market']['og_image'] );
-			}
-			if ( $data && ! empty( $data['market']['hero_image'] ) ) {
-				$ver = defined( 'LNKUP_THEME_VERSION' ) ? LNKUP_THEME_VERSION : LNKUP_VERSION;
-				$path = 'assets/images/events/' . sanitize_file_name( (string) $data['market']['hero_image'] );
-				return add_query_arg( 'ver', $ver, get_theme_file_uri( $path ) );
+			if ( $data && ! empty( $data['market']['og_image'] ) && lnkup_seo_is_raster_url( $data['market']['og_image'] ) ) {
+				$chosen = esc_url_raw( $data['market']['og_image'] );
 			}
 		}
-		if ( is_page( 'vendors' ) && ! empty( $_GET['vendor'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( '' === $chosen && is_page( 'organizers' ) && ! empty( $_GET['organizer'] ) && class_exists( 'LNKup_Organizer_Onboarding' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$user_id = LNKup_Organizer_Onboarding::organizer_id_from_public_slug( sanitize_title( wp_unslash( $_GET['organizer'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( $user_id ) {
+				$chosen = lnkup_seo_raster_attachment_url( (int) get_user_meta( $user_id, '_lnkup_organizer_cover_id', true ) );
+				if ( '' === $chosen ) {
+					$chosen = lnkup_seo_raster_attachment_url( (int) get_user_meta( $user_id, '_lnkup_organizer_logo_id', true ) );
+				}
+			}
+		}
+		if ( '' === $chosen && is_page( 'vendors' ) && ! empty( $_GET['vendor'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$slug       = sanitize_text_field( wp_unslash( $_GET['vendor'] ) );
 			$profile_id = class_exists( 'LNKup_Vendor_Reputation' ) ? LNKup_Vendor_Reputation::resolve_profile( $slug ) : 0;
 			if ( $profile_id ) {
-				$data = LNKup_Vendor_CRM_Profile::get_public( $profile_id );
-				if ( $data && ! empty( $data['cover'] ) ) {
-					return esc_url_raw( $data['cover'] );
-				}
-				if ( $data && ! empty( $data['logo'] ) ) {
-					return esc_url_raw( $data['logo'] );
+				$chosen = lnkup_seo_raster_attachment_url( (int) get_post_meta( $profile_id, '_lnkup_cover_image_id', true ) );
+				if ( '' === $chosen ) {
+					$chosen = lnkup_seo_raster_attachment_url( (int) get_post_meta( $profile_id, '_lnkup_logo_attachment_id', true ) );
 				}
 			}
 		}
-		if ( is_singular( array( 'lnkup_opportunity', 'lnkup_event' ) ) ) {
-			$opp = lnkup_seo_opportunity_copy( get_queried_object_id() );
-			if ( $opp ) {
-				$post = get_post( get_queried_object_id() );
-				$opp_post = $post;
-				if ( $post && 'lnkup_event' === $post->post_type ) {
-					$linked = get_posts(
-						array(
-							'post_type'      => 'lnkup_opportunity',
-							'posts_per_page' => 1,
-							'meta_key'       => '_lnkup_event_id',
-							'meta_value'     => $post->ID,
-						)
-					);
-					$opp_post = $linked[0] ?? null;
-				}
-				if ( $opp_post ) {
-					$formatted = lnkup_format_opportunity( $opp_post );
-					$illus     = lnkup_opportunity_illustration_url( $formatted );
-					if ( $illus ) {
-						return $illus;
-					}
-				}
+		if ( '' === $chosen && is_singular( array( 'lnkup_opportunity', 'lnkup_event' ) ) ) {
+			$post_id  = get_queried_object_id();
+			$event_id = 'lnkup_event' === get_post_type( $post_id ) ? $post_id : (int) get_post_meta( $post_id, '_lnkup_event_id', true );
+			$image_id = $event_id ? (int) get_post_meta( $event_id, '_lnkup_featured_image_id', true ) : 0;
+			if ( ! $image_id && $event_id ) {
+				$image_id = (int) get_post_thumbnail_id( $event_id );
 			}
+			$chosen = lnkup_seo_raster_attachment_url( $image_id );
 		}
-		return lnkup_seo_default_og_image();
+		if ( '' === $chosen ) {
+			$chosen = lnkup_seo_default_og_image();
+		}
+		return $chosen;
 	}
 
 	/**
@@ -402,15 +596,63 @@ class LNKup_SEO {
 	 * @param array $robots Robots array.
 	 */
 	public static function filter_robots( $robots ) {
+		$directives = is_array( $robots ) ? $robots : array();
+		if ( lnkup_seo_request_has_filters() && ! lnkup_seo_should_noindex() ) {
+			$directives['index']  = 'noindex';
+			$directives['follow'] = 'follow';
+			return $directives;
+		}
 		if ( ! lnkup_seo_should_noindex() ) {
 			return $robots;
 		}
-		if ( ! is_array( $robots ) ) {
-			$robots = array();
+		$directives['index']  = 'noindex';
+		$directives['follow'] = 'nofollow';
+		return $directives;
+	}
+
+	/**
+	 * Titles, descriptions, robots, canonical, and Open Graph when Rank Math is inactive.
+	 */
+	public static function print_fallback_meta() {
+		if ( is_admin() ) {
+			return;
 		}
-		$robots['index']  = 'noindex';
-		$robots['follow'] = 'nofollow';
-		return $robots;
+		$description = self::filter_description( '' );
+		if ( $description ) {
+			echo '<meta name="description" content="' . esc_attr( $description ) . '" />' . "\n";
+		}
+		$robots = self::filter_robots( array() );
+		if ( ! empty( $robots['index'] ) && 'noindex' === $robots['index'] ) {
+			$follow = ! empty( $robots['follow'] ) ? $robots['follow'] : 'follow';
+			echo '<meta name="robots" content="' . esc_attr( 'noindex, ' . $follow ) . '" />' . "\n";
+		}
+		$fallback_url = is_singular() ? (string) get_permalink( get_queried_object_id() ) : home_url( '/' );
+		$canonical    = self::filter_canonical( $fallback_url );
+		if ( $canonical ) {
+			echo '<meta property="og:url" content="' . esc_url( $canonical ) . '" />' . "\n";
+		}
+		$title = self::filter_title( '' );
+		if ( $title ) {
+			echo '<meta property="og:title" content="' . esc_attr( $title ) . '" />' . "\n";
+		}
+		if ( $description ) {
+			echo '<meta property="og:description" content="' . esc_attr( $description ) . '" />' . "\n";
+		}
+		echo '<meta property="og:type" content="website" />' . "\n";
+		$image = self::filter_og_image( '' );
+		if ( $image ) {
+			echo '<meta property="og:image" content="' . esc_url( $image ) . '" />' . "\n";
+		}
+		$data = self::filter_json_ld(
+			array(
+				'@context' => 'https://schema.org',
+				'@graph'   => array(),
+			),
+			null
+		);
+		if ( ! empty( $data['@graph'] ) && is_array( $data['@graph'] ) ) {
+			echo '<script type="application/ld+json">' . wp_json_encode( $data ) . '</script>' . "\n";
+		}
 	}
 
 	/**
@@ -513,15 +755,19 @@ class LNKup_SEO {
 		}
 
 		$opp  = lnkup_format_opportunity( $opp_post );
-		$fee  = (float) ( $opp['vendor_fee'] ?? 0 );
 		$date = ! empty( $opp['date'] ) ? $opp['date'] : '';
 
+		$event_id     = (int) ( $opp['event_id'] ?? 0 );
+		$stored       = $event_id ? (string) get_post_meta( $event_id, '_lnkup_event_status', true ) : '';
+		$event_status = in_array( $stored, array( 'cancelled', 'canceled' ), true )
+			? 'https://schema.org/EventCancelled'
+			: 'https://schema.org/EventScheduled';
 		$event_schema = array(
 			'@type'       => 'Event',
 			'name'        => $opp['name'] ?? $opp_post->post_title,
 			'description' => $copy['description'],
-			'url'         => get_permalink( $opp_post ),
-			'eventStatus' => 'https://schema.org/EventScheduled',
+			'url'         => get_permalink( $event_id ? $event_id : $opp_post ),
+			'eventStatus' => $event_status,
 		);
 
 		if ( $date ) {
@@ -540,18 +786,6 @@ class LNKup_SEO {
 					'addressRegion'   => $state,
 					'addressCountry'  => 'US',
 				),
-			);
-		}
-
-		if ( $fee > 0 ) {
-			$event_schema['offers'] = array(
-				'@type'         => 'Offer',
-				'price'         => (string) $fee,
-				'priceCurrency' => 'USD',
-				'availability'  => ( (int) ( $opp['spots_remaining'] ?? 0 ) ) > 0
-					? 'https://schema.org/InStock'
-					: 'https://schema.org/SoldOut',
-				'url'           => get_permalink( $opp_post ),
 			);
 		}
 
@@ -577,6 +811,10 @@ class LNKup_SEO {
 		$post = get_post( (int) $post_id );
 		if ( ! $post ) {
 			return $exclude;
+		}
+
+		if ( 'page' === $post->post_type && in_array( $post->post_name, lnkup_seo_noindex_page_slugs(), true ) ) {
+			return true;
 		}
 
 		$private_types = array(
@@ -612,15 +850,44 @@ class LNKup_SEO {
 	}
 
 	/**
-	 * Canonical URL for virtual market pages.
+	 * Core canonical filter. Rank Math prints its own tag from filter_canonical().
+	 *
+	 * @param string  $canonical Canonical URL.
+	 * @param WP_Post $post      Queried post.
+	 */
+	public static function filter_wp_canonical( $canonical, $post ) {
+		unset( $post );
+		return self::filter_canonical( $canonical );
+	}
+
+	/**
+	 * Canonical URL for public marketplace screens.
 	 *
 	 * @param string $canonical Canonical URL.
 	 */
 	public static function filter_canonical( $canonical ) {
-		if ( class_exists( 'LNKup_Market_Pages' ) && LNKup_Market_Pages::is_market_request() ) {
-			return LNKup_Market_Pages::market_url( LNKup_Market_Pages::current_slug() );
+		if ( is_singular() ) {
+			$manual = get_post_meta( get_queried_object_id(), 'rank_math_canonical_url', true );
+			if ( is_string( $manual ) && '' !== trim( $manual ) ) {
+				return $manual;
+			}
 		}
-		return $canonical;
+		$managed = ( class_exists( 'LNKup_Market_Pages' ) && LNKup_Market_Pages::is_market_request() )
+			|| is_page( array( 'opportunities', 'vendors', 'organizers' ) )
+			|| is_singular( array( 'lnkup_event', 'lnkup_opportunity' ) );
+		if ( ! $managed ) {
+			foreach ( lnkup_seo_tracking_params() as $key ) {
+				if ( ! empty( $_GET[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+					$managed = true;
+					break;
+				}
+			}
+		}
+		if ( ! $managed ) {
+			return $canonical;
+		}
+		$public = lnkup_seo_public_canonical();
+		return $public ? $public : $canonical;
 	}
 
 	/**

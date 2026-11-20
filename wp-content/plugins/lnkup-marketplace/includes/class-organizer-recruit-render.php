@@ -15,12 +15,21 @@ defined( 'ABSPATH' ) || exit;
 class LNKup_Organizer_Recruit_Render {
 
 	/**
+	 * Headline used as the referral page subtitle.
+	 */
+	public static function headline(): string {
+		return __( 'Invite organizers or vendors — earn on LNKup fees for a year', 'lnkup-marketplace' );
+	}
+
+	/**
 	 * Shared hub shell (filled by JS).
 	 *
 	 * @param string $context vendor|organizer.
+	 * @param array  $args    show_title: false when the page header already shows the title and headline.
 	 */
-	public static function hub_shell( string $context = 'vendor' ): string {
-		$context = in_array( $context, array( 'vendor', 'organizer' ), true ) ? $context : 'vendor';
+	public static function hub_shell( string $context = 'vendor', array $args = array() ): string {
+		$context    = in_array( $context, array( 'vendor', 'organizer' ), true ) ? $context : 'vendor';
+		$show_title = ! isset( $args['show_title'] ) || $args['show_title'];
 		ob_start();
 		?>
 		<div
@@ -30,14 +39,16 @@ class LNKup_Organizer_Recruit_Render {
 			data-testid="lnkup-org-recruit-hub"
 		>
 			<div class="lnkup-org-recruit__hero">
-				<p class="lnkup-org-recruit__eyebrow"><?php esc_html_e( 'Referral Invites', 'lnkup-marketplace' ); ?></p>
-				<h2 class="lnkup-org-recruit__title"><?php esc_html_e( 'Invite organizers or vendors — earn on LNKup fees for a year', 'lnkup-marketplace' ); ?></h2>
+				<?php if ( $show_title ) : ?>
+					<p class="lnkup-org-recruit__eyebrow"><?php esc_html_e( 'Referral Invites', 'lnkup-marketplace' ); ?></p>
+					<h2 class="lnkup-org-recruit__title"><?php echo esc_html( self::headline() ); ?></h2>
+				<?php endif; ?>
 				<p class="lnkup-org-recruit__body lnkup-muted">
 					<?php esc_html_e( 'Share a role-specific link. When they pay booth fees (vendors) or collect booth fees on their events (organizers), you earn a cut of LNKup’s vendor fee and organizer fee for up to 12 months.', 'lnkup-marketplace' ); ?>
 				</p>
 			</div>
 			<div class="lnkup-org-recruit__mount" data-org-recruit-mount>
-				<p class="lnkup-muted"><?php esc_html_e( 'Loading your invite link…', 'lnkup-marketplace' ); ?></p>
+				<?php echo function_exists( 'lnkup_loading_state' ) ? lnkup_loading_state( 'panel' ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			</div>
 		</div>
 		<?php

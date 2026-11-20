@@ -6,8 +6,273 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
-**Plugin version:** 12.18.43  
-**Theme version:** 1.4.19
+**Plugin version:** 12.21.0  
+**Theme version:** 1.6.0
+
+### v12.21.0 (Organizer Experience 2.0 — tenancy, capacity, money, Requests, operations)
+
+Findings, root causes, and verification status: [ORGANIZER_AUDIT_MATRIX.md](ORGANIZER_AUDIT_MATRIX.md). QA run sheet: [ORGANIZER_QA_CHECKLIST.md](ORGANIZER_QA_CHECKLIST.md). Local runtime: `@wordpress/env` + `scripts/e2e/seed.php` + `scripts/e2e/probe-organizer.php` (46 probes).
+
+- **Tenant isolation:** operations, map, support, incident, booth, parking, load-in, sponsor, refund-calculate and intelligence routes check the event the row belongs to; another organizer gets 403/404.
+- **Staff matrix:** `LNKup_Capabilities::staff_can()` + `LNKup_Event_Staff::capability_matrix()` (operations, coordinator, finance, parking, load-in, power, medical, security). Financials are owner/finance only; staff can no longer add staff; `organizer_owns_event()` means owner (or manage-all) only.
+- **Capacity:** new `LNKup_Opportunity_Inventory` derives `_lnkup_spots_remaining` from applications holding a spot (approved / payment_required / paid / completed). Approve takes a per-opportunity lock and returns 409 `opportunity_full`; a one-time backfill corrects existing counts (logged). Declined/cancelled bookings void their unpaid payment; checkout refuses non-pending payments. Optional unpaid-hold expiry via `payment_hold_expiry_days` (off by default).
+- **Payment status fix:** the meta sanitizer used to rewrite `processing` (ACH in flight) and `partially_refunded` to `pending`, making them payable again. Both are now kept.
+- **Refunds:** one open request per payment, claim-before-refund (double approve → 409), amount capped at the remaining balance, `partially_refunded` status, credit refunds grant credit only (no card refund), all card refunds through `LNKup_Financial_Service::refund()`.
+- **Cash out:** per-organizer lock, `standard|instant` allow-list, conditional cancel, optional `client_token` replay protection.
+- **Idempotent create:** Create Event, opportunity rows and Duplicate Event accept a `client_token`; a retry returns the original record. When the event saves but slots fail, web and app show "Your event was saved — Retry vendor slots" instead of a green toast. Duplicate keeps closed slots closed and never copies bookings.
+- **Request More Information:** new `info_requested` status; organizer asks (web card, drawer, app sheet), vendor replies on Requests (web and app); history on the application; notifications both ways.
+- **Requests inbox:** To review · Needs info · Approved · Awaiting payment · Confirmed · Waitlisted · Declined · Missing docs; counts update in place; drawer gains Decide, Q&A and history with you.
+- **Home / workspace:** organization welcome, Action Center (incl. events with no open spots), server-rendered recent activity, event cards scoped to the events shown; workspace tabs Overview · Opportunities · Applications · Confirmed · Financials · Operations · Check-in (sticky), Events highlighted in the nav, Applications link keeps the event.
+- **Editing logistics:** a date, time, venue or address change notifies booked vendors and re-syncs listings; fees never change.
+- **Inventory UI:** each slot shows open · held · paid · waitlisted, "Spot open — review waitlist", and Preview as vendor.
+- **Financial Center:** Gross collected · Platform fees · Refunds · Net · Pending · Available to cash out · In transit · Paid out (each explained; pending ≠ available) plus a By-event table. Dispute dialogs replace `prompt()`/`alert()`.
+- **Operations / check-in:** booths are one-per-vendor-per-event and only for approved vendors; a paid vendor's booth change sends a pass update. Event-day status can no longer set approval/payment states; owner/operations overrides need a reason and are written to the operations log; duplicate scans say "already checked in". Scan page shows Expected · Checked in · Not yet · Exceptions and a vendor lookup, and opens for check-in staff.
+- **Packets:** Draft / Ready / Published label derived from pass completeness and payment unlocks.
+- **Intelligence:** Applications → Approvals → Payments → Confirmed → Check-ins funnel and an owner-scoped event comparison. Past events offer "Rebook N vendors".
+- **Vendors / Lists / Invites:** load from the sidebar (`?view=`), duplicates surfaced, invites bound to the invited vendor and answerable once; discover excludes private profiles and searches name OR city.
+- **JS hygiene:** `crmFetch`, `mapFetch` check JSON and status; no remaining `alert`/`prompt`/`confirm` in organizer CRM, maps or financial (new `LNKupUI.askText()` dialog).
+- **Native organizer:** shared cache for events, requests and Money; tab badge subscribes and polls only in the foreground; review re-reads server status and surfaces bulk failures; Ask for more info sheet; publish and cash out send a `client_token` and handle partial success; no demo events in live mode; push routing for `info_requested`, `organizer_event_needs_attention` and event-scoped requests; Money no longer re-derives "collected" from activity.
+
+### v12.20.0 (Vendor Experience 2.0 — security, payments, Home, Find, Requests)
+
+Full findings and verification status: [VENDOR_AUDIT_MATRIX.md](VENDOR_AUDIT_MATRIX.md). QA run sheet: [VENDOR_QA_CHECKLIST.md](VENDOR_QA_CHECKLIST.md).
+
+- **Data exposure:** only `lnkup_event` and `lnkup_opportunity` stay in core `wp/v2` REST; applications, payments, documents, packets, profiles, CRM records, reviews, and their meta are served only by `lnkup/v1`. Vendor document attachments are hidden from `wp/v2/media` and attachment pages; new uploads go to `uploads/lnkup-private/` (deny rules) and must be PDF/JPG/PNG under 10 MB. Existing files were flagged, not moved.
+- **Payments:** `confirm_checkout` no longer accepts `sim_` IDs unless simulation is explicitly enabled (test mode with no live Stripe, or `LNKUP_ALLOW_PAYMENT_SIMULATION`). Stripe intents must carry this payment's `payment_post_id` and at least the amount due. Reconcile and meta backfill use the same binding. Missing Stripe keys return a friendly `payments_unavailable` instead of silently simulating.
+- **Free booths:** a $0 amount due finalizes through the Financial Service on approval, prepare, or redirect checkout — no Stripe call, no vendor fee, no "payment required" email.
+- **Credits / promos:** credits apply only to the owner's pending payment and only the uncovered remainder (locked); one promo redemption per payment.
+- **Integrity:** application transitions follow an allowed-from map (409 `invalid_transition`); apply is locked per vendor + opportunity; throttle set only after success.
+- **Vendor ops:** vendor home and weather ownership read `_lnkup_owner_user_id` (new `LNKup_Capabilities::vendor_owns_profile()`).
+- **Native checkout:** hosted checkout returns via `GET /financial/checkout/native-return` → `lnkup://stripe-redirect`; the auth session closes itself and the Pass polls server status.
+- **Home:** welcome with logo, one Next step, linked metrics, upcoming event, recommendations, recent activity.
+- **Requests:** All · Needs action · In review · Confirmed · Past events; timeline through Event day / Completed; free booths skip Payment.
+- **Find / Apply:** one status vocabulary on cards; cards show the vendor's application status; booth chooser; progress steps; filters restore from URL; infinite scroll works; guest ♥ goes to signup.
+- **Reliability:** checkout, wallet, growth, operations, documents, and marketplace calls clear loaders and show retryable errors.
+- **Nav / tokens:** Home / Find events labels from `lnkup_copy`; storefront icon for Profile; missing `--lnkup-*` tokens defined; reduced-motion support.
+
+### v12.18.86 (Invite name and one payment)
+
+- Overview invites use the event post title, date, and city. If the saved notice does not match an invite, sent and opened invites for that vendor are shown instead.
+- Vendor Wallet and organizer Money list one row per event. The amount is the overall total. Installments for that event add up.
+
+### v12.18.85 (Invite name and Find filters)
+
+- The vendor Overview invite names the event, date, and city. If the invite only has a slot, that name is shown.
+- Find filters are grouped into Where, When, Fee, Documents, and More. Short fields sit two across from 640px, and checkboxes wrap with space between them.
+
+### v12.18.84 (Money and wallet screens)
+
+- Organizer Money and vendor Wallet show one overall price per application. Installments add up. A duplicate charge is listed once.
+- Money, Revenue, Planning, and Account stay above Overview, Wallet, Cash out, and Payouts. Those buttons stay above the figures and the month chart.
+- Revenue by month uses paid payment totals, one amount per application.
+- Wallet ledger marks money in green and money out red. Cash out is a card with Standard and Instant (1.5% fee).
+- Invoice View opens the invoice page. Payment methods are card rows. Receipts are cards with View.
+
+### v12.18.83 (Vendor sell and location)
+
+- Organizer vendor cards show category pills, or a short products line, and a city. Cities served fills in when the home city is empty. Missing facts say “Category not listed.” and “Location not listed.”
+- Organizer request rows and an event’s Vendors tab show the same sell and location line under the vendor name.
+
+### v12.18.82 (Profile, event switcher, Money, and Vendors)
+
+- The vendor Profile tab stacks every section in one centered 48rem column. Two-across fields stay inside each card from 640px.
+- An event screen with more than one event has a switcher beside the title. It keeps the current tab.
+- Organizer Money opens with Available, Pending, Collected, and Paid out, a payout-status line, the month chart, and recent payment activity. Revenue, Planning, and Account stay under that.
+- Vendors is a two-column gallery from 768px and three columns from 1200px. Each card keeps the logo or initials, name, city, categories, event count, and Invite.
+
+### v12.18.81 (Profile edit and share)
+
+- The workspace bar has Edit profile, Copy link, and View for organizers and vendors.
+- Organizer Edit profile opens the existing profile form on Events. Vendor Edit profile opens the profile page. Copy link and View use the public profile URL.
+- The vendor profile header also has Copy link next to Preview.
+
+### v12.18.80 (Organizer list, slots, and More)
+
+- Overview titles the pending rows Recent requests. Event cards keep Open and Requests, and Duplicate uses the existing copy form.
+- The cross-event slot list leaves the Events page. Slot name, fee, spots, and open or closed stay on that event’s Slots tab.
+- More sits on the top right of the workspace bar and opens the existing sidebar. The phone bar is the five primary links.
+- Vendor cards show city, categories, and a completed-event count.
+
+### v12.18.79 (Vendor profile width)
+
+- The vendor Profile tab uses the dashboard width. Business Basics stays a 42rem card. From 768px the other sections sit in two columns, and Photos spans both.
+
+### v12.18.78 (Organizer event pages)
+
+- The organizer dashboard shows one section at a time. Overview is the default.
+- Open on an event goes to that event’s screen: Overview, Slots, Requests, and Vendors. Edit still opens the existing form.
+- The Requests inbox stays in the nav. An event name there opens that event’s Requests tab.
+
+### v12.18.77 (Vendor Wallet and Profile)
+
+- Wallet opens with Balance and a payments list of event, city, amount, and Paid or Due. Pay, Wallet, Extras, and Reports stay under that list.
+- Profile opens as one card: logo, business name, city, and category pills, then a photo grid. The other sections keep their save buttons. The strength sidebar is gone.
+
+### v12.18.76 (Vendor Overview, Find, and Requests)
+
+- Vendor Overview is a bordered title, a four-cell count, one next action, and up to three request rows. With no applications, it shows Find an event.
+- Vendor Requests uses the same title and pill filters. Pay now stays on the row.
+- Find events is a search row and a city field, then a two-column gallery. Category, sort, and the other filters stay behind Filters. View opens the public event.
+
+### v12.18.75 (Dashboard look)
+
+- Public vendor and organizer profiles use a wide rounded cover, a square mark, and the name and city on one row. Invite and Share sit on that row. The public vendor page no longer shows the score rail, metrics, or reliability sidebar.
+- Dashboard content is centered. Lime fills leave the dashboard. Status is a dot and a label. Cards stay flat with an 8px border.
+
+### v12.18.74 (Dashboard screen bodies)
+
+- Vendor Requests is one row list: event, slot, fee, and status. Filters are Applied, In review, Pay now, and Booked. Pay now stays on a pending payment.
+- Organizer Requests is the same kind of row. Accept and Decline stay on new requests.
+- Event cards keep the image, status, date, and city, plus vendor slots and spots open. Open and Requests stay. Revenue and Operations leave the card.
+- Vendors opens on search and a card with name, city, categories, and Invite. Discover, import, and filters stay behind the expand control.
+- Vendor Wallet first shows the balance and Pay tabs. Wallet, Extras, and Reports stay on the section buttons.
+
+### v12.18.73 (Secondary pages and Money)
+
+- Lists, Invites, Insights, Launch, Event operations, Documents, Growth, Referral Invites, and Reviews open with a one-line title. Their lists and actions stay.
+- Organizer Money first shows Overview, Wallet, Cash out, and Payouts. Revenue, Planning, and Account stay on the section buttons.
+- The public vendor page keeps About, photos, and events. Setup, power, water, and payment fields stay off that page. Invite stays for a signed-in organizer.
+
+### v12.18.72 (Lists, event workspace, Money, Find, profiles)
+
+- Requests, slots, and vendors use one bordered list. Accept and Decline stay on new requests. Pay stays on payment due.
+- The event page has a facts column with the public link and Copy. Edit still uses the existing form.
+- Money opens on balances, payout status, the month chart, and recent activity. Other sections stay in the section nav.
+- Find cards open the public event. Public profiles use the shared header. Empty and error states share one pattern.
+- The dashboard title under the workspace bar is visually hidden. More stays in the sidebar.
+
+### v12.18.71 (Type, workspace bar, public pages)
+
+- The theme uses Geist and Geist Mono. Dashboard cards are flat 8px borders, and status is a dot plus a label.
+- The dashboard has a real top bar with the workspace name and the open event. Phone navigation stays the bottom bar.
+- The public header is Events, Organizers, and Vendors. Find cards open the public event. Vendor profile edit is stacked sections, without documents on that page.
+
+### v12.18.70 (Public event slots)
+
+- The public event page titles the list Vendor slots. Fee, spots open, and the free-to-apply line stay.
+- Organizer profile cards keep View vendor options and Apply for {slot}, which opens the same `?apply=` link.
+
+### v12.18.69 (Vendors, vendor Requests, and Wallet)
+
+- Organizer Vendors is a title, search, and Invite.
+- Vendor Requests drops the tracking paragraph. Pay stays on payment-due rows.
+- Vendor Wallet drops the payments essay and keeps the balance and payment list.
+
+### v12.18.68 (Events, Requests, and Money)
+
+- Events is a title, Live / Drafts / Completed, and Launch event. Public profile stays a small secondary action.
+- Requests drops the extra review paragraph. Accept and Decline stay on new requests.
+- Money opens on the existing balances, payout status, and chart.
+
+### v12.18.67 (Quieter dashboard homes)
+
+- Organizer Overview is one upcoming event, one waiting row, four counts, and two requests.
+- Vendor home is a greeting, Applied / In review / Pay now / Booked, one next action, and a short request list.
+- The event page adds a Vendors tab for accepted and booked vendors. Accept and decline stay on new requests.
+
+### v12.18.66 (Dashboard shell from lnkupdashboards)
+
+- Organizer and vendor dashboards use a top navigation bar: Overview, Events, Requests, Money, Vendors, and Overview, Find, Requests, Wallet, Profile.
+- Public event and organizer profile cards use the same flat 8px border treatment.
+
+### v12.18.65 (Invite drawer and revenue charts)
+
+- Invite vendor opens a full-height drawer with the event form inside it.
+- The organizer revenue dashboard stays JSON when a chart value cannot be encoded, and month bars fall back to paid booth payments.
+- A cashout that does not save does not debit the wallet. A failed Connect transfer puts the amount back.
+
+### v12.18.64 (Apply Sign up navigates)
+
+- Sign up and Log in inside the apply window leave the page. After signup, the visitor returns to that same slot.
+
+### v12.18.63 (Guest apply from an organizer profile)
+
+- Guests see Log in and Sign up. Dashboard is only for a signed-in vendor or organizer.
+- A public event or apply link stays on the public page, not inside the vendor dashboard.
+- Organizer profile cards include Apply for a slot. Logged-out visitors sign up or log in and return to that same application.
+
+### v12.18.62 (Organizer and vendor home)
+
+- Organizer home opens with the command center, the existing stat grid, two upcoming events, and two pending requests.
+- Vendor home opens with a greeting, a KPI row, and one next action.
+
+### v12.18.61 (Organizer events match the app example)
+
+- Events uses a header, Live / Drafts / Completed tabs, and a two-column card with Manage event, View requests, and Operations.
+- The event edit page shows request counts and tabs for overview, vendor slots, and requests.
+
+### v12.18.60 (Per-event edit page)
+
+- Edit event opens `organizer-dashboard/?event={id}&edit=1` with the listing form and that event’s vendor slots. The Events list no longer hides a full editor on every card.
+
+### v12.18.59 (Public storefront template)
+
+- The organizers page uses the theme Public Storefront template, so the WordPress title “Organizers” is not printed around the profile.
+- Vendor slots across events are full-width cards, with the event name and city on one line and each slot on a row that uses the dashboard width.
+
+### v12.18.58 (Public profile layout)
+
+- Organizer profile cards use the full width when an event has no photo. The organization name sits below the cover, and the WordPress “Organizers” title is hidden on that page.
+
+### v12.18.57 (Public organizer profile and event page)
+
+- The public organizer profile is a storefront: cover, logo, upcoming events as one card each, then about and past events.
+- The public event page leads with vendor opportunities, keeps the street address private when hidden, and says applying is free.
+
+### v12.18.56 (Vendor slot list layout)
+
+- Vendor slots across events sits under the event cards. Slots are grouped by event, with the name, price, spots, and Save on one row.
+
+Organizer baseline (ORG-00–04): [ORG_BASELINE.md](ORG_BASELINE.md). The cross-event vendor-slot list is in 12.18.55. Local WordPress at `http://localhost:8888` was not running when that baseline was written.
+
+### v12.18.55 (Vendor slots across events)
+
+- Events shows every vendor slot in one list, with the event name, city, and date. Name, price, and spots save from that row. Close, reopen, and remove work the same way as on a single event card. A filter narrows the list when there are several events.
+
+### v12.18.54 (Organizer event command)
+
+- Edit event saves photos, indoor or outdoor, and vendor amenities.
+- Vendor slots can be renamed. A slot with requests can be closed without deleting those requests. The extra fee table is no longer on the Events page.
+- Review requests and Find vendors are on the vendor slots panel.
+
+### v12.18.53 (Public event details and duplicate venue)
+
+- The public event page shows category, attendance, indoor or outdoor, vendor amenities, tickets, organizer about, and each slot’s category, deadline, and spots filled.
+- Duplicate asks for city, state, venue, and address, prefilled from the original, so the copy can use a different place.
+
+### v12.18.52 (Vendor slots on the event card)
+
+- **Vendor slots** on the event card lists each slot so you can change price and spots, add another, or remove one that has no vendor requests. Removing the last open slot returns the event to Draft.
+
+### v12.18.51 (Edit the whole event)
+
+- **Edit event** sits next to Manage and opens the full listing: title, description, category, date, times, attendance, ticketing link, and venue.
+
+### v12.18.50 (Edit events and organizer profile)
+
+- **Edit event** saves the title, description, date, times, venue, address, and attendance that are already on the event.
+- Organizers can set an organization name and about text. The public profile shows that above their live events.
+
+### v12.18.49 (Public event page)
+
+- **Share event** copies one public link. That page shows the event details and every open vendor slot, with Apply on each slot.
+
+### v12.18.48 (Empty vendor roster)
+
+- Manage with no vendors hides bulk check-in actions and explains that the roster fills after vendors apply. Next steps are Review requests, Discover vendors, and Publish when the event is still a draft.
+
+### v12.18.47 (Publish drafts, requests, and public links)
+
+- Event cards show **Live** when a vendor slot is open and **Draft** when none is. **Publish** on a draft card adds the slot that takes it live.
+- Vendor requests: event dropdown on small screens, a sticky “showing requests for” line, and status counts for the selected event. Event cards link to **Review requests**.
+- Discover and Vendor lists sit together in the sidebar, with clearer copy and a Discover shortcut from lists.
+- **Share event** copies the public apply link. **Your public profile** is `/organizers/?organizer={slug}` with live events.
+
+### v12.18.46 (Duplicate events and vendor slots)
+
+- Events command: **Duplicate** copies the event, vendor slots (fees, spots, documents), and venue map onto a new name and date. Applications, payments, and roster are not copied.
+- **Add vendor slot** on the event card. Preset vendor type or a custom type (saved as a vendor category). Multiple rows in one save.
+- Create wizard: custom type on each slot row. Closing vendor applications no longer blocks publish on an empty vendor type.
 
 **WordPress deploy:** GitHub Action `deploy-wordpress.yml` rsyncs plugin + theme to SiteGround over SSH. Do not clone this monorepo into `public_html`. See [SITEGROUND_DEPLOY.md](SITEGROUND_DEPLOY.md).
 
@@ -87,7 +352,7 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 
 The canonical **Next.js app** for vendor/organizer/admin dashboards lives in [`lnk-up-marketplace-ui/`](../lnk-up-marketplace-ui/). **App Phase 2+ is app-only** — vendor More hub, secondary routes, live BFF integration. WordPress visual port is **deferred** (production website UI is considered done).
 
-**Roadmap:** [SYSTEM_OVERVIEW.md §14.2](SYSTEM_OVERVIEW.md#142-app-roadmap-phases-126) · **Queued 22–26:** [PHASES_22_26_ROADMAP.md](PHASES_22_26_ROADMAP.md) · **Next:** [PHASE_22_PRODUCTION_LAUNCH_HARDENING.md](PHASE_22_PRODUCTION_LAUNCH_HARDENING.md) · **E2E journey:** [E2E_MARKETPLACE_JOURNEY.md](E2E_MARKETPLACE_JOURNEY.md) · **Gaps:** [APP_GAP_ANALYSIS.md](APP_GAP_ANALYSIS.md)
+**Roadmap:** [SYSTEM_OVERVIEW.md §14.2](SYSTEM_OVERVIEW.md#142-app-roadmap-phases-126) · **Queued 22–26:** [PHASES_22_26_ROADMAP.md](PHASES_22_26_ROADMAP.md) · **App phases 22–26:** [PHASE_22_PRODUCTION_LAUNCH_HARDENING.md](PHASE_22_PRODUCTION_LAUNCH_HARDENING.md) · **Organizer baseline:** [ORG-00–04](ORG_BASELINE.md) · **E2E journey:** [E2E_MARKETPLACE_JOURNEY.md](E2E_MARKETPLACE_JOURNEY.md) · **Gaps:** [APP_GAP_ANALYSIS.md](APP_GAP_ANALYSIS.md)
 
 ```bash
 cd lnk-up-marketplace-ui
@@ -126,6 +391,7 @@ npx expo start
 - **Native Phase 8 built:** Find discovery polish — filters, sort, near-me (`expo-location`), saved-search CRUD; map view deferred
 - **Native Phase 9 built:** organizer Launch lite — 3-step publish via `POST /organizer/launch/publish`, AsyncStorage draft, Home/Events/More CTAs
 - **Native Phase 10 built:** store release hardening — privacy/support URLs, encryption flag, EAS submit scaffolding, [`STORE_RELEASE.md`](../lnk-up-marketplace-mobile/STORE_RELEASE.md); submit remains operator-run
+- **Tab UI/UX polish (OTA-safe, app 1.0.1):** shared primitives in `components/ui/` (`Button`, `FilterChip`/`FilterChipRow`/`SegmentedControl`, `StatusBadge` + `statusToneColors`, `ListRow`/`ListGroup`, `StatTile`/`StatGrid`, `SectionHeader`, `InlineBanner`, `Skeleton*`, `FormField`, `CollapsibleSection`, `BottomSheet`, `PressableScale`). Both tab bars use `components/tab-bar.tsx` (safe-area bottom inset, `gray500` inactive tint, a11y badge labels). All 10 tabs use skeleton first paint, 44pt targets, pressed feedback, and the same empty/error/refresh-banner pattern. Application statuses are colored via `vendorRequestStatusTone` / `organizerRequestStatusTone`. Organizer Vendors is split into `components/organizer-vendors/`. Event detail collapses pricing/edit into sections with the review CTA up top. Money copy now says "Manage payouts" / "Opening payouts…" (no Stripe wording). JS-only, no new native deps — ship with `npm run update:preview` then `update:production`.
 - **App Store readiness:** Theme seeds `/privacy`, `/terms`, `/contact`; in-app account deletion (Guideline 5.1.1(v)) via `POST /lnkup/v1/account/delete` + More → Delete account; ASC paste pack [`ASC_APP_REVIEW_PACKAGE.md`](ASC_APP_REVIEW_PACKAGE.md); verify `node scripts/app-store-readiness-verify.mjs`
 - **Referral Invites (organizer recruit):** Program `organizer_recruit` — vendors/organizers invite outside organizers; **20% of LNKup platform fees for 12 months** from attribution; REST `/referrals/organizer-recruit*`; WP hubs + Expo/Next hard-push CTAs; docs [`PHASE_REFERRAL_INVITES.md`](PHASE_REFERRAL_INVITES.md); verify `node scripts/referral-invites-verify.mjs`
 - **Brand assets:** Official LNKup logo (`lnk-up-marketplace-mobile/assets/brand/lnkup-logo.png`) → store icons via `npm run icons`

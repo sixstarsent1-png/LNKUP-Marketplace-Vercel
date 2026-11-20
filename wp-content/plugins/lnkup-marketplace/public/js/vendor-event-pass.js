@@ -53,17 +53,48 @@
     });
   }
 
+  function clearRefreshNotice(root) {
+    var notice = root.querySelector('.lnkup-vendor-pass__refresh-error');
+    if (notice) {
+      notice.remove();
+    }
+  }
+
+  function showRefreshNotice(root) {
+    if (root.querySelector('.lnkup-vendor-pass__refresh-error')) {
+      return;
+    }
+    var notice = document.createElement('div');
+    notice.className = 'lnkup-alert lnkup-alert--warning lnkup-vendor-pass__refresh-error';
+    notice.setAttribute('role', 'status');
+    notice.textContent = 'We couldn\u2019t refresh your pass. The details below may be out of date. ';
+    var retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'lnkup-btn lnkup-btn--sm lnkup-btn--outline';
+    retry.textContent = 'Try again';
+    retry.addEventListener('click', function () {
+      clearRefreshNotice(root);
+      refreshPass(root);
+    });
+    notice.appendChild(retry);
+    root.insertBefore(notice, root.firstChild);
+  }
+
   function refreshPass(root) {
     var appId = root.getAttribute('data-app-id');
     if (!appId) {
       return;
     }
     packetsFetch('/pass/' + appId).then(function () {
+      clearRefreshNotice(root);
       if (window.lnkupRenderQrCodes) {
         window.lnkupRenderQrCodes();
       }
       initReadinessRings();
-    }).catch(function () {});
+    }).catch(function (error) {
+      console.error('LNKup event pass: refresh failed', error);
+      showRefreshNotice(root);
+    });
   }
 
   function initVendorPass() {

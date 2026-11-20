@@ -68,6 +68,23 @@ class LNKup_Organizer_Launch_REST {
 
 		register_rest_route(
 			self::NS,
+			'/organizer/events/(?P<id>\d+)/duplicate',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'duplicate_event' ),
+				'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+				'args'                => array(
+					'id' => array(
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/organizer/events/(?P<id>\d+)/opportunities',
 			array(
 				'methods'             => 'POST',
@@ -99,6 +116,49 @@ class LNKup_Organizer_Launch_REST {
 				),
 			)
 		);
+
+		register_rest_route(
+			self::NS,
+			'/organizer/opportunities/(?P<id>\d+)/status',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'update_listing_status' ),
+				'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+				'args'                => array(
+					'id'     => array(
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+					),
+					'status' => array(
+						'type'     => 'string',
+						'required' => true,
+						'enum'     => array( 'open', 'closed' ),
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Open or close a vendor slot (closing keeps existing applications and hides it from discovery).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function update_listing_status( WP_REST_Request $request ) {
+		if ( ! class_exists( 'LNKup_Organizer_Onboarding' ) ) {
+			return new WP_Error( 'lnkup_unavailable', __( 'Slot status is not available.', 'lnkup-marketplace' ), array( 'status' => 503 ) );
+		}
+		$result = LNKup_Organizer_Onboarding::set_opportunity_listing_status(
+			(int) $request['id'],
+			sanitize_key( (string) $request['status'] ),
+			get_current_user_id()
+		);
+		if ( is_wp_error( $result ) ) {
+			return self::error_response( $result );
+		}
+		return rest_ensure_response( $result );
 	}
 
 	/**
@@ -158,6 +218,37 @@ class LNKup_Organizer_Launch_REST {
 		$input = self::map_request_to_onboarding_input( is_array( $body ) ? $body : array() );
 
 		$result = LNKup_Organizer_Onboarding::update_event_from_request(
+			(int) $request['id'],
+			$input,
+			get_current_user_id()
+		);
+
+		if ( is_wp_error( $result ) ) {
+			return self::error_response( $result );
+		}
+
+		return rest_ensure_response( $result );
+	}
+
+	/**
+	 * Duplicate an event and its vendor slots.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function duplicate_event( WP_REST_Request $request ) {
+		if ( ! class_exists( 'LNKup_Organizer_Onboarding' ) ) {
+			return new WP_Error(
+				'lnkup_unavailable',
+				__( 'Event duplicate is not available.', 'lnkup-marketplace' ),
+				array( 'status' => 503 )
+			);
+		}
+
+		$body  = $request->get_json_params();
+		$input = self::map_request_to_onboarding_input( is_array( $body ) ? $body : array() );
+
+		$result = LNKup_Organizer_Onboarding::duplicate_event(
 			(int) $request['id'],
 			$input,
 			get_current_user_id()
@@ -241,9 +332,33 @@ class LNKup_Organizer_Launch_REST {
 			);
 		}
 
+		// Draft: keep the event without vendor slots (listing stays draft, invisible to vendors).
+		if ( is_array( $body ) && 'draft' === sanitize_key( (string) ( $body['save_mode'] ?? '' ) ) ) {
+			return rest_ensure_response(
+				array(
+					'draft'    => true,
+					'event_id' => $event_id,
+					'message'  => __( 'Draft saved. Vendors can\'t see it until you publish vendor spots.', 'lnkup-marketplace' ),
+				)
+			);
+		}
+
 		$opp_result = LNKup_Organizer_Onboarding::create_opportunities_for_event( $event_id, $input, $organizer_id );
 		if ( is_wp_error( $opp_result ) ) {
-			return self::error_response( $opp_result );
+			$data = $opp_result->get_error_data();
+			return rest_ensure_response(
+				array(
+					'partial'                => true,
+					'event_id'               => $event_id,
+					'event_created'          => true,
+					'opportunity_created'    => false,
+					'created_opportunities'  => is_array( $data ) ? ( $data['created_opportunities'] ?? array() ) : array(),
+					'error_code'             => $opp_result->get_error_code(),
+					'message'                => __( 'Your event was saved, but vendor spots were not published yet. Retry to finish publishing — nothing will be duplicated.', 'lnkup-marketplace' ),
+					'detail'                 => $opp_result->get_error_message(),
+					'view_event_url'         => $event_result['view_event_url'] ?? '',
+				)
+			);
 		}
 
 		$opp_id = isset( $opp_result['opportunity_id'] ) ? (int) $opp_result['opportunity_id'] : 0;
@@ -328,7 +443,7 @@ class LNKup_Organizer_Launch_REST {
 		$status = 400;
 		if ( 'forbidden' === $code || 'rest_forbidden' === $code ) {
 			$status = 403;
-		} elseif ( 'missing_name' === $code || 'invalid_spots' === $code || 'invalid_fee' === $code || 'spots_too_low' === $code || 'invalid_opportunity' === $code || 'invalid_event' === $code || 'missing_fee_rows' === $code ) {
+		} elseif ( in_array( $code, array( 'missing_name', 'missing_date', 'invalid_spots', 'invalid_fee', 'invalid_category', 'spots_too_low', 'invalid_opportunity', 'invalid_event', 'missing_fee_rows' ), true ) ) {
 			$status = 400;
 		}
 		return new WP_Error( $code, $error->get_error_message(), array( 'status' => $status ) );

@@ -1,0 +1,48 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "ios": {
+        "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_LNKUP_LIVE_API": "false",
+        "EXPO_PUBLIC_WORDPRESS_API_URL": "https://thelnkup.com"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_LNKUP_LIVE_API": "true",
+        "EXPO_PUBLIC_WORDPRESS_API_URL": "https://thelnkup.com"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_LNKUP_LIVE_API": "true",
+        "EXPO_PUBLIC_WORDPRESS_API_URL": "https://thelnkup.com"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6795865859",
+        "appleTeamId": "R23JQ6A5P7"
+      },
+      "android": {
+        "track": "internal",
+        "releaseStatus": "draft"
+      }
+    }
+  }
+}

@@ -7,12 +7,33 @@
 
 defined( 'ABSPATH' ) || exit;
 
+add_filter(
+	'wp_resource_hints',
+	function ( $urls, $relation_type ) {
+		if ( 'preconnect' !== $relation_type ) {
+			return $urls;
+		}
+		$urls[] = 'https://fonts.googleapis.com';
+		$urls[] = array(
+			'href'        => 'https://fonts.gstatic.com',
+			'crossorigin' => 'anonymous',
+		);
+		return $urls;
+	},
+	10,
+	2
+);
+
 add_action(
 	'wp_enqueue_scripts',
 	function () {
+		$font = 'https://fonts.googleapis.com/css2?family=Geist:wght@400;600&display=swap';
+		if ( lnkup_theme_is_dashboard_page() ) {
+			$font = 'https://fonts.googleapis.com/css2?family=Geist:wght@400;600&family=Geist+Mono:wght@400&display=swap';
+		}
 		wp_enqueue_style(
 			'lnkup-fonts',
-			'https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap',
+			$font,
 			array(),
 			null
 		);

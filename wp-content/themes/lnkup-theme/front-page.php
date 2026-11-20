@@ -18,6 +18,7 @@ get_header();
 		get_template_part( 'template-parts/landing/categories' );
 		get_template_part( 'template-parts/landing/featured' );
 		get_template_part( 'template-parts/landing/trust' );
+		get_template_part( 'template-parts/landing/get-the-app' );
 		get_template_part( 'template-parts/landing/final-cta' );
 		?>
 	</main>

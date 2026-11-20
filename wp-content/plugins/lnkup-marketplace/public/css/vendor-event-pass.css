@@ -84,6 +84,21 @@
   letter-spacing: 0.03em;
 }
 
+.lnkup-vendor-pass .lnkup-btn {
+  min-height: 44px;
+}
+
+.lnkup-vendor-pass__status {
+  margin: 0.5rem 0 0;
+  font-weight: 600;
+}
+
+@media (max-width: 767px) {
+  .lnkup-vendor-pass__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .lnkup-vendor-pass__map-img {
   max-width: 100%;
   height: auto;

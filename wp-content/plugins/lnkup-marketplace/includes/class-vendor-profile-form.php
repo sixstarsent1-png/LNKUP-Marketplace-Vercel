@@ -39,63 +39,50 @@ class LNKup_Vendor_Profile_Form {
 		?>
 		<div class="lnkup-mp lnkup-vendor-dash lnkup-vendor-profile-editor" id="lnkup-vendor-profile-editor" data-testid="lnkup-vendor-profile-editor">
 			<?php
-			$doc_pct = $compliance['total'] ? round( ( $compliance['verified'] / $compliance['total'] ) * 100 ) : 0;
-			echo lnkup_executive_hero(
+			$profile_actions = '';
+			if ( $preview_url ) {
+				$profile_actions = '<button type="button" class="lnkup-btn lnkup-btn--outline" data-copy-url="' . esc_url( $preview_url ) . '">' . esc_html__( 'Copy link', 'lnkup-marketplace' ) . '</button>'
+					. '<a class="lnkup-btn lnkup-btn--outline" href="' . esc_url( $preview_url ) . '">' . esc_html( lnkup_copy( 'vendor_profile_preview_cta' ) ) . '</a>';
+			}
+			echo lnkup_page_header( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 				array(
-					'title'     => lnkup_copy( 'vendor_profile_title' ),
-					'subtitle'  => lnkup_copy( 'vendor_profile_subtitle' ),
-					'kpi'       => (string) (int) ( $strength['score'] ?? 0 ) . '%',
-					'kpi_label' => __( 'Profile strength', 'lnkup-marketplace' ),
-					'ring_pct'  => (int) ( $strength['score'] ?? 0 ),
-					'metrics'   => array(
-						array( 'label' => __( 'Documents', 'lnkup-marketplace' ), 'value' => $doc_pct . '%' ),
-						array( 'label' => __( 'Reviews', 'lnkup-marketplace' ), 'value' => (string) (int) ( $rep['review_count'] ?? 0 ) ),
-					),
-					'primary_cta' => $preview_url ? array(
-						'label' => lnkup_copy( 'vendor_profile_preview_cta' ),
-						'href'  => $preview_url,
-					) : array(),
+					'title'    => __( 'Profile', 'lnkup-marketplace' ),
+					'subtitle' => __( 'What organizers see when they review your application.', 'lnkup-marketplace' ),
+					'actions'  => $profile_actions,
 				)
-			); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			);
 			?>
 
-			<div class="lnkup-profile-layout lnkup-profile-layout--resume">
-				<aside class="lnkup-panel lnkup-profile-preview lnkup-profile-resume-banner lnkup-surface--hero" id="lnkup-profile-live-preview">
-					<?php if ( ! empty( $meta['cover_url'] ) ) : ?>
-						<div class="lnkup-profile-preview__cover" style="background-image:url(<?php echo esc_url( $meta['cover_url'] ); ?>)"></div>
-					<?php endif; ?>
-					<div class="lnkup-profile-preview__body">
-						<?php if ( ! empty( $meta['logo_url'] ) ) : ?>
-							<img src="<?php echo esc_url( $meta['logo_url'] ); ?>" alt="" class="lnkup-profile-preview__logo" id="lnkup-preview-logo" />
-						<?php else : ?>
-							<div class="lnkup-profile-preview__avatar" id="lnkup-preview-initials"><?php echo esc_html( $meta['initials'] ); ?></div>
-						<?php endif; ?>
-						<h2 class="lnkup-profile-preview__name" id="lnkup-preview-name"><?php echo esc_html( $meta['business_name'] ?: __( 'Your business', 'lnkup-marketplace' ) ); ?></h2>
-						<p class="lnkup-profile-preview__location" id="lnkup-preview-location"><?php echo esc_html( $meta['location'] ); ?></p>
-						<p class="lnkup-profile-preview__categories lnkup-muted" id="lnkup-preview-categories"><?php echo esc_html( $meta['categories_label'] ); ?></p>
-						<p class="lnkup-profile-preview__strength" id="lnkup-preview-strength"><?php echo esc_html( sprintf( lnkup_copy( 'vendor_profile_progress' ), (int) ( $strength['score'] ?? 0 ), (string) ( $strength['tier'] ?? '' ) ) ); ?></p>
-						<?php if ( $rep && ! empty( $rep['avg_rating'] ) ) : ?>
-							<?php echo LNKup_Reputation_Render::star_rating( $rep['avg_rating'], $rep['review_count'] ?? 0 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-						<?php endif; ?>
-						<?php if ( $preview_url ) : ?>
-							<a href="<?php echo esc_url( $preview_url ); ?>" class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm"><?php echo esc_html( lnkup_copy( 'vendor_profile_preview_cta' ) ); ?></a>
-						<?php endif; ?>
-						<div class="lnkup-profile-trust-strip lnkup-surface--quiet">
-							<div><span class="lnkup-type-label"><?php esc_html_e( 'Trust', 'lnkup-marketplace' ); ?></span><p class="lnkup-type-display" style="font-size:1.25rem"><?php echo esc_html( $rep ? number_format( (float) ( $rep['avg_rating'] ?? 0 ), 1 ) : '—' ); ?></p></div>
-							<div><span class="lnkup-type-label"><?php esc_html_e( 'Compliance', 'lnkup-marketplace' ); ?></span><p class="lnkup-type-display" style="font-size:1.25rem"><?php echo esc_html( (string) $doc_pct ); ?>%</p></div>
-						</div>
-					</div>
-				</aside>
-
+			<?php echo self::strength_summary( $strength ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<div class="lnkup-profile-layout lnkup-profile-layout--stack">
 				<div class="lnkup-profile-sections">
 					<?php
 					self::section_form( 'business_basics', __( 'Business Basics', 'lnkup-marketplace' ), $strength, $meta, function () use ( $terms, $meta ) {
 						?>
+						<?php
+						$image_alt = $meta['business_name'] ? $meta['business_name'] : __( 'Business', 'lnkup-marketplace' );
+						echo lnkup_image_upload_field( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+							array(
+								'label'        => __( 'Logo', 'lnkup-marketplace' ),
+								'button_label' => __( 'Upload logo', 'lnkup-marketplace' ),
+								'input_name'   => 'logo_attachment_id',
+								'input_id'     => 'logo_attachment_id',
+								'ids'          => array( (int) $meta['logo_id'] ),
+								/* translators: %s: business name */
+								'alt'          => sprintf( __( '%s logo', 'lnkup-marketplace' ), $image_alt ),
+								'testid'       => 'lnkup-vendor-logo-upload',
+							)
+						);
+						?>
+						<div class="lnkup-form-row">
+							<label for="business_name"><?php esc_html_e( 'Business name', 'lnkup-marketplace' ); ?> *</label>
+							<input type="text" id="business_name" name="business_name" required value="<?php echo esc_attr( $meta['business_name'] ); ?>" data-preview="name" />
+						</div>
+						<div class="lnkup-form-row">
+							<label for="city"><?php esc_html_e( 'City', 'lnkup-marketplace' ); ?></label>
+							<input type="text" id="city" name="city" value="<?php echo esc_attr( $meta['city'] ); ?>" data-preview="city" />
+						</div>
 						<div class="lnkup-grid lnkup-grid--2">
-							<div class="lnkup-form-row">
-								<label for="business_name"><?php esc_html_e( 'Business Name', 'lnkup-marketplace' ); ?> *</label>
-								<input type="text" id="business_name" name="business_name" required value="<?php echo esc_attr( $meta['business_name'] ); ?>" data-preview="name" />
-							</div>
 							<div class="lnkup-form-row">
 								<label for="owner_name"><?php esc_html_e( 'Owner / Contact Name', 'lnkup-marketplace' ); ?></label>
 								<input type="text" id="owner_name" name="owner_name" value="<?php echo esc_attr( $meta['owner_name'] ); ?>" />
@@ -124,18 +111,20 @@ class LNKup_Vendor_Profile_Form {
 								<?php endforeach; ?>
 							</div>
 						</div>
-						<div class="lnkup-grid lnkup-grid--2">
-							<div class="lnkup-form-row">
-								<label><?php esc_html_e( 'Logo', 'lnkup-marketplace' ); ?></label>
-								<input type="hidden" name="logo_attachment_id" id="logo_attachment_id" value="<?php echo esc_attr( $meta['logo_id'] ); ?>" />
-								<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" data-media-picker="logo"><?php esc_html_e( 'Choose logo', 'lnkup-marketplace' ); ?></button>
-							</div>
-							<div class="lnkup-form-row">
-								<label><?php esc_html_e( 'Cover Photo', 'lnkup-marketplace' ); ?></label>
-								<input type="hidden" name="cover_image_id" id="cover_image_id" value="<?php echo esc_attr( $meta['cover_id'] ); ?>" />
-								<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" data-media-picker="cover"><?php esc_html_e( 'Choose cover', 'lnkup-marketplace' ); ?></button>
-							</div>
-						</div>
+						<?php
+						echo lnkup_image_upload_field( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+							array(
+								'label'        => __( 'Cover photo', 'lnkup-marketplace' ),
+								'button_label' => __( 'Upload cover', 'lnkup-marketplace' ),
+								'input_name'   => 'cover_image_id',
+								'input_id'     => 'cover_image_id',
+								'ids'          => array( (int) $meta['cover_id'] ),
+								/* translators: %s: business name */
+								'alt'          => sprintf( __( '%s cover photo', 'lnkup-marketplace' ), $image_alt ),
+								'testid'       => 'lnkup-vendor-cover-upload',
+							)
+						);
+						?>
 						<?php
 					} );
 
@@ -154,7 +143,6 @@ class LNKup_Vendor_Profile_Form {
 					self::section_form( 'markets_served', __( 'Markets Served', 'lnkup-marketplace' ), $strength, $meta, function () use ( $meta ) {
 						?>
 						<div class="lnkup-grid lnkup-grid--2">
-							<div class="lnkup-form-row"><label for="city"><?php esc_html_e( 'Home City', 'lnkup-marketplace' ); ?></label><input type="text" id="city" name="city" value="<?php echo esc_attr( $meta['city'] ); ?>" data-preview="city" /></div>
 							<div class="lnkup-form-row"><label for="state"><?php esc_html_e( 'Home State', 'lnkup-marketplace' ); ?></label><input type="text" id="state" name="state" maxlength="2" value="<?php echo esc_attr( $meta['state'] ); ?>" data-preview="state" /></div>
 							<div class="lnkup-form-row"><label for="cities_served"><?php esc_html_e( 'Cities Served', 'lnkup-marketplace' ); ?></label><input type="text" id="cities_served" name="cities_served" value="<?php echo esc_attr( $meta['cities_served'] ); ?>" /></div>
 							<div class="lnkup-form-row"><label for="states_served"><?php esc_html_e( 'States Served', 'lnkup-marketplace' ); ?></label><input type="text" id="states_served" name="states_served" value="<?php echo esc_attr( $meta['states_served'] ); ?>" /></div>
@@ -188,22 +176,20 @@ class LNKup_Vendor_Profile_Form {
 						<?php
 					} );
 
-					self::section_form( 'photos_proof', __( 'Photos & Proof', 'lnkup-marketplace' ), $strength, $meta, function () use ( $meta ) {
-						?>
-						<p class="lnkup-muted"><?php esc_html_e( 'Add at least 3 photos of your booth, products, and past events.', 'lnkup-marketplace' ); ?></p>
-						<input type="hidden" name="gallery_ids[]" value="" />
-						<div id="lnkup-gallery-ids">
-							<?php foreach ( $meta['gallery_ids'] as $gid ) : ?>
-								<input type="hidden" name="gallery_ids[]" value="<?php echo esc_attr( (string) $gid ); ?>" />
-							<?php endforeach; ?>
-						</div>
-						<div class="lnkup-profile-gallery-preview" id="lnkup-gallery-preview">
-							<?php foreach ( $meta['gallery_urls'] as $url ) : ?>
-								<img src="<?php echo esc_url( $url ); ?>" alt="" />
-							<?php endforeach; ?>
-						</div>
-						<button type="button" class="lnkup-btn lnkup-btn--outline" data-media-picker="gallery"><?php esc_html_e( 'Manage gallery', 'lnkup-marketplace' ); ?></button>
-						<?php
+					self::section_form( 'photos_proof', __( 'Photos', 'lnkup-marketplace' ), $strength, $meta, function () use ( $meta ) {
+						$photo_alt = $meta['business_name'] ? $meta['business_name'] : __( 'Vendor', 'lnkup-marketplace' );
+						echo lnkup_image_upload_field( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+							array(
+								'mode'         => 'gallery',
+								'label'        => __( 'Gallery', 'lnkup-marketplace' ),
+								'button_label' => __( 'Add photos', 'lnkup-marketplace' ),
+								'item_name'    => 'gallery_ids[]',
+								'ids'          => (array) $meta['gallery_ids'],
+								/* translators: %s: business name */
+								'alt'          => sprintf( __( '%s photo', 'lnkup-marketplace' ), $photo_alt ),
+								'testid'       => 'lnkup-vendor-gallery-upload',
+							)
+						);
 					} );
 
 					self::section_readonly( 'documents', __( 'Documents', 'lnkup-marketplace' ), $strength, $compliance, $docs_url );
@@ -220,6 +206,9 @@ class LNKup_Vendor_Profile_Form {
 						</div>
 						<?php
 					} );
+					if ( class_exists( 'LNKup_App_Promo' ) ) {
+						echo LNKup_App_Promo::render_preference_toggle(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					}
 					?>
 				</div>
 			</div>
@@ -400,6 +389,49 @@ class LNKup_Vendor_Profile_Form {
 			<a href="<?php echo esc_url( $reviews_url ); ?>" class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm"><?php esc_html_e( 'View reviews', 'lnkup-marketplace' ); ?></a>
 		</article>
 		<?php
+	}
+
+	/**
+	 * Compact profile strength: score, tier, and jump links to incomplete sections.
+	 *
+	 * @param array<string, mixed> $strength Strength payload.
+	 */
+	private static function strength_summary( array $strength ): string {
+		if ( ! isset( $strength['score'] ) ) {
+			return '';
+		}
+		$score      = (int) $strength['score'];
+		$incomplete = array_values(
+			array_filter(
+				(array) ( $strength['sections'] ?? array() ),
+				static function ( $section ) {
+					return empty( $section['complete'] ) && ! empty( $section['key'] );
+				}
+			)
+		);
+		ob_start();
+		?>
+		<section class="lnkup-profile-strength-summary" data-testid="lnkup-profile-strength-summary" aria-label="<?php esc_attr_e( 'Profile strength', 'lnkup-marketplace' ); ?>">
+			<p class="lnkup-profile-strength-summary__score">
+				<strong><?php echo esc_html( sprintf( /* translators: %d: score */ __( '%d%% complete', 'lnkup-marketplace' ), $score ) ); ?></strong>
+				<?php if ( ! empty( $strength['tier'] ) ) : ?>
+					<span class="lnkup-muted"><?php echo esc_html( (string) $strength['tier'] ); ?></span>
+				<?php endif; ?>
+			</p>
+			<div class="lnkup-vendor-strength-card__bar" role="progressbar" aria-label="<?php esc_attr_e( 'Profile strength', 'lnkup-marketplace' ); ?>" aria-valuenow="<?php echo esc_attr( (string) $score ); ?>" aria-valuemin="0" aria-valuemax="100">
+				<span class="lnkup-vendor-strength-card__fill" style="width:<?php echo esc_attr( (string) min( 100, max( 0, $score ) ) ); ?>%"></span>
+			</div>
+			<?php if ( $incomplete ) : ?>
+				<p class="lnkup-profile-strength-summary__todo">
+					<span class="lnkup-muted"><?php esc_html_e( 'Still to finish:', 'lnkup-marketplace' ); ?></span>
+					<?php foreach ( $incomplete as $section ) : ?>
+						<a href="#section-<?php echo esc_attr( str_replace( '_', '-', (string) $section['key'] ) ); ?>"><?php echo esc_html( (string) ( $section['label'] ?? $section['title'] ?? $section['key'] ) ); ?></a>
+					<?php endforeach; ?>
+				</p>
+			<?php endif; ?>
+		</section>
+		<?php
+		return (string) ob_get_clean();
 	}
 
 	/**

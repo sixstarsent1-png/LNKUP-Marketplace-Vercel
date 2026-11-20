@@ -22,6 +22,41 @@
 }
 
 .lnkup-fin-balance-hero { border-radius: var(--lnkup-radius-lg, 1.125rem); border: 1px solid var(--border); background: linear-gradient(135deg, color-mix(in oklch, var(--card) 92%, var(--accent) 8%), var(--card)); padding: 1.25rem; margin-bottom: 1rem; }
+#payments .lnkup-wallet-balance { border: 1px solid #eaeaea; border-radius: 8px; background: #fff; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: none; }
+#payments .lnkup-wallet-balance__label { margin: 0 0 0.25rem; color: #666; font-size: 0.875rem; }
+#payments #lnkup-fin-balance-hero { border: 0; background: transparent; padding: 0; margin: 0; box-shadow: none; }
+#payments .lnkup-fin-balance-hero__primary .lnkup-fin-balance-hero__value,
+#payments .lnkup-fin-balance-hero__value { font-size: clamp(2.25rem, 5vw, 3rem); font-weight: 600; letter-spacing: -0.03em; }
+#payments .lnkup-wallet-payments { margin-bottom: 1.5rem; }
+#payments .lnkup-wallet-payments h2 { margin: 0 0 0.75rem; font-size: 0.875rem; font-weight: 500; }
+#financial .lnkup-fin-balance-hero {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+#lnkup-organizer-financial {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+#lnkup-organizer-financial:not(:has([data-panel="overview"].is-active)) .lnkup-wallet-payments { display: none; }
+#financial .lnkup-wallet-payments h2 {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+#financial .lnkup-money-payout {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid #eaeaea;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
 .lnkup-growth-shell__kpi-strip .lnkup-stat-card,
 .lnkup-growth-shell__kpi-strip .lnkup-growth-kpi { transition: transform 0.18s ease; }
 .lnkup-growth-shell__kpi-strip .lnkup-stat-card:hover,
@@ -82,33 +117,7 @@
 }
 
 .lnkup-fin-section-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.25rem;
-}
-
-.lnkup-fin-section {
-  border: 1px solid var(--lnkup-border, #e5e5e5);
-  background: var(--lnkup-card);
-  padding: 0.4rem 0.85rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  color: var(--muted-foreground, var(--lnkup-muted));
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-}
-
-.lnkup-fin-section:hover {
-  border-color: color-mix(in oklch, var(--lnkup-accent, #a3e635) 50%, #ccc);
-  color: var(--foreground, var(--lnkup-primary));
-}
-
-.lnkup-fin-section.is-active {
-  background: color-mix(in oklch, var(--lnkup-accent, #a3e635) 25%, var(--lnkup-card));
-  border-color: var(--lnkup-accent, #a3e635);
-  color: var(--lnkup-primary);
+  margin-bottom: 0.5rem;
 }
 
 .lnkup-fin-tab[data-section] {
@@ -124,12 +133,15 @@
   top: 0;
   z-index: 5;
   margin: 0 0 1rem;
-  padding: 0.5rem 0 0.75rem;
+  padding-top: 0.25rem;
   background: color-mix(in oklch, var(--background, var(--lnkup-card)) 92%, transparent);
   backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--lnkup-border, #e5e5e5);
   min-width: 0;
   overflow: hidden;
+}
+
+.lnkup-fin-tabs-wrap .lnkup-fin-tabs {
+  margin-bottom: 0;
 }
 
 .lnkup-fin-tabs-wrap::before,
@@ -151,54 +163,6 @@
 .lnkup-fin-tabs-wrap::after {
   right: 0;
   background: linear-gradient(270deg, var(--background, var(--lnkup-card)), transparent);
-}
-
-.lnkup-fin-tabs {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 0.375rem;
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  padding: 0.25rem;
-  border-radius: 0.75rem;
-  background: color-mix(in oklch, var(--muted, var(--lnkup-muted-bg)) 65%, transparent);
-}
-
-.lnkup-fin-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.lnkup-fin-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  flex: 0 0 auto;
-  border: 1px solid transparent;
-  background: transparent;
-  padding: 0.5rem 0.875rem;
-  border-radius: 999px;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  line-height: 1.2;
-  white-space: nowrap;
-  cursor: pointer;
-  color: var(--muted-foreground, var(--lnkup-muted));
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.lnkup-fin-tab:hover {
-  background: color-mix(in oklch, var(--foreground, var(--lnkup-primary)) 6%, var(--lnkup-card));
-  color: var(--foreground, var(--lnkup-primary));
-}
-
-.lnkup-fin-tab.is-active {
-  background: var(--lnkup-accent, #a3e635);
-  color: var(--lnkup-primary);
-  font-weight: 600;
-  border-color: color-mix(in oklch, var(--lnkup-accent, #a3e635) 80%, var(--lnkup-primary));
-  box-shadow: 0 2px 8px color-mix(in oklch, var(--lnkup-accent, #a3e635) 35%, transparent);
 }
 
 .lnkup-fin-tab__icon {
@@ -273,6 +237,17 @@
   font-weight: 700;
   margin: 0;
 }
+.lnkup-fin-kpi__hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--muted-foreground, #52525b);
+}
+.lnkup-fin-money-grid .lnkup-fin-kpi--net,
+.lnkup-fin-money-grid .lnkup-fin-kpi--available { border-color: var(--lnkup-accent, #b3ee55); }
+.lnkup-fin-event-breakdown { margin-top: 1.25rem; }
+.lnkup-fin-event-breakdown h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+.lnkup-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
 .lnkup-fin-status {
   display: inline-block;
@@ -398,6 +373,12 @@
   margin: 0 0 0.5rem;
   font-size: 0.875rem;
   color: #16a34a;
+}
+
+.lnkup-fin-connect-notice {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  color: #b91c1c;
 }
 
 .lnkup-fin-overview-cards {
@@ -652,16 +633,6 @@
     display: none;
   }
 
-  .lnkup-fin-tab {
-    min-height: 44px;
-    padding: 0.55rem 0.9rem;
-  }
-
-  .lnkup-fin-section-nav {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
-  }
 }
 
 @media (min-width: 769px) {
@@ -671,12 +642,32 @@
 }
 
 .lnkup-fin-invoice-cards { display: grid; gap: 0.75rem; margin-bottom: 1rem; }
-.lnkup-fin-invoice-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; padding: var(--lnkup-card-pad, 1.25rem); }
-.lnkup-fin-invoice-card__side { text-align: right; }
-.lnkup-fin-row-hover:hover { background: color-mix(in oklch, var(--muted) 35%, transparent); }
-.lnkup-fin-table-wrap--desktop-only { display: none; }
-@media (min-width: 768px) {
-  .lnkup-fin-invoice-cards { display: none; }
-  .lnkup-fin-table-wrap--desktop-only { display: block; }
-}
+.lnkup-fin-invoice-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border: 1px solid #eaeaea; border-radius: 8px; background: #fff; }
+.lnkup-fin-invoice-card__side { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; text-align: right; }
+.lnkup-fin-invoice-card h3 { margin: 0.15rem 0; font-size: 1rem; }
+.lnkup-money-in { color: #15803d; font-weight: 600; }
+.lnkup-money-out { color: #b91c1c; font-weight: 600; }
+.lnkup-fin-cashout-card { max-width: 28rem; display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem; border: 1px solid #eaeaea; border-radius: 8px; background: #fff; }
+.lnkup-fin-cashout-card__choices { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.lnkup-fin-cashout-card__choices label { display: flex; align-items: center; gap: 0.4rem; margin: 0; padding: 0.65rem 0.75rem; border: 1px solid #eaeaea; border-radius: 8px; font-size: 0.875rem; }
+.lnkup-fin-cashout-card__choices input:checked + span { font-weight: 600; }
+.lnkup-fin-cashout-card input[type="number"] { width: 100%; height: 2.5rem; border: 1px solid #eaeaea; border-radius: 8px; padding: 0 0.75rem; }
+.lnkup-pay-method { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; border: 1px solid #eaeaea; border-radius: 8px; background: #fff; }
+.lnkup-pay-method__brand { margin: 0; font-weight: 600; }
+.lnkup-pay-method__meta { margin: 0.15rem 0 0; color: #666; font-size: 0.875rem; }
+.lnkup-pay-methods { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.75rem 0 1rem; }
 #payments .lnkup-executive-hero + * #lnkup-fin-balance-hero { display: none; }
+
+/* Organizer Money: first paint shows Overview, Wallet, Cash out, and Payouts. After the section nav binds, only the active section's tabs stay visible. */
+#lnkup-organizer-financial:not([data-fin-sections-bound]) .lnkup-fin-tab[data-section="money"] {
+  display: inline-flex;
+}
+#lnkup-organizer-financial[data-fin-sections-bound] .lnkup-fin-tab:not(.is-section-visible) {
+  display: none;
+}
+#lnkup-vendor-financial:not([data-fin-sections-bound]) .lnkup-fin-tab[data-section="pay"] {
+  display: inline-flex;
+}
+#lnkup-vendor-financial[data-fin-sections-bound] .lnkup-fin-tab:not(.is-section-visible) {
+  display: none;
+}

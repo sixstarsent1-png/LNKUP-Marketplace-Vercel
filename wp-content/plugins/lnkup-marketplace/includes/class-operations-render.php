@@ -267,7 +267,7 @@ class LNKup_Operations_Render {
 						'app'    => $v['application_id'],
 						'filter' => 'missing_docs',
 					),
-					$dash_url . '#applications'
+					lnkup_organizer_view_url( 'applications' )
 				);
 				$html .= '<tr>';
 				$html .= '<td><a href="' . esc_url( $apps_url ) . '">' . esc_html( $v['business_name'] ?? '' ) . '</a></td>';

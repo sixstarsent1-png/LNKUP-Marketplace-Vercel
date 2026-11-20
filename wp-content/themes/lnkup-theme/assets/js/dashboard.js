@@ -3,12 +3,21 @@ document.addEventListener('DOMContentLoaded', function () {
   var sidebar = document.getElementById('lnkup-sidebar');
   var overlay = document.getElementById('lnkup-sidebar-overlay');
   var searchToggle = document.getElementById('lnkup-search-toggle');
-  var header = document.querySelector('.lnkup-dashboard__header');
+  var header = document.querySelector('.lnkup-workspace-bar');
   var searchForm = document.getElementById('lnkup-dashboard-search-form');
 
   var bottomMore = document.getElementById('lnkup-bottom-more');
+  var workspaceMore = document.getElementById('lnkup-workspace-more');
+  var sidebarReturn = null;
 
-  function setSidebarOpen(open) {
+  function sidebarFocusables() {
+    if (!sidebar) return [];
+    return Array.prototype.slice.call(sidebar.querySelectorAll('a, button, summary, input, select, textarea')).filter(function (el) {
+      return !el.hasAttribute('disabled') && el.getAttribute('aria-disabled') !== 'true' && el.tabIndex !== -1;
+    });
+  }
+
+  function setSidebarOpen(open, returnTo) {
     if (!sidebar) return;
     sidebar.classList.toggle('is-open', open);
     if (overlay) overlay.hidden = !open;
@@ -19,7 +28,11 @@ document.addEventListener('DOMContentLoaded', function () {
     if (bottomMore) {
       bottomMore.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
-    if (open && sidebar) {
+    if (workspaceMore) {
+      workspaceMore.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    if (open) {
+      sidebarReturn = returnTo || document.activeElement;
       var focusTarget = sidebar.querySelector('a, button, summary');
       if (focusTarget) {
         try {
@@ -28,18 +41,19 @@ document.addEventListener('DOMContentLoaded', function () {
           /* ignore */
         }
       }
-    } else if (!open && toggle) {
+    } else if (sidebarReturn && typeof sidebarReturn.focus === 'function') {
       try {
-        toggle.focus();
+        sidebarReturn.focus();
       } catch (err) {
         /* ignore */
       }
+      sidebarReturn = null;
     }
   }
 
   if (toggle && sidebar) {
     toggle.addEventListener('click', function () {
-      setSidebarOpen(!sidebar.classList.contains('is-open'));
+      setSidebarOpen(!sidebar.classList.contains('is-open'), toggle);
     });
   }
 
@@ -50,8 +64,26 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && profileMenu && !profileMenu.hidden) {
+      setProfileOpen(false);
+      return;
+    }
     if (e.key === 'Escape' && sidebar && sidebar.classList.contains('is-open')) {
       setSidebarOpen(false);
+      return;
+    }
+    if (e.key === 'Tab' && sidebar && sidebar.classList.contains('is-open') && window.matchMedia('(max-width: 1023px)').matches) {
+      var items = sidebarFocusables();
+      if (!items.length) return;
+      var first = items[0];
+      var last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     if (e.key === 'Escape' && header && header.classList.contains('is-search-open')) {
       header.classList.remove('is-search-open');
@@ -82,6 +114,60 @@ document.addEventListener('DOMContentLoaded', function () {
   if (bottomMore) {
     bottomMore.addEventListener('click', function () {
       setSidebarOpen(true);
+    });
+  }
+
+  var profileBtn = document.getElementById('lnkup-workspace-profile');
+  var profileMenu = document.getElementById('lnkup-workspace-profile-menu');
+
+  function setProfileOpen(open) {
+    if (!profileBtn || !profileMenu) {
+      return;
+    }
+    profileBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    profileMenu.hidden = !open;
+  }
+
+  if (profileBtn && profileMenu) {
+    profileBtn.addEventListener('click', function (event) {
+      event.stopPropagation();
+      setProfileOpen(profileMenu.hidden);
+    });
+    document.addEventListener('click', function (event) {
+      if (profileMenu.hidden) {
+        return;
+      }
+      if (profileBtn.contains(event.target) || profileMenu.contains(event.target)) {
+        return;
+      }
+      setProfileOpen(false);
+    });
+    var copyBtn = profileMenu.querySelector('[data-copy-url]');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        var url = copyBtn.getAttribute('data-copy-url') || '';
+        var original = copyBtn.textContent;
+        function markCopied() {
+          copyBtn.textContent = 'Copied';
+          window.setTimeout(function () {
+            copyBtn.textContent = original;
+          }, 1500);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(markCopied).catch(function () {});
+          return;
+        }
+        markCopied();
+      });
+    }
+  }
+
+  if (workspaceMore && sidebar) {
+    workspaceMore.addEventListener('click', function () {
+      setProfileOpen(false);
+      setSidebarOpen(!sidebar.classList.contains('is-open'), workspaceMore);
     });
   }
 
@@ -184,6 +270,9 @@ document.addEventListener('DOMContentLoaded', function () {
    * Highlight nav for hash anchors (organizer).
    */
   function syncHashNav() {
+    if (window.location.pathname.indexOf('organizer-dashboard') > -1 && !(window.location.hash || '').replace(/^#/, '')) {
+      return;
+    }
     var hash = normalizeOrganizerHash();
     if (!hash || hash === 'overview') {
       hash = hash || 'overview';
@@ -200,17 +289,9 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.lnkup-dashboard__bottom-link[data-hash], .lnkup-dashboard__bottom-link[data-also-active]').forEach(function (link) {
       link.classList.toggle('is-active', hashMatchesNavLink(link, hash));
     });
-    document.querySelectorAll('.lnkup-dashboard__nav-link:not([data-hash]):not([data-also-active])').forEach(function (link) {
-      if (link.href && link.href.indexOf('organizer-dashboard') > -1 && link.href.indexOf('#') === -1) {
-        var homeActive = hash === 'overview' || !window.location.hash;
-        link.classList.toggle('is-active', homeActive);
-        if (homeActive) {
-          link.setAttribute('aria-current', 'page');
-        } else {
-          link.removeAttribute('aria-current');
-        }
-      }
-    });
+    if (window.location.pathname.indexOf('organizer-dashboard') > -1) {
+      return;
+    }
     document.querySelectorAll('.lnkup-dashboard__bottom-link[data-hash="overview"]').forEach(function (link) {
       if (hash === 'overview' || !window.location.hash.replace(/^#/, '')) {
         link.classList.add('is-active');
@@ -291,6 +372,41 @@ document.addEventListener('DOMContentLoaded', function () {
         link.classList.add('is-active');
       }
     });
+
+    if (path.indexOf('organizer-dashboard') > -1) {
+      var orgView = view || (params.get('event') ? 'events' : 'home');
+      if (orgView === 'overview' || orgView === 'payments') {
+        orgView = orgView === 'payments' ? 'financial' : 'home';
+      }
+      document.querySelectorAll('.lnkup-dashboard__nav-link[data-view], .lnkup-dashboard__bottom-link[data-view]').forEach(function (link) {
+        var linkView = link.getAttribute('data-view') || '';
+        var active = linkView === orgView;
+        link.classList.toggle('is-active', active);
+        if (link.classList.contains('lnkup-dashboard__nav-link')) {
+          if (active) {
+            link.setAttribute('aria-current', 'page');
+          } else {
+            link.removeAttribute('aria-current');
+          }
+        }
+      });
+      var orgMore = document.querySelector('.lnkup-dashboard__nav-more');
+      if (orgMore && orgMore.querySelector('.lnkup-dashboard__nav-link.is-active')) {
+        orgMore.setAttribute('open', '');
+      }
+      var workspaceEvent = params.get('event') || params.get('event_filter');
+      if (workspaceEvent && /^\d+$/.test(workspaceEvent)) {
+        document.querySelectorAll('.lnkup-dashboard__nav-link[data-view="applications"], .lnkup-dashboard__bottom-link[data-view="applications"]').forEach(function (link) {
+          try {
+            var url = new URL(link.href, window.location.origin);
+            url.searchParams.set('event_filter', workspaceEvent);
+            link.href = url.toString();
+          } catch (e) {
+            // Leave the link unchanged if the URL cannot be parsed.
+          }
+        });
+      }
+    }
   }
 
   function scrollOrganizerHash() {
@@ -317,7 +433,52 @@ document.addEventListener('DOMContentLoaded', function () {
     window.setTimeout(go, 150);
   }
 
-  window.addEventListener('hashchange', syncHashNav);
+  function redirectOrganizerLegacyHash() {
+    if (window.location.pathname.indexOf('organizer-dashboard') === -1) {
+      return false;
+    }
+    var raw = (window.location.hash || '').replace(/^#/, '');
+    if (!raw) {
+      return false;
+    }
+    var section = raw.split('&')[0].split('?')[0];
+    var params = new URLSearchParams(window.location.search);
+    var map = { overview: 'home', payments: 'financial', import: 'create', 'create-event': 'create', 'create-opportunity': 'events' };
+    var pricing = section.match(/^pricing-(\d+)$/);
+    if (pricing) {
+      params.set('view', 'events');
+      params.set('event', pricing[1]);
+      params.set('edit', '1');
+    } else {
+      var view = map[section] || section || 'home';
+      var allowed = ['home', 'events', 'applications', 'financial', 'vendors', 'lists', 'invites', 'referrals', 'operations', 'intelligence', 'create', 'help'];
+      if (allowed.indexOf(view) === -1) {
+        view = 'home';
+      }
+      params.set('view', view);
+    }
+    raw.split('&').slice(1).forEach(function (part) {
+      var bits = part.split('=');
+      if (!bits[0]) {
+        return;
+      }
+      var key = decodeURIComponent(bits[0]);
+      var value = decodeURIComponent(bits.slice(1).join('=') || '');
+      if (key === 'event' && params.get('view') === 'applications') {
+        key = 'event_filter';
+      }
+      params.set(key, value);
+    });
+    window.location.replace(window.location.pathname + '?' + params.toString());
+    return true;
+  }
+
+  window.addEventListener('hashchange', function () {
+    if (redirectOrganizerLegacyHash()) {
+      return;
+    }
+    syncHashNav();
+  });
   window.addEventListener('hashchange', scrollOrganizerHash);
   syncHashNav();
   syncViewNav();
@@ -372,30 +533,58 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   /**
-   * Application table tabs.
+   * Application table tabs. Selection is stored in app_filter so reload and back work.
    */
+  function applyVendorAppFilter(tab, updateUrl) {
+    document.querySelectorAll('.lnkup-dash-tabs__btn[data-app-tab]').forEach(function (b) {
+      var isActive = b.getAttribute('data-app-tab') === tab;
+      b.classList.toggle('is-active', isActive);
+      b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+    document.querySelectorAll('#lnkup-vendor-apps-table tbody tr').forEach(function (row) {
+      var rowTab = row.getAttribute('data-app-tab');
+      var show = tab === 'all' || rowTab === tab;
+      row.hidden = !show;
+    });
+    document.querySelectorAll('#lnkup-vendor-apps-workflow .lnkup-workflow-card').forEach(function (card) {
+      var filterTab = card.getAttribute('data-app-filter') || card.getAttribute('data-app-tab');
+      var show = tab === 'all' || filterTab === tab;
+      card.hidden = !show;
+    });
+    document.querySelectorAll('#lnkup-vendor-apps-workflow .lnkup-workflow-section').forEach(function (section) {
+      var visible = section.querySelectorAll('.lnkup-workflow-card:not([hidden])').length > 0;
+      section.hidden = !visible && tab !== 'all';
+    });
+    var filterEmpty = document.getElementById('lnkup-vendor-apps-filter-empty');
+    if (filterEmpty) {
+      filterEmpty.hidden = tab === 'all' || document.querySelectorAll('#lnkup-vendor-apps-workflow .lnkup-workflow-card:not([hidden])').length > 0;
+    }
+    if (updateUrl && window.history.pushState) {
+      var url = new URL(window.location.href);
+      if (!tab || tab === 'all') {
+        url.searchParams.delete('app_filter');
+      } else {
+        url.searchParams.set('app_filter', tab);
+      }
+      window.history.pushState({ app_filter: tab }, '', url.toString());
+    }
+  }
+
   document.querySelectorAll('[data-app-tab]').forEach(function (btn) {
     if (btn.tagName !== 'BUTTON') return;
     btn.addEventListener('click', function () {
-      var tab = btn.getAttribute('data-app-tab');
-      document.querySelectorAll('.lnkup-dash-tabs__btn').forEach(function (b) {
-        b.classList.toggle('is-active', b === btn);
-      });
-      document.querySelectorAll('#lnkup-vendor-apps-table tbody tr').forEach(function (row) {
-        var rowTab = row.getAttribute('data-app-tab');
-        var show = tab === 'all' || rowTab === tab;
-        row.hidden = !show;
-      });
-      document.querySelectorAll('#lnkup-vendor-apps-workflow .lnkup-workflow-card').forEach(function (card) {
-        var filterTab = card.getAttribute('data-app-filter') || card.getAttribute('data-app-tab');
-        var show = tab === 'all' || filterTab === tab;
-        card.hidden = !show;
-      });
-      document.querySelectorAll('#lnkup-vendor-apps-workflow .lnkup-workflow-section').forEach(function (section) {
-        var visible = section.querySelectorAll('.lnkup-workflow-card:not([hidden])').length > 0;
-        section.hidden = !visible && tab !== 'all';
-      });
+      applyVendorAppFilter(btn.getAttribute('data-app-tab') || 'all', true);
     });
+  });
+
+  var initialAppFilter = new URLSearchParams(window.location.search).get('app_filter') || 'all';
+  if (document.querySelector('[data-app-tab]')) {
+    applyVendorAppFilter(initialAppFilter, false);
+  }
+  window.addEventListener('popstate', function () {
+    if (!document.querySelector('[data-app-tab]')) return;
+    var next = new URLSearchParams(window.location.search).get('app_filter') || 'all';
+    applyVendorAppFilter(next, false);
   });
 
   /**

@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense } from "react"
+import { Suspense, useState } from "react"
 import Image from "next/image"
 import { PageHeader } from "@/components/marketplace/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,11 +8,17 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { LaunchChecklist } from "@/components/marketplace/launch-checklist"
+import { ProfileCompletionChecklist } from "@/components/vendor/profile-completion-checklist"
+import { VendorDocumentsPanel } from "@/components/vendor/vendor-documents-panel"
+import { ShareVendorProfileCard } from "@/components/vendor/share-vendor-profile-card"
+import { useVendorDocuments } from "@/lib/hooks/use-vendor-documents"
 import { VerificationBadge } from "@/components/marketplace/badges"
 import { PanelContent, SkeletonList } from "@/components/marketplace/states"
 import { currentVendor, vendorProfileDetails } from "@/lib/data"
 import { usePanelState } from "@/lib/use-panel-state"
+import { useVendorProfile } from "@/lib/hooks/use-vendor-profile"
+import { DemoModeNotice } from "@/components/marketplace/demo-mode-notice"
+import { isLiveApiEnabled } from "@/lib/api/config"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Star,
@@ -33,14 +39,6 @@ import {
   CheckCircle2,
   Clock,
 } from "lucide-react"
-
-const profileTasks = [
-  { label: "Add business name & category", done: true },
-  { label: "Upload logo / profile photo", done: true },
-  { label: "Verify business documents", done: false },
-  { label: "Add proof of insurance", done: false },
-  { label: "Connect payout method", done: true },
-]
 
 const settingsItems = [
   { icon: Bell, label: "Notifications" },
@@ -80,23 +78,60 @@ function VendorProfileContent() {
   const { state, retry } = usePanelState()
   const vendor = currentVendor
   const details = vendorProfileDetails
+  const { items: docItems, uploading, uploadError, uploadDocument } = useVendorDocuments()
+  const { profile, saving, saveError, saveProfile, retry: retryProfile } = useVendorProfile()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState({
+    businessName: "",
+    description: "",
+    website: "",
+    instagram: "",
+    contactEmail: "",
+    contactPhone: "",
+    city: "",
+    state: "",
+  })
+  const live = isLiveApiEnabled()
+  const displayName = profile?.businessName || vendor.name
+  const displayCity = profile?.city || vendor.city
+  const displayState = profile?.state || vendor.state
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || vendor.initials
 
   return (
-    <PanelContent state={state} retry={retry}>
+    <PanelContent
+      state={state}
+      retry={() => {
+        retry()
+        retryProfile()
+      }}
+    >
       <div className="flex flex-col gap-6 pb-4">
         <PageHeader title="Profile" subtitle="Manage your vendor business and account." />
+
+        <ShareVendorProfileCard />
+
+        {!live ? (
+          <DemoModeNotice testId="vendor-profile-demo-notice">
+            Demo mode — profile identity uses sample data. Enable live API to load and save your WordPress profile.
+          </DemoModeNotice>
+        ) : null}
 
         <Card>
           <CardContent className="flex flex-col gap-4 pt-6">
             <div className="flex items-center gap-4">
               <Avatar className="size-16">
                 <AvatarFallback className="bg-primary font-heading text-lg text-primary-foreground">
-                  {vendor.initials}
+                  {initials}
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-1 flex-col gap-1">
                 <div className="flex items-center gap-2">
-                  <h2 className="font-heading text-lg font-semibold">{vendor.name}</h2>
+                  <h2 className="font-heading text-lg font-semibold">{displayName}</h2>
                   {vendor.verified && <VerificationBadge />}
                 </div>
                 <p className="text-sm text-muted-foreground">{vendor.category}</p>
@@ -107,11 +142,29 @@ function VendorProfileContent() {
                   </span>
                   <span className="flex items-center gap-1">
                     <MapPin className="size-3.5" />
-                    {vendor.city}, {vendor.state}
+                    {displayCity}
+                    {displayState ? `, ${displayState}` : ""}
                   </span>
                 </div>
               </div>
-              <Button variant="outline" size="icon" aria-label="Edit profile">
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Edit profile"
+                onClick={() => {
+                  setDraft({
+                    businessName: profile?.businessName ?? "",
+                    description: profile?.description ?? details.business.description,
+                    website: profile?.website ?? details.business.website,
+                    instagram: profile?.instagram ?? details.business.instagram,
+                    contactEmail: profile?.contactEmail ?? details.business.email,
+                    contactPhone: profile?.contactPhone ?? details.business.phone,
+                    city: profile?.city ?? vendor.city,
+                    state: profile?.state ?? vendor.state,
+                  })
+                  setEditing(true)
+                }}
+              >
                 <Pencil />
               </Button>
             </div>
@@ -148,6 +201,8 @@ function VendorProfileContent() {
           </CardContent>
         </Card>
 
+        <ProfileCompletionChecklist />
+
         <Tabs defaultValue="business">
           <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
             <TabsList variant="line" className="w-max">
@@ -166,12 +221,103 @@ function VendorProfileContent() {
                 <CardTitle className="text-base">Business info</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <p className="text-sm text-muted-foreground">{details.business.description}</p>
+                {editing ? (
+                  <form
+                    className="flex flex-col gap-3"
+                    onSubmit={async (event) => {
+                      event.preventDefault()
+                      const result = await saveProfile(draft)
+                      if (result.success) {
+                        setEditing(false)
+                      }
+                    }}
+                  >
+                    <label className="flex flex-col gap-1 text-sm">
+                      Business name
+                      <input
+                        className="rounded-lg border bg-background px-3 py-2"
+                        value={draft.businessName}
+                        onChange={(e) => setDraft((prev) => ({ ...prev, businessName: e.target.value }))}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-sm">
+                      Description
+                      <textarea
+                        className="min-h-24 rounded-lg border bg-background px-3 py-2"
+                        value={draft.description}
+                        onChange={(e) => setDraft((prev) => ({ ...prev, description: e.target.value }))}
+                      />
+                    </label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="flex flex-col gap-1 text-sm">
+                        Email
+                        <input
+                          className="rounded-lg border bg-background px-3 py-2"
+                          value={draft.contactEmail}
+                          onChange={(e) => setDraft((prev) => ({ ...prev, contactEmail: e.target.value }))}
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-sm">
+                        Phone
+                        <input
+                          className="rounded-lg border bg-background px-3 py-2"
+                          value={draft.contactPhone}
+                          onChange={(e) => setDraft((prev) => ({ ...prev, contactPhone: e.target.value }))}
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-sm">
+                        Website
+                        <input
+                          className="rounded-lg border bg-background px-3 py-2"
+                          value={draft.website}
+                          onChange={(e) => setDraft((prev) => ({ ...prev, website: e.target.value }))}
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-sm">
+                        Instagram
+                        <input
+                          className="rounded-lg border bg-background px-3 py-2"
+                          value={draft.instagram}
+                          onChange={(e) => setDraft((prev) => ({ ...prev, instagram: e.target.value }))}
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-sm">
+                        City
+                        <input
+                          className="rounded-lg border bg-background px-3 py-2"
+                          value={draft.city}
+                          onChange={(e) => setDraft((prev) => ({ ...prev, city: e.target.value }))}
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1 text-sm">
+                        State
+                        <input
+                          className="rounded-lg border bg-background px-3 py-2"
+                          value={draft.state}
+                          onChange={(e) => setDraft((prev) => ({ ...prev, state: e.target.value }))}
+                        />
+                      </label>
+                    </div>
+                    {saveError ? <p className="text-sm text-destructive">{saveError}</p> : null}
+                    <div className="flex gap-2">
+                      <Button type="submit" disabled={saving}>
+                        {saving ? "Saving…" : "Save profile"}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => setEditing(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                <p className="text-sm text-muted-foreground">
+                  {profile?.description || details.business.description}
+                </p>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <InfoRow icon={Mail} label="Email" value={details.business.email} />
-                  <InfoRow icon={Phone} label="Phone" value={details.business.phone} />
-                  <InfoRow icon={Globe} label="Website" value={details.business.website} />
-                  <InfoRow icon={AtSign} label="Instagram" value={details.business.instagram} />
+                  <InfoRow icon={Mail} label="Email" value={profile?.contactEmail || details.business.email} />
+                  <InfoRow icon={Phone} label="Phone" value={profile?.contactPhone || details.business.phone} />
+                  <InfoRow icon={Globe} label="Website" value={profile?.website || details.business.website} />
+                  <InfoRow icon={AtSign} label="Instagram" value={profile?.instagram || details.business.instagram} />
                 </div>
                 <Separator />
                 <div className="flex flex-col gap-2">
@@ -184,6 +330,8 @@ function VendorProfileContent() {
                     ))}
                   </div>
                 </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -211,34 +359,13 @@ function VendorProfileContent() {
           </TabsContent>
 
           <TabsContent value="documents" className="mt-4">
-            <Card className="rounded-2xl">
-              <CardHeader className="flex-row items-center justify-between">
-                <CardTitle className="text-base">Documents</CardTitle>
-                <Button size="sm" variant="outline">
-                  <Upload data-icon="inline-start" />
-                  Upload
-                </Button>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-1">
-                {details.documents.map((doc, i) => (
-                  <div key={doc.id}>
-                    {i > 0 && <Separator className="my-1" />}
-                    <div className="flex items-center gap-3 py-2">
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-                        <FileCheck className="size-4 text-muted-foreground" />
-                      </span>
-                      <div className="flex flex-1 flex-col">
-                        <span className="text-sm font-medium">{doc.name}</span>
-                        <span className="text-xs text-muted-foreground">Uploaded {doc.uploadedAt}</span>
-                      </div>
-                      <Badge variant={doc.status === "verified" ? "secondary" : "outline"}>
-                        {doc.status === "verified" ? "Verified" : "Pending review"}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+            <VendorDocumentsPanel
+              items={docItems}
+              uploading={uploading}
+              uploadError={uploadError}
+              onUpload={uploadDocument}
+              compact
+            />
           </TabsContent>
 
           <TabsContent value="setup" className="mt-4">
@@ -298,7 +425,6 @@ function VendorProfileContent() {
                 <VerificationStatus label="Payout method" status={details.verification.payout} />
               </CardContent>
             </Card>
-            <LaunchChecklist title="Complete your vendor profile" items={profileTasks} />
           </TabsContent>
         </Tabs>
 

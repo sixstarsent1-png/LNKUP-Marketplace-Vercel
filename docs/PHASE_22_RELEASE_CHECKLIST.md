@@ -45,3 +45,21 @@ npm run phase22:report
 - Admin Lite health check freshness / partial reasons
 - Mobile OTA adoption / crash-free sessions
 - Support tickets tagged “demo numbers shown as live”
+
+## Gate run — 2026-09-29
+
+**Decision: No-Go.** Do not promote Vercel or publish a production Expo update from this run.
+
+| Check | Result |
+|-------|--------|
+| `npm run lint` | Fail. `eslint` is not installed for the root `eslint .` script. |
+| `npm run phase20:verify` | Fail. `app/login.tsx` line 97: `"/signup"` is not in the Expo typed-route union (`TS2322`). |
+| Playwright `lnkup-app` specs in the command block above | Not run. Nothing was listening on `http://localhost:3000`, and the dev server did not start in this environment. |
+| `npm run phase22:report` | Wrote `artifacts/phase15-20-gate-report.md`. That report is **no_go** because 28 older Playwright failure contexts are still in `test-results`. It does not record this run’s lint or typecheck. |
+
+Operator checklists stay unsigned:
+
+- [PHASE_22_OPERATOR_VERCEL.md](PHASE_22_OPERATOR_VERCEL.md): env names and production smokes were not confirmed. `vercel env ls` did not return a listing. Secret values were not read.
+- [PHASE_22_OPERATOR_EXPO.md](PHASE_22_OPERATOR_EXPO.md): production channel, live-API flag, WordPress URL, OTA publish, and device smokes were not confirmed. `phase20:verify` is not green.
+
+Mitigation before a retry: install or wire root ESLint, fix the `/signup` typed route, start `lnk-up-marketplace-ui` on port 3000, rerun the Playwright list, then sign the operator lists from the Vercel and Expo dashboards.

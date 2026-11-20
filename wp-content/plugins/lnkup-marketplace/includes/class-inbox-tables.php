@@ -9,7 +9,8 @@ defined( 'ABSPATH' ) || exit;
 
 class LNKup_Inbox_Tables {
 
-	const INDEX = 'lnkup_inbox_index';
+	const INDEX    = 'lnkup_inbox_index';
+	const DELIVERY = 'lnkup_notification_deliveries';
 
 	/**
 	 * Full table name.
@@ -29,6 +30,15 @@ class LNKup_Inbox_Tables {
 	 */
 	public static function index_table() {
 		return self::table_name( self::INDEX );
+	}
+
+	/**
+	 * Transactional delivery claims. No message bodies or tokens.
+	 *
+	 * @return string
+	 */
+	public static function delivery_table() {
+		return self::table_name( self::DELIVERY );
 	}
 
 	/**
@@ -62,6 +72,29 @@ class LNKup_Inbox_Tables {
 				UNIQUE KEY user_client (user_id, client_id),
 				KEY user_unread (user_id, read_at, created_at),
 				KEY user_role_created (user_id, role, created_at)
+			) {$charset};"
+		);
+
+		$delivery = self::delivery_table();
+		dbDelta(
+			"CREATE TABLE {$delivery} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				dedupe_key varchar(191) NOT NULL DEFAULT '',
+				event_key varchar(64) NOT NULL DEFAULT '',
+				ref_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				recipient_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				channel varchar(16) NOT NULL DEFAULT '',
+				window_key varchar(64) NOT NULL DEFAULT '',
+				status varchar(16) NOT NULL DEFAULT 'queued',
+				attempts smallint unsigned NOT NULL DEFAULT 0,
+				last_error varchar(255) NOT NULL DEFAULT '',
+				next_attempt_at datetime DEFAULT NULL,
+				created_at datetime NOT NULL,
+				updated_at datetime NOT NULL,
+				PRIMARY KEY (id),
+				UNIQUE KEY dedupe_key (dedupe_key),
+				KEY status_next (status, next_attempt_at),
+				KEY recipient_event (recipient_id, event_key)
 			) {$charset};"
 		);
 	}

@@ -82,6 +82,9 @@ class LNKup_Push_REST {
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
+		if ( class_exists( 'LNKup_App_Promo' ) ) {
+			LNKup_App_Promo::mark_app_user( $user_id );
+		}
 
 		return rest_ensure_response(
 			array(

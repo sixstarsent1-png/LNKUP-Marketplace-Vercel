@@ -69,6 +69,26 @@ function lnkup_theme_registration_url() {
 }
 
 /**
+ * Sign-up URL that keeps the current search, event, or directory.
+ */
+function lnkup_theme_signup_url() {
+	if ( function_exists( 'lnkup_registration_url_with_return' ) ) {
+		return lnkup_registration_url_with_return();
+	}
+	return lnkup_theme_registration_url();
+}
+
+/**
+ * Login URL that keeps the current search, event, or directory.
+ */
+function lnkup_theme_login_url() {
+	if ( function_exists( 'lnkup_login_url_with_return' ) ) {
+		return lnkup_login_url_with_return();
+	}
+	return wp_login_url();
+}
+
+/**
  * Whether marketplace browse/apply is open.
  */
 function lnkup_theme_marketplace_open() {
@@ -104,6 +124,173 @@ function lnkup_theme_app_released() {
 function lnkup_theme_app_release_label() {
 	return function_exists( 'lnkup_get_app_release_label' ) ? lnkup_get_app_release_label() : '';
 }
+
+/**
+ * Live iPhone App Store listing. The plugin setting wins when the plugin is active.
+ *
+ * @param string $context Campaign label for App Store Connect, e.g. homepage-hero.
+ */
+function lnkup_theme_app_store_url( $context = '' ) {
+	if ( class_exists( 'LNKup_App_Promo' ) ) {
+		return LNKup_App_Promo::store_url( $context );
+	}
+	return 'https://apps.apple.com/us/app/lnkup/id6795865859';
+}
+
+/**
+ * Apple ID for the Smart App Banner.
+ */
+function lnkup_theme_app_store_id() {
+	if ( class_exists( 'LNKup_App_Promo' ) && '' !== LNKup_App_Promo::app_id() ) {
+		return LNKup_App_Promo::app_id();
+	}
+	return '6795865859';
+}
+
+/**
+ * Download prompts show once the marketplace is open, unless the admin turned them off,
+ * the user already uses the app, or the user hid app suggestions.
+ */
+function lnkup_theme_show_app_download() {
+	if ( ! lnkup_theme_marketplace_open() ) {
+		return false;
+	}
+	return class_exists( 'LNKup_App_Promo' ) ? LNKup_App_Promo::should_show() : true;
+}
+
+/**
+ * Payment URLs stay on the website without the download sheet.
+ */
+function lnkup_theme_request_is_checkout() {
+	if ( is_page( 'checkout' ) ) {
+		return true;
+	}
+	$uri = isset( $_SERVER['REQUEST_URI'] ) ? strtolower( (string) wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+	return false !== strpos( $uri, 'checkout' );
+}
+
+/**
+ * Public events browse still uses the marketing header.
+ * Logged-in vendors on the same slug get the dashboard shell.
+ */
+function lnkup_theme_public_browse_page() {
+	if ( ! is_page() ) {
+		return false;
+	}
+	$slug = (string) get_post_field( 'post_name', get_queried_object_id() );
+	if ( ! in_array( $slug, array( 'opportunities', 'find-events' ), true ) ) {
+		return false;
+	}
+	if ( isset( $_GET['event'] ) || isset( $_GET['apply'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return true;
+	}
+	if ( ! is_user_logged_in() ) {
+		return true;
+	}
+	$user = wp_get_current_user();
+	return ! array_intersect( array( 'lnkup_vendor', 'lnkup_admin', 'administrator' ), (array) $user->roles );
+}
+
+/**
+ * First-visit iPhone sheet. Skips sign-up, login, dashboards, and checkout.
+ */
+function lnkup_theme_show_app_download_sheet() {
+	if ( ! lnkup_theme_show_app_download() ) {
+		return false;
+	}
+	if ( lnkup_theme_request_is_checkout() ) {
+		return false;
+	}
+	if ( is_page_template( 'page-templates/sign-up.php' ) || is_page( array( 'sign-up', 'login', 'log-in' ) ) ) {
+		return false;
+	}
+	if ( is_singular( 'lnkup_event' ) ) {
+		return false;
+	}
+	if ( isset( $_GET['event'] ) && absint( wp_unslash( $_GET['event'] ) ) > 0 ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return false;
+	}
+	if ( lnkup_theme_is_dashboard_page() && ! lnkup_theme_public_browse_page() ) {
+		return false;
+	}
+	return true;
+}
+
+/**
+ * Official App Store badge.
+ *
+ * @param string $tone    white on dark surfaces, black on light surfaces.
+ * @param string $context Campaign label for App Store Connect.
+ */
+function lnkup_theme_app_store_badge( $tone = 'white', $context = 'badge' ) {
+	if ( ! lnkup_theme_show_app_download() ) {
+		return;
+	}
+	$tone = ( 'black' === $tone ) ? 'black' : 'white';
+	$src  = 'https://tools.applemediaservices.com/api/badges/download-on-the-app-store/' . $tone . '/en-us?size=250x83';
+	?>
+	<a class="lnkup-app-download lnkup-app-badge" href="<?php echo esc_url( lnkup_theme_app_store_url( $context ) ); ?>" data-testid="lnkup-app-store-badge">
+		<img src="<?php echo esc_url( $src ); ?>" alt="<?php esc_attr_e( 'Download on the App Store', 'lnkup-theme' ); ?>" width="120" height="40">
+	</a>
+	<?php
+}
+
+/**
+ * Header Get the app control. Desktop opens a QR panel. Phones go straight to the store.
+ *
+ * @param string $context header or menu.
+ */
+function lnkup_theme_app_download_control( $context = 'header' ) {
+	if ( ! lnkup_theme_show_app_download() ) {
+		return;
+	}
+	$url = lnkup_theme_app_store_url( 'header' );
+	if ( 'menu' === $context ) {
+		?>
+		<a class="lnkup-btn lnkup-btn--accent lnkup-app-download" href="<?php echo esc_url( $url ); ?>"><?php esc_html_e( 'Get the app', 'lnkup-theme' ); ?></a>
+		<?php
+		return;
+	}
+	$qr = lnkup_theme_asset( 'images/app-store-qr.svg' );
+	?>
+	<div class="lnkup-app-download lnkup-app-qr">
+		<a class="lnkup-btn lnkup-btn--accent lnkup-app-download__link" href="<?php echo esc_url( $url ); ?>" data-testid="lnkup-header-get-app" aria-expanded="false" aria-controls="lnkup-app-qr-panel"><?php esc_html_e( 'Get the app', 'lnkup-theme' ); ?></a>
+		<div class="lnkup-app-qr__panel" id="lnkup-app-qr-panel" hidden>
+			<img src="<?php echo esc_url( $qr ); ?>" width="168" height="168" alt="<?php esc_attr_e( 'QR code to download LNKup on the App Store', 'lnkup-theme' ); ?>">
+			<a href="<?php echo esc_url( $url ); ?>"><?php esc_html_e( 'Download on the App Store', 'lnkup-theme' ); ?></a>
+		</div>
+	</div>
+	<?php
+}
+
+/**
+ * Smart App Banner on every front-end page. Safari shows it on iPhone and iPad only.
+ */
+function lnkup_theme_app_store_smart_banner() {
+	if ( is_admin() ) {
+		return;
+	}
+	if ( class_exists( 'LNKup_App_Promo' ) ) {
+		$content = LNKup_App_Promo::smart_banner_content();
+		if ( '' !== $content ) {
+			echo '<meta name="apple-itunes-app" content="' . esc_attr( $content ) . '">' . "\n";
+		}
+		return;
+	}
+	echo '<meta name="apple-itunes-app" content="app-id=' . esc_attr( lnkup_theme_app_store_id() ) . '">' . "\n";
+}
+add_action( 'wp_head', 'lnkup_theme_app_store_smart_banner', 1 );
+
+/**
+ * iPhone download sheet markup, when this page should offer it.
+ */
+function lnkup_theme_render_app_download_sheet() {
+	if ( ! lnkup_theme_show_app_download_sheet() ) {
+		return;
+	}
+	get_template_part( 'template-parts/landing/app-download-sheet' );
+}
+add_action( 'wp_footer', 'lnkup_theme_render_app_download_sheet' );
 
 /**
  * Launch community goals from plugin settings (synced from Landing Page).

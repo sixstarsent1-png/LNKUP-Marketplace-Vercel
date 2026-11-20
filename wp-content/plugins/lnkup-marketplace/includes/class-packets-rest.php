@@ -56,9 +56,16 @@ class LNKup_Packets_REST {
 			self::NS,
 			'/packets/event/(?P<event_id>\d+)/pass-details',
 			array(
-				'methods'             => 'POST',
-				'callback'            => array( __CLASS__, 'save_event_pass_details' ),
-				'permission_callback' => array( __CLASS__, 'event_organizer_permission' ),
+				array(
+					'methods'             => 'GET',
+					'callback'            => array( __CLASS__, 'get_event_pass_details' ),
+					'permission_callback' => array( __CLASS__, 'event_organizer_permission' ),
+				),
+				array(
+					'methods'             => 'POST',
+					'callback'            => array( __CLASS__, 'save_event_pass_details' ),
+					'permission_callback' => array( __CLASS__, 'event_organizer_permission' ),
+				),
 			)
 		);
 
@@ -130,8 +137,22 @@ class LNKup_Packets_REST {
 			array(
 				'packet_id'    => $result,
 				'completeness' => LNKup_Packets::get_pass_completeness( $event_id ),
+				'lifecycle'    => LNKup_Packets::lifecycle( $event_id ),
 			)
 		);
+	}
+
+	/**
+	 * GET event pass details for the in-app packet form.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function get_event_pass_details( WP_REST_Request $request ) {
+		$result = LNKup_Packets::get_event_pass_details( absint( $request['event_id'] ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return rest_ensure_response( $result );
 	}
 
 	/**
@@ -153,6 +174,7 @@ class LNKup_Packets_REST {
 			array(
 				'event_id'     => $event_id,
 				'completeness' => LNKup_Packets::get_pass_completeness( $event_id ),
+				'lifecycle'    => LNKup_Packets::lifecycle( $event_id ),
 			)
 		);
 	}
@@ -164,7 +186,7 @@ class LNKup_Packets_REST {
 	 */
 	public static function get_completeness( WP_REST_Request $request ) {
 		$event_id = absint( $request['event_id'] );
-		return rest_ensure_response( LNKup_Packets::get_pass_completeness( $event_id ) );
+		return rest_ensure_response( array_merge( LNKup_Packets::get_pass_completeness( $event_id ), array( 'lifecycle' => LNKup_Packets::lifecycle( $event_id ) ) ) );
 	}
 
 	/**
@@ -194,7 +216,7 @@ class LNKup_Packets_REST {
 			return true;
 		}
 		$event_id = (int) get_post_meta( $packet_id, '_lnkup_event_id', true );
-		return LNKup_Capabilities::organizer_owns_event( $event_id, $user_id );
+		return LNKup_Capabilities::staff_can( $event_id, 'edit_packets', $user_id );
 	}
 
 	/**
@@ -211,6 +233,6 @@ class LNKup_Packets_REST {
 		if ( LNKup_Capabilities::user_has_manage_all( $user_id ) ) {
 			return true;
 		}
-		return LNKup_Capabilities::organizer_owns_event( $event_id, $user_id );
+		return LNKup_Capabilities::staff_can( $event_id, 'edit_packets', $user_id );
 	}
 }

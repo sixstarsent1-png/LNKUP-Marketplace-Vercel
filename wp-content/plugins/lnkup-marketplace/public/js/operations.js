@@ -4,6 +4,7 @@
   var packetsBase = ajax.packetsRestUrl || '';
   var nonce = ajax.restNonce || '';
   var pollTimer = null;
+  var refreshSeq = 0;
 
   /**
    * Safe JSON fetch — rejects HTML error pages and non-OK responses.
@@ -21,7 +22,17 @@
         if (!r.ok || ct.indexOf('application/json') === -1) {
           return r.text().then(function (body) {
             console.error('Operations API error', r.status, body.slice(0, 300));
-            throw new Error('api_error');
+            var err = new Error('api_error');
+            if (ct.indexOf('application/json') !== -1) {
+              try {
+                var parsed = JSON.parse(body);
+                if (parsed && parsed.message) {
+                  err = new Error(parsed.message);
+                  err.code = parsed.code || '';
+                }
+              } catch (e) {}
+            }
+            throw err;
           });
         }
         return r.json();
@@ -148,13 +159,22 @@
       }
       wrap.querySelectorAll('.lnkup-ops-packet-ack').forEach(function (btn) {
         btn.addEventListener('click', function () {
+          if (btn.disabled) {
+            return;
+          }
           var section = btn.getAttribute('data-section');
+          var label = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = 'Saving…';
           opsFetch('/applications/' + appId + '/packet/engage', {
             method: 'POST',
             body: { section: section, action: 'acknowledged' }
           }).then(function () {
-            btn.disabled = true;
             btn.textContent = 'Accepted';
+          }).catch(function () {
+            btn.disabled = false;
+            btn.textContent = label;
+            btn.setAttribute('title', 'Could not save — try again.');
           });
         });
       });
@@ -486,7 +506,7 @@
     var initialKey = '';
     try {
       var params = new URLSearchParams(window.location.search);
-      initialKey = params.get('ops_tab') || '';
+      initialKey = params.get('ops_tab') || params.get('tab') || '';
     } catch (e) {}
     var initialTab = root.querySelector('.lnkup-ops-tab[data-ops-tab="' + initialKey + '"]') || root.querySelector('.lnkup-ops-tab.is-active');
     if (initialTab) {
@@ -626,7 +646,15 @@
     if (!eventId) {
       return;
     }
+    var seq = ++refreshSeq;
     opsFetch('/events/' + eventId).then(function (snap) {
+      if (seq !== refreshSeq) {
+        return;
+      }
+      var stale = document.getElementById('lnkup-ops-refresh-error');
+      if (stale) {
+        stale.remove();
+      }
       if (!snap || snap.code) {
         return;
       }
@@ -671,9 +699,27 @@
         }
       }
     }).catch(function () {
+      if (seq !== refreshSeq) {
+        return;
+      }
       var kpis = document.getElementById('lnkup-ops-kpis');
-      if (kpis && window.LNKupUI) {
-        LNKupUI.panelError(kpis, { onRetry: function () { refreshCommandCenter(root); } });
+      var note = document.getElementById('lnkup-ops-refresh-error');
+      if (!note && kpis && kpis.parentNode) {
+        note = document.createElement('p');
+        note.id = 'lnkup-ops-refresh-error';
+        note.className = 'lnkup-alert lnkup-alert--error';
+        kpis.parentNode.insertBefore(note, kpis);
+      }
+      if (note) {
+        note.textContent = 'Could not refresh. ';
+        var retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'lnkup-btn lnkup-btn--sm';
+        retry.textContent = 'Retry';
+        retry.addEventListener('click', function () {
+          refreshCommandCenter(root);
+        });
+        note.appendChild(retry);
       }
     });
     opsFetch('/events/' + eventId + '/compliance').then(function (res) {
@@ -735,15 +781,24 @@
           return;
         }
         var status = col.getAttribute('data-ops-col');
-        var card = root.querySelector('.lnkup-ops-kanban__card[data-app-id="' + dragAppId + '"]');
-        if (card) {
-          col.querySelector('.lnkup-ops-kanban__cards').appendChild(card);
-        }
-        opsFetch('/events/' + eventId + '/vendors/' + dragAppId + '/status', {
+        var appId = dragAppId;
+        var card = root.querySelector('.lnkup-ops-kanban__card[data-app-id="' + appId + '"]');
+        var origin = card ? card.parentNode : null;
+        opsFetch('/events/' + eventId + '/vendors/' + appId + '/status', {
           method: 'PUT',
           body: { status: status }
-        }).then(function () {
+        }).then(function (res) {
+          if (!res || res.success === false || res.code) {
+            return;
+          }
+          if (card) {
+            col.querySelector('.lnkup-ops-kanban__cards').appendChild(card);
+          }
           refreshCommandCenter(root);
+        }).catch(function () {
+          if (card && origin) {
+            origin.appendChild(card);
+          }
         });
       });
     });
@@ -779,8 +834,8 @@
       }
       return;
     }
-    var html = '<table class="lnkup-ops-table"><thead><tr>';
-    columns.forEach(function (c) { html += '<th>' + escapeHtml(c.label) + '</th>'; });
+    var html = '<div class="lnkup-ops-table-wrap"><table class="lnkup-ops-table"><thead><tr>';
+    columns.forEach(function (c) { html += '<th scope="col">' + escapeHtml(c.label) + '</th>'; });
     html += '</tr></thead><tbody>';
     rows.forEach(function (row) {
       html += '<tr>';
@@ -794,7 +849,7 @@
       });
       html += '</tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
 
     html += '<div class="lnkup-ops-card-list">';
     rows.forEach(function (row) {
@@ -1090,7 +1145,52 @@
   }
 
   /**
-   * QR scan page — manual entry and optional camera placeholder.
+   * Scan page vendor lookup: filter by name/booth and check in without a pass code.
+   * The server applies the same payment and document gates as a QR scan.
+   */
+  function initCheckinLookup() {
+    var root = document.getElementById('lnkup-qr-scan');
+    var lookup = root ? root.querySelector('[data-checkin-lookup]') : null;
+    if (!lookup) {
+      return;
+    }
+    var eventId = root.getAttribute('data-event-id');
+    var search = lookup.querySelector('[data-checkin-search]');
+    if (search) {
+      search.addEventListener('input', function () {
+        var q = search.value.trim().toLowerCase();
+        lookup.querySelectorAll('[data-checkin-row]').forEach(function (row) {
+          row.hidden = q !== '' && (row.getAttribute('data-search') || '').indexOf(q) === -1;
+        });
+      });
+    }
+    lookup.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-checkin-app]');
+      if (!btn || btn.disabled) {
+        return;
+      }
+      var row = btn.closest('[data-checkin-row]');
+      var label = row ? row.querySelector('[data-checkin-label]') : null;
+      btn.disabled = true;
+      opsFetch('/events/' + encodeURIComponent(eventId) + '/vendors/' + encodeURIComponent(btn.getAttribute('data-checkin-app')) + '/status', {
+        method: 'PUT',
+        body: { status: 'checked_in' }
+      }).then(function (res) {
+        if (label) {
+          label.textContent = (res && res.message) ? res.message : 'Checked in';
+        }
+        btn.remove();
+      }).catch(function (err) {
+        btn.disabled = false;
+        if (label) {
+          label.textContent = (err && err.message && err.message !== 'api_error') ? err.message : 'Could not check in. Try again.';
+        }
+      });
+    });
+  }
+
+  /**
+   * QR scan page: native camera scanning where the browser supports BarcodeDetector, manual entry everywhere.
    */
   function initQrScan() {
     var root = document.getElementById('lnkup-qr-scan');
@@ -1099,35 +1199,218 @@
     }
     var eventId = root.getAttribute('data-event-id');
     var result = document.getElementById('lnkup-qr-result');
-    var reader = document.getElementById('lnkup-qr-reader');
-    if (reader) {
-      reader.innerHTML = '<p class="lnkup-muted">Point camera at vendor QR pass or use manual entry below.</p>';
-    }
     var form = document.getElementById('lnkup-qr-manual');
     if (form) {
       form.addEventListener('submit', function (e) {
         e.preventDefault();
-        var token = form.querySelector('[name="token"]').value.trim();
-        submitScan(eventId, token, result);
+        var field = form.querySelector('[name="token"]');
+        var token = field.value.trim();
+        if (!token) {
+          return;
+        }
+        submitScan(eventId, token, result).then(function () {
+          field.value = '';
+          field.focus();
+        });
       });
     }
+    initQrCamera(root, eventId, result);
+    loadRecentCheckins(eventId);
+  }
+
+  function initQrCamera(root, eventId, resultEl) {
+    var status = root.querySelector('[data-qr-camera-status]');
+    var video = root.querySelector('[data-qr-video]');
+    var startBtn = root.querySelector('[data-qr-camera-start]');
+    var stopBtn = root.querySelector('[data-qr-camera-stop]');
+    var supported = 'BarcodeDetector' in window && navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function';
+    if (!supported || !video || !startBtn) {
+      if (status) {
+        status.textContent = 'Camera scanning is not available in this browser. Type the pass code below instead.';
+      }
+      var manual = document.getElementById('lnkup-qr-token');
+      if (manual) {
+        manual.focus();
+      }
+      return;
+    }
+    var detector = null;
+    var stream = null;
+    var running = false;
+    var busy = false;
+    var lastToken = '';
+    var lastAt = 0;
+
+    function stop() {
+      running = false;
+      if (stream) {
+        stream.getTracks().forEach(function (track) { track.stop(); });
+        stream = null;
+      }
+      video.hidden = true;
+      startBtn.hidden = false;
+      if (stopBtn) {
+        stopBtn.hidden = true;
+      }
+    }
+
+    function tick() {
+      if (!running) {
+        return;
+      }
+      if (busy || video.readyState < 2) {
+        window.requestAnimationFrame(tick);
+        return;
+      }
+      busy = true;
+      detector.detect(video).then(function (codes) {
+        var token = codes && codes.length ? String(codes[0].rawValue || '').trim() : '';
+        var now = Date.now();
+        if (!token || (token === lastToken && now - lastAt < 4000)) {
+          busy = false;
+          return;
+        }
+        lastToken = token;
+        lastAt = now;
+        return submitScan(eventId, token, resultEl).then(function () {
+          busy = false;
+        });
+      }).catch(function () {
+        busy = false;
+      }).then(function () {
+        window.requestAnimationFrame(tick);
+      });
+    }
+
+    window.BarcodeDetector.getSupportedFormats().then(function (formats) {
+      if (formats.indexOf('qr_code') === -1) {
+        throw new Error('no_qr');
+      }
+      detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+      if (status) {
+        status.textContent = 'Point the camera at a vendor pass. Each pass is checked in once.';
+      }
+      startBtn.hidden = false;
+    }).catch(function () {
+      if (status) {
+        status.textContent = 'Camera scanning is not available in this browser. Type the pass code below instead.';
+      }
+    });
+
+    startBtn.addEventListener('click', function () {
+      startBtn.disabled = true;
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }).then(function (media) {
+        stream = media;
+        video.srcObject = media;
+        video.hidden = false;
+        startBtn.hidden = true;
+        if (stopBtn) {
+          stopBtn.hidden = false;
+        }
+        return video.play();
+      }).then(function () {
+        running = true;
+        window.requestAnimationFrame(tick);
+      }).catch(function () {
+        stop();
+        if (status) {
+          status.textContent = 'We could not open the camera. Allow camera access, or type the pass code below.';
+        }
+      }).then(function () {
+        startBtn.disabled = false;
+      });
+    });
+    if (stopBtn) {
+      stopBtn.addEventListener('click', stop);
+    }
+    window.addEventListener('pagehide', stop);
+  }
+
+  function renderScanCard(resultEl, state, title, detail) {
+    resultEl.className = 'lnkup-ops-scan-result is-' + state;
+    resultEl.innerHTML = '';
+    var icon = document.createElement('span');
+    icon.className = 'lnkup-ops-scan-result__icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = state === 'success' ? '\u2713' : (state === 'warning' ? '!' : '\u2715');
+    var body = document.createElement('div');
+    var strong = document.createElement('strong');
+    strong.textContent = title;
+    body.appendChild(strong);
+    if (detail) {
+      var p = document.createElement('p');
+      p.textContent = detail;
+      body.appendChild(p);
+    }
+    resultEl.appendChild(icon);
+    resultEl.appendChild(body);
   }
 
   function submitScan(eventId, token, resultEl) {
-    opsFetch('/qr/scan', {
+    return opsFetch('/qr/scan', {
       method: 'POST',
       body: { token: token, event_id: parseInt(eventId, 10) }
     }).then(function (res) {
-      if (res.code) {
-        resultEl.className = 'lnkup-ops-scan-result is-error';
-        resultEl.textContent = res.message || 'Scan failed.';
+      if (!resultEl) {
         return;
       }
-      resultEl.className = 'lnkup-ops-scan-result is-success';
-      resultEl.textContent = 'Vendor checked in successfully.';
+      if (!res || res.code || res.success === false) {
+        renderScanCard(resultEl, 'error', (res && res.message) || 'Scan failed.', '');
+        return;
+      }
+      var detail = [res.business_name || '', res.booth ? 'Booth ' + res.booth : ''].filter(Boolean).join(' · ');
+      renderScanCard(resultEl, 'success', res.message || 'Vendor checked in.', detail);
+      loadRecentCheckins(eventId);
+    }).catch(function (err) {
+      if (!resultEl) {
+        return;
+      }
+      var message = (err && err.message && err.message !== 'api_error') ? err.message : 'Scan request failed. Try again.';
+      var state = err && err.code === 'already_checked_in' ? 'warning' : 'error';
+      renderScanCard(resultEl, state, message, '');
+    });
+  }
+
+  function loadRecentCheckins(eventId) {
+    var wrap = document.getElementById('lnkup-qr-recent');
+    if (!wrap) {
+      return;
+    }
+    opsFetch('/events/' + encodeURIComponent(eventId) + '/feed').then(function (res) {
+      var items = ((res && res.items) || []).filter(function (item) {
+        return item.activity_type === 'checked_in';
+      }).slice(0, 10);
+      if (!items.length) {
+        wrap.innerHTML = '<p class="lnkup-muted">No check-ins yet. Scanned vendors show up here.</p>';
+        return;
+      }
+      var list = document.createElement('ul');
+      list.className = 'lnkup-qr-recent-list';
+      items.forEach(function (item) {
+        var li = document.createElement('li');
+        var name = document.createElement('strong');
+        name.textContent = (item.payload && item.payload.business_name) || item.label || 'Vendor';
+        var when = document.createElement('span');
+        when.className = 'lnkup-muted';
+        when.textContent = item.created_at || '';
+        li.appendChild(name);
+        li.appendChild(when);
+        list.appendChild(li);
+      });
+      wrap.innerHTML = '';
+      wrap.appendChild(list);
     }).catch(function () {
-      resultEl.className = 'lnkup-ops-scan-result is-error';
-      resultEl.textContent = 'Scan request failed.';
+      wrap.innerHTML = '';
+      var p = document.createElement('p');
+      p.className = 'lnkup-muted';
+      p.textContent = 'Recent check-ins could not load. ';
+      var retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'lnkup-btn lnkup-btn--sm lnkup-btn--ghost';
+      retry.textContent = 'Retry';
+      retry.addEventListener('click', function () { loadRecentCheckins(eventId); });
+      p.appendChild(retry);
+      wrap.appendChild(p);
     });
   }
 
@@ -1159,7 +1442,15 @@
         });
         overlay.querySelector('#lnkup-ops-support-form').addEventListener('submit', function (e) {
           e.preventDefault();
-          var fd = new FormData(e.target);
+          var form = e.target;
+          var submit = form.querySelector('[type="submit"]');
+          if (submit && submit.disabled) {
+            return;
+          }
+          if (submit) {
+            submit.disabled = true;
+          }
+          var fd = new FormData(form);
           opsFetch('/support', {
             method: 'POST',
             body: {
@@ -1170,6 +1461,18 @@
           }).then(function () {
             overlay.remove();
             loadVendorSupportHistory();
+          }).catch(function (err) {
+            if (submit) {
+              submit.disabled = false;
+            }
+            var box = form.querySelector('.lnkup-ops-form-error');
+            if (!box) {
+              box = document.createElement('p');
+              box.className = 'lnkup-ops-form-error lnkup-alert lnkup-alert--error';
+              box.setAttribute('role', 'alert');
+              form.appendChild(box);
+            }
+            box.textContent = (err && err.message) || 'We could not send your request. Try again.';
           });
         });
       });
@@ -1396,8 +1699,19 @@
     initReadinessFilters(root);
     refreshCommandCenter(root);
     pollTimer = setInterval(function () {
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
       refreshCommandCenter(root);
     }, 15000);
+    if (!root.dataset.visibilityBound) {
+      root.dataset.visibilityBound = '1';
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') {
+          refreshCommandCenter(root);
+        }
+      });
+    }
   }
 
   /**
@@ -1438,6 +1752,7 @@
     initCommandCenter();
     initVendorOps();
     initQrScan();
+    initCheckinLookup();
     initSupportForm();
   });
 })();

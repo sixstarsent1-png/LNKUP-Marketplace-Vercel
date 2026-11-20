@@ -7,29 +7,14 @@
 
 $signup_url        = lnkup_theme_registration_url();
 $opportunities_url = lnkup_theme_opportunities_url();
-$profile_url       = lnkup_page_url( 'vendor-profile' );
 $hero_image        = lnkup_landing_image_url( 'hero_image_id', 'images/marketing/hero-home.jpg' );
 $launch_label      = lnkup_theme_launch_label();
 $marketplace_open  = lnkup_theme_marketplace_open();
-$launch_goals      = lnkup_theme_launch_goals();
 $eyebrow           = (string) lnkup_landing_get( 'hero_eyebrow', '' );
-$title             = (string) lnkup_landing_get( 'hero_title', '' );
-$lead              = (string) lnkup_landing_get( 'hero_lead', '' );
-$primary_label     = (string) lnkup_landing_get( 'hero_primary_cta', __( 'Create your account', 'lnkup-theme' ) );
-$secondary_label   = (string) lnkup_landing_get( 'hero_secondary_cta', __( 'Explore How It Works', 'lnkup-theme' ) );
-$event_label       = (string) lnkup_landing_get( 'hero_event_label', __( 'New opportunity', 'lnkup-theme' ) );
-$event_title       = (string) lnkup_landing_get( 'hero_event_title', '' );
-$event_meta        = (string) lnkup_landing_get( 'hero_event_meta', '' );
-$event_badge       = (string) lnkup_landing_get( 'hero_event_badge', '' );
-$goal_override     = trim( (string) lnkup_landing_get( 'hero_goal_override', '' ) );
-
-$primary_url   = is_user_logged_in() ? $profile_url : $signup_url;
-$secondary_url = lnkup_theme_nav_href( 'how-it-works' );
-if ( $marketplace_open ) {
-	$primary_url = $opportunities_url;
-}
-
-$vendor_goal_label = '' !== $goal_override ? $goal_override : number_format_i18n( $launch_goals['vendors'] ) . '+';
+$list_event_url    = is_user_logged_in()
+	? ( function_exists( 'lnkup_organizer_view_url' ) ? lnkup_organizer_view_url( 'create' ) : lnkup_page_url( 'organizer-dashboard' ) . '?view=create' )
+	: add_query_arg( 'role', 'organizer', $signup_url );
+$city_counts       = function_exists( 'lnkup_homepage_city_counts' ) ? lnkup_homepage_city_counts() : array();
 ?>
 <section class="lnkup-hero lnkup-hero--cinematic lnkup-reveal">
 	<?php
@@ -55,65 +40,64 @@ $vendor_goal_label = '' !== $goal_override ? $goal_override : number_format_i18n
 					<?php echo esc_html( $eyebrow ); ?>
 				</span>
 			<?php endif; ?>
-			<h1 class="lnkup-heading lnkup-heading--hero"><?php echo esc_html( $title ); ?></h1>
-			<p class="lnkup-hero__lead"><?php echo esc_html( $lead ); ?></p>
+			<h1 class="lnkup-heading lnkup-heading--hero"><?php esc_html_e( 'Find your next vendor opportunity.', 'lnkup-theme' ); ?></h1>
+			<p class="lnkup-hero__lead"><?php esc_html_e( 'Discover events, apply for free, get approved, and secure your vendor spot. All in one place.', 'lnkup-theme' ); ?></p>
+			<form class="lnkup-hero-search" method="get" action="<?php echo esc_url( $opportunities_url ); ?>" data-testid="lnkup-hero-search">
+				<label>
+					<?php esc_html_e( 'City', 'lnkup-theme' ); ?>
+					<input type="search" name="city" placeholder="<?php esc_attr_e( 'Houston', 'lnkup-theme' ); ?>" />
+				</label>
+				<label>
+					<?php esc_html_e( 'Vendor category', 'lnkup-theme' ); ?>
+					<select name="categories">
+						<option value=""><?php esc_html_e( 'Any category', 'lnkup-theme' ); ?></option>
+						<?php
+						$hero_categories = get_terms(
+							array(
+								'taxonomy'   => 'lnkup_vendor_category',
+								'hide_empty' => true,
+								'number'     => 40,
+								'orderby'    => 'name',
+							)
+						);
+						if ( ! is_wp_error( $hero_categories ) ) {
+							foreach ( $hero_categories as $hero_category ) {
+								$hero_label = function_exists( 'lnkup_display_category_badge' ) ? lnkup_display_category_badge( $hero_category->name ) : $hero_category->name;
+								echo '<option value="' . esc_attr( $hero_category->name ) . '">' . esc_html( $hero_label ) . '</option>';
+							}
+						}
+						?>
+					</select>
+				</label>
+				<label>
+					<?php esc_html_e( 'Date', 'lnkup-theme' ); ?>
+					<input type="date" name="date_from" />
+				</label>
+				<button type="submit" class="lnkup-btn lnkup-btn--primary"><?php esc_html_e( 'Search Events', 'lnkup-theme' ); ?></button>
+			</form>
+			<div class="lnkup-hero-paths">
+				<a class="lnkup-btn lnkup-btn--primary" href="<?php echo esc_url( $opportunities_url ); ?>"><?php esc_html_e( 'Find Vendor Opportunities', 'lnkup-theme' ); ?></a>
+				<a class="lnkup-btn lnkup-btn--outline" href="<?php echo esc_url( $list_event_url ); ?>"><?php esc_html_e( 'List Your Event', 'lnkup-theme' ); ?></a>
+			</div>
+			<?php if ( lnkup_theme_show_app_download() ) : ?>
+				<p class="lnkup-hero__app-link">
+					<a class="lnkup-app-download" href="<?php echo esc_url( lnkup_theme_app_store_url( 'homepage-hero' ) ); ?>" data-testid="lnkup-hero-app-link"><?php esc_html_e( 'Also on iPhone: get the LNKup app', 'lnkup-theme' ); ?></a>
+				</p>
+			<?php endif; ?>
 			<?php if ( ! $marketplace_open && $launch_label ) : ?>
 				<p class="lnkup-hero__sublead"><?php echo esc_html( sprintf( __( 'Create your free account today. Browse and apply when we launch %s.', 'lnkup-theme' ), $launch_label ) ); ?></p>
 			<?php endif; ?>
-			<div class="lnkup-hero__cta">
-				<a href="<?php echo esc_url( $primary_url ); ?>" class="lnkup-btn lnkup-btn--primary lnkup-btn--lg" data-testid="lnkup-hero-cta-primary">
-					<?php echo esc_html( $primary_label ); ?>
-					<svg class="lnkup-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-				</a>
-				<a href="<?php echo esc_url( $secondary_url ); ?>" class="lnkup-btn lnkup-btn--outline lnkup-btn--lg"><?php echo esc_html( $secondary_label ); ?></a>
-			</div>
-			<ul class="lnkup-hero__trust-list">
-				<li>
-					<?php echo lnkup_theme_landing_icon( 'check' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-					<?php esc_html_e( 'Free to join & apply', 'lnkup-theme' ); ?>
-				</li>
-				<li>
-					<?php echo lnkup_theme_landing_icon( 'star' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-					<?php esc_html_e( 'Pay only when accepted', 'lnkup-theme' ); ?>
-				</li>
-				<li>
-					<?php echo lnkup_theme_landing_icon( 'pin' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-					<?php
-					echo $marketplace_open
-						? esc_html__( 'Events across our markets', 'lnkup-theme' )
-						: esc_html__( 'Building our launch cities', 'lnkup-theme' );
-					?>
-				</li>
-			</ul>
-		</div>
-		<div class="lnkup-hero__stamps" data-testid="lnkup-hero-visual">
-			<div class="lnkup-hero__card lnkup-hero__card--opportunity">
-				<div class="lnkup-hero__card-row">
-					<div class="lnkup-hero__card-body">
-						<p class="lnkup-hero__card-label"><?php echo esc_html( $event_label ); ?></p>
-						<p class="lnkup-hero__card-title"><?php echo esc_html( $event_title ); ?></p>
-					</div>
-				</div>
-				<div class="lnkup-hero__card-meta">
-					<span><?php echo esc_html( $event_meta ); ?></span>
-					<?php if ( $event_badge ) : ?>
-						<span class="lnkup-badge lnkup-badge--accent"><?php echo esc_html( $event_badge ); ?></span>
-					<?php endif; ?>
-				</div>
-			</div>
-			<?php if ( ! $marketplace_open ) : ?>
-				<a href="<?php echo esc_url( $signup_url ); ?>" class="lnkup-hero__card lnkup-hero__card--goal" data-testid="lnkup-hero-goal-card">
-					<p class="lnkup-hero__card-label"><?php esc_html_e( 'Community goal', 'lnkup-theme' ); ?></p>
-					<p class="lnkup-hero__stat"><?php echo esc_html( $vendor_goal_label ); ?></p>
-					<p class="lnkup-hero__card-title"><?php esc_html_e( 'vendors on LNKup', 'lnkup-theme' ); ?></p>
-					<span class="lnkup-hero__card-link"><?php esc_html_e( 'Be an early vendor', 'lnkup-theme' ); ?> &rarr;</span>
-				</a>
-			<?php else : ?>
-				<?php $live_stats = lnkup_theme_public_stats(); ?>
-				<div class="lnkup-hero__card lnkup-hero__card--stat" data-testid="lnkup-hero-stat-card">
-					<p class="lnkup-hero__stat"><?php echo esc_html( number_format_i18n( $live_stats['vendors'] ) . ( $live_stats['vendors'] > 0 ? '+' : '' ) ); ?></p>
-					<p class="lnkup-hero__card-label"><?php esc_html_e( 'active vendors', 'lnkup-theme' ); ?></p>
-				</div>
+			<?php if ( $city_counts ) : ?>
+				<ul class="lnkup-hero-cities">
+					<?php foreach ( $city_counts as $city_row ) : ?>
+						<li>
+							<a href="<?php echo esc_url( $city_row['url'] ); ?>">
+								<?php echo esc_html( $city_row['label'] ); ?>
+								<span><?php echo esc_html( sprintf( _n( '%d open', '%d open', (int) $city_row['count'], 'lnkup-theme' ), (int) $city_row['count'] ) ); ?></span>
+							</a>
+						</li>
+					<?php endforeach; ?>
+				</ul>
 			<?php endif; ?>
 		</div>
 	</div>

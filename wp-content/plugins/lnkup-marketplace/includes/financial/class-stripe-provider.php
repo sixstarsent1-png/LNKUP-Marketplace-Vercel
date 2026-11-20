@@ -126,7 +126,9 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 
 		$amount_cents = $prepared['amount_cents'];
 		$meta         = $this->payment_metadata( $payment_id );
-		$idempotency  = 'lnkup_pi_' . $payment_id . '_' . $amount_cents;
+		// Settlement mode changes the request params, and Stripe rejects a reused key with different params.
+		$mode         = ! empty( $prepared['connect_params'] ) ? 'destination' : 'platform_treasury';
+		$idempotency  = 'lnkup_pi_' . $payment_id . '_' . $amount_cents . '_' . $mode;
 
 		$params = array(
 			'amount'                    => $amount_cents,
@@ -190,10 +192,20 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 		if ( ! $intent || 0 === strpos( (string) $intent, 'sim_' ) ) {
 			return ( new LNKup_Manual_Provider() )->refund( $payment_id, $amount );
 		}
-		$result = $this->client->create_refund( array(
+		$amount_cents   = (int) round( $amount * 100 );
+		$prior_refunded = (int) round( (float) get_post_meta( $payment_id, '_lnkup_refund_amount', true ) * 100 );
+		$params         = array(
 			'payment_intent' => $intent,
-			'amount'         => (int) round( $amount * 100 ),
-		) );
+			'amount'         => $amount_cents,
+		);
+		// Destination charge: pull the organizer's share back from Connect; LNKup keeps its application fee.
+		if ( 'destination' === get_post_meta( $payment_id, '_lnkup_settlement_mode', true ) ) {
+			$params['reverse_transfer'] = true;
+		}
+		$result = $this->client->create_refund(
+			$params,
+			'lnkup_refund_' . absint( $payment_id ) . '_' . $amount_cents . '_' . $prior_refunded
+		);
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
@@ -356,6 +368,9 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 	 * @param array $args       Checkout args (return_to, app_base_url, application_id).
 	 */
 	private function success_url( $payment_id, $args = array() ) {
+		if ( ! empty( $args['return_to'] ) && 'native' === $args['return_to'] ) {
+			return lnkup_native_payment_return_url( $payment_id, 'success', $args );
+		}
 		if ( ! empty( $args['return_to'] ) && 'app' === $args['return_to'] ) {
 			$app_url = lnkup_vendor_app_payment_return_url( $payment_id, 'success', $args );
 			if ( $app_url ) {
@@ -373,6 +388,9 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 	 * @param array $args       Checkout args.
 	 */
 	private function cancel_url( $payment_id, $args = array() ) {
+		if ( ! empty( $args['return_to'] ) && 'native' === $args['return_to'] ) {
+			return lnkup_native_payment_return_url( $payment_id, 'cancelled', $args );
+		}
 		if ( ! empty( $args['return_to'] ) && 'app' === $args['return_to'] ) {
 			$app_url = lnkup_vendor_app_payment_return_url( $payment_id, 'cancelled', $args );
 			if ( $app_url ) {

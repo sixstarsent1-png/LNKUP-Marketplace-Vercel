@@ -40,13 +40,13 @@ test.describe('City Connector program', () => {
 
   test('connector dashboard requires login', async ({ page }) => {
     await page.goto('/connector-dashboard/');
-    await expect(page).toHaveURL(/wp-login|login/);
+    await expect(page).toHaveURL(/wp-login|log-?in/);
   });
 
   test('connector dashboard mobile viewport has no horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/connector-dashboard/');
-    if (!page.url().includes('login')) {
+    if (!page.url().match(/log-?in/)) {
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
       expect(overflow).toBe(false);
     }
@@ -95,7 +95,7 @@ test.describe('City Connector program', () => {
     test(`connector dashboard does not overflow at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
       await page.goto('/connector-dashboard/?view=start');
-      if (page.url().includes('login')) {
+      if (page.url().match(/log-?in/)) {
         return;
       }
       await expect(page.getByTestId('lnkup-connector-dashboard')).toBeVisible();
@@ -106,7 +106,7 @@ test.describe('City Connector program', () => {
     test(`connector studio view does not overflow at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
       await page.goto('/connector-dashboard/?view=studio');
-      if (page.url().includes('login')) {
+      if (page.url().match(/log-?in/)) {
         return;
       }
       await expect(page.getByTestId('lnkup-connector-studio')).toBeVisible();
@@ -117,7 +117,7 @@ test.describe('City Connector program', () => {
     test(`connector ranks view does not overflow at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
       await page.goto('/connector-dashboard/?view=ranks');
-      if (page.url().includes('login')) {
+      if (page.url().match(/log-?in/)) {
         return;
       }
       await expect(page.getByTestId('lnkup-connector-roadmap')).toBeVisible();
@@ -128,7 +128,7 @@ test.describe('City Connector program', () => {
 
   test('logged-in connector Get Started shows a launch plan without generic Continue', async ({ page }) => {
     await page.goto('/connector-dashboard/?view=start');
-    if (page.url().includes('login')) {
+    if (page.url().match(/log-?in/)) {
       test.skip(true, 'Requires a logged-in connector session');
       return;
     }
@@ -142,7 +142,7 @@ test.describe('City Connector program', () => {
 
   test('logged-in connector can open a studio template and submit a URL', async ({ page }) => {
     await page.goto('/connector-dashboard/?view=studio');
-    if (page.url().includes('login')) {
+    if (page.url().match(/log-?in/)) {
       test.skip(true, 'Requires a logged-in connector session');
       return;
     }
@@ -160,7 +160,7 @@ test.describe('City Connector program', () => {
 
   test('logged-in connector rank card and roadmap stay on-page', async ({ page }) => {
     await page.goto('/connector-dashboard/?view=home');
-    if (page.url().includes('login')) {
+    if (page.url().match(/log-?in/)) {
       test.skip(true, 'Requires a logged-in connector session');
       return;
     }
@@ -173,7 +173,7 @@ test.describe('City Connector program', () => {
 
   test('logged-in connector Share sheet opens without reload', async ({ page }) => {
     await page.goto('/connector-dashboard/?view=home');
-    if (page.url().includes('login')) {
+    if (page.url().match(/log-?in/)) {
       test.skip(true, 'Requires a logged-in connector session');
       return;
     }
@@ -186,7 +186,7 @@ test.describe('City Connector program', () => {
 
   test('logged-in connector referrals filters and earnings calculator stay on-page', async ({ page }) => {
     await page.goto('/connector-dashboard/?view=referrals');
-    if (page.url().includes('login')) {
+    if (page.url().match(/log-?in/)) {
       test.skip(true, 'Requires a logged-in connector session');
       return;
     }

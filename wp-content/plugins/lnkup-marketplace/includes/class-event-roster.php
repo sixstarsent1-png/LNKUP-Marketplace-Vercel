@@ -17,7 +17,7 @@ class LNKup_Event_Roster {
 	 */
 	public static function get( $event_id, $organizer_id = 0 ) {
 		$organizer_id = $organizer_id ?: get_current_user_id();
-		if ( ! LNKup_Capabilities::user_owns_post( $event_id, $organizer_id, '_lnkup_organizer_user_id' ) && ! LNKup_Capabilities::user_has_manage_all( $organizer_id ) ) {
+		if ( ! LNKup_Checkins::actor_can_operate( $event_id, $organizer_id ) ) {
 			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ) );
 		}
 		$apps = get_posts(
@@ -39,22 +39,26 @@ class LNKup_Event_Roster {
 			'checked_in'        => array(),
 			'no_shows'          => array(),
 		);
+		$rows       = array();
+		$membership = array();
 		foreach ( $apps as $app ) {
 			$row = self::format_roster_row( $app, $organizer_id );
+			$rows[ $app->ID ] = $row;
 			$status = get_post_meta( $app->ID, '_lnkup_application_status', true );
+			$keys   = array();
 			if ( get_post_meta( $app->ID, '_lnkup_checked_in_at', true ) ) {
-				$groups['checked_in'][] = $row;
+				$keys[] = 'checked_in';
 			} elseif ( get_post_meta( $app->ID, '_lnkup_no_show_at', true ) ) {
-				$groups['no_shows'][] = $row;
+				$keys[] = 'no_shows';
 			} elseif ( 'rejected' === $status ) {
-				$groups['rejected'][] = $row;
+				$keys[] = 'rejected';
 			} elseif ( 'waitlisted' === $status ) {
-				$groups['waitlisted'][] = $row;
+				$keys[] = 'waitlisted';
 			} elseif ( in_array( $status, array( 'payment_required', 'approved', 'paid', 'completed' ), true ) ) {
 				$paid = class_exists( 'LNKup_Vendor_Readiness' )
 					&& LNKup_Vendor_Readiness::application_payment_satisfied( (int) $app->ID, $status );
 				if ( ! $paid ) {
-					$groups['missing_payment'][] = $row;
+					$keys[] = 'missing_payment';
 				} else {
 					$readiness = LNKup_Vendor_Readiness::refresh( $app->ID );
 					$doc_code  = '';
@@ -63,21 +67,27 @@ class LNKup_Event_Roster {
 						$doc_code = (string) ( $doc_ctx['code'] ?? '' );
 					}
 					if ( in_array( $doc_code, array( 'pending', 'missing' ), true ) || LNKup_Vendor_Readiness::STATUS_NEEDS_DOCUMENTS === $readiness ) {
-						$groups['missing_documents'][] = $row;
+						$keys[] = 'missing_documents';
 					} else {
-						$groups['paid'][] = $row;
+						$keys[] = 'paid';
 					}
-					$groups['approved'][] = $row;
+					$keys[] = 'approved';
 				}
 			} elseif ( in_array( $status, array( 'submitted', 'under_review' ), true ) ) {
-				$groups['applied'][] = $row;
+				$keys[] = 'applied';
+			}
+			$membership[ $app->ID ] = $keys;
+			foreach ( $keys as $key ) {
+				$groups[ $key ][] = $row;
 			}
 		}
+		$unique = array_values( $rows );
 		return array(
 			'event_id' => $event_id,
 			'groups'   => $groups,
-			'total'    => count( $apps ),
-			'html'     => self::render_html( $groups ),
+			'rows'     => $unique,
+			'total'    => count( $unique ),
+			'html'     => self::render_html( $unique, $membership ),
 		);
 	}
 
@@ -88,7 +98,12 @@ class LNKup_Event_Roster {
 		$vendor_id = (int) get_post_meta( $app->ID, '_lnkup_vendor_user_id', true );
 		$profile_id = (int) get_post_meta( $app->ID, '_lnkup_vendor_profile_id', true );
 		$profile = $profile_id ? LNKup_Vendor_CRM_Profile::get( $profile_id, $organizer_id ) : null;
-		$readiness = LNKup_Vendor_Readiness::refresh( $app->ID );
+		$readiness  = LNKup_Vendor_Readiness::refresh( $app->ID );
+		$evaluation = class_exists( 'LNKup_Checkins' )
+			? LNKup_Checkins::evaluate( $app->ID, '', $organizer_id, (int) get_post_meta( $app->ID, '_lnkup_event_id', true ) )
+			: array();
+		$ops = (string) ( $evaluation['ops_status'] ?? '' );
+		$reason = (string) ( $evaluation['reason'] ?? '' );
 		return array(
 			'application_id' => $app->ID,
 			'vendor_user_id' => $vendor_id,
@@ -99,66 +114,125 @@ class LNKup_Event_Roster {
 			'readiness_label'=> LNKup_Vendor_Readiness::label( $readiness ),
 			'booth'          => get_post_meta( $app->ID, '_lnkup_booth_placeholder', true ),
 			'checked_in'     => (bool) get_post_meta( $app->ID, '_lnkup_checked_in_at', true ),
+			'checked_in_at'  => (string) ( $evaluation['checked_in_at'] ?? '' ),
 			'no_show'        => (bool) get_post_meta( $app->ID, '_lnkup_no_show_at', true ),
 			'vendor_score'   => $profile ? $profile['vendor_score'] : 0,
 			'flags'          => $profile ? $profile['flags'] : array(),
+			'ops_status'     => $ops,
+			'ops_label'      => class_exists( 'LNKup_Checkins' ) ? LNKup_Checkins::roster_label( $ops, $reason ) : '',
+			'reason'         => $reason,
+			'message'        => (string) ( $evaluation['message'] ?? '' ),
+			'actions'        => array_values( (array) ( $evaluation['actions'] ?? array() ) ),
 		);
 	}
 
 	/**
-	 * Render roster HTML.
+	 * Render one card per application. Group chips stay as filters.
+	 *
+	 * @param array<int, array<string, mixed>> $rows       Unique rows.
+	 * @param array<int, string[]>             $membership Group keys per application.
 	 */
-	private static function render_html( $groups ) {
-		$html = '<div class="lnkup-roster">';
-		foreach ( $groups as $key => $rows ) {
-			if ( ! $rows ) {
+	private static function render_html( $rows, $membership = array() ) {
+		$counts = array();
+		foreach ( $membership as $keys ) {
+			foreach ( (array) $keys as $key ) {
+				$counts[ $key ] = ( $counts[ $key ] ?? 0 ) + 1;
+			}
+		}
+		$html  = '<p class="lnkup-roster-count" id="lnkup-roster-count" data-total="' . esc_attr( (string) count( $rows ) ) . '">';
+		$html .= esc_html( sprintf( _n( '%d vendor', '%d vendors', count( $rows ), 'lnkup-marketplace' ), count( $rows ) ) );
+		$html .= '</p>';
+		if ( $counts ) {
+			$labels = array(
+				'applied'           => __( 'New requests', 'lnkup-marketplace' ),
+				'approved'          => __( 'Accepted', 'lnkup-marketplace' ),
+				'paid'              => __( 'Paid and ready', 'lnkup-marketplace' ),
+				'missing_payment'   => __( 'Not paid yet', 'lnkup-marketplace' ),
+				'missing_documents' => __( 'Documents needed', 'lnkup-marketplace' ),
+				'waitlisted'        => __( 'Waitlisted', 'lnkup-marketplace' ),
+				'rejected'          => __( 'Declined', 'lnkup-marketplace' ),
+				'checked_in'        => __( 'Checked in', 'lnkup-marketplace' ),
+				'no_shows'          => __( 'No-shows', 'lnkup-marketplace' ),
+			);
+			$html .= '<div class="lnkup-roster-filters" id="lnkup-roster-filters" role="group" aria-label="' . esc_attr__( 'Filter roster', 'lnkup-marketplace' ) . '">';
+			$html .= '<button type="button" class="lnkup-badge is-active" data-roster-filter="" aria-pressed="true">' . esc_html__( 'All', 'lnkup-marketplace' ) . '</button>';
+			foreach ( $counts as $key => $count ) {
+				$label = $labels[ $key ] ?? ucwords( str_replace( '_', ' ', $key ) );
+				$html .= '<button type="button" class="lnkup-badge" data-roster-filter="' . esc_attr( $key ) . '" aria-pressed="false">' . esc_html( $label . ' (' . $count . ')' ) . '</button>';
+			}
+			$html .= '</div>';
+		}
+		$html .= '<div class="lnkup-roster"><div class="lnkup-roster__list">';
+		foreach ( $rows as $row ) {
+			$groups = implode( ' ', (array) ( $membership[ $row['application_id'] ] ?? array() ) );
+			$url    = $row['profile_id'] ? add_query_arg( 'vendor', $row['profile_id'], lnkup_page_url_helper( 'organizer-dashboard' ) ) : '#';
+			$html  .= '<article class="lnkup-roster-card" data-app-id="' . esc_attr( (string) $row['application_id'] ) . '" data-groups="' . esc_attr( $groups ) . '">';
+			$html  .= '<label class="lnkup-roster-card__pick"><input type="checkbox" class="lnkup-roster-pick" value="' . esc_attr( (string) $row['application_id'] ) . '" /><span class="screen-reader-text">' . esc_html( sprintf( /* translators: %s: vendor name */ __( 'Select %s', 'lnkup-marketplace' ), (string) $row['business_name'] ) ) . '</span></label>';
+			$html  .= '<div class="lnkup-roster-card__main"><strong><a href="' . esc_url( $url ) . '">' . esc_html( $row['business_name'] ) . '</a></strong>';
+			if ( ! empty( $row['vendor_score'] ) ) {
+				$html .= ' <span class="lnkup-intel-score-inline" title="' . esc_attr__( 'Vendor score', 'lnkup-marketplace' ) . '">' . esc_html( (string) $row['vendor_score'] ) . '</span>';
+			}
+			$html .= '<span class="lnkup-roster-card__status lnkup-status lnkup-status--' . esc_attr( (string) ( $row['ops_status'] ?: $row['readiness'] ) ) . '">' . esc_html( (string) $row['ops_label'] ) . '</span>';
+			if ( class_exists( 'LNKup_Vendor_Reliability_Intel' ) && ! empty( $row['profile_id'] ) ) {
+				$intel = LNKup_Vendor_Reliability_Intel::for_profile( (int) $row['profile_id'] );
+				if ( $intel && ! empty( $intel['flags'] ) ) {
+					$flag  = $intel['flags'][0];
+					$html .= ' <span class="lnkup-intel-flag lnkup-intel-flag--' . esc_attr( $flag['type'] ) . '">' . esc_html( $flag['label'] ) . '</span>';
+				}
+			}
+			$html .= '<p class="lnkup-roster-card__note lnkup-muted">' . esc_html( (string) ( $row['message'] ?? '' ) ) . '</p>';
+			$html .= '<p class="lnkup-roster-card__activity lnkup-muted"></p>';
+			$html .= '</div>';
+			$html .= '<div class="lnkup-roster-card__actions">';
+			$html .= self::render_action_buttons( $row );
+			$html .= '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-crm-review-open" data-app-id="' . esc_attr( (string) $row['application_id'] ) . '">' . esc_html__( 'Review', 'lnkup-marketplace' ) . '</button>';
+			$html .= '</div></article>';
+		}
+		return $html . '</div></div>';
+	}
+
+	/**
+	 * Buttons for actions this actor may perform.
+	 *
+	 * @param array<string, mixed> $row Roster row.
+	 */
+	private static function render_action_buttons( array $row ) {
+		$labels = class_exists( 'LNKup_Checkins' ) ? LNKup_Checkins::actions() : array();
+		$bulk   = array(
+			'checked_in'     => 'check_in',
+			'no_show'        => 'no_show',
+			'late_arrival'   => 'late_arrival',
+			'setup_started'  => 'setup_started',
+			'setup_complete' => 'setup_complete',
+			'checked_out'    => 'mark_complete',
+		);
+		$html = '';
+		foreach ( (array) ( $row['actions'] ?? array() ) as $action ) {
+			if ( ! isset( $bulk[ $action ] ) ) {
 				continue;
 			}
-			$html .= '<section class="lnkup-roster__group"><h3>' . esc_html( ucwords( str_replace( '_', ' ', $key ) ) ) . ' (' . count( $rows ) . ')</h3>';
-			$html .= '<div class="lnkup-roster__list">';
-			foreach ( $rows as $row ) {
-				$url = $row['profile_id'] ? add_query_arg( 'vendor', $row['profile_id'], lnkup_page_url_helper( 'organizer-dashboard' ) ) : '#';
-				$html .= '<article class="lnkup-roster-card" data-app-id="' . esc_attr( (string) $row['application_id'] ) . '">';
-				$html .= '<label class="lnkup-roster-card__pick"><input type="checkbox" class="lnkup-roster-pick" value="' . esc_attr( (string) $row['application_id'] ) . '" /></label>';
-				$html .= '<div class="lnkup-roster-card__main"><strong><a href="' . esc_url( $url ) . '">' . esc_html( $row['business_name'] ) . '</a></strong>';
-				if ( ! empty( $row['vendor_score'] ) ) {
-					$html .= ' <span class="lnkup-intel-score-inline" title="' . esc_attr__( 'Vendor score', 'lnkup-marketplace' ) . '">' . esc_html( (string) $row['vendor_score'] ) . '</span>';
-				}
-				$html .= '<span class="lnkup-status lnkup-status--' . esc_attr( $row['readiness'] ) . '">' . esc_html( $row['readiness_label'] ) . '</span>';
-				if ( class_exists( 'LNKup_Vendor_Reliability_Intel' ) && ! empty( $row['profile_id'] ) ) {
-					$intel = LNKup_Vendor_Reliability_Intel::for_profile( (int) $row['profile_id'] );
-					if ( $intel && ! empty( $intel['flags'] ) ) {
-						$flag = $intel['flags'][0];
-						$html .= ' <span class="lnkup-intel-flag lnkup-intel-flag--' . esc_attr( $flag['type'] ) . '">' . esc_html( $flag['label'] ) . '</span>';
-					}
-				}
-				$html .= '</div>';
-				$html .= '<div class="lnkup-roster-card__actions">';
-				$html .= '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-crm-checkin" data-app-id="' . esc_attr( (string) $row['application_id'] ) . '">Check in</button>';
-				$html .= '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost lnkup-crm-noshow" data-app-id="' . esc_attr( (string) $row['application_id'] ) . '">No-show</button>';
-				$html .= '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-crm-late" data-app-id="' . esc_attr( (string) $row['application_id'] ) . '">Late</button>';
-				$html .= '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-crm-review-open" data-app-id="' . esc_attr( (string) $row['application_id'] ) . '">Review</button>';
-				if ( ! empty( $row['readiness_label'] ) ) {
-					$html .= '<span class="lnkup-badge lnkup-badge--' . esc_attr( $row['readiness'] ) . '">' . esc_html( $row['readiness_label'] ) . '</span>';
-				}
-				$html .= '</div></article>';
-			}
-			$html .= '</div></section>';
+			$html .= '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-roster-action" data-roster-action="' . esc_attr( $bulk[ $action ] ) . '" data-app-id="' . esc_attr( (string) $row['application_id'] ) . '">' . esc_html( $labels[ $action ] ?? $action ) . '</button>';
 		}
-		return $html . '</div>';
+		return $html;
 	}
 
 	/**
 	 * Bulk action on applications.
 	 */
 	public static function bulk_action( $event_id, $organizer_id, $app_ids, $action, $extra = array() ) {
-		if ( ! LNKup_Capabilities::user_owns_post( $event_id, $organizer_id, '_lnkup_organizer_user_id' ) ) {
+		if ( ! LNKup_Checkins::actor_can_operate( $event_id, $organizer_id ) ) {
 			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ) );
 		}
 		$results = array();
 		foreach ( (array) $app_ids as $app_id ) {
 			$app_id = absint( $app_id );
 			if ( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) !== (int) $event_id ) {
+				$results[] = array(
+					'application_id' => $app_id,
+					'success'        => false,
+					'reason'         => 'wrong_event',
+					'message'        => __( 'That application belongs to a different event.', 'lnkup-marketplace' ),
+				);
 				continue;
 			}
 			switch ( $action ) {
@@ -168,44 +242,21 @@ class LNKup_Event_Roster {
 					$results[] = LNKup_Applications::handle_organizer_action( $app_id, $action, $organizer_id, $extra );
 					break;
 				case 'check_in':
-					if ( class_exists( 'LNKup_Checkins' ) ) {
-						LNKup_Checkins::record( $app_id, 'checked_in', 'manual' );
-					} else {
-						update_post_meta( $app_id, '_lnkup_checked_in_at', current_time( 'mysql' ) );
-					}
-					delete_post_meta( $app_id, '_lnkup_no_show_at' );
-					LNKup_Organizer_CRM::log_activity( 'checked_in', $organizer_id, (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true ), array( 'application_id' => $app_id, 'event_id' => $event_id ) );
-					self::refresh_vendor_reputation( $app_id );
-					$results[] = true;
-					break;
 				case 'no_show':
-					if ( class_exists( 'LNKup_Checkins' ) ) {
-						LNKup_Checkins::record( $app_id, 'no_show', 'manual' );
-					} else {
-						update_post_meta( $app_id, '_lnkup_no_show_at', current_time( 'mysql' ) );
-					}
-					LNKup_Organizer_CRM::log_activity( 'no_show', $organizer_id, (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true ), array( 'application_id' => $app_id, 'event_id' => $event_id ) );
-					self::refresh_vendor_reputation( $app_id );
-					$results[] = true;
-					break;
 				case 'late_arrival':
-					if ( class_exists( 'LNKup_Checkins' ) ) {
-						LNKup_Checkins::record( $app_id, 'late_arrival', 'manual' );
-					} else {
-						update_post_meta( $app_id, '_lnkup_late_arrival_at', current_time( 'mysql' ) );
-					}
-					self::refresh_vendor_reputation( $app_id );
-					$results[] = true;
-					break;
+				case 'setup_started':
+				case 'setup_complete':
 				case 'mark_complete':
-					if ( class_exists( 'LNKup_Checkins' ) ) {
-						LNKup_Checkins::record( $app_id, 'checked_out', 'manual' );
-					} else {
-						update_post_meta( $app_id, '_lnkup_event_completed_at', current_time( 'mysql' ) );
-						update_post_meta( $app_id, '_lnkup_application_status', 'completed' );
-					}
-					self::refresh_vendor_reputation( $app_id );
-					$results[] = true;
+					$map = array(
+						'check_in'       => 'checked_in',
+						'no_show'        => 'no_show',
+						'late_arrival'   => 'late_arrival',
+						'setup_started'  => 'setup_started',
+						'setup_complete' => 'setup_complete',
+						'mark_complete'  => 'checked_out',
+					);
+					$recorded = LNKup_Checkins::record( $app_id, $map[ $action ], 'bulk', $event_id );
+					$results[] = $recorded;
 					break;
 				case 'add_tag':
 					if ( ! empty( $extra['tag'] ) ) {
@@ -221,7 +272,35 @@ class LNKup_Event_Roster {
 					break;
 			}
 		}
-		return $results;
+		$succeeded = array();
+		$failed    = array();
+		foreach ( $results as $item ) {
+			if ( is_array( $item ) ) {
+				if ( ! empty( $item['success'] ) ) {
+					$succeeded[] = (int) ( $item['application_id'] ?? 0 );
+				} else {
+					$failed[] = $item;
+				}
+				continue;
+			}
+			if ( is_wp_error( $item ) ) {
+				$failed[] = array(
+					'success' => false,
+					'reason'  => $item->get_error_code(),
+					'message' => $item->get_error_message(),
+				);
+				continue;
+			}
+			if ( $item ) {
+				$succeeded[] = 0;
+			}
+		}
+		return array(
+			'success'   => array() === $failed,
+			'succeeded' => $succeeded,
+			'failed'    => $failed,
+			'results'   => $results,
+		);
 	}
 
 	/**

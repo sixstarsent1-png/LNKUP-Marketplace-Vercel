@@ -39,13 +39,18 @@ class LNKup_Reputation_Render {
 	public static function star_rating( $rating, $count = 0 ) {
 		$rating = (float) $rating;
 		$full   = (int) floor( $rating );
-		$html   = '<span class="lnkup-rep-stars" aria-label="' . esc_attr( sprintf( __( '%s out of 5 stars', 'lnkup-marketplace' ), $rating ) ) . '">';
+		$label  = $count
+			/* translators: 1: rating, 2: number of reviews */
+			? sprintf( _n( '%1$s out of 5 stars from %2$d review', '%1$s out of 5 stars from %2$d reviews', (int) $count, 'lnkup-marketplace' ), number_format( $rating, 1 ), (int) $count )
+			/* translators: %s: rating */
+			: sprintf( __( '%s out of 5 stars', 'lnkup-marketplace' ), number_format( $rating, 1 ) );
+		$html   = '<span class="lnkup-rep-stars" role="img" aria-label="' . esc_attr( $label ) . '">';
 		for ( $i = 1; $i <= 5; $i++ ) {
-			$html .= '<span class="lnkup-rep-stars__star' . ( $i <= $full ? ' is-filled' : '' ) . '">★</span>';
+			$html .= '<span class="lnkup-rep-stars__star' . ( $i <= $full ? ' is-filled' : '' ) . '" aria-hidden="true">★</span>';
 		}
-		$html .= ' <span class="lnkup-rep-stars__value">' . esc_html( number_format( $rating, 1 ) ) . '</span>';
+		$html .= ' <span class="lnkup-rep-stars__value" aria-hidden="true">' . esc_html( number_format( $rating, 1 ) ) . '</span>';
 		if ( $count ) {
-			$html .= ' <span class="lnkup-muted">(' . esc_html( (string) $count ) . ')</span>';
+			$html .= ' <span class="lnkup-muted" aria-hidden="true">(' . esc_html( (string) $count ) . ')</span>';
 		}
 		$html .= '</span>';
 		return $html;
@@ -69,18 +74,20 @@ class LNKup_Reputation_Render {
 	/**
 	 * Reliability meter rows.
 	 */
-	public static function reliability_meter( $metrics ) {
+	public static function reliability_meter( $metrics, $public = false ) {
 		if ( ! $metrics ) {
 			return '';
 		}
 		$rows = array(
 			array( __( 'Completed events', 'lnkup-marketplace' ), (string) $metrics['completed_events'], null ),
 			array( __( 'No-show rate', 'lnkup-marketplace' ), $metrics['no_show_rate'] . '%', 100 - $metrics['no_show_rate'] ),
-			array( __( 'Payment completion', 'lnkup-marketplace' ), $metrics['payment_completion_rate'] . '%', $metrics['payment_completion_rate'] ),
-			array( __( 'Document compliance', 'lnkup-marketplace' ), $metrics['document_compliance_rate'] . '%', $metrics['document_compliance_rate'] ),
-			array( __( 'On-time check-ins', 'lnkup-marketplace' ), $metrics['on_time_check_in_rate'] . '%', $metrics['on_time_check_in_rate'] ),
-			array( __( 'Avg organizer rating', 'lnkup-marketplace' ), number_format( $metrics['avg_organizer_rating'], 1 ) . ' / 5', $metrics['avg_organizer_rating'] * 20 ),
 		);
+		if ( ! $public ) {
+			$rows[] = array( __( 'Payment completion', 'lnkup-marketplace' ), $metrics['payment_completion_rate'] . '%', $metrics['payment_completion_rate'] );
+			$rows[] = array( __( 'Document compliance', 'lnkup-marketplace' ), $metrics['document_compliance_rate'] . '%', $metrics['document_compliance_rate'] );
+		}
+		$rows[] = array( __( 'On-time check-ins', 'lnkup-marketplace' ), $metrics['on_time_check_in_rate'] . '%', $metrics['on_time_check_in_rate'] );
+		$rows[] = array( __( 'Avg organizer rating', 'lnkup-marketplace' ), number_format( $metrics['avg_organizer_rating'], 1 ) . ' / 5', $metrics['avg_organizer_rating'] * 20 );
 		$html = '<dl class="lnkup-rep-meter">';
 		foreach ( $rows as $row ) {
 			$html .= '<div class="lnkup-rep-meter__row"><dt>' . esc_html( $row[0] ) . '</dt><dd>' . esc_html( $row[1] );
@@ -95,14 +102,29 @@ class LNKup_Reputation_Render {
 
 	/**
 	 * Review card.
+	 *
+	 * @param array $review         Review row.
+	 * @param bool  $show_organizer Name the reviewing organizer. Only for the reviewed vendor's own view.
 	 */
-	public static function review_card( $review ) {
+	public static function review_card( $review, $show_organizer = false ) {
 		ob_start();
 		?>
 		<article class="lnkup-rep-review-card lnkup-surface--primary lnkup-micro-lift">
 			<header class="lnkup-rep-review-card__header">
 				<?php echo self::star_rating( $review['overall_rating'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-				<span class="lnkup-muted"><?php echo esc_html( $review['event_title'] ); ?> · <?php echo esc_html( $review['created_at'] ); ?></span>
+				<span class="lnkup-muted">
+					<?php
+					$review_ts   = ! empty( $review['created_at'] ) ? strtotime( (string) $review['created_at'] ) : false;
+					$review_meta = array_filter(
+						array(
+							(string) ( $review['event_title'] ?? '' ),
+							$show_organizer && ! empty( $review['organizer_name'] ) ? sprintf( /* translators: %s: organizer name */ __( 'by %s', 'lnkup-marketplace' ), (string) $review['organizer_name'] ) : '',
+							$review_ts ? date_i18n( get_option( 'date_format' ), $review_ts ) : (string) ( $review['created_at'] ?? '' ),
+						)
+					);
+					echo esc_html( implode( ' · ', $review_meta ) );
+					?>
+				</span>
 			</header>
 			<?php if ( ! empty( $review['public_text'] ) ) : ?>
 				<p class="lnkup-rep-review-card__body"><?php echo esc_html( $review['public_text'] ); ?></p>
@@ -185,27 +207,31 @@ class LNKup_Reputation_Render {
 	/**
 	 * Public storefront hero.
 	 *
-	 * @param array<string, mixed> $data Public profile DTO.
+	 * @param array<string, mixed> $data    Public profile DTO.
+	 * @param string               $actions Optional action HTML, already escaped.
 	 */
-	public static function public_hero( $data ) {
-		$rep     = $data['reputation'] ?? array();
-		$verify  = $data['verification'] ?? array();
-		$location = trim( ( $data['city'] ?? '' ) . ( ! empty( $data['state'] ) ? ', ' . $data['state'] : '' ) );
+	public static function public_hero( $data, $actions = '' ) {
+		$location   = trim( ( $data['city'] ?? '' ) . ( ! empty( $data['state'] ) ? ', ' . $data['state'] : '' ) );
 		$categories = is_array( $data['categories'] ?? null ) ? implode( ' · ', $data['categories'] ) : '';
+		$initials   = '';
+		foreach ( preg_split( '/\s+/', trim( (string) ( $data['business_name'] ?? '' ) ) ) as $part ) {
+			$initials .= strtoupper( substr( $part, 0, 1 ) );
+			if ( strlen( $initials ) >= 2 ) {
+				break;
+			}
+		}
 		ob_start();
 		?>
-		<div class="lnkup-pub-hero">
+		<div class="lnkup-pub-hero<?php echo empty( $data['cover'] ) ? ' lnkup-pub-hero--plain' : ''; ?>">
 			<?php if ( ! empty( $data['cover'] ) ) : ?>
 				<div class="lnkup-pub-hero__cover" style="background-image:url(<?php echo esc_url( $data['cover'] ); ?>)"></div>
-			<?php else : ?>
-				<div class="lnkup-pub-hero__cover lnkup-pub-hero__cover--placeholder"></div>
 			<?php endif; ?>
 			<div class="lnkup-pub-hero__body">
 				<div class="lnkup-pub-hero__identity">
 					<?php if ( ! empty( $data['logo'] ) ) : ?>
-						<div class="lnkup-avatar-ring lnkup-pub-hero__logo-wrap">
-							<img src="<?php echo esc_url( $data['logo'] ); ?>" alt="" class="lnkup-pub-hero__logo" />
-						</div>
+						<img src="<?php echo esc_url( $data['logo'] ); ?>" alt="<?php echo esc_attr( sprintf( /* translators: %s: business name */ __( '%s logo', 'lnkup-marketplace' ), (string) ( $data['business_name'] ?? '' ) ) ); ?>" class="lnkup-pub-hero__logo" />
+					<?php else : ?>
+						<span class="lnkup-pub-hero__logo lnkup-pub-hero__logo--initials" aria-hidden="true"><?php echo esc_html( $initials ?: 'LN' ); ?></span>
 					<?php endif; ?>
 					<div class="lnkup-pub-hero__titles">
 						<h1 class="lnkup-type-display"><?php echo esc_html( $data['business_name'] ); ?></h1>
@@ -215,20 +241,14 @@ class LNKup_Reputation_Render {
 						<?php if ( $categories ) : ?>
 							<p class="lnkup-pub-hero__category"><?php echo esc_html( $categories ); ?></p>
 						<?php endif; ?>
+						<?php if ( ! empty( $data['reputation']['avg_rating'] ) && ! empty( $data['reputation']['review_count'] ) ) : ?>
+							<div class="lnkup-pub-hero__rating"><?php echo self::star_rating( (float) $data['reputation']['avg_rating'], (int) $data['reputation']['review_count'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
+						<?php endif; ?>
 					</div>
 				</div>
-				<div class="lnkup-pub-hero__rail">
-					<?php echo self::score_badge( $rep['score'] ?? 0, $rep['label'] ?? '', ! empty( $rep['is_new'] ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-					<?php if ( ! empty( $rep['review_count'] ) ) : ?>
-						<?php echo self::star_rating( $rep['avg_rating'] ?? 0, $rep['review_count'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-					<?php endif; ?>
-					<?php if ( ! empty( $verify['label'] ) ) : ?>
-						<span class="lnkup-badge lnkup-badge--verified"><?php echo esc_html( $verify['label'] ); ?></span>
-					<?php endif; ?>
-					<?php foreach ( array_slice( (array) ( $rep['badges'] ?? array() ), 0, 3 ) as $badge ) : ?>
-						<span class="lnkup-badge lnkup-badge--secondary" title="<?php echo esc_attr( $badge['label'] ?? '' ); ?>"><?php echo esc_html( $badge['label'] ?? '' ); ?></span>
-					<?php endforeach; ?>
-				</div>
+				<?php if ( $actions ) : ?>
+					<div class="lnkup-pub-hero__actions"><?php echo $actions; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
+				<?php endif; ?>
 			</div>
 		</div>
 		<?php
@@ -312,7 +332,6 @@ class LNKup_Reputation_Render {
 		$rows = array(
 			array( __( 'Events completed', 'lnkup-marketplace' ), (string) ( $metrics['completed_events'] ?? count( $data['events'] ?? array() ) ) ),
 			array( __( 'Repeat bookings', 'lnkup-marketplace' ), (string) ( $metrics['repeat_bookings'] ?? 0 ) ),
-			array( __( 'Payment reliability', 'lnkup-marketplace' ), (string) ( $metrics['payment_completion_rate'] ?? 0 ) . '%' ),
 			array( __( 'On-time check-ins', 'lnkup-marketplace' ), (string) ( $metrics['on_time_check_in_rate'] ?? 0 ) . '%' ),
 		);
 		if ( ! empty( $data['years_in_business'] ) ) {

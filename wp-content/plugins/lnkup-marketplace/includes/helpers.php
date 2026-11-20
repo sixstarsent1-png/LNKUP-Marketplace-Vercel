@@ -103,6 +103,240 @@ function lnkup_registration_url() {
 }
 
 /**
+ * Current Find Events, event, or directory URL, with search args kept.
+ */
+function lnkup_current_public_return_url() {
+	if ( is_admin() ) {
+		return '';
+	}
+	$on_feed  = is_page( array( 'opportunities', 'find-events', 'vendors', 'organizers' ) );
+	$on_event = is_singular( 'lnkup_event' );
+	if ( ! $on_feed && ! $on_event ) {
+		return '';
+	}
+	$url = get_permalink();
+	if ( ! $url ) {
+		return '';
+	}
+	if ( $on_event ) {
+		return $url;
+	}
+	$allowed = array( 'apply', 'city', 'categories', 'date_from', 'date_to', 'q', 'state', 'organizer' );
+	$args    = array();
+	foreach ( $allowed as $key ) {
+		if ( 'organizer' === $key && ! is_page( 'organizers' ) ) {
+			continue;
+		}
+		if ( ! isset( $_GET[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			continue;
+		}
+		$raw   = wp_unslash( (string) $_GET[ $key ] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$value = 'organizer' === $key ? sanitize_title( $raw ) : sanitize_text_field( $raw );
+		if ( '' === $value ) {
+			continue;
+		}
+		$args[ $key ] = $value;
+	}
+	if ( $args ) {
+		$url = add_query_arg( $args, $url );
+	}
+	return $url;
+}
+
+/**
+ * Sign-up URL that returns to the current public page when that page is allowed.
+ */
+function lnkup_registration_url_with_return() {
+	$base   = lnkup_registration_url();
+	$return = lnkup_current_public_return_url();
+	if ( ! $return ) {
+		return $base;
+	}
+	return add_query_arg( 'redirect', rawurlencode( $return ), $base );
+}
+
+/**
+ * Branded public login page.
+ */
+function lnkup_login_page_url() {
+	return lnkup_page_url_helper( 'log-in' );
+}
+
+/**
+ * Login URL that returns to the current public page when that page is allowed.
+ */
+function lnkup_login_url_with_return() {
+	return lnkup_login_url_for( lnkup_current_public_return_url() );
+}
+
+/**
+ * Branded login URL that returns to a specific page after sign-in.
+ *
+ * @param string $return Absolute or relative return URL.
+ */
+function lnkup_login_url_for( $return ) {
+	$base = lnkup_login_page_url();
+	$return = trim( (string) $return );
+	if ( '' === $return ) {
+		return $base;
+	}
+	return add_query_arg( 'redirect', rawurlencode( $return ), $base );
+}
+
+/**
+ * Canonical organizer dashboard section from a view slug or legacy alias.
+ *
+ * @param string $view Raw view slug.
+ * @return string
+ */
+function lnkup_organizer_dashboard_view( $view = null ) {
+	if ( null === $view ) {
+		$view = isset( $_GET['view'] ) ? sanitize_key( wp_unslash( $_GET['view'] ) ) : 'home'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	}
+	$view     = sanitize_key( (string) $view );
+	$aliases  = array(
+		''                   => 'home',
+		'overview'           => 'home',
+		'payments'           => 'financial',
+		'import'             => 'create',
+		'create-event'       => 'create',
+		'create-opportunity' => 'events',
+	);
+	if ( isset( $aliases[ $view ] ) ) {
+		$view = $aliases[ $view ];
+	}
+	$allowed = array( 'home', 'events', 'applications', 'financial', 'vendors', 'lists', 'invites', 'referrals', 'operations', 'intelligence', 'create', 'help', 'profile' );
+	return in_array( $view, $allowed, true ) ? $view : 'home';
+}
+
+/**
+ * Organizer dashboard URL for one section.
+ *
+ * @param string               $view Section slug or legacy alias.
+ * @param array<string, mixed> $args Extra query args.
+ * @return string
+ */
+function lnkup_organizer_view_url( $view = 'home', $args = array() ) {
+	$url  = add_query_arg( 'view', lnkup_organizer_dashboard_view( $view ), lnkup_page_url_helper( 'organizer-dashboard' ) );
+	$args = is_array( $args ) ? $args : array();
+	foreach ( $args as $key => $value ) {
+		if ( null === $value || '' === $value ) {
+			unset( $args[ $key ] );
+		}
+	}
+	if ( $args ) {
+		$url = add_query_arg( $args, $url );
+	}
+	return $url;
+}
+
+/**
+ * Current organizer list page from lnkup_page.
+ *
+ * @return int
+ */
+function lnkup_organizer_dashboard_page() {
+	$page = isset( $_GET['lnkup_page'] ) ? absint( wp_unslash( $_GET['lnkup_page'] ) ) : 1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	return max( 1, $page );
+}
+
+/**
+ * Count posts owned by an organizer. Totals are not limited to the current page.
+ *
+ * @param string               $post_type  Post type.
+ * @param int                  $user_id    Organizer user ID.
+ * @param array<int, array>    $meta_query Extra meta query clauses.
+ * @return int
+ */
+function lnkup_count_posts_for_organizer( $post_type, $user_id, $meta_query = array() ) {
+	$meta_query   = is_array( $meta_query ) ? $meta_query : array();
+	$meta_query[] = array(
+		'key'   => '_lnkup_organizer_user_id',
+		'value' => (string) (int) $user_id,
+	);
+	$query = new WP_Query(
+		array(
+			'post_type'              => $post_type,
+			'post_status'            => array( 'publish', 'draft', 'pending', 'private' ),
+			'posts_per_page'         => 1,
+			'fields'                 => 'ids',
+			'no_found_rows'          => false,
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+			'meta_query'             => $meta_query, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+		)
+	);
+	$found = (int) $query->found_posts;
+	wp_reset_postdata();
+	return $found;
+}
+
+/**
+ * Sum paid booth fees for every payment the organizer owns.
+ *
+ * @param int $user_id Organizer user ID.
+ * @return float
+ */
+function lnkup_organizer_collected_booth_total( $user_id ) {
+	$ids = get_posts(
+		array(
+			'post_type'              => 'lnkup_payment',
+			'post_status'            => array( 'publish', 'draft', 'pending', 'private' ),
+			'posts_per_page'         => -1,
+			'fields'                 => 'ids',
+			'no_found_rows'          => true,
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+			'meta_query'             => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+				array(
+					'key'   => '_lnkup_organizer_user_id',
+					'value' => (string) (int) $user_id,
+				),
+				array(
+					'key'   => '_lnkup_payment_status',
+					'value' => 'paid',
+				),
+			),
+		)
+	);
+	$sum = 0.0;
+	foreach ( $ids as $payment_id ) {
+		$sum += class_exists( 'LNKup_Financial' ) ? (float) LNKup_Financial::payment_booth_amount( (int) $payment_id ) : 0.0;
+	}
+	return $sum;
+}
+
+/**
+ * Previous / next links for an organizer dashboard list.
+ *
+ * @param int                  $total    Total records.
+ * @param int                  $per_page Page size.
+ * @param string               $view     Section slug.
+ * @param array<string, mixed> $args     Query args to keep.
+ * @return string
+ */
+function lnkup_organizer_pagination_nav( $total, $per_page, $view, $args = array() ) {
+	$per_page = max( 1, (int) $per_page );
+	$pages    = (int) ceil( max( 0, (int) $total ) / $per_page );
+	$page     = lnkup_organizer_dashboard_page();
+	if ( $pages <= 1 ) {
+		return '';
+	}
+	$args = is_array( $args ) ? $args : array();
+	unset( $args['lnkup_page'] );
+	$html = '<nav class="lnkup-dash-pagination" aria-label="' . esc_attr__( 'Pages', 'lnkup-marketplace' ) . '">';
+	if ( $page > 1 ) {
+		$html .= '<a class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" href="' . esc_url( lnkup_organizer_view_url( $view, array_merge( $args, array( 'lnkup_page' => $page - 1 ) ) ) ) . '">' . esc_html__( 'Previous', 'lnkup-marketplace' ) . '</a>';
+	}
+	$html .= '<span class="lnkup-muted">' . esc_html( sprintf( /* translators: 1: current page, 2: total pages */ __( 'Page %1$d of %2$d', 'lnkup-marketplace' ), $page, $pages ) ) . '</span>';
+	if ( $page < $pages ) {
+		$html .= '<a class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" href="' . esc_url( lnkup_organizer_view_url( $view, array_merge( $args, array( 'lnkup_page' => $page + 1 ) ) ) ) . '">' . esc_html__( 'Next', 'lnkup-marketplace' ) . '</a>';
+	}
+	$html .= '</nav>';
+	return $html;
+}
+
+/**
  * Human-readable platform launch date.
  */
 function lnkup_get_launch_date_label() {
@@ -318,6 +552,19 @@ function lnkup_currency( $amount ) {
 }
 
 /**
+ * Public price without trailing cents on a whole dollar amount.
+ *
+ * @param float $amount Amount.
+ */
+function lnkup_public_money( $amount ) {
+	$amount = (float) $amount;
+	if ( abs( $amount - round( $amount ) ) < 0.001 ) {
+		return '$' . number_format( $amount, 0 );
+	}
+	return '$' . number_format( $amount, 2 );
+}
+
+/**
  * Asset version for cache-busting (filemtime, fallback LNKUP_VERSION).
  *
  * @param string $relative_path Path under plugin dir (e.g. public/js/financial.js).
@@ -498,6 +745,102 @@ function lnkup_format_gallery_items( array $ids ) {
 }
 
 /**
+ * Image upload control used for logos, covers, and galleries. Uploads go through
+ * lnkup_upload_profile_image (marketplace.js), not the WordPress media library.
+ *
+ * @param array $args {
+ *     @type string $mode         single | gallery.
+ *     @type string $label        Visible field label.
+ *     @type string $button_label Upload button text.
+ *     @type string $input_name   Hidden input name (single, or comma list for gallery).
+ *     @type string $input_id     Hidden input ID.
+ *     @type string $item_name    Gallery only: per-image hidden input name (e.g. gallery_ids[]) instead of a comma list.
+ *     @type int[]  $ids          Current attachment IDs.
+ *     @type string $alt          Alt text prefix for previews.
+ *     @type int    $max          Gallery only: maximum images.
+ *     @type string $testid       Optional data-testid.
+ * }
+ * @return string
+ */
+function lnkup_image_upload_field( array $args ) {
+	$args = wp_parse_args(
+		$args,
+		array(
+			'mode'         => 'single',
+			'label'        => '',
+			'button_label' => __( 'Upload image', 'lnkup-marketplace' ),
+			'input_name'   => '',
+			'input_id'     => '',
+			'item_name'    => '',
+			'ids'          => array(),
+			'alt'          => '',
+			'max'          => 12,
+			'testid'       => '',
+		)
+	);
+	$gallery  = 'gallery' === $args['mode'];
+	$ids      = array_values( array_filter( array_map( 'absint', (array) $args['ids'] ) ) );
+	$ids      = $gallery ? $ids : array_slice( $ids, 0, 1 );
+	$label_id = 'lnkup-image-label-' . wp_unique_id();
+	ob_start();
+	?>
+	<div class="lnkup-form-row lnkup-image-upload lnkup-image-upload--<?php echo esc_attr( $gallery ? 'gallery' : 'single' ); ?>" data-image-upload="<?php echo esc_attr( $gallery ? 'gallery' : 'single' ); ?>" data-image-alt="<?php echo esc_attr( (string) $args['alt'] ); ?>"<?php echo $args['item_name'] ? ' data-image-item-name="' . esc_attr( (string) $args['item_name'] ) . '"' : ''; ?> data-image-max="<?php echo esc_attr( (string) (int) $args['max'] ); ?>"<?php echo $args['testid'] ? ' data-testid="' . esc_attr( (string) $args['testid'] ) . '"' : ''; ?>>
+		<p class="lnkup-image-upload__label" id="<?php echo esc_attr( $label_id ); ?>"><?php echo esc_html( (string) $args['label'] ); ?></p>
+		<?php if ( $args['input_name'] ) : ?>
+			<input type="hidden" name="<?php echo esc_attr( (string) $args['input_name'] ); ?>"<?php echo $args['input_id'] ? ' id="' . esc_attr( (string) $args['input_id'] ) . '"' : ''; ?> value="<?php echo esc_attr( $gallery ? implode( ',', $ids ) : (string) ( $ids[0] ?? 0 ) ); ?>" data-image-value />
+		<?php elseif ( $args['item_name'] ) : ?>
+			<input type="hidden" name="<?php echo esc_attr( (string) $args['item_name'] ); ?>" value="" />
+		<?php endif; ?>
+		<div class="lnkup-image-upload__preview" data-image-preview>
+			<?php foreach ( $ids as $index => $id ) : ?>
+				<?php echo lnkup_image_upload_item( $id, (string) $args['alt'], $index + 1, (string) $args['item_name'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php endforeach; ?>
+		</div>
+		<div class="lnkup-image-upload__actions">
+			<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" data-image-upload-button aria-describedby="<?php echo esc_attr( $label_id ); ?>"><?php echo esc_html( (string) $args['button_label'] ); ?></button>
+		</div>
+		<p class="lnkup-image-upload__hint lnkup-type-caption"><?php echo esc_html( $gallery ? sprintf( /* translators: %d: max images */ __( 'JPG, PNG, WebP, or GIF, up to 5 MB each. Up to %d images.', 'lnkup-marketplace' ), (int) $args['max'] ) : __( 'JPG, PNG, WebP, or GIF, up to 5 MB.', 'lnkup-marketplace' ) ); ?></p>
+		<p class="lnkup-image-upload__status" data-image-status role="status" aria-live="polite"></p>
+	</div>
+	<?php
+	return (string) ob_get_clean();
+}
+
+/**
+ * One preview tile inside lnkup_image_upload_field().
+ *
+ * @param int    $id        Attachment ID.
+ * @param string $alt       Alt text prefix.
+ * @param int    $position  1-based position for alt and remove labels.
+ * @param string $item_name Optional per-item hidden input name.
+ * @return string
+ */
+function lnkup_image_upload_item( $id, $alt, $position, $item_name = '' ) {
+	$id       = absint( $id );
+	$is_video = 0 === strpos( (string) get_post_mime_type( $id ), 'video/' );
+	$url      = $is_video ? '' : (string) wp_get_attachment_image_url( $id, 'medium' );
+	if ( ! $is_video && '' === $url ) {
+		return '';
+	}
+	$alt_text = trim( $alt . ' ' . $position );
+	ob_start();
+	?>
+	<figure class="lnkup-image-upload__item" data-image-id="<?php echo esc_attr( (string) $id ); ?>">
+		<?php if ( $is_video ) : ?>
+			<span class="lnkup-image-upload__video"><?php esc_html_e( 'Video', 'lnkup-marketplace' ); ?></span>
+		<?php else : ?>
+			<img src="<?php echo esc_url( $url ); ?>" alt="<?php echo esc_attr( $alt_text ); ?>" loading="lazy" />
+		<?php endif; ?>
+		<button type="button" class="lnkup-image-upload__remove" data-image-remove aria-label="<?php echo esc_attr( sprintf( /* translators: %s: image description */ __( 'Remove %s', 'lnkup-marketplace' ), $alt_text ) ); ?>">&times;</button>
+		<?php if ( $item_name ) : ?>
+			<input type="hidden" name="<?php echo esc_attr( $item_name ); ?>" value="<?php echo esc_attr( (string) $id ); ?>" />
+		<?php endif; ?>
+	</figure>
+	<?php
+	return (string) ob_get_clean();
+}
+
+/**
  * Save event/opportunity gallery IDs; set featured image from first image when missing.
  *
  * @param int   $post_id Post ID.
@@ -512,13 +855,19 @@ function lnkup_save_post_gallery( $post_id, $raw_ids ) {
 	if ( is_string( $raw_ids ) && '' !== $raw_ids && '[' !== $raw_ids[0] ) {
 		$raw_ids = preg_split( '/[\s,]+/', $raw_ids );
 	}
-	$ids = lnkup_parse_gallery_ids( $raw_ids );
-	$ids = array_values(
+	$ids      = lnkup_parse_gallery_ids( $raw_ids );
+	$existing = lnkup_parse_gallery_ids( get_post_meta( $post_id, '_lnkup_gallery_ids', true ) );
+	$actor    = get_current_user_id();
+	$scoped   = $actor && ! LNKup_Capabilities::user_has_manage_all( $actor );
+	$ids      = array_values(
 		array_filter(
 			$ids,
-			function ( $id ) {
+			function ( $id ) use ( $existing, $actor, $scoped ) {
 				$mime = (string) get_post_mime_type( $id );
-				return $id && ( 0 === strpos( $mime, 'image/' ) || 0 === strpos( $mime, 'video/' ) );
+				if ( ! $id || ( 0 !== strpos( $mime, 'image/' ) && 0 !== strpos( $mime, 'video/' ) ) ) {
+					return false;
+				}
+				return ! $scoped || in_array( $id, $existing, true ) || (int) get_post_field( 'post_author', $id ) === $actor;
 			}
 		)
 	);
@@ -690,18 +1039,76 @@ function lnkup_opportunity_category_fallback_url( $opp = array() ) {
  * @param string $alt      Alt text.
  * @param string $fallback Fallback URL (defaults to category JPG).
  */
-function lnkup_event_card_img_html( $src, $alt, $fallback = '' ) {
+function lnkup_event_card_img_html( $src, $alt, $fallback = '', $attachment_id = 0 ) {
 	$src      = (string) $src;
 	$fallback = $fallback ? (string) $fallback : lnkup_opportunity_category_fallback_url();
 	if ( '' === $src ) {
 		return '<div class="lnkup-event-card__placeholder" aria-hidden="true"><span>LNKup</span></div>';
 	}
+	$srcset = '';
+	if ( $attachment_id && false !== strpos( $src, (string) wp_basename( (string) get_attached_file( (int) $attachment_id ) ) ) ) {
+		$set = wp_get_attachment_image_srcset( (int) $attachment_id, 'medium_large' );
+		if ( $set ) {
+			$srcset = sprintf(
+				' srcset="%1$s" sizes="%2$s"',
+				esc_attr( $set ),
+				esc_attr( '(max-width: 640px) 100vw, (max-width: 1100px) 50vw, 360px' )
+			);
+		}
+	}
+	lnkup_enqueue_card_image_fallback();
 	return sprintf(
-		'<img src="%1$s" alt="%2$s" width="1280" height="800" loading="lazy" data-fallback-src="%3$s" onerror="if(!this.dataset.tried){this.dataset.tried=\'1\';var f=this.getAttribute(\'data-fallback-src\');if(f&&f!==this.src){this.src=f;return;}}this.onerror=null;this.removeAttribute(\'src\');var p=document.createElement(\'div\');p.className=\'lnkup-event-card__placeholder\';p.setAttribute(\'aria-hidden\',\'true\');p.innerHTML=\'<span>LNKup</span>\';if(this.parentNode){this.parentNode.replaceChild(p,this);}" />',
+		'<img src="%1$s" alt="%2$s" width="1280" height="800" loading="lazy" decoding="async" data-fallback-src="%3$s"%4$s />',
 		esc_url( $src ),
 		esc_attr( $alt ),
-		esc_url( $fallback )
+		esc_url( $fallback ),
+		$srcset
 	);
+}
+
+/**
+ * Delegated card image fallback (category JPG, then placeholder). Printed once per page
+ * in the footer so cards work on pages that do not load the dashboard scripts.
+ */
+function lnkup_enqueue_card_image_fallback() {
+	static $queued = false;
+	if ( $queued ) {
+		return;
+	}
+	$queued = true;
+	add_action( 'wp_footer', 'lnkup_print_card_image_fallback', 5 );
+}
+
+/**
+ * Print the delegated image fallback script.
+ */
+function lnkup_print_card_image_fallback() {
+	$js = <<<'JS'
+(function(){if(window.lnkupCardImageFallback){return;}window.lnkupCardImageFallback=function(img){if(!img||img.tagName!=='IMG'||!img.hasAttribute('data-fallback-src')){return;}var f=img.getAttribute('data-fallback-src');if(!img.dataset.tried&&f&&f!==img.currentSrc&&f!==img.src){img.dataset.tried='1';img.removeAttribute('srcset');img.src=f;return;}var p=document.createElement('div');p.className='lnkup-event-card__placeholder';p.setAttribute('aria-hidden','true');p.innerHTML='<span>LNKup</span>';if(img.parentNode){img.parentNode.replaceChild(p,img);}};document.addEventListener('error',function(e){window.lnkupCardImageFallback(e.target);},true);document.querySelectorAll('img[data-fallback-src]').forEach(function(img){if(img.complete&&img.naturalWidth===0){window.lnkupCardImageFallback(img);}});})();
+JS;
+	wp_print_inline_script_tag( $js, array( 'id' => 'lnkup-card-image-fallback' ) );
+}
+
+/**
+ * Vendor-facing label for an application status. Backend enums are unchanged;
+ * this is the single place cards, dashboards and REST DTOs read display copy from.
+ *
+ * @param string $status Application status meta value.
+ */
+function lnkup_application_status_label( $status ) {
+	$labels = array(
+		'submitted'        => __( 'Submitted', 'lnkup-marketplace' ),
+		'under_review'     => __( 'Under review', 'lnkup-marketplace' ),
+		'info_requested'   => __( 'More info needed', 'lnkup-marketplace' ),
+		'waitlisted'       => __( 'Waitlisted', 'lnkup-marketplace' ),
+		'approved'         => __( 'Approved', 'lnkup-marketplace' ),
+		'payment_required' => __( 'Payment required', 'lnkup-marketplace' ),
+		'paid'             => __( 'Confirmed', 'lnkup-marketplace' ),
+		'completed'        => __( 'Completed', 'lnkup-marketplace' ),
+		'rejected'         => __( 'Declined', 'lnkup-marketplace' ),
+		'cancelled'        => __( 'Withdrawn', 'lnkup-marketplace' ),
+	);
+	return $labels[ (string) $status ] ?? '';
 }
 
 /**
@@ -811,6 +1218,26 @@ function lnkup_vendor_app_payment_return_url( $payment_id, $payment_state, $args
 		$query['applicationId'] = $application_id;
 	}
 	return $app_base . '/vendor/requests?' . http_build_query( $query, '', '&', PHP_QUERY_RFC3986 );
+}
+
+/**
+ * Stripe return URL for the native app: an https bounce that 302s to lnkup://stripe-redirect.
+ *
+ * @param int    $payment_id    Payment post ID.
+ * @param string $payment_state success|cancelled.
+ * @param array  $args          application_id.
+ */
+function lnkup_native_payment_return_url( $payment_id, $payment_state, $args = array() ) {
+	$application_id = absint( $args['application_id'] ?? get_post_meta( $payment_id, '_lnkup_application_id', true ) );
+	return add_query_arg(
+		array_filter(
+			array(
+				'payment'        => sanitize_key( $payment_state ),
+				'application_id' => $application_id,
+			)
+		),
+		rest_url( 'lnkup/v1/financial/checkout/native-return' )
+	);
 }
 
 /**
@@ -990,6 +1417,190 @@ function lnkup_empty_state( $title, $description = '', $cta_label = '', $cta_hre
 }
 
 /**
+ * Dashboard page header. Every dashboard tab and detail view renders exactly one.
+ *
+ * HTML keys (actions, meta, title_after) must already be escaped by the caller.
+ *
+ * @param array $args {
+ *     @type string $title       Page title (required). Rendered as the page's only h1.
+ *     @type string $subtitle    One-line description under the title.
+ *     @type string $eyebrow     Small label above the title.
+ *     @type string $back_url    Optional back link URL.
+ *     @type string $back_label  Back link text.
+ *     @type string $title_after Escaped HTML placed inside the h1 after the text (status pill, switcher).
+ *     @type string $meta        Escaped HTML for the meta row under the subtitle.
+ *     @type string $actions     Escaped HTML for header buttons.
+ *     @type string $class       Extra classes.
+ *     @type string $testid      data-testid value.
+ * }
+ * @return string
+ */
+function lnkup_page_header( array $args ) {
+	$title = (string) ( $args['title'] ?? '' );
+	if ( '' === $title ) {
+		return '';
+	}
+	$classes = trim( 'lnkup-page-header ' . (string) ( $args['class'] ?? '' ) );
+	$back    = (string) ( $args['back_url'] ?? '' );
+	ob_start();
+	?>
+	<header class="<?php echo esc_attr( $classes ); ?>"<?php echo ! empty( $args['testid'] ) ? ' data-testid="' . esc_attr( (string) $args['testid'] ) . '"' : ''; ?>>
+		<div class="lnkup-page-header__main">
+			<?php if ( $back ) : ?>
+				<a class="lnkup-page-header__back" href="<?php echo esc_url( $back ); ?>"><span aria-hidden="true">&larr;</span> <?php echo esc_html( (string) ( $args['back_label'] ?? __( 'Back', 'lnkup-marketplace' ) ) ); ?></a>
+			<?php endif; ?>
+			<?php if ( ! empty( $args['eyebrow'] ) ) : ?>
+				<p class="lnkup-page-header__eyebrow"><?php echo esc_html( (string) $args['eyebrow'] ); ?></p>
+			<?php endif; ?>
+			<h1 class="lnkup-page-header__title">
+				<?php echo esc_html( $title ); ?>
+				<?php echo (string) ( $args['title_after'] ?? '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			</h1>
+			<?php if ( ! empty( $args['subtitle'] ) ) : ?>
+				<p class="lnkup-page-header__subtitle"><?php echo esc_html( (string) $args['subtitle'] ); ?></p>
+			<?php endif; ?>
+			<?php if ( ! empty( $args['meta'] ) ) : ?>
+				<div class="lnkup-page-header__meta"><?php echo (string) $args['meta']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
+			<?php endif; ?>
+		</div>
+		<?php if ( ! empty( $args['actions'] ) ) : ?>
+			<div class="lnkup-page-header__actions"><?php echo (string) $args['actions']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
+		<?php endif; ?>
+	</header>
+	<?php
+	return (string) ob_get_clean();
+}
+
+/**
+ * Stat strip: a row of labelled numbers.
+ *
+ * @param array $items Each item: label, value. Optional key for data attributes.
+ * @param array $args  Optional class, id, testid.
+ * @return string
+ */
+function lnkup_stat_strip( array $items, array $args = array() ) {
+	$items = array_values( array_filter( $items, 'is_array' ) );
+	if ( ! $items ) {
+		return '';
+	}
+	$count   = count( $items );
+	$classes = 'lnkup-home-stats';
+	if ( $count < 4 ) {
+		$classes .= ' lnkup-home-stats--cols-' . $count;
+	}
+	if ( ! empty( $args['class'] ) ) {
+		$classes .= ' ' . (string) $args['class'];
+	}
+	ob_start();
+	?>
+	<dl class="<?php echo esc_attr( $classes ); ?>"<?php echo ! empty( $args['id'] ) ? ' id="' . esc_attr( (string) $args['id'] ) . '"' : ''; ?><?php echo ! empty( $args['testid'] ) ? ' data-testid="' . esc_attr( (string) $args['testid'] ) . '"' : ''; ?>>
+		<?php foreach ( $items as $item ) : ?>
+			<div class="lnkup-home-stat<?php echo ! empty( $item['href'] ) ? ' lnkup-home-stat--link' : ''; ?>"<?php echo ! empty( $item['key'] ) ? ' data-stat="' . esc_attr( (string) $item['key'] ) . '"' : ''; ?>>
+				<dt>
+					<?php if ( ! empty( $item['href'] ) ) : ?>
+						<a class="lnkup-home-stat__link" href="<?php echo esc_url( (string) $item['href'] ); ?>"><?php echo esc_html( (string) ( $item['label'] ?? '' ) ); ?></a>
+					<?php else : ?>
+						<?php echo esc_html( (string) ( $item['label'] ?? '' ) ); ?>
+					<?php endif; ?>
+				</dt>
+				<dd><?php echo esc_html( (string) ( $item['value'] ?? '' ) ); ?></dd>
+			</div>
+		<?php endforeach; ?>
+	</dl>
+	<?php
+	return (string) ob_get_clean();
+}
+
+/**
+ * Tab bar for dashboard pages and in-page sections.
+ *
+ * Tabs with an href render as links (aria-current on the active one); tabs without render as
+ * buttons so existing JS can switch panels.
+ *
+ * @param array  $tabs    Each tab: id, label, href (optional), badge (int, optional), badge_class, attrs (array of extra attributes).
+ * @param string $current Active tab id.
+ * @param array  $args    variant ('' | pills | underline), label (aria-label), class, id, testid.
+ * @return string
+ */
+function lnkup_dash_tabs( array $tabs, $current = '', array $args = array() ) {
+	if ( ! $tabs ) {
+		return '';
+	}
+	$classes = 'lnkup-dash-tabs';
+	if ( ! empty( $args['variant'] ) ) {
+		$classes .= ' lnkup-dash-tabs--' . sanitize_html_class( (string) $args['variant'] );
+	}
+	if ( ! empty( $args['class'] ) ) {
+		$classes .= ' ' . (string) $args['class'];
+	}
+	$label = (string) ( $args['label'] ?? __( 'Sections', 'lnkup-marketplace' ) );
+	ob_start();
+	?>
+	<nav class="<?php echo esc_attr( $classes ); ?>" aria-label="<?php echo esc_attr( $label ); ?>"<?php echo ! empty( $args['id'] ) ? ' id="' . esc_attr( (string) $args['id'] ) . '"' : ''; ?><?php echo ! empty( $args['testid'] ) ? ' data-testid="' . esc_attr( (string) $args['testid'] ) . '"' : ''; ?>>
+		<?php foreach ( $tabs as $tab ) : ?>
+			<?php
+			$id     = (string) ( $tab['id'] ?? '' );
+			$active = '' !== $id && $id === (string) $current;
+			$attrs  = '';
+			foreach ( (array) ( $tab['attrs'] ?? array() ) as $attr => $value ) {
+				$attrs .= ' ' . esc_attr( (string) $attr ) . '="' . esc_attr( (string) $value ) . '"';
+			}
+			$badge = isset( $tab['badge'] ) ? (int) $tab['badge'] : null;
+			$inner = esc_html( (string) ( $tab['label'] ?? '' ) );
+			if ( null !== $badge && $badge > 0 ) {
+				$inner .= ' <span class="lnkup-dash-tabs__badge' . ( ! empty( $tab['badge_class'] ) ? ' ' . esc_attr( (string) $tab['badge_class'] ) : '' ) . '">' . esc_html( (string) $badge ) . '</span>';
+			}
+			$btn_class = 'lnkup-dash-tabs__btn' . ( $active ? ' is-active' : '' );
+			?>
+			<?php if ( ! empty( $tab['href'] ) ) : ?>
+				<a class="<?php echo esc_attr( $btn_class ); ?>" href="<?php echo esc_url( (string) $tab['href'] ); ?>"<?php echo $active ? ' aria-current="page"' : ''; ?><?php echo $attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>><?php echo $inner; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></a>
+			<?php else : ?>
+				<button type="button" class="<?php echo esc_attr( $btn_class ); ?>" aria-pressed="<?php echo $active ? 'true' : 'false'; ?>"<?php echo $attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>><?php echo $inner; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></button>
+			<?php endif; ?>
+		<?php endforeach; ?>
+	</nav>
+	<?php
+	return (string) ob_get_clean();
+}
+
+/**
+ * Skeleton placeholder shown while a panel loads. JS replaces it with content, an empty state, or an error card.
+ *
+ * @param string $variant panel | list | stats | line.
+ * @param array  $args    Optional id, class.
+ * @return string
+ */
+function lnkup_loading_state( $variant = 'panel', array $args = array() ) {
+	$variant = in_array( $variant, array( 'panel', 'list', 'stats', 'line' ), true ) ? $variant : 'panel';
+	$classes = 'lnkup-loading-state lnkup-loading-state--' . $variant;
+	if ( ! empty( $args['class'] ) ) {
+		$classes .= ' ' . (string) $args['class'];
+	}
+	ob_start();
+	?>
+	<div class="<?php echo esc_attr( $classes ); ?>" role="status" aria-busy="true" aria-label="<?php esc_attr_e( 'Loading', 'lnkup-marketplace' ); ?>"<?php echo ! empty( $args['id'] ) ? ' id="' . esc_attr( (string) $args['id'] ) . '"' : ''; ?>>
+		<?php if ( 'stats' === $variant ) : ?>
+			<?php for ( $i = 0; $i < 4; $i++ ) : ?>
+				<div class="lnkup-skeleton"></div>
+			<?php endfor; ?>
+		<?php elseif ( 'list' === $variant ) : ?>
+			<?php for ( $i = 0; $i < 3; $i++ ) : ?>
+				<div class="lnkup-skeleton lnkup-skeleton--card"></div>
+			<?php endfor; ?>
+		<?php elseif ( 'line' === $variant ) : ?>
+			<div class="lnkup-skeleton lnkup-skeleton--line"></div>
+		<?php else : ?>
+			<div class="lnkup-skeleton lnkup-skeleton--title"></div>
+			<div class="lnkup-skeleton lnkup-skeleton--line"></div>
+			<div class="lnkup-skeleton lnkup-skeleton--line"></div>
+			<div class="lnkup-skeleton lnkup-skeleton--short"></div>
+		<?php endif; ?>
+	</div>
+	<?php
+	return (string) ob_get_clean();
+}
+
+/**
  * Query applications for user.
  *
  * @param int    $user_id User ID.
@@ -1028,12 +1639,76 @@ function lnkup_get_payments_for_user( $user_id, $role = 'vendor' ) {
 }
 
 /**
+ * One display row per event. Installments add up. A fee line and a full charge keep the larger total.
+ *
+ * @param array $payments Payment posts.
+ * @return array<int, array{payment: WP_Post, amount: float}>
+ */
+function lnkup_payment_display_rows( $payments ) {
+	$groups = array();
+	foreach ( (array) $payments as $payment ) {
+		if ( ! $payment instanceof WP_Post ) {
+			continue;
+		}
+		$event_id = (int) get_post_meta( $payment->ID, '_lnkup_event_id', true );
+		if ( ! $event_id ) {
+			$opp_id = (int) get_post_meta( $payment->ID, '_lnkup_opportunity_id', true );
+			if ( $opp_id ) {
+				$event_id = (int) get_post_meta( $opp_id, '_lnkup_event_id', true );
+			}
+		}
+		$key            = $event_id > 0 ? 'event-' . $event_id : 'pay-' . $payment->ID;
+		$amount         = (float) get_post_meta( $payment->ID, '_lnkup_total_amount', true );
+		$is_installment = (int) get_post_meta( $payment->ID, '_lnkup_installment_id', true ) > 0;
+		if ( ! isset( $groups[ $key ] ) ) {
+			$groups[ $key ] = array(
+				'payment'          => $payment,
+				'installment_sum'  => 0.0,
+				'standalone_total' => 0.0,
+				'has_installment'  => false,
+				'has_standalone'   => false,
+			);
+		}
+		if ( strtotime( (string) $payment->post_date ) >= strtotime( (string) $groups[ $key ]['payment']->post_date ) ) {
+			$groups[ $key ]['payment'] = $payment;
+		}
+		if ( $is_installment ) {
+			$groups[ $key ]['has_installment']  = true;
+			$groups[ $key ]['installment_sum'] += $amount;
+		} else {
+			$groups[ $key ]['has_standalone']   = true;
+			$groups[ $key ]['standalone_total'] = max( $groups[ $key ]['standalone_total'], $amount );
+		}
+	}
+	$rows = array();
+	foreach ( $groups as $group ) {
+		if ( $group['has_installment'] && ! $group['has_standalone'] ) {
+			$amount = $group['installment_sum'];
+		} elseif ( $group['has_installment'] ) {
+			$amount = max( $group['installment_sum'], $group['standalone_total'] );
+		} else {
+			$amount = $group['standalone_total'];
+		}
+		$rows[] = array(
+			'payment' => $group['payment'],
+			'amount'  => round( (float) $amount, 2 ),
+		);
+	}
+	return $rows;
+}
+
+/**
  * Parse marketplace filter args from request array.
  *
  * @param array $source Request source ($_GET or POST).
  */
 function lnkup_parse_marketplace_filters( $source = null ) {
 	$source = is_array( $source ) ? $source : $_GET; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	foreach ( array( 'market' => 'markets', 'event_type' => 'event_types', 'category' => 'categories' ) as $alias => $canonical ) {
+		if ( empty( $source[ $canonical ] ) && ! empty( $source[ $alias ] ) ) {
+			$source[ $canonical ] = $source[ $alias ];
+		}
+	}
 
 	$array_keys = array( 'categories', 'event_types', 'markets', 'doc_required' );
 	$args       = array();
@@ -1313,10 +1988,13 @@ function lnkup_render_mixed_feed_batch( $opps, $externals, $page = 1 ) {
 	}
 
 	$merged = array();
-	foreach ( (array) $opps as $item ) {
-		$item['item_type'] = 'opportunity';
-		$item['sort_date'] = strtotime( (string) ( $item['event_date'] ?? $item['deadline'] ?? '2999-12-31' ) );
-		$merged[]          = $item;
+	foreach ( lnkup_group_opportunities_by_event( $opps ) as $slots ) {
+		$first    = $slots[0];
+		$merged[] = array(
+			'item_type' => 'event_group',
+			'slots'     => $slots,
+			'sort_date' => strtotime( (string) ( $first['date'] ?? $first['event_date'] ?? $first['deadline'] ?? '2999-12-31' ) ),
+		);
 	}
 	foreach ( array_slice( (array) $externals, 0, 6 ) as $item ) {
 		$merged[] = $item;
@@ -1332,6 +2010,8 @@ function lnkup_render_mixed_feed_batch( $opps, $externals, $page = 1 ) {
 	foreach ( $merged as $item ) {
 		if ( 'external_event' === ( $item['item_type'] ?? '' ) ) {
 			$html .= lnkup_render_external_event_card( $item );
+		} elseif ( 'event_group' === ( $item['item_type'] ?? '' ) ) {
+			$html .= lnkup_render_event_group_card( $item['slots'] ?? array() );
 		} else {
 			$html .= lnkup_render_opportunity_card_v2( $item );
 		}
@@ -1359,6 +2039,7 @@ function lnkup_render_external_event_card( $row ) {
 	$img       = lnkup_external_event_illustration_url( $row );
 	$img_alt   = lnkup_opportunity_card_alt(
 		array(
+			'title'            => $row['title'] ?? '',
 			'categories'       => $row['recommended_categories'] ?? array(),
 			'event_type_label' => $row['event_type_label'] ?? $row['event_type'] ?? '',
 			'city'             => $row['city'] ?? '',
@@ -1412,7 +2093,7 @@ function lnkup_render_external_event_card( $row ) {
 					<span><?php echo esc_html( (string) $row['organizer_name'] ); ?></span>
 				</div>
 			<?php endif; ?>
-			<p class="lnkup-event-card__external-subline"><?php echo esc_html( lnkup_copy( 'external_event_unclaimed' ) ); ?></p>
+			<p class="lnkup-event-group__trust is-external"><?php esc_html_e( 'Not bookable on LNKup', 'lnkup-marketplace' ); ?></p>
 			<h3 class="lnkup-event-card__title"><?php echo esc_html( (string) ( $row['title'] ?? '' ) ); ?></h3>
 			<div class="lnkup-event-card__meta lnkup-event-card__meta-grid">
 				<?php if ( ! empty( $row['date_label'] ) ) : ?>
@@ -1424,7 +2105,7 @@ function lnkup_render_external_event_card( $row ) {
 				<?php if ( ! empty( $row['location_label'] ) ) : ?>
 					<div class="lnkup-event-card__meta-item">
 						<span class="lnkup-event-card__meta-label"><?php esc_html_e( 'Location', 'lnkup-marketplace' ); ?></span>
-						<span><?php echo esc_html( (string) $row['location_label'] ); ?></span>
+						<span><?php echo esc_html( ( ! empty( $row['city'] ) || ! empty( $row['state'] ) ) ? lnkup_display_place( $row['city'] ?? '', $row['state'] ?? '' ) : (string) $row['location_label'] ); ?></span>
 					</div>
 				<?php endif; ?>
 				<?php if ( ! empty( $row['venue_name'] ) ) : ?>
@@ -1461,7 +2142,7 @@ function lnkup_render_external_event_card( $row ) {
 			<?php if ( ! empty( $recs ) ) : ?>
 				<div class="lnkup-event-card__chips">
 					<?php foreach ( array_slice( $recs, 0, 3 ) as $cat ) : ?>
-						<span class="lnkup-badge lnkup-badge--secondary"><?php echo esc_html( (string) $cat ); ?></span>
+						<span class="lnkup-badge lnkup-badge--secondary"><?php echo esc_html( lnkup_display_category_badge( (string) $cat ) ); ?></span>
 					<?php endforeach; ?>
 				</div>
 			<?php endif; ?>
@@ -1667,8 +2348,47 @@ function lnkup_format_index_row( $row, $compare = false ) {
 	$item['featured_image']         = lnkup_opportunity_illustration_url( $item );
 	$item['category_fallback_url']  = lnkup_opportunity_category_fallback_url( $item );
 	$item['image_alt']              = lnkup_opportunity_card_alt( $item );
+	$statuses                       = lnkup_current_vendor_application_statuses();
+	$item['application_status']     = $statuses[ (int) $row['opportunity_id'] ] ?? '';
 
 	return $item;
+}
+
+/**
+ * Current vendor's application status keyed by opportunity ID (one query per request).
+ *
+ * @return array<int, string>
+ */
+function lnkup_current_vendor_application_statuses() {
+	static $cache = array();
+	$user_id = get_current_user_id();
+	if ( ! $user_id || ! class_exists( 'LNKup_Roles' ) || ! LNKup_Roles::is_vendor( $user_id ) ) {
+		return array();
+	}
+	if ( isset( $cache[ $user_id ] ) ) {
+		return $cache[ $user_id ];
+	}
+	$ids = get_posts(
+		array(
+			'post_type'      => 'lnkup_application',
+			'post_status'    => 'any',
+			'posts_per_page' => 500,
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+			'meta_key'       => '_lnkup_vendor_user_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+			'meta_value'     => $user_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+		)
+	);
+	update_meta_cache( 'post', $ids );
+	$map = array();
+	foreach ( $ids as $app_id ) {
+		$opp_id = (int) get_post_meta( $app_id, '_lnkup_opportunity_id', true );
+		if ( $opp_id && ! isset( $map[ $opp_id ] ) ) {
+			$map[ $opp_id ] = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+		}
+	}
+	$cache[ $user_id ] = $map;
+	return $map;
 }
 
 /**
@@ -1693,7 +2413,7 @@ function lnkup_get_opportunity_badges( $row ) {
 	if ( $spots_t > 0 && ( $spots_r / $spots_t ) <= 0.1 && $spots_r > 0 ) {
 		$badges[] = 'almost_full';
 	}
-	if ( ! empty( $row['trending_score'] ) && (float) $row['trending_score'] > 30 ) {
+	if ( ! empty( $row['trending_score'] ) && (float) $row['trending_score'] > 30 && (int) ( $row['application_count'] ?? 0 ) > 0 ) {
 		$badges[] = 'trending';
 	}
 	if ( ! empty( $row['organizer_verified'] ) ) {
@@ -1720,8 +2440,12 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 
 	$user_id   = get_current_user_id();
 	$favorited = $user_id && LNKup_Vendor_Personalization::is_favorite( $user_id, 'opportunities', $opp['opportunity_id'] );
-	$low_spots = ( $opp['spots_remaining'] ?? 0 ) <= 5 && ( $opp['spots_remaining'] ?? 0 ) > 0;
 	$apply_url = $opp['apply_url'] ?? add_query_arg( array( 'apply' => $opp['opportunity_id'] ), lnkup_page_url_helper( 'opportunities' ) );
+	$event_id  = (int) ( $opp['event_id'] ?? 0 );
+	$view_url  = $apply_url;
+	if ( $event_id && class_exists( 'LNKup_Organizer_Onboarding' ) ) {
+		$view_url = LNKup_Organizer_Onboarding::event_public_url( $event_id );
+	}
 	$match_chip = '';
 	if ( $user_id && class_exists( 'LNKup_Growth_Match' ) && LNKup_Capabilities::can_view_growth( $user_id ) ) {
 		$match = LNKup_Growth_Match::for_opportunity( $user_id, $opp['opportunity_id'] );
@@ -1735,7 +2459,16 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 	if ( ! empty( $opp['opportunity_title'] ) && $opp['opportunity_title'] !== $event_name ) {
 		$subtitle = $opp['opportunity_title'];
 	}
-	$location = $opp['location_label'] ?? trim( ( $opp['city'] ?? '' ) . ( ! empty( $opp['state'] ) ? ', ' . $opp['state'] : '' ) );
+	$location = ( ! empty( $opp['city'] ) || ! empty( $opp['state'] ) )
+		? lnkup_display_place( $opp['city'] ?? '', $opp['state'] ?? '' )
+		: ( $opp['location_label'] ?? '' );
+	if ( ! empty( $opp['date'] ) ) {
+		$event_name = lnkup_display_event_title( $event_name, (string) $opp['date'] );
+		if ( empty( $opp['name_html'] ) ) {
+			$name = $event_name;
+		}
+	}
+	$bookable = ! ( $event_id && class_exists( 'LNKup_Organizer_Onboarding' ) && LNKup_Organizer_Onboarding::event_is_unclaimed_external( $event_id ) );
 	$img       = lnkup_opportunity_illustration_url( $opp );
 	$img_alt   = lnkup_opportunity_card_alt( $opp );
 	$badge_labels = array(
@@ -1746,30 +2479,37 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 		'popular'        => __( 'Popular', 'lnkup-marketplace' ),
 		'almost_full'    => __( 'Almost Full', 'lnkup-marketplace' ),
 	);
-	$status = $opp['application_status'] ?? '';
-	$status_labels = array(
-		'submitted'        => __( 'Applied', 'lnkup-marketplace' ),
-		'under_review'     => __( 'Under Review', 'lnkup-marketplace' ),
-		'approved'         => __( 'Approved', 'lnkup-marketplace' ),
-		'payment_required' => __( 'Payment Due', 'lnkup-marketplace' ),
-		'paid'             => __( 'Paid', 'lnkup-marketplace' ),
-		'completed'        => __( 'Completed', 'lnkup-marketplace' ),
-		'waitlisted'       => __( 'Waitlisted', 'lnkup-marketplace' ),
-	);
+	$status       = (string) ( $opp['application_status'] ?? '' );
+	$status_label = lnkup_application_status_label( $status );
 	$is_closed = empty( $opp['is_open'] );
+	$spots_left = (int) ( $opp['spots_remaining'] ?? 0 );
+	$deadline_raw = (string) ( $opp['deadline'] ?? '' );
+	$deadline_passed = '' !== $deadline_raw && $deadline_raw < current_time( 'Y-m-d' );
+	$deadline_label = (string) ( $opp['deadline_label'] ?? '' );
+	$rolling_deadline = '' === $deadline_label || false !== stripos( $deadline_label, 'rolling' );
+	if ( $deadline_passed || ( $is_closed && $spots_left > 0 ) ) {
+		$availability_line = __( 'Closed', 'lnkup-marketplace' );
+	} elseif ( $spots_left < 1 ) {
+		$availability_line = __( 'Full', 'lnkup-marketplace' );
+	} elseif ( ! $rolling_deadline ) {
+		$availability_line = sprintf(
+			/* translators: %s: application deadline */
+			__( 'Apply by %s', 'lnkup-marketplace' ),
+			$deadline_label
+		);
+	} else {
+		$availability_line = __( 'Open', 'lnkup-marketplace' );
+	}
 
 	ob_start();
 	?>
-	<article class="lnkup-event-card lnkup-event-card--v2<?php echo $is_closed ? ' lnkup-event-card--closed' : ''; ?>" data-listing-type="managed" data-opportunity-id="<?php echo esc_attr( (string) $opp['opportunity_id'] ); ?>" data-lat="<?php echo esc_attr( (string) ( $opp['lat'] ?? '' ) ); ?>" data-lng="<?php echo esc_attr( (string) ( $opp['lng'] ?? '' ) ); ?>">
+	<article class="lnkup-event-card lnkup-event-card--v2<?php echo $is_closed ? ' lnkup-event-card--closed' : ''; ?><?php echo ( ! empty( $opp['card_variant'] ) && 'compact' === $opp['card_variant'] ) ? ' lnkup-event-card--compact' : ''; ?>" data-listing-type="managed" data-opportunity-id="<?php echo esc_attr( (string) $opp['opportunity_id'] ); ?>" data-lat="<?php echo esc_attr( (string) ( $opp['lat'] ?? '' ) ); ?>" data-lng="<?php echo esc_attr( (string) ( $opp['lng'] ?? '' ) ); ?>">
 		<div class="lnkup-event-card__media">
-			<?php echo lnkup_event_card_img_html( $img, $img_alt, lnkup_opportunity_category_fallback_url( $opp ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php echo lnkup_event_card_img_html( $img, $img_alt, lnkup_opportunity_category_fallback_url( $opp ), (int) ( $opp['featured_image_id'] ?? 0 ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<div class="lnkup-event-card__badges-top">
 				<span class="lnkup-badge lnkup-badge--accent"><?php echo esc_html( $opp['event_type_label'] ?? __( 'Event Opportunity', 'lnkup-marketplace' ) ); ?></span>
-				<span class="lnkup-badge lnkup-badge--managed"><?php esc_html_e( 'Apply on LNKup', 'lnkup-marketplace' ); ?></span>
+				<span class="lnkup-badge lnkup-badge--managed"><?php echo esc_html( $bookable ? __( 'Book on LNKup', 'lnkup-marketplace' ) : __( 'Not bookable on LNKup', 'lnkup-marketplace' ) ); ?></span>
 				<span class="lnkup-badge"><?php echo esc_html( $opp['fee_label'] ?? lnkup_currency( $opp['vendor_fee'] ?? 0 ) ); ?></span>
-				<?php if ( $low_spots ) : ?>
-					<span class="lnkup-badge lnkup-badge--destructive"><?php echo esc_html( (string) $opp['spots_remaining'] ); ?> <?php esc_html_e( 'left', 'lnkup-marketplace' ); ?></span>
-				<?php endif; ?>
 			</div>
 			<?php if ( ! empty( $opp['badges'] ) ) : ?>
 				<div class="lnkup-event-card__badges-float">
@@ -1805,7 +2545,11 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 				}
 				?>
 			<?php endif; ?>
-			<h3><?php echo wp_kses_post( $name ); ?></h3>
+			<h3><a href="<?php echo esc_url( $view_url ); ?>"><?php echo wp_kses_post( $name ); ?></a></h3>
+			<p class="lnkup-event-card__summary">
+				<span><?php echo esc_html( trim( ( ! empty( $opp['date'] ) ? date_i18n( 'M j, Y', strtotime( $opp['date'] ) ) : '' ) . ( $location ? ' · ' . $location : '' ), ' ·' ) ); ?></span>
+				<span class="lnkup-event-card__availability"><?php echo esc_html( $availability_line ); ?></span>
+			</p>
 			<?php if ( $subtitle ) : ?>
 				<p class="lnkup-event-card__subtitle lnkup-muted"><?php echo esc_html( $subtitle ); ?></p>
 			<?php endif; ?>
@@ -1852,7 +2596,7 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 			<?php if ( ! empty( $opp['categories'] ) ) : ?>
 				<div class="lnkup-event-card__chips">
 					<?php foreach ( array_slice( $opp['categories'], 0, 3 ) as $cat ) : ?>
-						<span class="lnkup-badge lnkup-badge--secondary"><?php echo esc_html( $cat ); ?></span>
+						<span class="lnkup-badge lnkup-badge--secondary"><?php echo esc_html( lnkup_display_category_badge( $cat ) ); ?></span>
 					<?php endforeach; ?>
 				</div>
 			<?php endif; ?>
@@ -1867,25 +2611,17 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 				</div>
 			<?php endif; ?>
 			<div class="lnkup-event-card__footer">
-				<span class="lnkup-badge lnkup-badge--secondary"><?php
-				$filled = max( 0, (int) $opp['total_spots'] - (int) $opp['spots_remaining'] );
-				printf(
-					/* translators: 1: filled spots, 2: total spots */
-					esc_html__( '%1$d of %2$d spots filled', 'lnkup-marketplace' ),
-					$filled,
-					(int) $opp['total_spots']
-				);
-				?></span>
+				<span class="lnkup-badge lnkup-badge--secondary"><?php echo esc_html( $availability_line ); ?></span>
 				<div class="lnkup-event-card__actions">
 					<?php if ( lnkup_marketplace_phase_at_least( '1c' ) ) : ?>
 					<button type="button" class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm lnkup-compare-add" data-opportunity-id="<?php echo esc_attr( (string) $opp['opportunity_id'] ); ?>"><?php esc_html_e( 'Compare', 'lnkup-marketplace' ); ?></button>
 					<?php endif; ?>
-					<a href="<?php echo esc_url( $apply_url ); ?>" class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm"><?php esc_html_e( 'Details', 'lnkup-marketplace' ); ?></a>
-					<?php if ( $status && isset( $status_labels[ $status ] ) ) : ?>
-						<span class="lnkup-badge lnkup-badge--accent"><?php echo esc_html( $status_labels[ $status ] ); ?></span>
+					<a href="<?php echo esc_url( $view_url ); ?>" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm"><?php esc_html_e( 'View', 'lnkup-marketplace' ); ?></a>
+					<?php if ( $status_label ) : ?>
+						<a href="<?php echo esc_url( add_query_arg( 'view', 'applications', lnkup_page_url_helper( 'vendor-dashboard' ) ) ); ?>" class="lnkup-badge lnkup-badge--accent lnkup-event-card__status" data-application-status="<?php echo esc_attr( $status ); ?>"><?php echo esc_html( $status_label ); ?></a>
 					<?php elseif ( $is_closed ) : ?>
 						<span class="lnkup-badge"><?php esc_html_e( 'Closed', 'lnkup-marketplace' ); ?></span>
-					<?php else : ?>
+					<?php elseif ( $bookable ) : ?>
 						<a href="<?php echo esc_url( $apply_url ); ?>" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm"><?php esc_html_e( 'Apply', 'lnkup-marketplace' ); ?></a>
 					<?php endif; ?>
 				</div>
@@ -1904,14 +2640,478 @@ function lnkup_render_opportunity_card_skeleton() {
 }
 
 /**
- * Batch render cards HTML.
+ * Title-case a display label. Mixed-case values are left as written.
+ *
+ * @param string $value Raw label.
+ */
+function lnkup_display_label( $value ) {
+	$value = trim( (string) $value );
+	if ( '' === $value ) {
+		return '';
+	}
+	if ( function_exists( 'mb_strtolower' ) && function_exists( 'mb_strtoupper' ) ) {
+		$lower = mb_strtolower( $value );
+		$upper = mb_strtoupper( $value );
+	} else {
+		$lower = strtolower( $value );
+		$upper = strtoupper( $value );
+	}
+	if ( $value !== $lower && $value !== $upper ) {
+		return $value;
+	}
+	return ucwords( strtolower( $value ) );
+}
+
+/**
+ * Short public category name. Stored terms are not changed.
+ *
+ * @param string $value Raw category.
+ */
+function lnkup_display_category_badge( $value ) {
+	$label = lnkup_display_label( $value );
+	$key   = strtolower( $label );
+	$map   = array(
+		'art vendor'         => __( 'Art', 'lnkup-marketplace' ),
+		'beauty vendor'      => __( 'Beauty', 'lnkup-marketplace' ),
+		'merchandise vendor' => __( 'Merchandise', 'lnkup-marketplace' ),
+		'food vendor'        => __( 'Food', 'lnkup-marketplace' ),
+		'food truck'         => __( 'Food Trucks', 'lnkup-marketplace' ),
+		'service vendor'     => __( 'Services', 'lnkup-marketplace' ),
+	);
+	return $map[ $key ] ?? $label;
+}
+
+/**
+ * Display a state: two letters stay uppercase, a full name is title-cased.
+ *
+ * @param string $state Raw state.
+ */
+function lnkup_display_state( $state ) {
+	$state = trim( (string) $state );
+	if ( '' === $state ) {
+		return '';
+	}
+	$aliases = array(
+		'ge' => 'GA',
+	);
+	$key = strtolower( $state );
+	if ( isset( $aliases[ $key ] ) ) {
+		return $aliases[ $key ];
+	}
+	if ( 2 === strlen( $state ) ) {
+		return strtoupper( $state );
+	}
+	return lnkup_display_label( $state );
+}
+
+/**
+ * Display city and state without rewriting stored meta.
+ *
+ * @param string $city  Raw city.
+ * @param string $state Raw state.
+ */
+function lnkup_display_place( $city, $state ) {
+	$city  = lnkup_display_label( $city );
+	if ( 'pheonix' === strtolower( $city ) ) {
+		$city = 'Phoenix';
+	}
+	$state = lnkup_display_state( $state );
+	if ( $city && $state ) {
+		return $city . ', ' . $state;
+	}
+	return $city ? $city : $state;
+}
+
+/**
+ * Drop a trailing venue and weekday date from a title when the date is shown separately.
+ *
+ * @param string $title Event title.
+ * @param string $date  Y-m-d event date, or empty.
+ */
+function lnkup_display_event_title( $title, $date, $venue = '', $organizer = '' ) {
+	$title = trim( (string) $title );
+	if ( '' === (string) $date || '' === $title ) {
+		return $title;
+	}
+	$title = trim( (string) preg_replace( '/\s*@[^|]+/', ' ', $title ) );
+	$parts = preg_split( '/\s*\|\s*/', $title );
+	if ( ! is_array( $parts ) ) {
+		return $title;
+	}
+	$months   = 'Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?';
+	$days     = 'Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?';
+	$date_re  = '/^(?:(?:' . $days . '),?\s+)?(?:' . $months . ')\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?$/i';
+	$venue    = trim( (string) $venue );
+	$organizer = trim( (string) $organizer );
+	$kept     = array();
+	foreach ( $parts as $part ) {
+		$part = trim( (string) $part );
+		if ( '' === $part || preg_match( $date_re, $part ) ) {
+			continue;
+		}
+		if ( '' !== $venue && 0 === strcasecmp( $part, $venue ) ) {
+			continue;
+		}
+		if ( '' !== $organizer && 0 === strcasecmp( $part, $organizer ) ) {
+			continue;
+		}
+		$kept[] = $part;
+	}
+	if ( ! $kept ) {
+		return trim( (string) preg_replace( '/\s{2,}/', ' ', $title ) );
+	}
+	return trim( (string) preg_replace( '/\s{2,}/', ' ', implode( ' | ', $kept ) ), " \t|" );
+}
+
+/**
+ * Group opportunity rows so one event is one card.
+ *
+ * @param array $items Opportunity rows.
+ * @return array<int, array<int, array>>
+ */
+function lnkup_group_opportunities_by_event( $items ) {
+	$groups = array();
+	$order  = array();
+	foreach ( (array) $items as $item ) {
+		if ( ! is_array( $item ) ) {
+			continue;
+		}
+		$event_id = (int) ( $item['event_id'] ?? 0 );
+		$opp_id   = (int) ( $item['opportunity_id'] ?? $item['id'] ?? 0 );
+		$key      = $event_id > 0 ? 'e' . $event_id : 'o' . $opp_id;
+		if ( ! isset( $groups[ $key ] ) ) {
+			$groups[ $key ] = array();
+			$order[]        = $key;
+		}
+		if ( $opp_id && isset( $groups[ $key ][ $opp_id ] ) ) {
+			continue;
+		}
+		if ( $opp_id ) {
+			$groups[ $key ][ $opp_id ] = $item;
+		} else {
+			$groups[ $key ][] = $item;
+		}
+	}
+	$out = array();
+	foreach ( $order as $key ) {
+		$out[] = array_values( $groups[ $key ] );
+	}
+	return $out;
+}
+
+/**
+ * One public event card for a group of vendor slots.
+ *
+ * @param array $slots Opportunity rows for a single event.
+ */
+function lnkup_render_event_group_card( $slots ) {
+	return lnkup_render_homepage_event_card( $slots, 'feed' );
+}
+
+/**
+ * Public discovery card for one event.
+ *
+ * @param array  $slots   Opportunity rows for a single event.
+ * @param string $context home|feed. Apply is only offered on the feed.
+ */
+function lnkup_render_homepage_event_card( $slots, $context = 'home' ) {
+	$slots = array_values( (array) $slots );
+	if ( ! $slots ) {
+		return '';
+	}
+	$first    = $slots[0];
+	$event_id = (int) ( $first['event_id'] ?? 0 );
+	$event    = $event_id ? get_post( $event_id ) : null;
+	$date     = (string) ( $first['date'] ?? '' );
+	$title    = $event ? $event->post_title : (string) ( $first['event_name'] ?? $first['name'] ?? '' );
+	$venue    = '';
+	$organizer_name = '';
+	if ( $event_id && ! get_post_meta( $event_id, '_lnkup_venue_hidden', true ) ) {
+		$venue = (string) get_post_meta( $event_id, '_lnkup_venue_name', true );
+	}
+	if ( $event_id ) {
+		$organizer_user = (int) get_post_meta( $event_id, '_lnkup_organizer_user_id', true );
+		if ( $organizer_user ) {
+			$organizer_name = (string) get_user_meta( $organizer_user, '_lnkup_organizer_public_name', true );
+		}
+	}
+	$title    = lnkup_display_event_title( $title, $date, $venue, $organizer_name );
+	$place    = ( ! empty( $first['city'] ) || ! empty( $first['state'] ) )
+		? lnkup_display_place( $first['city'] ?? '', $first['state'] ?? '' )
+		: '';
+	$when     = $date ? date_i18n( 'M j, Y', strtotime( $date ) ) : '';
+	$bookable = ! ( $event_id && class_exists( 'LNKup_Organizer_Onboarding' ) && LNKup_Organizer_Onboarding::event_is_unclaimed_external( $event_id ) );
+	$view_url = ( $event_id && class_exists( 'LNKup_Organizer_Onboarding' ) ) ? LNKup_Organizer_Onboarding::event_public_url( $event_id ) : '';
+	$apply_base = function_exists( 'lnkup_page_url_helper' ) ? lnkup_page_url_helper( 'opportunities' ) : '';
+
+	$fee         = null;
+	$fee_max     = null;
+	$fee_known   = false;
+	$accepting   = false;
+	$open_spot_total = 0;
+	$spots_left  = false;
+	$closing     = false;
+	$apply_id    = 0;
+	$app_status  = '';
+	$cats        = array();
+	$slot_rows   = array();
+	foreach ( $slots as $slot ) {
+		$open = ! isset( $slot['is_open'] ) || ! empty( $slot['is_open'] );
+		$left = (int) ( $slot['spots_remaining'] ?? 0 );
+		$slot_status = (string) ( $slot['application_status'] ?? '' );
+		if ( $left > 0 ) {
+			$spots_left = true;
+		}
+		if ( in_array( 'closing_soon', (array) ( $slot['badges'] ?? array() ), true ) ) {
+			$closing = true;
+		}
+		if ( '' === $app_status && '' !== $slot_status ) {
+			$app_status = lnkup_application_status_label( $slot_status );
+		}
+		if ( $bookable && $open && $left > 0 ) {
+			$accepting = true;
+			$open_spot_total += $left;
+			if ( array_key_exists( 'vendor_fee', $slot ) && '' !== $slot['vendor_fee'] && null !== $slot['vendor_fee'] ) {
+				$slot_fee = (float) $slot['vendor_fee'];
+				if ( ! $fee_known || $slot_fee < $fee ) {
+					$fee       = $slot_fee;
+					$fee_known = true;
+				}
+				if ( null === $fee_max || $slot_fee > $fee_max ) {
+					$fee_max = $slot_fee;
+				}
+			}
+			$slot_id = (int) ( $slot['opportunity_id'] ?? $slot['id'] ?? 0 );
+			if ( ! $apply_id && $slot_id && '' === $slot_status ) {
+				$apply_id = $slot_id;
+			}
+			$row_label = '';
+			$slot_cats = array_values( array_filter( (array) ( $slot['categories'] ?? array() ) ) );
+			if ( $slot_cats ) {
+				$row_label = lnkup_display_category_badge( (string) $slot_cats[0] );
+			}
+			if ( '' === $row_label ) {
+				$row_label = lnkup_display_category_badge( (string) ( $slot['opportunity_title'] ?? $slot['name'] ?? '' ) );
+			}
+			if ( '' === $row_label ) {
+				$row_label = __( 'Vendor slot', 'lnkup-marketplace' );
+			}
+			$row_fee = null;
+			if ( array_key_exists( 'vendor_fee', $slot ) && '' !== $slot['vendor_fee'] && null !== $slot['vendor_fee'] ) {
+				$row_fee = (float) $slot['vendor_fee'];
+			}
+			$slot_rows[] = array(
+				'label' => $row_label,
+				'fee'   => $row_fee,
+			);
+		}
+		foreach ( (array) ( $slot['categories'] ?? array() ) as $cat ) {
+			$label = lnkup_display_category_badge( (string) $cat );
+			if ( '' !== $label ) {
+				$cats[ strtolower( $label ) ] = $label;
+			}
+		}
+	}
+	if ( ! $bookable ) {
+		$status = __( 'Unclaimed Event', 'lnkup-marketplace' );
+	} elseif ( $accepting && $closing ) {
+		$status = __( 'Closing Soon', 'lnkup-marketplace' );
+	} elseif ( $accepting ) {
+		$status = __( 'Accepting Applications', 'lnkup-marketplace' );
+	} elseif ( ! $spots_left ) {
+		$status = __( 'Sold Out', 'lnkup-marketplace' );
+	} else {
+		$status = __( 'Applications Closed', 'lnkup-marketplace' );
+	}
+	if ( $bookable && $fee_known ) {
+		if ( 'storefront' === $context && $fee > 0 && null !== $fee_max && $fee_max > $fee ) {
+			$fee_label = lnkup_public_money( $fee ) . '–' . lnkup_public_money( $fee_max );
+		} elseif ( 'storefront' === $context && $fee > 0 ) {
+			$fee_label = sprintf( __( 'From %s', 'lnkup-marketplace' ), lnkup_public_money( $fee ) );
+		} else {
+			$fee_label = $fee > 0
+				? sprintf( __( 'Vendor spots from %s', 'lnkup-marketplace' ), lnkup_public_money( $fee ) )
+				: __( 'Free', 'lnkup-marketplace' );
+		}
+	} else {
+		$fee_label = __( 'View vendor opportunities', 'lnkup-marketplace' );
+	}
+	$visible_cats = array_slice( array_values( $cats ), 0, 3 );
+	$extra_cats   = count( $cats ) - count( $visible_cats );
+	$img          = lnkup_opportunity_illustration_url( $first );
+	$img_alt      = function_exists( 'lnkup_opportunity_card_alt' ) ? lnkup_opportunity_card_alt( $first ) : $title;
+	$show_apply   = ( 'feed' === $context && $bookable && $accepting && $apply_id && $apply_base );
+	$action_url   = $view_url;
+	$action_label = __( 'View event', 'lnkup-marketplace' );
+	$action_class = 'lnkup-btn lnkup-btn--outline lnkup-btn--sm';
+	if ( 'storefront' === $context && $view_url ) {
+		$action_url   = $view_url . '#lnkup-vendor-options';
+		$action_label = __( 'View vendor spots', 'lnkup-marketplace' );
+		$action_class = 'lnkup-btn lnkup-btn--primary lnkup-btn--sm';
+	}
+	$apply_url    = $show_apply ? add_query_arg( 'apply', $apply_id, $apply_base ) : '';
+	$status_url   = ( '' !== $app_status && ! $apply_url ) ? add_query_arg( 'view', 'applications', lnkup_page_url_helper( 'vendor-dashboard' ) ) : '';
+	$can_save     = ( 'feed' === $context && $event_id && is_user_logged_in() && class_exists( 'LNKup_Roles' ) && ( LNKup_Roles::is_vendor() || ( class_exists( 'LNKup_Capabilities' ) && LNKup_Capabilities::user_has_manage_all() ) ) );
+	$saved        = $can_save && class_exists( 'LNKup_Vendor_Personalization' ) && LNKup_Vendor_Personalization::is_favorite( get_current_user_id(), 'events', $event_id );
+	$organizer    = trim( (string) ( $first['organizer_name'] ?? '' ) );
+
+	ob_start();
+	?>
+	<article class="lnkup-event-card lnkup-event-card--v2 lnkup-event-card--public" data-event-id="<?php echo esc_attr( (string) $event_id ); ?>">
+		<div class="lnkup-event-card__media">
+			<?php echo lnkup_event_card_img_html( $img, $img_alt, lnkup_opportunity_category_fallback_url( $first ), (int) ( $first['featured_image_id'] ?? 0 ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<div class="lnkup-event-card__badges-top">
+				<span class="lnkup-badge lnkup-badge--accent"><?php echo esc_html( $status ); ?></span>
+				<?php if ( $app_status ) : ?>
+					<span class="lnkup-badge"><?php echo esc_html( $app_status ); ?></span>
+				<?php endif; ?>
+			</div>
+			<?php if ( $can_save ) : ?>
+				<button type="button" class="lnkup-event-card__favorite<?php echo $saved ? ' is-active' : ''; ?>" data-favorite-type="events" data-favorite-id="<?php echo esc_attr( (string) $event_id ); ?>" aria-pressed="<?php echo $saved ? 'true' : 'false'; ?>" aria-label="<?php esc_attr_e( 'Save event', 'lnkup-marketplace' ); ?>">♥</button>
+			<?php endif; ?>
+		</div>
+		<div class="lnkup-event-card__body">
+			<?php if ( $organizer ) : ?>
+				<p class="lnkup-event-card__organizer"><?php echo esc_html( $organizer ); ?></p>
+			<?php endif; ?>
+			<h3 class="lnkup-event-card__title">
+				<?php if ( $view_url ) : ?>
+					<a href="<?php echo esc_url( $view_url ); ?>"><?php echo esc_html( $title ); ?></a>
+				<?php else : ?>
+					<?php echo esc_html( $title ); ?>
+				<?php endif; ?>
+			</h3>
+			<?php if ( $place || $when ) : ?>
+				<p class="lnkup-event-card__meta"><?php echo esc_html( trim( $place . ( $place && $when ? ' · ' : '' ) . $when ) ); ?></p>
+			<?php endif; ?>
+			<p class="lnkup-event-card__fee"><?php echo esc_html( $fee_label ); ?></p>
+			<?php if ( 'storefront' === $context && $open_spot_total > 0 ) : ?>
+				<p class="lnkup-event-card__slot-count"><?php echo esc_html( sprintf( _n( '%d spot available', '%d spots available', $open_spot_total, 'lnkup-marketplace' ), $open_spot_total ) ); ?></p>
+			<?php endif; ?>
+			<?php if ( 'feed' === $context && $slot_rows ) : ?>
+				<?php
+				$slot_labels = array();
+				foreach ( $slot_rows as $slot_row ) {
+					$slot_labels[ strtolower( $slot_row['label'] ) ] = true;
+				}
+				$slot_count = count( $slot_labels );
+				?>
+				<p class="lnkup-event-card__slot-count"><?php echo esc_html( sprintf( _n( '%d vendor category available', '%d vendor categories available', $slot_count, 'lnkup-marketplace' ), $slot_count ) ); ?></p>
+				<p class="lnkup-event-card__slots-title"><?php esc_html_e( 'Available vendor slots', 'lnkup-marketplace' ); ?></p>
+				<ul class="lnkup-event-card__slot-prices">
+					<?php foreach ( array_slice( $slot_rows, 0, 4 ) as $slot_row ) : ?>
+						<li>
+							<span><?php echo esc_html( $slot_row['label'] ); ?></span>
+							<?php if ( null !== $slot_row['fee'] ) : ?>
+								<span><?php echo esc_html( $slot_row['fee'] > 0 ? lnkup_public_money( $slot_row['fee'] ) : __( 'Free', 'lnkup-marketplace' ) ); ?></span>
+							<?php endif; ?>
+						</li>
+					<?php endforeach; ?>
+				</ul>
+			<?php elseif ( $visible_cats ) : ?>
+				<ul class="lnkup-event-card__chips">
+					<?php foreach ( $visible_cats as $cat_label ) : ?>
+						<li><span class="lnkup-badge lnkup-badge--secondary"><?php echo esc_html( $cat_label ); ?></span></li>
+					<?php endforeach; ?>
+					<?php if ( $extra_cats > 0 ) : ?>
+						<li><span class="lnkup-badge"><?php echo esc_html( sprintf( __( '+%d more', 'lnkup-marketplace' ), $extra_cats ) ); ?></span></li>
+					<?php endif; ?>
+				</ul>
+			<?php endif; ?>
+			<div class="lnkup-event-card__footer">
+				<?php if ( $action_url ) : ?>
+					<a class="<?php echo esc_attr( $action_class ); ?>" href="<?php echo esc_url( $action_url ); ?>"><?php echo esc_html( $action_label ); ?></a>
+				<?php endif; ?>
+				<?php if ( $apply_url ) : ?>
+					<a class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" href="<?php echo esc_url( $apply_url ); ?>"><?php esc_html_e( 'Apply', 'lnkup-marketplace' ); ?></a>
+				<?php elseif ( $status_url ) : ?>
+					<a class="lnkup-btn lnkup-btn--secondary lnkup-btn--sm lnkup-event-card__status" href="<?php echo esc_url( $status_url ); ?>"><?php echo esc_html( sprintf( /* translators: %s: application status */ __( 'Application: %s', 'lnkup-marketplace' ), $app_status ) ); ?></a>
+				<?php endif; ?>
+			</div>
+		</div>
+	</article>
+	<?php
+	return ob_get_clean();
+}
+
+/**
+ * Configured cities that currently have open vendor slots.
+ *
+ * @return array<int, array{label:string,count:int,url:string}>
+ */
+function lnkup_homepage_city_counts() {
+	if ( ! class_exists( 'LNKup_Market_Pages' ) ) {
+		return array();
+	}
+	global $wpdb;
+	$rows = $wpdb->get_results(
+		"SELECT city.meta_value AS city, COUNT(DISTINCT opp.ID) AS total
+		FROM {$wpdb->posts} opp
+		INNER JOIN {$wpdb->postmeta} status
+			ON status.post_id = opp.ID AND status.meta_key = '_lnkup_opportunity_status' AND status.meta_value = 'open'
+		INNER JOIN {$wpdb->postmeta} spots
+			ON spots.post_id = opp.ID AND spots.meta_key = '_lnkup_spots_remaining' AND CAST(spots.meta_value AS SIGNED) > 0
+		INNER JOIN {$wpdb->postmeta} event_id
+			ON event_id.post_id = opp.ID AND event_id.meta_key = '_lnkup_event_id'
+		INNER JOIN {$wpdb->posts} event_post
+			ON event_post.ID = CAST(event_id.meta_value AS UNSIGNED) AND event_post.post_type = 'lnkup_event' AND event_post.post_status = 'publish'
+		INNER JOIN {$wpdb->postmeta} city
+			ON city.post_id = event_post.ID AND city.meta_key = '_lnkup_city'
+		WHERE opp.post_type = 'lnkup_opportunity' AND opp.post_status = 'publish'
+		GROUP BY city.meta_value",
+		ARRAY_A
+	);
+	$by_city = array();
+	foreach ( (array) $rows as $row ) {
+		$key = strtolower( trim( (string) ( $row['city'] ?? '' ) ) );
+		if ( '' === $key ) {
+			continue;
+		}
+		$by_city[ $key ] = ( $by_city[ $key ] ?? 0 ) + (int) $row['total'];
+	}
+	$feed   = function_exists( 'lnkup_page_url_helper' ) ? lnkup_page_url_helper( 'opportunities' ) : home_url( '/opportunities/' );
+	$cities = array();
+	foreach ( LNKup_Market_Pages::get_all_markets() as $market ) {
+		if ( ! is_array( $market ) ) {
+			continue;
+		}
+		if ( isset( $market['enabled'] ) && empty( $market['enabled'] ) ) {
+			continue;
+		}
+		$city = trim( (string) ( $market['city'] ?? '' ) );
+		$key  = strtolower( $city );
+		$count = $by_city[ $key ] ?? 0;
+		if ( $count < 1 || '' === $city ) {
+			continue;
+		}
+		$label = trim( (string) ( $market['display_name'] ?? '' ) );
+		if ( '' === $label ) {
+			$label = lnkup_display_place( $city, (string) ( $market['state'] ?? '' ) );
+		}
+		$cities[] = array(
+			'label' => $label,
+			'count' => $count,
+			'url'   => add_query_arg( 'city', $city, $feed ),
+		);
+	}
+	usort(
+		$cities,
+		static function ( $a, $b ) {
+			return (int) $b['count'] <=> (int) $a['count'];
+		}
+	);
+	return array_slice( $cities, 0, 6 );
+}
+
+/**
+ * Batch render one card per event.
  *
  * @param array $items Items.
  */
 function lnkup_render_opportunity_cards_batch( $items ) {
 	$html = '';
-	foreach ( (array) $items as $item ) {
-		$html .= lnkup_render_opportunity_card_v2( $item );
+	foreach ( lnkup_group_opportunities_by_event( $items ) as $slots ) {
+		$html .= lnkup_render_event_group_card( $slots );
 	}
 	return $html;
 }
@@ -1948,7 +3148,7 @@ function lnkup_get_discoverable_vendors( $args = array() ) {
 			'state'       => '',
 			'category'    => '',
 			'verified'    => '',
-			'post_status' => array( 'publish', 'private' ),
+			'post_status' => 'publish',
 		)
 	);
 
@@ -2002,21 +3202,20 @@ function lnkup_get_discoverable_vendors( $args = array() ) {
 	}
 
 	if ( ! empty( $args['q'] ) ) {
-		$search = sanitize_text_field( $args['q'] );
-		$query_args['s'] = $search;
-		$query_args['meta_query'][] = array(
-			'relation' => 'OR',
-			array(
-				'key'     => '_lnkup_business_name',
-				'value'   => $search,
-				'compare' => 'LIKE',
-			),
-			array(
-				'key'     => '_lnkup_city',
-				'value'   => $search,
-				'compare' => 'LIKE',
-			),
+		// Title OR business name OR city: WP's `s` plus a meta clause would AND them together.
+		global $wpdb;
+		$like = '%' . $wpdb->esc_like( sanitize_text_field( $args['q'] ) ) . '%';
+		$ids  = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"SELECT DISTINCT p.ID FROM {$wpdb->posts} p
+				LEFT JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key IN ('_lnkup_business_name','_lnkup_city','_lnkup_state')
+				WHERE p.post_type = 'lnkup_vendor_profile' AND ( p.post_title LIKE %s OR m.meta_value LIKE %s )
+				LIMIT 2000",
+				$like,
+				$like
+			)
 		);
+		$query_args['post__in'] = $ids ? array_map( 'intval', $ids ) : array( 0 );
 	}
 
 	if ( count( $query_args['meta_query'] ) > 1 ) {
@@ -2311,31 +3510,6 @@ function lnkup_kpi_card( array $args ): string {
 }
 
 /**
- * Render panel hero header.
- *
- * @param string $title    Page title.
- * @param string $subtitle Subtitle.
- * @param string $actions  Optional HTML for action buttons.
- */
-function lnkup_panel_hero( string $title, string $subtitle = '', string $actions = '' ): string {
-	ob_start();
-	?>
-	<header class="lnkup-panel-hero lnkup-dash-header">
-		<div class="lnkup-panel-hero__copy">
-			<h1 class="lnkup-dash-header__title"><?php echo esc_html( $title ); ?></h1>
-			<?php if ( $subtitle ) : ?>
-				<p class="lnkup-dash-header__subtitle"><?php echo esc_html( $subtitle ); ?></p>
-			<?php endif; ?>
-		</div>
-		<?php if ( $actions ) : ?>
-			<div class="lnkup-panel-hero__actions"><?php echo $actions; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
-		<?php endif; ?>
-	</header>
-	<?php
-	return ob_get_clean();
-}
-
-/**
  * Executive page hero with KPI, metrics, and CTAs.
  *
  * @param array $args title, subtitle, kpi, kpi_label, metrics[], status_html, primary_cta{label,href}, secondary_cta{label,href}, ring_pct.
@@ -2356,9 +3530,9 @@ function lnkup_executive_hero( array $args ): string {
 	<header class="lnkup-executive-hero lnkup-surface--hero">
 		<div class="lnkup-executive-hero__top">
 			<div>
-				<h1 class="lnkup-dash-header__title"><?php echo esc_html( $title ); ?></h1>
+				<h1 class="lnkup-page-header__title"><?php echo esc_html( $title ); ?></h1>
 				<?php if ( $subtitle ) : ?>
-					<p class="lnkup-dash-header__subtitle lnkup-type-meta"><?php echo esc_html( $subtitle ); ?></p>
+					<p class="lnkup-page-header__subtitle"><?php echo esc_html( $subtitle ); ?></p>
 				<?php endif; ?>
 				<?php if ( $kpi ) : ?>
 					<p class="lnkup-executive-hero__kpi">

@@ -15,7 +15,35 @@
       options.body = JSON.stringify(options.body);
     }
     return fetch(base + path, Object.assign({ credentials: 'same-origin', headers: headers }, options))
-      .then(function (r) { return r.json(); });
+      .then(function (r) {
+        var type = r.headers.get('content-type') || '';
+        if (type.indexOf('application/json') === -1) {
+          throw new Error('Something went wrong. Refresh and try again.');
+        }
+        return r.json().then(function (body) {
+          if (!r.ok) {
+            throw new Error((body && body.message) || 'The map could not be updated.');
+          }
+          return body;
+        });
+      });
+  }
+
+  function mapToast(message, type) {
+    if (typeof window.lnkupShowToast === 'function') {
+      window.lnkupShowToast(message, type || 'success');
+    }
+  }
+
+  function mapFailed(err) {
+    mapToast((err && err.message) || 'The map could not be updated.', 'error');
+  }
+
+  function askLabel(title, label, value) {
+    if (window.LNKupUI && typeof window.LNKupUI.askText === 'function') {
+      return window.LNKupUI.askText({ title: title, label: label, value: value || '', required: true, confirmLabel: 'Add' });
+    }
+    return Promise.resolve(null);
   }
 
   function escapeHtml(str) {
@@ -110,6 +138,10 @@
         }
       });
       renderRoutes(routeSvg, state.routes);
+    }).catch(function (err) {
+      if (elContainer) {
+        elContainer.innerHTML = '<p class="lnkup-alert lnkup-alert--error">' + escapeHtml((err && err.message) || 'Could not load the map.') + '</p>';
+      }
     });
 
     shell.addEventListener('click', function (e) {
@@ -119,35 +151,38 @@
       }
       var key = action.getAttribute('data-map-action');
       if (key === 'add-booth') {
-        var num = prompt('Booth number');
-        if (!num) {
-          return;
-        }
-        var el = {
-          element_type: 'booth',
-          label: num,
-          pos_x: 10 + Math.random() * 70,
-          pos_y: 10 + Math.random() * 70,
-          layer: 'booths',
-          visibility: 'public'
-        };
-        mapFetch('/events/' + eventId + '/elements', { method: 'POST', body: { elements: [el] } }).then(function (res) {
-          if (res.items) {
-            state.elements = state.elements.concat(res.items);
-            renderElements(elContainer, state.elements, {});
+        askLabel('Add booth', 'Booth number').then(function (num) {
+          if (!num) {
+            return;
+          }
+          var el = {
+            element_type: 'booth',
+            label: num,
+            pos_x: 10 + Math.random() * 70,
+            pos_y: 10 + Math.random() * 70,
+            layer: 'booths',
+            visibility: 'public'
+          };
+          mapFetch('/events/' + eventId + '/elements', { method: 'POST', body: { elements: [el] } }).then(function (res) {
+            if (res.items) {
+              state.elements = state.elements.concat(res.items);
+              renderElements(elContainer, state.elements, {});
+            }
+          }).catch(mapFailed);
+          if (window.lnkupOpsFetch) {
+            Promise.resolve(window.lnkupOpsFetch('/events/' + eventId + '/booths', { method: 'POST', body: { booth_number: num, booth_type: 'standard' } })).catch(mapFailed);
           }
         });
-        if (window.lnkupOpsFetch) {
-          window.lnkupOpsFetch('/events/' + eventId + '/booths', { method: 'POST', body: { booth_number: num, booth_type: 'standard' } });
-        }
       }
       if (key === 'save' && state.map) {
-        mapFetch('/events/' + eventId, { method: 'POST', body: { status: 'draft' } });
+        mapFetch('/events/' + eventId, { method: 'POST', body: { status: 'draft' } })
+          .then(function () { mapToast('Map saved.'); })
+          .catch(mapFailed);
       }
       if (key === 'publish') {
-        mapFetch('/events/' + eventId + '/publish', { method: 'POST' }).then(function () {
-          alert('Map published');
-        });
+        mapFetch('/events/' + eventId + '/publish', { method: 'POST' })
+          .then(function () { mapToast('Map published.'); })
+          .catch(mapFailed);
       }
       if (key === 'layers') {
         var panel = shell.querySelector('.lnkup-map-layer-panel');
@@ -183,18 +218,19 @@
         var rect = canvasWrap.getBoundingClientRect();
         var pos_x = ((e.clientX - rect.left) / rect.width) * 100;
         var pos_y = ((e.clientY - rect.top) / rect.height) * 100;
-        var label = prompt('Element label', 'New element');
-        if (!label) {
-          return;
-        }
-        mapFetch('/events/' + eventId + '/elements', {
-          method: 'POST',
-          body: { elements: [{ element_type: 'custom', label: label, pos_x: pos_x, pos_y: pos_y, layer: 'booths', visibility: 'public' }] }
-        }).then(function (res) {
-          if (res.items) {
-            state.elements = state.elements.concat(res.items);
-            renderElements(elContainer, state.elements, {});
+        askLabel('Add map element', 'Element label', 'New element').then(function (label) {
+          if (!label) {
+            return;
           }
+          mapFetch('/events/' + eventId + '/elements', {
+            method: 'POST',
+            body: { elements: [{ element_type: 'custom', label: label, pos_x: pos_x, pos_y: pos_y, layer: 'booths', visibility: 'public' }] }
+          }).then(function (res) {
+            if (res.items) {
+              state.elements = state.elements.concat(res.items);
+              renderElements(elContainer, state.elements, {});
+            }
+          }).catch(mapFailed);
         });
       });
     }
@@ -236,6 +272,8 @@
             drawer.innerHTML = html;
           }
         });
+      }).catch(function () {
+        // Live polling retries on the next tick; the last good map stays visible.
       });
     }
     refresh();
@@ -247,7 +285,7 @@
         return;
       }
       var appId = btn.getAttribute('data-app-id');
-      window.lnkupOpsFetch('/applications/' + appId + '/check-in', { method: 'POST' }).then(refresh);
+      Promise.resolve(window.lnkupOpsFetch('/applications/' + appId + '/check-in', { method: 'POST' })).then(refresh).catch(mapFailed);
     });
   }
 
@@ -287,6 +325,8 @@
         dir.textContent = 'Directions';
         wrap.appendChild(dir);
       }
+    }).catch(function () {
+      wrap.innerHTML = '<p class="lnkup-muted">Map unavailable.</p>';
     });
   }
 
@@ -362,8 +402,9 @@
         });
       }).then(function () {
         window.location.reload();
-      }).catch(function () {
+      }).catch(function (err) {
         input.value = '';
+        mapFailed(err && err.message ? err : new Error('The floor plan could not be uploaded.'));
       });
     });
   }

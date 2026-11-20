@@ -28,18 +28,18 @@ async function loginOrganizer(page: import('@playwright/test').Page) {
 }
 
 test.describe('Vendor Reputation', () => {
-  test('public vendor profile page handles missing slug gracefully', async ({ page }) => {
+  test('vendors page without a slug shows the public vendor directory', async ({ page }) => {
     const response = await page.goto('/vendors/');
     if (!response || response.status() === 404) {
       test.skip(true, 'Vendors public profile page not deployed on this environment');
       return;
     }
-    await expect(
-      page.getByText(/vendor not found/i).or(page.locator('#lnkup-public-vendor-profile'))
-    ).toBeVisible({ timeout: 15000 });
-    if (await page.locator('#lnkup-public-vendor-profile').count()) {
-      return;
-    }
+    expect(response.status()).toBe(200);
+    await expect(page.getByRole('heading', { level: 1, name: /vendors/i })).toBeVisible();
+  });
+
+  test('unknown vendor slug shows vendor not found', async ({ page }) => {
+    await page.goto('/vendors/?vendor=zz-no-such-vendor');
     await expect(page.getByText(/vendor not found/i)).toBeVisible();
   });
 
@@ -98,6 +98,6 @@ test.describe('Vendor Reputation regression', () => {
 
   test('vendor dashboard route responds', async ({ page }) => {
     await page.goto('/vendor-dashboard/');
-    await expect(page).toHaveURL(/vendor-dashboard|wp-login|login/);
+    await expect(page).toHaveURL(/vendor-dashboard|wp-login|log-?in/);
   });
 });

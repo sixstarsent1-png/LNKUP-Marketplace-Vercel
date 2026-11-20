@@ -1,14 +1,18 @@
 "use client"
 
+import Link from "next/link"
 import {
   Building2,
   BadgeCheck,
   CreditCard,
   Bell,
+  Bookmark,
+  Download,
   Users,
   FileText,
   HelpCircle,
   Shield,
+  Rocket,
 } from "lucide-react"
 import { PageHeader } from "@/components/marketplace/page-header"
 import { SettingsMenu, type SettingsGroup } from "@/components/marketplace/settings-menu"
@@ -17,6 +21,13 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { VerificationBadge } from "@/components/marketplace/badges"
 
 const groups: SettingsGroup[] = [
+  {
+    title: "Launch",
+    items: [
+      { icon: Rocket, label: "Launch event", href: "/organizer/launch", hint: "Guided event setup" },
+      { icon: FileText, label: "Organizer onboarding", href: "/organizer/onboarding", hint: "First-time setup" },
+    ],
+  },
   {
     title: "Organization",
     items: [
@@ -35,7 +46,10 @@ const groups: SettingsGroup[] = [
   {
     title: "Preferences",
     items: [
-      { icon: Bell, label: "Notifications" },
+      { icon: Bell, label: "Notifications", hint: "Alerts & updates", href: "/notifications" },
+      { icon: Bell, label: "Alert preferences", href: "/notifications/preferences" },
+      { icon: Bookmark, label: "Saved search alerts", href: "/notifications/preferences" },
+      { icon: Download, label: "Install app", hint: "Add LNKup to your home screen", href: "/organizer" },
       { icon: Shield, label: "Privacy & security" },
       { icon: HelpCircle, label: "Help & support" },
     ],

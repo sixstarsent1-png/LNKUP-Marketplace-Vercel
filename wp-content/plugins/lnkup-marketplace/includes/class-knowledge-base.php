@@ -45,7 +45,6 @@ class LNKup_Knowledge_Base {
 		?>
 		<section class="lnkup-kb lnkup-panel" data-section="help" data-testid="lnkup-knowledge-base" data-kb-role="<?php echo esc_attr( $role ); ?>">
 			<header class="lnkup-kb__header">
-				<p class="lnkup-kb__eyebrow lnkup-muted"><?php echo esc_html( function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_eyebrow' ) : __( 'Help', 'lnkup-marketplace' ) ); ?></p>
 				<h2 class="lnkup-panel__title"><?php echo esc_html( function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_title' ) : __( 'Knowledge Base', 'lnkup-marketplace' ) ); ?></h2>
 				<p class="lnkup-kb__intro lnkup-muted"><?php echo esc_html( function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_intro' ) : __( 'Quick answers for common marketplace tasks.', 'lnkup-marketplace' ) ); ?></p>
 			</header>
@@ -150,31 +149,31 @@ class LNKup_Knowledge_Base {
 				'title'     => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_launch_title' ) : __( 'Launch your first event', 'lnkup-marketplace' ),
 				'body'      => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_launch_body' ) : __( 'Create an event, set categories and booth fees, then publish so vendors can apply.', 'lnkup-marketplace' ),
 				'cta_label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_launch_cta' ) : __( 'Launch event', 'lnkup-marketplace' ),
-				'cta_url'   => $dash . '#create',
+				'cta_url'   => lnkup_organizer_view_url( 'create' ),
 			),
 			array(
 				'title'     => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_review_title' ) : __( 'Review and approve vendors', 'lnkup-marketplace' ),
 				'body'      => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_review_body' ) : __( 'Open Vendor Requests to approve, waitlist, or reject applications as they come in.', 'lnkup-marketplace' ),
 				'cta_label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_review_cta' ) : __( 'Review requests', 'lnkup-marketplace' ),
-				'cta_url'   => $dash . '#applications',
+				'cta_url'   => lnkup_organizer_view_url( 'applications' ),
 			),
 			array(
 				'title'     => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_fees_title' ) : __( 'Fees, spots, and payments', 'lnkup-marketplace' ),
 				'body'      => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_fees_body' ) : __( 'Edit opportunity pricing and spots from your Events list. Vendors pay only after they are accepted.', 'lnkup-marketplace' ),
 				'cta_label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_fees_cta' ) : __( 'Open events', 'lnkup-marketplace' ),
-				'cta_url'   => $dash . '#events',
+				'cta_url'   => lnkup_organizer_view_url( 'events' ),
 			),
 			array(
 				'title'     => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_discover_title' ) : __( 'Discover / invite vendors', 'lnkup-marketplace' ),
 				'body'      => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_discover_body' ) : __( 'Search the vendor directory, save favorites, and send invites from Discover and Invites.', 'lnkup-marketplace' ),
 				'cta_label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_discover_cta' ) : __( 'Discover vendors', 'lnkup-marketplace' ),
-				'cta_url'   => $dash . '#vendors',
+				'cta_url'   => lnkup_organizer_view_url( 'vendors' ),
 			),
 			array(
 				'title'     => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_payouts_title' ) : __( 'Payouts and financial center', 'lnkup-marketplace' ),
 				'body'      => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_payouts_body' ) : __( 'Connect payouts and track booth-fee revenue in the Financial center.', 'lnkup-marketplace' ),
 				'cta_label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'kb_org_payouts_cta' ) : __( 'Open financials', 'lnkup-marketplace' ),
-				'cta_url'   => $dash . '#financial',
+				'cta_url'   => lnkup_organizer_view_url( 'financial' ),
 			),
 		);
 	}

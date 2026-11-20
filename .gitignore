@@ -13,3 +13,12 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
+# wp-env E2E seed output
+scripts/e2e/.env.e2e
+
+# Downloaded plugin/theme zip copies, build info, local reports
+wp-content/plugins/lnkup-marketplace (*).zip
+wp-content/themes/lnkup-theme (*).zip
+*.tsbuildinfo
+artifacts/
+test-results/

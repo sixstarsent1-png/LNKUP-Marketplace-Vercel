@@ -57,7 +57,7 @@ function RequestCta({ request }: { request: VendorRequest }) {
       return <Button size="sm">Pay now</Button>
     case "paid":
       return (
-        <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/vendor/pass/${request.eventId}`} />}>
+        <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/vendor/pass/${request.id}`} />}>
           View pass
         </Button>
       )

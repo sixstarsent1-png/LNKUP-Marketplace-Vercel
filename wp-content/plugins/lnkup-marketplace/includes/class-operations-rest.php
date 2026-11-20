@@ -16,88 +16,100 @@ class LNKup_Operations_REST {
 	}
 
 	public static function register_routes() {
-		$org = array( 'permission_callback' => array( __CLASS__, 'organizer_permission' ) );
+		$org    = array( 'permission_callback' => array( __CLASS__, 'organizer_permission' ) );
 		$vendor = array( 'permission_callback' => array( __CLASS__, 'vendor_permission' ) );
+		$view   = self::event_cap( 'view_roster' );
+		$ops    = self::event_cap( 'edit_ops' );
+		$owner  = self::event_cap( 'owner' );
 
-		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)', array_merge( $org, array(
-			'methods'  => 'GET',
-			'callback' => array( __CLASS__, 'event_snapshot' ),
-		) ) );
+		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'event_snapshot' ),
+			'permission_callback' => $view,
+		) );
 
-		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/defaults', array_merge( $org, array(
-			'methods'  => 'GET',
-			'callback' => array( __CLASS__, 'event_defaults' ),
-		) ) );
+		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/defaults', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'event_defaults' ),
+			'permission_callback' => $view,
+		) );
 
 		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/lifecycle', array(
-			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_lifecycle' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
-			array( 'methods' => 'PUT', 'callback' => array( __CLASS__, 'set_lifecycle' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
+			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_lifecycle' ), 'permission_callback' => $view ),
+			array( 'methods' => 'PUT', 'callback' => array( __CLASS__, 'set_lifecycle' ), 'permission_callback' => $owner ),
 		) );
 
-		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/vendors', array_merge( $org, array(
-			'methods'  => 'GET',
-			'callback' => array( __CLASS__, 'event_vendors' ),
-		) ) );
+		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/vendors', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'event_vendors' ),
+			'permission_callback' => $view,
+		) );
 
-		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/vendors/(?P<app_id>\d+)/status', array_merge( $org, array(
-			'methods'  => 'PUT',
-			'callback' => array( __CLASS__, 'set_vendor_status' ),
-		) ) );
+		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/vendors/(?P<app_id>\d+)/status', array(
+			'methods'             => 'PUT',
+			'callback'            => array( __CLASS__, 'set_vendor_status' ),
+			'permission_callback' => self::event_cap( 'check_in' ),
+		) );
 
-		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/feed', array_merge( $org, array(
-			'methods'  => 'GET',
-			'callback' => array( __CLASS__, 'event_feed' ),
-		) ) );
+		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/feed', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'event_feed' ),
+			'permission_callback' => $view,
+		) );
 
-		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/compliance', array_merge( $org, array(
-			'methods'  => 'GET',
-			'callback' => array( __CLASS__, 'event_compliance' ),
-		) ) );
+		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/compliance', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'event_compliance' ),
+			'permission_callback' => $view,
+		) );
 
 		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/booths', array(
-			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_booths' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
-			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_booth' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
+			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_booths' ), 'permission_callback' => $view ),
+			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_booth' ), 'permission_callback' => $ops ),
 		) );
 
-		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/booths/(?P<booth_id>\d+)/assign', array_merge( $org, array(
-			'methods'  => 'POST',
-			'callback' => array( __CLASS__, 'assign_booth' ),
-		) ) );
+		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/booths/(?P<booth_id>\d+)/assign', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'assign_booth' ),
+			'permission_callback' => $ops,
+		) );
 
 		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/parking', array(
-			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_parking' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
-			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_parking' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
+			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_parking' ), 'permission_callback' => $view ),
+			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_parking' ), 'permission_callback' => $ops ),
 		) );
 
 		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/loadin', array(
-			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_loadin' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
-			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_loadin' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
+			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_loadin' ), 'permission_callback' => $view ),
+			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_loadin' ), 'permission_callback' => $ops ),
 		) );
 
 		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/broadcasts', array(
-			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_broadcasts' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
-			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'send_broadcast' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
+			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_broadcasts' ), 'permission_callback' => $view ),
+			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'send_broadcast' ), 'permission_callback' => self::event_cap( 'broadcast' ) ),
 		) );
 
 		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/staff', array(
-			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_staff' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
-			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'assign_staff' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
+			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_staff' ), 'permission_callback' => $view ),
+			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'assign_staff' ), 'permission_callback' => self::event_cap( 'manage_staff' ) ),
 		) );
 
-		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/analytics', array_merge( $org, array(
-			'methods'  => 'GET',
-			'callback' => array( __CLASS__, 'event_analytics' ),
-		) ) );
+		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/analytics', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'event_analytics' ),
+			'permission_callback' => self::event_cap( 'view_intelligence' ),
+		) );
 
 		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/incidents', array(
-			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_incidents' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
-			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'create_incident' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
+			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_incidents' ), 'permission_callback' => $view ),
+			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'create_incident' ), 'permission_callback' => $view ),
 		) );
 
-		register_rest_route( self::NS, '/operations/incidents/(?P<id>\d+)', array_merge( $org, array(
-			'methods'  => 'PUT',
-			'callback' => array( __CLASS__, 'update_incident' ),
-		) ) );
+		register_rest_route( self::NS, '/operations/incidents/(?P<id>\d+)', array(
+			'methods'             => 'PUT',
+			'callback'            => array( __CLASS__, 'update_incident' ),
+			'permission_callback' => self::row_cap( 'incidents', 'edit_ops' ),
+		) );
 
 		register_rest_route( self::NS, '/operations/applications/(?P<id>\d+)/readiness', array(
 			'methods'             => 'GET',
@@ -123,25 +135,38 @@ class LNKup_Operations_REST {
 			'permission_callback' => array( __CLASS__, 'vendor_app_permission' ),
 		) );
 
-		register_rest_route( self::NS, '/operations/applications/(?P<id>\d+)/checkin', array_merge( $org, array(
-			'methods'  => 'POST',
-			'callback' => array( __CLASS__, 'app_checkin' ),
-		) ) );
+		register_rest_route( self::NS, '/operations/applications/(?P<id>\d+)/checkin', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'app_checkin' ),
+			'permission_callback' => array( __CLASS__, 'checkin_permission' ),
+		) );
 
-		register_rest_route( self::NS, '/operations/qr/scan', array_merge( $org, array(
-			'methods'  => 'POST',
-			'callback' => array( __CLASS__, 'qr_scan' ),
-		) ) );
+		register_rest_route( self::NS, '/operations/qr/scan', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'qr_scan' ),
+			'permission_callback' => array( __CLASS__, 'scan_permission' ),
+		) );
 
 		register_rest_route( self::NS, '/operations/support', array(
-			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'list_support' ), 'permission_callback' => array( __CLASS__, 'organizer_permission' ) ),
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'list_support' ),
+				'permission_callback' => array( __CLASS__, 'support_list_permission' ),
+				'args'                => array(
+					'event_id' => array(
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+					),
+				),
+			),
 			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'create_support' ), 'permission_callback' => array( __CLASS__, 'vendor_permission' ) ),
 		) );
 
-		register_rest_route( self::NS, '/operations/support/(?P<id>\d+)', array_merge( $org, array(
-			'methods'  => 'PUT',
-			'callback' => array( __CLASS__, 'update_support' ),
-		) ) );
+		register_rest_route( self::NS, '/operations/support/(?P<id>\d+)', array(
+			'methods'             => 'PUT',
+			'callback'            => array( __CLASS__, 'update_support' ),
+			'permission_callback' => self::row_cap( 'support', 'edit_ops' ),
+		) );
 
 		register_rest_route( self::NS, '/operations/vendor-home', array_merge( $vendor, array(
 			'methods'  => 'GET',
@@ -159,12 +184,75 @@ class LNKup_Operations_REST {
 		) ) );
 	}
 
+	/**
+	 * Organizer-level routes with no event in the path (dashboard widgets).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
 	public static function organizer_permission( WP_REST_Request $request ) {
-		$event_id = absint( $request['id'] ?? 0 );
-		if ( $event_id && ! LNKup_Capabilities::organizer_owns_event( $event_id ) ) {
-			return false;
-		}
+		unset( $request );
 		return current_user_can( 'lnkup_review_applications' ) || LNKup_Capabilities::user_has_manage_all();
+	}
+
+	/**
+	 * Permission callback requiring an event-scoped capability on the `{id}` event.
+	 *
+	 * @param string $capability LNKup_Capabilities::staff_can() capability.
+	 * @return callable
+	 */
+	private static function event_cap( $capability ) {
+		return static function ( WP_REST_Request $request ) use ( $capability ) {
+			return self::check_event_cap( absint( $request['id'] ), $capability );
+		};
+	}
+
+	/**
+	 * Permission callback for routes whose `{id}` is a row in an operations table.
+	 * The row's event decides access, so IDs from another tenant are rejected.
+	 *
+	 * @param string $table      incidents|support.
+	 * @param string $capability Capability on the row's event.
+	 * @return callable
+	 */
+	private static function row_cap( $table, $capability ) {
+		return static function ( WP_REST_Request $request ) use ( $table, $capability ) {
+			global $wpdb;
+			$name     = 'incidents' === $table ? LNKup_Operations_Tables::incidents_table() : LNKup_Operations_Tables::support_table();
+			$event_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$name} WHERE id = %d", absint( $request['id'] ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( ! $event_id ) {
+				return new WP_Error( 'not_found', __( 'Not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+			}
+			return self::check_event_cap( $event_id, $capability );
+		};
+	}
+
+	/**
+	 * Resolve event access to true or a REST error.
+	 *
+	 * @param int    $event_id   Event ID.
+	 * @param string $capability Capability.
+	 * @return true|WP_Error
+	 */
+	private static function check_event_cap( $event_id, $capability ) {
+		if ( ! is_user_logged_in() ) {
+			return new WP_Error( 'rest_forbidden', __( 'Sign in to continue.', 'lnkup-marketplace' ), array( 'status' => 401 ) );
+		}
+		if ( ! $event_id || 'lnkup_event' !== get_post_type( $event_id ) ) {
+			return new WP_Error( 'not_found', __( 'Event not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		if ( ! LNKup_Capabilities::staff_can( $event_id, $capability ) ) {
+			return new WP_Error( 'forbidden', __( 'You do not have access to this for this event.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+		return true;
+	}
+
+	/**
+	 * Support tickets are listed per event the caller can view.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function support_list_permission( WP_REST_Request $request ) {
+		return self::check_event_cap( absint( $request->get_param( 'event_id' ) ), 'view_roster' );
 	}
 
 	public static function vendor_permission() {
@@ -179,10 +267,36 @@ class LNKup_Operations_REST {
 		return self::vendor_app_permission( $request );
 	}
 
+	/**
+	 * Check-in uses the application id, then the event that application belongs to.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return bool|WP_Error
+	 */
+	public static function checkin_permission( WP_REST_Request $request ) {
+		$app_id = absint( $request['id'] );
+		$post   = $app_id ? get_post( $app_id ) : null;
+		if ( ! $post || 'lnkup_application' !== $post->post_type ) {
+			return new WP_Error( 'not_found', __( 'Application not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		$event_id = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
+		if ( ! LNKup_Checkins::actor_can_operate( $event_id ) ) {
+			return new WP_Error( 'forbidden', __( 'You cannot manage this event.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+		return true;
+	}
+
+	/**
+	 * QR scan resolves the event inside the eligibility check.
+	 */
+	public static function scan_permission() {
+		return is_user_logged_in();
+	}
+
 	private static function organizer_for_app( WP_REST_Request $request ) {
 		$app_id = absint( $request['id'] ?? $request['app_id'] ?? 0 );
 		$event_id = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
-		return LNKup_Capabilities::organizer_owns_event( $event_id );
+		return LNKup_Capabilities::staff_can( $event_id, 'view_roster' );
 	}
 
 	public static function event_snapshot( WP_REST_Request $request ) {
@@ -220,9 +334,46 @@ class LNKup_Operations_REST {
 	}
 
 	public static function set_vendor_status( WP_REST_Request $request ) {
-		$body = $request->get_json_params() ?: $request->get_params();
-		LNKup_Event_Operations::set_ops_status( absint( $request['app_id'] ), $body['status'] ?? '' );
-		return rest_ensure_response( array( 'success' => true ) );
+		$body     = $request->get_json_params() ?: $request->get_params();
+		$event_id = absint( $request['id'] );
+		$app_id   = absint( $request['app_id'] );
+		$status   = sanitize_key( (string) ( $body['status'] ?? '' ) );
+		$map      = array(
+			'checked_in'  => 'checked_in',
+			'setting_up'  => 'setup_started',
+			'live_ready'  => 'setup_complete',
+			'checked_out' => 'checked_out',
+			'late'        => 'late_arrival',
+			'no_show'     => 'no_show',
+		);
+		if ( isset( $map[ $status ] ) ) {
+			if ( ! empty( $body['override'] ) ) {
+				if ( ! LNKup_Capabilities::staff_can( $event_id, 'edit_ops' ) ) {
+					return new WP_Error( 'forbidden', __( 'Only the event owner or operations staff can override check-in rules.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+				}
+				return LNKup_Checkins::rest_response( LNKup_Checkins::record_override( $app_id, $map[ $status ], (string) ( $body['reason'] ?? '' ), $event_id ) );
+			}
+			return LNKup_Checkins::rest_response( LNKup_Checkins::record( $app_id, $map[ $status ], 'manual', $event_id ) );
+		}
+		// Flags only: approval/payment states come from the booking, never from event-day status.
+		if ( ! in_array( $status, array( 'needs_help', 'missing' ), true ) ) {
+			return new WP_Error( 'invalid_status', __( 'That status cannot be set from event operations.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$state = LNKup_Checkins::evaluate( $app_id, '', get_current_user_id(), $event_id );
+		if ( in_array( (string) ( $state['reason'] ?? '' ), array( 'not_found', 'wrong_event', 'forbidden', 'invalid_booking' ), true ) ) {
+			return LNKup_Checkins::rest_response( $state );
+		}
+		if ( ! LNKup_Event_Operations::set_ops_status( $app_id, $status ) ) {
+			return new WP_Error( 'write_failed', __( 'The status could not be saved.', 'lnkup-marketplace' ), array( 'status' => 500 ) );
+		}
+		return rest_ensure_response(
+			array(
+				'success'        => true,
+				'application_id' => $app_id,
+				'event_id'       => $event_id,
+				'ops_status'     => $status,
+			)
+		);
 	}
 
 	public static function event_feed( WP_REST_Request $request ) {
@@ -240,12 +391,15 @@ class LNKup_Operations_REST {
 	public static function save_booth( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
 		$id = LNKup_Booths::save( absint( $request['id'] ), $body );
+		if ( is_wp_error( $id ) ) {
+			return $id;
+		}
 		return rest_ensure_response( array( 'id' => $id ) );
 	}
 
 	public static function assign_booth( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
-		$result = LNKup_Booths::assign( absint( $request['booth_id'] ), absint( $body['application_id'] ?? 0 ) );
+		$result = LNKup_Booths::assign( absint( $request['booth_id'] ), absint( $body['application_id'] ?? 0 ), absint( $request['id'] ) );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
@@ -259,6 +413,9 @@ class LNKup_Operations_REST {
 	public static function save_parking( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
 		$id = LNKup_Parking::save( absint( $request['id'] ), $body );
+		if ( is_wp_error( $id ) ) {
+			return $id;
+		}
 		return rest_ensure_response( array( 'id' => $id ) );
 	}
 
@@ -269,7 +426,7 @@ class LNKup_Operations_REST {
 	public static function save_loadin( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
 		if ( ! empty( $body['assign'] ) ) {
-			$result = LNKup_Loadin_Schedule::assign( absint( $body['window_id'] ), absint( $body['application_id'] ) );
+			$result = LNKup_Loadin_Schedule::assign( absint( $body['window_id'] ), absint( $body['application_id'] ), absint( $request['id'] ) );
 			if ( is_wp_error( $result ) ) {
 				return $result;
 			}
@@ -322,6 +479,7 @@ class LNKup_Operations_REST {
 
 	public static function update_incident( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
+		unset( $body['event_id'] );
 		LNKup_Incidents::update( absint( $request['id'] ), $body );
 		return rest_ensure_response( array( 'success' => true ) );
 	}
@@ -345,21 +503,23 @@ class LNKup_Operations_REST {
 	}
 
 	public static function app_checkin( WP_REST_Request $request ) {
-		$body = $request->get_json_params() ?: $request->get_params();
-		$result = LNKup_Checkins::record( absint( $request['id'] ), $body['action'] ?? 'checked_in', 'manual' );
-		if ( is_wp_error( $result ) ) {
-			return $result;
-		}
-		return rest_ensure_response( array( 'success' => true ) );
+		$body   = $request->get_json_params() ?: $request->get_params();
+		$result = LNKup_Checkins::record( absint( $request['id'] ), $body['action'] ?? 'checked_in', sanitize_key( (string) ( $body['method'] ?? 'manual' ) ) );
+		return LNKup_Checkins::rest_response( $result );
 	}
 
 	public static function qr_scan( WP_REST_Request $request ) {
-		$body = $request->get_json_params() ?: $request->get_params();
+		$body   = $request->get_json_params() ?: $request->get_params();
 		$result = LNKup_Checkins::scan_qr( $body['token'] ?? '', absint( $body['event_id'] ?? 0 ) );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
-		return rest_ensure_response( $result );
+		$app_id = absint( $result['application_id'] ?? 0 );
+		if ( $app_id && ! empty( $result['success'] ) ) {
+			$result['business_name'] = class_exists( 'LNKup_Event_Operations' ) ? LNKup_Event_Operations::vendor_name_for_app( $app_id ) : '';
+			$result['booth']         = (string) get_post_meta( $app_id, '_lnkup_booth_placeholder', true );
+		}
+		return LNKup_Checkins::rest_response( $result );
 	}
 
 	public static function list_support( WP_REST_Request $request ) {
@@ -377,8 +537,11 @@ class LNKup_Operations_REST {
 	}
 
 	public static function update_support( WP_REST_Request $request ) {
-		$body = $request->get_json_params() ?: $request->get_params();
-		LNKup_Support_Requests::update( absint( $request['id'] ), $body );
+		$body   = $request->get_json_params() ?: $request->get_params();
+		$result = LNKup_Support_Requests::update( absint( $request['id'] ), $body );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
 		return rest_ensure_response( array( 'success' => true ) );
 	}
 

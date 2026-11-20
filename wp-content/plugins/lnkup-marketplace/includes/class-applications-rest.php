@@ -61,6 +61,77 @@ class LNKup_Applications_REST {
 				'permission_callback' => array( __CLASS__, 'organizer_permission' ),
 			)
 		);
+
+		register_rest_route(
+			self::NS,
+			'/applications/(?P<id>\d+)/request-info',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'request_info' ),
+				'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+				'args'                => array( 'id' => array( 'sanitize_callback' => 'absint' ) ),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
+			'/applications/(?P<id>\d+)/respond-info',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'respond_info' ),
+				'permission_callback' => array( __CLASS__, 'vendor_permission' ),
+				'args'                => array( 'id' => array( 'sanitize_callback' => 'absint' ) ),
+			)
+		);
+	}
+
+	/**
+	 * POST organizer asks for more information.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function request_info( WP_REST_Request $request ) {
+		$body  = $request->get_json_params() ?: $request->get_body_params();
+		$entry = LNKup_Applications::request_info(
+			(int) $request['id'],
+			(string) ( $body['message'] ?? '' ),
+			is_array( $body['documents'] ?? null ) ? $body['documents'] : array(),
+			get_current_user_id()
+		);
+		if ( is_wp_error( $entry ) ) {
+			return $entry;
+		}
+		return rest_ensure_response( self::info_payload( (int) $request['id'] ) );
+	}
+
+	/**
+	 * POST vendor replies to an information request.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function respond_info( WP_REST_Request $request ) {
+		$body  = $request->get_json_params() ?: $request->get_body_params();
+		$entry = LNKup_Applications::respond_info( (int) $request['id'], (string) ( $body['message'] ?? '' ), get_current_user_id() );
+		if ( is_wp_error( $entry ) ) {
+			return $entry;
+		}
+		return rest_ensure_response( self::info_payload( (int) $request['id'] ) );
+	}
+
+	/**
+	 * Status and request thread after an info action.
+	 *
+	 * @param int $app_id Application ID.
+	 */
+	private static function info_payload( $app_id ) {
+		$status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+		return array(
+			'application_id' => $app_id,
+			'status'         => $status,
+			'status_label'   => function_exists( 'lnkup_application_status_label' ) ? lnkup_application_status_label( $status ) : $status,
+			'info_request'   => LNKup_Applications::open_info_request( $app_id ),
+			'info_history'   => LNKup_Applications::info_history( $app_id ),
+		);
 	}
 
 	/**
@@ -109,7 +180,7 @@ class LNKup_Applications_REST {
 				'category'        => (string) get_post_meta( $app->ID, '_lnkup_selected_category', true ),
 				'status'          => $status ?: 'submitted',
 				'submitted_at'    => (string) ( get_post_meta( $app->ID, '_lnkup_submitted_at', true ) ?: $app->post_date ),
-				'approved_at'     => (string) get_post_meta( $app->ID, '_lnkup_decided_at', true ),
+				'approved_at'     => (string) ( get_post_meta( $app->ID, '_lnkup_approved_at', true ) ?: get_post_meta( $app->ID, '_lnkup_decided_at', true ) ),
 				'payment_due_at'  => (string) get_post_meta( $app->ID, '_lnkup_payment_due_at', true ),
 				'amount_due'      => $amount_due,
 				'currency'        => 'USD',
@@ -118,6 +189,7 @@ class LNKup_Applications_REST {
 				'payment_id'      => $payment ? (int) $payment->ID : 0,
 				'payment_status'  => $pay_status,
 				'rejection_reason'=> (string) get_post_meta( $app->ID, '_lnkup_rejection_reason', true ),
+				'info_request'    => LNKup_Applications::open_info_request( $app->ID ),
 			);
 		}
 
@@ -182,11 +254,10 @@ class LNKup_Applications_REST {
 		$opportunity_id = absint( $params['opportunity_id'] ?? $request->get_param( 'opportunity_id' ) );
 		$user_id        = get_current_user_id();
 
-		$key = 'lnkup_apply_' . $user_id;
+		$key = 'lnkup_apply_' . $user_id . '_' . $opportunity_id;
 		if ( get_transient( $key ) ) {
 			return new WP_Error( 'rate_limit', __( 'Please wait before submitting again.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
 		}
-		set_transient( $key, 1, 30 );
 
 		$result = LNKup_Applications::submit_with_profile(
 			$user_id,
@@ -210,9 +281,13 @@ class LNKup_Applications_REST {
 			if ( ! is_array( $data ) ) {
 				$data = array();
 			}
+			if ( 'rate_limit' === $result->get_error_code() ) {
+				$status = 429;
+			}
 			$data['status'] = $status;
 			return new WP_Error( $result->get_error_code(), $result->get_error_message(), $data );
 		}
+		set_transient( $key, 1, 30 );
 
 		$context  = LNKup_Applications::build_apply_context( $opportunity_id, $user_id );
 		$warnings = is_array( $context ) ? ( $context['warnings'] ?? array() ) : array();
@@ -322,6 +397,8 @@ class LNKup_Applications_REST {
 				'trust_badges'      => array_values( array_unique( array_filter( $trust_badges ) ) ),
 				'message'           => (string) $app->post_content,
 				'rejection_reason'  => (string) get_post_meta( $app->ID, '_lnkup_rejection_reason', true ),
+				'info_request'      => LNKup_Applications::open_info_request( $app->ID ),
+				'info_history'      => LNKup_Applications::info_history( $app->ID ),
 			);
 		}
 

@@ -1,5 +1,7 @@
+import Link from "next/link"
 import type { LucideIcon } from "lucide-react"
 import { AlertTriangle, RefreshCw } from "lucide-react"
+import type { AppErrorShape } from "@/lib/api/app-error"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -22,7 +24,7 @@ export function EmptyState({
   return (
     <Card
       className={cn(
-        "items-center gap-3 rounded-2xl border-dashed py-10 text-center",
+        "items-center gap-3 rounded-2xl border-dashed py-8 text-center sm:py-10",
         className,
       )}
     >
@@ -34,6 +36,41 @@ export function EmptyState({
         <p className="text-pretty text-sm text-muted-foreground">{description}</p>
       </div>
       {action}
+    </Card>
+  )
+}
+
+export function AppErrorPanel({
+  error,
+  onRetry,
+  className,
+}: {
+  error: AppErrorShape
+  onRetry?: () => void
+  className?: string
+}) {
+  return (
+    <Card className={cn("items-center gap-3 rounded-2xl py-8 text-center sm:py-10", className)}>
+      <span className="flex size-12 items-center justify-center rounded-full bg-destructive/10">
+        <AlertTriangle className="size-6 text-destructive" />
+      </span>
+      <div className="flex flex-col gap-1 px-6">
+        <h2 className="text-base font-semibold">{error.title}</h2>
+        <p className="text-pretty text-sm text-muted-foreground">{error.message}</p>
+      </div>
+      <div className="flex flex-wrap justify-center gap-2">
+        {error.retryable !== false && onRetry && (
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            <RefreshCw data-icon="inline-start" />
+            Try again
+          </Button>
+        )}
+        {error.actionHref && error.actionLabel && (
+          <Button size="sm" nativeButton={false} render={<Link href={error.actionHref} />}>
+            {error.actionLabel}
+          </Button>
+        )}
+      </div>
     </Card>
   )
 }

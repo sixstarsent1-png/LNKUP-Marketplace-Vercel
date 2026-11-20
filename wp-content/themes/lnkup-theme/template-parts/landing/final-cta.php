@@ -38,6 +38,7 @@ if ( '' === $body ) {
 				<?php else : ?>
 					<a href="#how-it-works" class="lnkup-btn lnkup-btn--outline lnkup-btn--lg lnkup-btn--on-dark"><?php esc_html_e( 'Explore How It Works', 'lnkup-theme' ); ?></a>
 				<?php endif; ?>
+				<?php lnkup_theme_app_store_badge( 'white', 'final-cta' ); ?>
 			</div>
 		</div>
 	</div>

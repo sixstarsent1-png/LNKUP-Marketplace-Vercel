@@ -33,16 +33,24 @@ class LNKup_Apply_With_Profile_View {
 		$docs_url     = add_query_arg( 'view', 'documents', lnkup_page_url_helper( 'vendor-dashboard' ) );
 		$profile_url  = lnkup_page_url_helper( 'vendor-profile' );
 		$apps_url     = add_query_arg( 'view', 'applications', lnkup_page_url_helper( 'vendor-dashboard' ) );
-		$apply_return = add_query_arg( 'apply', $opportunity_id, lnkup_page_url_helper( 'opportunities' ) );
-		$login_url    = wp_login_url( $apply_return );
-		$register_url = add_query_arg(
-			array(
-				'role'     => 'vendor',
-				'apply'    => $opportunity_id,
-				'redirect' => $apply_return,
-			),
-			lnkup_registration_url()
+		$invite       = isset( $_GET['invite'] ) ? sanitize_text_field( wp_unslash( $_GET['invite'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$return_args  = array( 'apply' => $opportunity_id );
+		if ( '' !== $invite ) {
+			$return_args['invite'] = $invite;
+		}
+		$apply_return = add_query_arg( $return_args, lnkup_page_url_helper( 'opportunities' ) );
+		$login_url    = lnkup_login_url_for( $apply_return );
+		$register_args = array(
+			'role'     => 'vendor',
+			'apply'    => $opportunity_id,
+			'redirect' => rawurlencode( $apply_return ),
 		);
+		if ( '' !== $invite ) {
+			$register_args['invite'] = $invite;
+		}
+		$register_url = add_query_arg( $register_args, lnkup_registration_url() );
+		$event_label  = (string) ( $opp['event_name'] ?? $opp['title'] ?? '' );
+		$slot_label   = (string) ( $opp['opportunity_title'] ?? $opp['name'] ?? $event_label );
 
 		ob_start();
 		?>
@@ -53,8 +61,13 @@ class LNKup_Apply_With_Profile_View {
 			</header>
 
 			<?php self::render_opportunity_summary( $opp ); ?>
+			<?php self::render_booth_choices( $opportunity_id, (int) ( $opp['event_id'] ?? 0 ) ); ?>
 
-			<?php if ( 'logged_out' === $eligibility['block_reason'] ) : ?>
+			<?php if ( 'not_vendor' === $eligibility['block_reason'] ) : ?>
+				<div class="lnkup-apply-profile__state lnkup-apply-profile__state--blocked">
+					<p><?php esc_html_e( 'Only vendor accounts can apply for booths. Switch to a vendor account to apply.', 'lnkup-marketplace' ); ?></p>
+				</div>
+			<?php elseif ( 'logged_out' === $eligibility['block_reason'] ) : ?>
 				<div class="lnkup-apply-profile__state lnkup-apply-profile__state--login">
 					<p><?php echo esc_html( lnkup_copy( 'apply_logged_out' ) ); ?></p>
 					<div class="lnkup-apply-profile__actions">
@@ -75,7 +88,7 @@ class LNKup_Apply_With_Profile_View {
 							<?php echo esc_html( LNKup_Vendor_Dashboard_Data::application_status_label( $eligibility['existing_application_status'] ) ); ?>
 						</span>
 					<?php endif; ?>
-					<a href="<?php echo esc_url( $apps_url ); ?>" class="lnkup-btn lnkup-btn--outline"><?php echo esc_html( lnkup_copy( 'apply_view_applications' ) ); ?></a>
+					<a href="<?php echo esc_url( $apps_url ); ?>" class="lnkup-btn lnkup-btn--outline"><?php esc_html_e( 'View requests', 'lnkup-marketplace' ); ?></a>
 				</div>
 			<?php elseif ( ! $eligibility['can_apply'] ) : ?>
 				<div class="lnkup-apply-profile__state lnkup-apply-profile__state--blocked">
@@ -91,6 +104,7 @@ class LNKup_Apply_With_Profile_View {
 					<p class="lnkup-alert lnkup-alert--error"><?php echo esc_html( $block_msg ); ?></p>
 				</div>
 			<?php else : ?>
+				<?php self::render_progress( $documents ); ?>
 				<?php if ( $warnings ) : ?>
 					<div class="lnkup-apply-warnings" role="status">
 						<?php foreach ( $warnings as $warning ) : ?>
@@ -171,12 +185,112 @@ class LNKup_Apply_With_Profile_View {
 			<?php endif; ?>
 
 			<div class="lnkup-apply-success" id="lnkup-apply-success" hidden>
-				<p class="lnkup-alert lnkup-alert--success"><?php echo esc_html( lnkup_copy( 'apply_success' ) ); ?></p>
-				<a href="<?php echo esc_url( $apps_url ); ?>" class="lnkup-btn lnkup-btn--outline"><?php echo esc_html( lnkup_copy( 'apply_view_applications' ) ); ?></a>
+				<div class="lnkup-alert lnkup-alert--success" role="status" aria-live="polite">
+					<p>
+						<?php
+						echo esc_html(
+							sprintf(
+								/* translators: 1: vendor slot, 2: event name */
+								__( 'Your request for %1$s at %2$s was submitted.', 'lnkup-marketplace' ),
+								$slot_label,
+								$event_label
+							)
+						);
+						?>
+					</p>
+					<p><?php esc_html_e( 'The organizer reviews this request before any payment.', 'lnkup-marketplace' ); ?></p>
+				</div>
+				<a href="<?php echo esc_url( $apps_url ); ?>" class="lnkup-btn lnkup-btn--outline"><?php esc_html_e( 'View requests', 'lnkup-marketplace' ); ?></a>
 			</div>
 		</div>
 		<?php
 		return ob_get_clean();
+	}
+
+	/**
+	 * Booth → Requirements → Confirm progress for an eligible vendor.
+	 *
+	 * @param array<int, array<string, mixed>> $documents Document rows.
+	 */
+	private static function render_progress( array $documents ): void {
+		$docs_missing = false;
+		foreach ( $documents as $row ) {
+			if ( in_array( $row['status'] ?? 'missing', array( 'missing', 'expired' ), true ) ) {
+				$docs_missing = true;
+				break;
+			}
+		}
+		$steps = array(
+			array( 'label' => __( 'Booth', 'lnkup-marketplace' ), 'state' => 'done' ),
+			array(
+				'label' => __( 'Requirements', 'lnkup-marketplace' ),
+				'state' => $docs_missing ? 'attention' : 'done',
+			),
+			array( 'label' => __( 'Confirm & submit', 'lnkup-marketplace' ), 'state' => 'current' ),
+		);
+		?>
+		<ol class="lnkup-apply-steps" aria-label="<?php esc_attr_e( 'Application progress', 'lnkup-marketplace' ); ?>" data-testid="lnkup-apply-steps">
+			<?php foreach ( $steps as $index => $step ) : ?>
+				<li class="lnkup-apply-steps__item is-<?php echo esc_attr( $step['state'] ); ?>"<?php echo 'current' === $step['state'] ? ' aria-current="step"' : ''; ?>>
+					<span class="lnkup-apply-steps__num" aria-hidden="true"><?php echo esc_html( (string) ( $index + 1 ) ); ?></span>
+					<span class="lnkup-apply-steps__label"><?php echo esc_html( $step['label'] ); ?></span>
+					<?php if ( 'attention' === $step['state'] ) : ?>
+						<span class="screen-reader-text"><?php esc_html_e( '(documents needed)', 'lnkup-marketplace' ); ?></span>
+					<?php endif; ?>
+				</li>
+			<?php endforeach; ?>
+		</ol>
+		<?php
+	}
+
+	/**
+	 * Sibling vendor slots on the same event, so vendors can switch booth type before applying.
+	 *
+	 * @param int $opportunity_id Selected opportunity.
+	 * @param int $event_id       Parent event.
+	 */
+	private static function render_booth_choices( int $opportunity_id, int $event_id ): void {
+		if ( ! $event_id || ! class_exists( 'LNKup_Organizer_Onboarding' ) ) {
+			return;
+		}
+		$today    = current_time( 'Y-m-d' );
+		$statuses = function_exists( 'lnkup_current_vendor_application_statuses' ) ? lnkup_current_vendor_application_statuses() : array();
+		$choices  = array();
+		foreach ( LNKup_Organizer_Onboarding::event_slot_posts( $event_id ) as $slot ) {
+			if ( 'publish' !== $slot->post_status || 'open' !== get_post_meta( $slot->ID, '_lnkup_opportunity_status', true ) ) {
+				continue;
+			}
+			$deadline = (string) get_post_meta( $slot->ID, '_lnkup_application_deadline', true );
+			if ( (int) get_post_meta( $slot->ID, '_lnkup_spots_remaining', true ) < 1 || ( $deadline && $deadline < $today ) ) {
+				continue;
+			}
+			$fee       = (float) get_post_meta( $slot->ID, '_lnkup_vendor_fee', true );
+			$choices[] = array(
+				'id'     => (int) $slot->ID,
+				'label'  => $slot->post_title,
+				'fee'    => $fee > 0 ? lnkup_public_money( $fee ) : __( 'Free', 'lnkup-marketplace' ),
+				'status' => isset( $statuses[ (int) $slot->ID ] ) ? lnkup_application_status_label( $statuses[ (int) $slot->ID ] ) : '',
+			);
+		}
+		if ( count( $choices ) < 2 ) {
+			return;
+		}
+		?>
+		<fieldset class="lnkup-apply-booths" data-testid="lnkup-apply-booths">
+			<legend class="lnkup-apply-booths__legend"><?php esc_html_e( 'Choose a booth type', 'lnkup-marketplace' ); ?></legend>
+			<ul class="lnkup-apply-booths__list">
+				<?php foreach ( $choices as $choice ) : ?>
+					<?php $selected = $choice['id'] === $opportunity_id; ?>
+					<li>
+						<button type="button" class="lnkup-apply-booths__option<?php echo $selected ? ' is-selected' : ''; ?>" data-apply-switch="<?php echo esc_attr( (string) $choice['id'] ); ?>" aria-pressed="<?php echo $selected ? 'true' : 'false'; ?>">
+							<span class="lnkup-apply-booths__name"><?php echo esc_html( $choice['label'] ); ?></span>
+							<span class="lnkup-apply-booths__fee"><?php echo esc_html( $choice['status'] ? $choice['status'] : $choice['fee'] ); ?></span>
+						</button>
+					</li>
+				<?php endforeach; ?>
+			</ul>
+		</fieldset>
+		<?php
 	}
 
 	/**
@@ -308,7 +422,7 @@ class LNKup_Apply_With_Profile_View {
 
 		$status_labels = array(
 			'approved' => __( 'Approved', 'lnkup-marketplace' ),
-			'pending'  => __( 'Pending', 'lnkup-marketplace' ),
+			'pending'  => __( 'Pending review', 'lnkup-marketplace' ),
 			'uploaded' => __( 'Uploaded', 'lnkup-marketplace' ),
 			'missing'  => __( 'Missing', 'lnkup-marketplace' ),
 			'expired'  => __( 'Expired', 'lnkup-marketplace' ),

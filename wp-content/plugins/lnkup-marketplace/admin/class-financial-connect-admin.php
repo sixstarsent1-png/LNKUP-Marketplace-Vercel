@@ -133,6 +133,7 @@ class LNKup_Financial_Connect_Admin {
 		$recent = self::recent_webhook_events( 25 );
 		$events = array(
 			'account.updated',
+			'account.application.deauthorized',
 			'checkout.session.completed',
 			'payment_intent.succeeded',
 			'payment_intent.processing',
@@ -141,7 +142,7 @@ class LNKup_Financial_Connect_Admin {
 			'customer.subscription.updated',
 			'customer.subscription.deleted',
 			'transfer.created',
-			'transfer.failed',
+			'transfer.reversed',
 			'payout.created',
 			'payout.paid',
 			'payout.failed',

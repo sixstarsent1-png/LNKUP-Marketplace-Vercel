@@ -9,6 +9,11 @@ defined( 'ABSPATH' ) || exit;
 
 class LNKup_Stripe_Connect {
 
+	/**
+	 * Local disabled_reason for an account the organizer or Stripe deauthorized.
+	 */
+	const DEAUTHORIZED_REASON = 'deauthorized';
+
 	public static function is_enabled() {
 		$settings = lnkup_get_settings();
 		return ! empty( $settings['stripe_connect_enabled'] );
@@ -89,16 +94,23 @@ class LNKup_Stripe_Connect {
 		if ( empty( $account['stripe_account_id'] ) && empty( $account['id'] ) ) {
 			return 'not_started';
 		}
-		if ( ! empty( $account['disabled_reason'] ) ) {
+		$reason       = (string) ( $account['disabled_reason'] ?? '' );
+		$verification = $account['verification_status'] ?? '';
+		if ( self::DEAUTHORIZED_REASON === $reason ) {
 			return 'disabled';
 		}
-		$verification = $account['verification_status'] ?? '';
-		if ( 'rejected' === $verification ) {
+		if ( 'rejected' === $verification || 0 === strpos( $reason, 'rejected.' ) ) {
 			return 'rejected';
 		}
 		$past_due = json_decode( $account['requirements_past_due'] ?? '[]', true );
-		if ( is_array( $past_due ) && count( $past_due ) > 0 ) {
+		if ( ( is_array( $past_due ) && count( $past_due ) > 0 ) || 'requirements.past_due' === $reason ) {
 			return 'verification_required';
+		}
+		if ( in_array( $reason, array( 'requirements.pending_verification', 'under_review' ), true ) ) {
+			return 'pending_verification';
+		}
+		if ( '' !== $reason ) {
+			return 'disabled';
 		}
 		if ( ! empty( $account['charges_enabled'] ) && ! empty( $account['payouts_enabled'] ) ) {
 			return 'active';
@@ -151,6 +163,7 @@ class LNKup_Stripe_Connect {
 		}
 		$requirements_due      = json_decode( $account['requirements_due'] ?? '[]', true ) ?: array();
 		$requirements_past_due = json_decode( $account['requirements_past_due'] ?? '[]', true ) ?: array();
+		$metadata              = json_decode( $account['metadata'] ?? '{}', true ) ?: array();
 		$status                = self::map_account_status( $account );
 		$masked_id             = $account['stripe_account_id'];
 		if ( strlen( $masked_id ) > 8 ) {
@@ -164,6 +177,7 @@ class LNKup_Stripe_Connect {
 			'details_submitted'     => (bool) ( $account['details_submitted'] ?? false ),
 			'requirements_due'      => $requirements_due,
 			'requirements_past_due' => $requirements_past_due,
+			'pending_verification'  => is_array( $metadata['pending_verification'] ?? null ) ? $metadata['pending_verification'] : array(),
 			'disabled_reason'       => $account['disabled_reason'] ?? '',
 			'last_synced_at'        => $account['last_synced_at'] ?? null,
 			'settlement_mode'       => self::settlement_mode_for_organizer( $user_id ),
@@ -178,7 +192,7 @@ class LNKup_Stripe_Connect {
 		if ( ! empty( $settings['connect_return_url'] ) ) {
 			return $settings['connect_return_url'];
 		}
-		return home_url( '/organizer-dashboard/?connect=return#financial' );
+		return home_url( '/organizer-dashboard/?view=financial&connect=return' );
 	}
 
 	/**
@@ -189,7 +203,7 @@ class LNKup_Stripe_Connect {
 		if ( ! empty( $settings['connect_refresh_url'] ) ) {
 			return $settings['connect_refresh_url'];
 		}
-		return home_url( '/organizer-dashboard/?connect=refresh#financial' );
+		return home_url( '/organizer-dashboard/?view=financial&connect=refresh' );
 	}
 
 	/**
@@ -278,20 +292,35 @@ class LNKup_Stripe_Connect {
 		}
 		$existing = self::get_account( $user_id, $role );
 		$row      = array(
-			'user_id'               => absint( $user_id ),
-			'role_type'             => sanitize_key( $role ),
-			'stripe_account_id'     => sanitize_text_field( $data['stripe_account_id'] ?? '' ),
-			'verification_status'   => sanitize_key( $data['verification_status'] ?? 'pending' ),
-			'payouts_enabled'       => ! empty( $data['payouts_enabled'] ) ? 1 : 0,
-			'charges_enabled'       => ! empty( $data['charges_enabled'] ) ? 1 : 0,
-			'details_submitted'     => ! empty( $data['details_submitted'] ) ? 1 : 0,
-			'requirements_due'      => isset( $data['requirements_due'] ) ? wp_json_encode( $data['requirements_due'] ) : null,
-			'requirements_past_due' => isset( $data['requirements_past_due'] ) ? wp_json_encode( $data['requirements_past_due'] ) : null,
-			'disabled_reason'       => sanitize_text_field( $data['disabled_reason'] ?? '' ),
-			'last_synced_at'        => $data['last_synced_at'] ?? current_time( 'mysql' ),
-			'metadata'              => ! empty( $data['metadata'] ) ? wp_json_encode( $data['metadata'] ) : null,
-			'updated_at'            => current_time( 'mysql' ),
+			'user_id'    => absint( $user_id ),
+			'role_type'  => sanitize_key( $role ),
+			'updated_at' => current_time( 'mysql' ),
 		);
+		// On update only touch the columns the caller passed, so partial writes keep synced state.
+		if ( ! $existing || array_key_exists( 'stripe_account_id', $data ) ) {
+			$row['stripe_account_id'] = sanitize_text_field( $data['stripe_account_id'] ?? '' );
+		}
+		if ( ! $existing || array_key_exists( 'verification_status', $data ) ) {
+			$row['verification_status'] = sanitize_key( $data['verification_status'] ?? 'pending' );
+		}
+		foreach ( array( 'payouts_enabled', 'charges_enabled', 'details_submitted' ) as $flag ) {
+			if ( ! $existing || array_key_exists( $flag, $data ) ) {
+				$row[ $flag ] = ! empty( $data[ $flag ] ) ? 1 : 0;
+			}
+		}
+		foreach ( array( 'requirements_due', 'requirements_past_due' ) as $list ) {
+			if ( ! $existing || array_key_exists( $list, $data ) ) {
+				$row[ $list ] = isset( $data[ $list ] ) ? wp_json_encode( $data[ $list ] ) : null;
+			}
+		}
+		if ( ! $existing || array_key_exists( 'disabled_reason', $data ) ) {
+			$row['disabled_reason'] = sanitize_text_field( $data['disabled_reason'] ?? '' );
+		}
+		if ( ! $existing || array_key_exists( 'metadata', $data ) ) {
+			$row['metadata'] = ! empty( $data['metadata'] ) ? wp_json_encode( $data['metadata'] ) : null;
+		}
+		$row['last_synced_at'] = $data['last_synced_at'] ?? current_time( 'mysql' );
+
 		if ( $existing ) {
 			$wpdb->update( $table, $row, array( 'id' => (int) $existing['id'] ) );
 			return (int) $existing['id'];
@@ -314,12 +343,84 @@ class LNKup_Stripe_Connect {
 		$client  = new LNKup_Stripe_Client();
 		$remote  = $client->retrieve_account( $account['stripe_account_id'] );
 		if ( is_wp_error( $remote ) ) {
-			return $remote;
+			if ( self::is_missing_account_error( $remote ) ) {
+				self::reset_account( $user_id );
+				LNKup_Financial_Audit::log( 'connect_account_missing', 'user', $user_id, array( 'account_id' => $account['stripe_account_id'] ) );
+				return self::get_status( $user_id );
+			}
+			self::log_stripe_error( 'connect_sync', $user_id, $remote );
+			return new WP_Error(
+				'stripe_api_error',
+				__( 'We couldn\'t refresh your payout status. Try again in a minute.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
 		}
 		self::apply_stripe_account_payload( $user_id, $remote );
-		self::ensure_payout_schedule( $user_id );
+		$remote_interval = (string) ( $remote['settings']['payouts']['schedule']['interval'] ?? '' );
+		if ( 'manual' !== $remote_interval ) {
+			self::ensure_payout_schedule( $user_id );
+		}
 		LNKup_Financial_Audit::log( 'connect_account_synced', 'user', $user_id, array( 'account_id' => $account['stripe_account_id'] ) );
 		return self::get_status( $user_id );
+	}
+
+	/**
+	 * Whether a Stripe error means the connected account no longer exists or is no longer accessible.
+	 *
+	 * @param WP_Error $error Stripe client error.
+	 * @return bool
+	 */
+	public static function is_missing_account_error( $error ) {
+		if ( ! is_wp_error( $error ) ) {
+			return false;
+		}
+		$data = $error->get_error_data();
+		$code = is_array( $data ) ? (string) ( $data['stripe_code'] ?? '' ) : '';
+		if ( in_array( $code, array( 'resource_missing', 'account_invalid' ), true ) ) {
+			return true;
+		}
+		$msg = strtolower( (string) $error->get_error_message() );
+		return false !== strpos( $msg, 'no such account' )
+			|| false !== strpos( $msg, 'does not have access to account' );
+	}
+
+	/**
+	 * Clear the local Connect row so onboarding can create a fresh account.
+	 *
+	 * @param int $user_id Organizer user ID.
+	 */
+	public static function reset_account( $user_id ) {
+		// A new idempotency generation so the next create cannot replay the old account.
+		update_user_meta( $user_id, '_lnkup_connect_account_generation', (int) get_user_meta( $user_id, '_lnkup_connect_account_generation', true ) + 1 );
+		self::upsert_account(
+			$user_id,
+			'organizer',
+			array(
+				'stripe_account_id'     => '',
+				'verification_status'   => 'pending',
+				'charges_enabled'       => false,
+				'payouts_enabled'       => false,
+				'details_submitted'     => false,
+				'requirements_due'      => array(),
+				'requirements_past_due' => array(),
+				'disabled_reason'       => '',
+				'metadata'              => array(),
+			)
+		);
+	}
+
+	/**
+	 * Log a raw Stripe error for operators; callers return friendly copy to users.
+	 *
+	 * @param string   $context Short context slug.
+	 * @param int      $user_id Organizer user ID.
+	 * @param WP_Error $error   Stripe client error.
+	 */
+	private static function log_stripe_error( $context, $user_id, $error ) {
+		$message = is_wp_error( $error ) ? $error->get_error_message() : '';
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( sprintf( '[LNKup] stripe_connect_%s_failed user=%d message=%s', $context, absint( $user_id ), $message ) );
+		LNKup_Financial_Audit::log( 'connect_' . $context . '_failed', 'user', absint( $user_id ), array( 'message' => $message ) );
 	}
 
 	/**
@@ -373,15 +474,50 @@ class LNKup_Stripe_Connect {
 			$user_id,
 			'organizer',
 			array(
-				'stripe_account_id'   => $account['stripe_account_id'],
 				'verification_status' => 'disabled',
 				'charges_enabled'     => false,
 				'payouts_enabled'     => false,
-				'disabled_reason'     => 'deauthorized',
+				'disabled_reason'     => self::DEAUTHORIZED_REASON,
 			)
 		);
 		LNKup_Financial_Audit::log( 'connect_deauthorized', 'user', $user_id, array() );
 		return array( 'success' => true, 'status' => 'disabled' );
+	}
+
+	/**
+	 * Handle account.application.deauthorized (platform lost access to the connected account).
+	 *
+	 * @param array  $application Stripe application object.
+	 * @param string $account_id  Connected account ID from the event envelope.
+	 */
+	public static function handle_account_deauthorized( $application, $account_id ) {
+		unset( $application );
+		$user_id = self::user_id_for_stripe_account( (string) $account_id );
+		if ( $user_id ) {
+			self::deauthorize_account( $user_id );
+		}
+	}
+
+	/**
+	 * Look up the organizer that owns a connected account.
+	 *
+	 * @param string $stripe_account_id Connected account ID.
+	 * @return int
+	 */
+	private static function user_id_for_stripe_account( $stripe_account_id ) {
+		if ( '' === $stripe_account_id ) {
+			return 0;
+		}
+		global $wpdb;
+		$table = LNKup_Financial_Tables::connected_accounts_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return 0;
+		}
+		$row = $wpdb->get_row(
+			$wpdb->prepare( "SELECT user_id FROM {$table} WHERE stripe_account_id = %s AND role_type = 'organizer' LIMIT 1", $stripe_account_id ),
+			ARRAY_A
+		);
+		return $row ? (int) $row['user_id'] : 0;
 	}
 
 	/**
@@ -391,21 +527,43 @@ class LNKup_Stripe_Connect {
 	 * @param array $account Stripe account object.
 	 */
 	public static function apply_stripe_account_payload( $user_id, $account ) {
-		$requirements = $account['requirements'] ?? array();
+		$requirements    = is_array( $account['requirements'] ?? null ) ? $account['requirements'] : array();
+		$account_id      = (string) ( $account['id'] ?? '' );
+		$disabled_reason = (string) ( $requirements['disabled_reason'] ?? '' );
+		$existing        = self::get_account( $user_id, 'organizer' );
+		$is_deauthorized = $existing
+			&& self::DEAUTHORIZED_REASON === ( $existing['disabled_reason'] ?? '' )
+			&& $account_id === (string) ( $existing['stripe_account_id'] ?? '' );
+
+		if ( $is_deauthorized ) {
+			$disabled_reason     = self::DEAUTHORIZED_REASON;
+			$verification_status = 'disabled';
+		} elseif ( 0 === strpos( $disabled_reason, 'rejected.' ) ) {
+			$verification_status = 'rejected';
+		} elseif ( ! empty( $account['details_submitted'] ) ) {
+			$verification_status = 'verified';
+		} else {
+			$verification_status = 'pending';
+		}
+
 		self::upsert_account(
 			$user_id,
 			'organizer',
 			array(
-				'stripe_account_id'     => $account['id'] ?? '',
-				'verification_status'   => ! empty( $account['details_submitted'] ) ? 'verified' : 'pending',
-				'payouts_enabled'       => ! empty( $account['payouts_enabled'] ),
-				'charges_enabled'       => ! empty( $account['charges_enabled'] ),
+				'stripe_account_id'     => $account_id,
+				'verification_status'   => $verification_status,
+				'payouts_enabled'       => ! $is_deauthorized && ! empty( $account['payouts_enabled'] ),
+				'charges_enabled'       => ! $is_deauthorized && ! empty( $account['charges_enabled'] ),
 				'details_submitted'     => ! empty( $account['details_submitted'] ),
 				'requirements_due'      => $requirements['currently_due'] ?? array(),
 				'requirements_past_due' => $requirements['past_due'] ?? array(),
-				'disabled_reason'       => $account['disabled_reason'] ?? '',
+				'disabled_reason'       => $disabled_reason,
 				'last_synced_at'        => current_time( 'mysql' ),
-				'metadata'              => array( 'capabilities' => $account['capabilities'] ?? array() ),
+				'metadata'              => array(
+					'capabilities'             => $account['capabilities'] ?? array(),
+					'pending_verification'     => $requirements['pending_verification'] ?? array(),
+					'payout_schedule_interval' => (string) ( $account['settings']['payouts']['schedule']['interval'] ?? '' ),
+				),
 			)
 		);
 	}
@@ -448,6 +606,10 @@ class LNKup_Stripe_Connect {
 		if ( ! $account || empty( $account['stripe_account_id'] ) ) {
 			return false;
 		}
+		$metadata = json_decode( $account['metadata'] ?? '{}', true ) ?: array();
+		if ( 'manual' === ( $metadata['payout_schedule_interval'] ?? '' ) ) {
+			return true;
+		}
 		$client = new LNKup_Stripe_Client();
 		$result = $client->update_connect_account(
 			$account['stripe_account_id'],
@@ -459,7 +621,12 @@ class LNKup_Stripe_Connect {
 				),
 			)
 		);
-		return ! is_wp_error( $result );
+		if ( is_wp_error( $result ) ) {
+			return false;
+		}
+		$metadata['payout_schedule_interval'] = 'manual';
+		self::upsert_account( $user_id, 'organizer', array( 'metadata' => $metadata ) );
+		return true;
 	}
 
 	/**
@@ -494,7 +661,12 @@ class LNKup_Stripe_Connect {
 		}
 		$link = $client->create_login_link( $account['stripe_account_id'] );
 		if ( is_wp_error( $link ) ) {
-			return $link;
+			self::log_stripe_error( 'login_link', $user_id, $link );
+			return new WP_Error(
+				'stripe_api_error',
+				__( 'We couldn\'t open your payout dashboard. Finish payout setup first, or try again in a minute.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
 		}
 		$url = is_array( $link ) ? (string) ( $link['url'] ?? '' ) : '';
 		if ( '' === $url ) {
@@ -537,6 +709,19 @@ class LNKup_Stripe_Connect {
 		}
 		$settings = lnkup_get_settings();
 		$account  = self::get_account( $user_id, 'organizer' );
+
+		// Organizer is reconnecting: re-check the existing account instead of trusting the local flag.
+		if ( $account && ! empty( $account['stripe_account_id'] ) && self::DEAUTHORIZED_REASON === ( $account['disabled_reason'] ?? '' ) ) {
+			$remote = $client->retrieve_account( $account['stripe_account_id'] );
+			if ( is_wp_error( $remote ) && self::is_missing_account_error( $remote ) ) {
+				self::reset_account( $user_id );
+			} elseif ( ! is_wp_error( $remote ) ) {
+				self::upsert_account( $user_id, 'organizer', array( 'disabled_reason' => '' ) );
+				self::apply_stripe_account_payload( $user_id, $remote );
+			}
+			$account = self::get_account( $user_id, 'organizer' );
+		}
+
 		if ( ! $account || empty( $account['stripe_account_id'] ) ) {
 			$params = array(
 				'type'     => ! empty( $settings['connect_express_enabled'] ) ? 'express' : 'standard',
@@ -548,12 +733,16 @@ class LNKup_Stripe_Connect {
 					),
 				),
 			);
-			$created = $client->create_connect_account( $params );
+			$generation = (int) get_user_meta( $user_id, '_lnkup_connect_account_generation', true );
+			$created    = $client->create_connect_account( $params, 'lnkup_connect_acct_' . absint( $user_id ) . '_' . $generation );
 			if ( is_wp_error( $created ) ) {
+				// Next attempt must not replay a cached failure for the same idempotency key.
+				update_user_meta( $user_id, '_lnkup_connect_account_generation', $generation + 1 );
+				self::log_stripe_error( 'account_create', $user_id, $created );
 				return array(
 					'success' => false,
 					'code'    => 'stripe_api_error',
-					'message' => $created->get_error_message(),
+					'message' => __( 'We couldn\'t start payout setup. Try again in a minute.', 'lnkup-marketplace' ),
 					'status'  => 'not_started',
 				);
 			}
@@ -590,10 +779,14 @@ class LNKup_Stripe_Connect {
 			'type'        => 'account_onboarding',
 		) );
 		if ( is_wp_error( $link ) ) {
+			self::log_stripe_error( 'account_link', $user_id, $link );
+			if ( self::is_missing_account_error( $link ) ) {
+				self::reset_account( $user_id );
+			}
 			return array(
 				'success' => false,
 				'code'    => 'stripe_api_error',
-				'message' => $link->get_error_message(),
+				'message' => __( 'We couldn\'t open payout setup. Try again in a minute.', 'lnkup-marketplace' ),
 				'status'  => 'not_started',
 			);
 		}
@@ -727,13 +920,17 @@ class LNKup_Stripe_Connect {
 		}
 		$settings = lnkup_get_settings();
 		$currency = $settings['connect_platform_currency'] ?? 'usd';
-		$client   = new LNKup_Stripe_Client();
-		$transfer = $client->create_transfer( array(
-			'amount'      => (int) round( $amount * 100 ),
-			'currency'    => $currency,
-			'destination' => $account['stripe_account_id'],
-			'metadata'    => array_merge( array( 'organizer_user_id' => (string) $organizer_id ), $metadata ),
-		) );
+		$client       = new LNKup_Stripe_Client();
+		$local_payout = absint( $metadata['payout_id'] ?? 0 );
+		$transfer     = $client->create_transfer(
+			array(
+				'amount'      => (int) round( $amount * 100 ),
+				'currency'    => $currency,
+				'destination' => $account['stripe_account_id'],
+				'metadata'    => array_merge( array( 'organizer_user_id' => (string) $organizer_id ), $metadata ),
+			),
+			$local_payout ? 'lnkup_transfer_' . $local_payout : ''
+		);
 		if ( is_wp_error( $transfer ) ) {
 			return $transfer;
 		}
@@ -908,13 +1105,17 @@ class LNKup_Stripe_Connect {
 			),
 		);
 
-		$last_error = null;
-		$transfer   = null;
-		$chosen     = '';
+		$last_error   = null;
+		$transfer     = null;
+		$chosen       = '';
+		$local_payout = absint( $metadata['payout_id'] ?? 0 );
 		foreach ( $candidates as $source_type ) {
 			$params                = $base_params;
 			$params['source_type'] = $source_type;
-			$transfer              = $client->create_transfer( $params );
+			$transfer              = $client->create_transfer(
+				$params,
+				$local_payout ? 'lnkup_recovery_' . $local_payout . '_' . $source_type : ''
+			);
 			if ( ! is_wp_error( $transfer ) ) {
 				$chosen = $source_type;
 				break;
@@ -1596,16 +1797,21 @@ class LNKup_Stripe_Connect {
 			$base_params['destination'] = $instant_destination;
 		}
 
-		$attempted   = array();
-		$last_error  = null;
-		$chosen      = '';
-		$payout      = null;
+		$attempted    = array();
+		$last_error   = null;
+		$chosen       = '';
+		$payout       = null;
+		$local_payout = absint( $metadata['payout_id'] ?? 0 );
 
 		foreach ( $candidates as $source_type ) {
 			$params                  = $base_params;
 			$params['source_type']   = $source_type;
 			$attempted[]             = $source_type;
-			$payout                  = $client->create_connect_payout( $acct_id, $params );
+			$payout                  = $client->create_connect_payout(
+				$acct_id,
+				$params,
+				$local_payout ? 'lnkup_payout_' . $local_payout . '_' . $source_type : ''
+			);
 			if ( ! is_wp_error( $payout ) ) {
 				$chosen = $source_type;
 				break;
@@ -1754,18 +1960,18 @@ class LNKup_Stripe_Connect {
 	 * @param array $account Stripe account object.
 	 */
 	public static function handle_account_updated( $account ) {
-		$user_id = 0;
-		if ( ! empty( $account['metadata']['organizer_user_id'] ) ) {
-			$user_id = (int) $account['metadata']['organizer_user_id'];
+		$account_id = (string) ( $account['id'] ?? '' );
+		if ( '' === $account_id ) {
+			return;
 		}
-		if ( ! $user_id ) {
-			global $wpdb;
-			$table = LNKup_Financial_Tables::connected_accounts_table();
-			$row   = $wpdb->get_row(
-				$wpdb->prepare( "SELECT user_id FROM {$table} WHERE stripe_account_id = %s LIMIT 1", $account['id'] ?? '' ),
-				ARRAY_A
-			);
-			$user_id = $row ? (int) $row['user_id'] : 0;
+		$user_id = self::user_id_for_stripe_account( $account_id );
+		if ( ! $user_id && ! empty( $account['metadata']['organizer_user_id'] ) ) {
+			// Metadata may only claim an organizer that has no other connected account yet.
+			$candidate = absint( $account['metadata']['organizer_user_id'] );
+			$existing  = $candidate ? self::get_account( $candidate, 'organizer' ) : null;
+			if ( $candidate && ( ! $existing || empty( $existing['stripe_account_id'] ) ) ) {
+				$user_id = $candidate;
+			}
 		}
 		if ( ! $user_id ) {
 			return;
@@ -1779,33 +1985,43 @@ class LNKup_Stripe_Connect {
 	 * @param array $transfer Stripe transfer object.
 	 */
 	public static function handle_transfer_created( $transfer ) {
-		$payout_id = (int) ( $transfer['metadata']['payout_id'] ?? 0 );
+		$payout_id = self::payout_id_for_treasury_transfer( $transfer );
 		if ( $payout_id && class_exists( 'LNKup_Organizer_Payouts' ) ) {
 			LNKup_Organizer_Payouts::mark_paid( $payout_id, $transfer['id'] ?? '' );
 		}
 	}
 
 	/**
-	 * Handle transfer.failed webhook.
+	 * Handle transfer.reversed webhook — a fully reversed treasury cashout transfer failed.
 	 *
 	 * @param array $transfer Stripe transfer object.
 	 */
-	public static function handle_transfer_failed( $transfer ) {
-		$payout_id = (int) ( $transfer['metadata']['payout_id'] ?? 0 );
-		if ( ! $payout_id ) {
+	public static function handle_transfer_reversed( $transfer ) {
+		$payout_id = self::payout_id_for_treasury_transfer( $transfer );
+		if ( ! $payout_id || ! class_exists( 'LNKup_Organizer_Payouts' ) ) {
 			return;
 		}
-		global $wpdb;
-		$table = LNKup_Treasury_Tables::organizer_payouts_table();
-		$wpdb->update(
-			$table,
-			array(
-				'status'         => 'failed',
-				'failure_reason' => sanitize_text_field( $transfer['failure_message'] ?? __( 'Transfer failed', 'lnkup-marketplace' ) ),
-				'updated_at'     => current_time( 'mysql' ),
-			),
-			array( 'id' => $payout_id )
-		);
+		$amount          = (int) ( $transfer['amount'] ?? 0 );
+		$amount_reversed = (int) ( $transfer['amount_reversed'] ?? 0 );
+		if ( empty( $transfer['reversed'] ) && ( $amount < 1 || $amount_reversed < $amount ) ) {
+			return;
+		}
+		LNKup_Organizer_Payouts::handle_async_failure( $payout_id, __( 'Transfer to your payout account was reversed', 'lnkup-marketplace' ) );
+	}
+
+	/**
+	 * Local payout row for a treasury cashout transfer (ignores stranded-funds recovery transfers).
+	 *
+	 * @param array $transfer Stripe transfer object.
+	 * @return int
+	 */
+	private static function payout_id_for_treasury_transfer( $transfer ) {
+		$metadata = is_array( $transfer['metadata'] ?? null ) ? $transfer['metadata'] : array();
+		// Recovery transfers carry the cashout's payout_id but only fund the Connect payout that follows.
+		if ( ! empty( $metadata['lnkup_recovery'] ) || ! empty( $metadata['cashout_recovery'] ) ) {
+			return 0;
+		}
+		return absint( $metadata['payout_id'] ?? 0 );
 	}
 
 	/**
@@ -1815,42 +2031,37 @@ class LNKup_Stripe_Connect {
 	 * @param string $type   Event type.
 	 */
 	public static function handle_payout_event( $payout, $type ) {
-		$local_id = (int) ( $payout['metadata']['payout_id'] ?? 0 );
-		if ( ! $local_id ) {
+		$local_id = absint( $payout['metadata']['payout_id'] ?? 0 );
+		if ( ! $local_id || ! class_exists( 'LNKup_Organizer_Payouts' ) ) {
+			return;
+		}
+		global $wpdb;
+		$table        = LNKup_Treasury_Tables::organizer_payouts_table();
+		$provider_ref = (string) $wpdb->get_var( $wpdb->prepare( "SELECT provider_ref FROM {$table} WHERE id = %d", $local_id ) );
+		$stripe_id    = (string) ( $payout['id'] ?? '' );
+		if ( '' !== $provider_ref && '' !== $stripe_id && $provider_ref !== $stripe_id ) {
 			return;
 		}
 		if ( 'payout.paid' === $type ) {
-			LNKup_Organizer_Payouts::mark_paid( $local_id, $payout['id'] ?? '' );
+			LNKup_Organizer_Payouts::mark_paid( $local_id, $stripe_id );
 		} elseif ( 'payout.failed' === $type ) {
-			global $wpdb;
-			$table = LNKup_Treasury_Tables::organizer_payouts_table();
-			$wpdb->update(
-				$table,
-				array(
-					'status'         => 'failed',
-					'failure_reason' => sanitize_text_field( $payout['failure_message'] ?? __( 'Payout failed', 'lnkup-marketplace' ) ),
-					'updated_at'     => current_time( 'mysql' ),
-				),
-				array( 'id' => $local_id )
-			);
+			LNKup_Organizer_Payouts::handle_async_failure( $local_id, (string) ( $payout['failure_message'] ?? '' ) );
 		}
 	}
 
 	/**
-	 * Connect-aware refund reversal for destination charges.
+	 * Audit a refund on a destination charge.
+	 *
+	 * The transfer reversal itself happens at refund time (reverse_transfer=true in
+	 * LNKup_Stripe_Provider::refund()), so this must not reverse again.
 	 *
 	 * @param int   $payment_id Payment post ID.
-	 * @param float $amount     Refund amount.
+	 * @param float $amount     Cumulative refunded amount.
 	 */
 	public static function handle_destination_refund( $payment_id, $amount ) {
 		if ( 'destination' !== get_post_meta( $payment_id, '_lnkup_settlement_mode', true ) ) {
 			return;
 		}
-		$transfer_id = get_post_meta( $payment_id, '_lnkup_stripe_transfer_id', true );
-		$client      = new LNKup_Stripe_Client();
-		if ( $transfer_id ) {
-			$client->reverse_transfer( $transfer_id, array( 'amount' => (int) round( $amount * 100 ) ) );
-		}
-		LNKup_Financial_Audit::log( 'connect_refund_reversal', 'payment', $payment_id, array( 'amount' => $amount ) );
+		LNKup_Financial_Audit::log( 'connect_refund_reversal', 'payment', $payment_id, array( 'amount_refunded' => $amount ) );
 	}
 }

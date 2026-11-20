@@ -56,9 +56,16 @@ class LNKup_Parking {
 	 */
 	public static function save( $event_id, $data ) {
 		global $wpdb;
-		$table = LNKup_Operations_Tables::parking_table();
-		$id    = absint( $data['id'] ?? 0 );
-		$app_id = absint( $data['application_id'] ?? 0 );
+		$table    = LNKup_Operations_Tables::parking_table();
+		$id       = absint( $data['id'] ?? 0 );
+		$app_id   = absint( $data['application_id'] ?? 0 );
+		$event_id = absint( $event_id );
+		if ( $id && (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$table} WHERE id = %d", $id ) ) !== $event_id ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return new WP_Error( 'not_found', __( 'Parking space not found for this event.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		if ( $app_id && ! LNKup_Capabilities::application_in_event( $app_id, $event_id ) ) {
+			return new WP_Error( 'wrong_event', __( 'That vendor is not booked for this event.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
 		$qr    = sanitize_text_field( $data['qr_token'] ?? '' );
 		if ( ! $qr && $app_id ) {
 			$qr = 'PARK-' . strtoupper( wp_generate_password( 8, false ) );
@@ -76,7 +83,7 @@ class LNKup_Parking {
 			'updated_at'     => current_time( 'mysql' ),
 		);
 		if ( $id ) {
-			$wpdb->update( $table, $row, array( 'id' => $id ) );
+			$wpdb->update( $table, $row, array( 'id' => $id, 'event_id' => $event_id ) );
 			$parking_id = $id;
 		} else {
 			$row['created_at'] = current_time( 'mysql' );

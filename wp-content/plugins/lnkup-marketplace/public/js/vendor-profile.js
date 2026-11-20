@@ -121,78 +121,6 @@
     });
   }
 
-  function bindMediaPickers(root) {
-    if (!window.wp || !wp.media) {
-      return;
-    }
-    root.addEventListener('click', function (e) {
-      var btn = e.target.closest('[data-media-picker]');
-      if (!btn) {
-        return;
-      }
-      e.preventDefault();
-      var mode = btn.getAttribute('data-media-picker');
-      var frame = wp.media({
-        title: 'Select image',
-        button: { text: 'Use image' },
-        multiple: mode === 'gallery'
-      });
-      frame.on('select', function () {
-        var selection = frame.state().get('selection');
-        if (mode === 'gallery') {
-          var wrap = document.getElementById('lnkup-gallery-ids');
-          var preview = document.getElementById('lnkup-gallery-preview');
-          if (wrap) {
-            wrap.innerHTML = '';
-          }
-          if (preview) {
-            preview.innerHTML = '';
-          }
-          selection.each(function (attachment) {
-            var json = attachment.toJSON();
-            if (!wrap) {
-              return;
-            }
-            var input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'gallery_ids[]';
-            input.value = String(json.id);
-            wrap.appendChild(input);
-            if (preview && json.url) {
-              var img = document.createElement('img');
-              img.src = json.url;
-              img.alt = '';
-              preview.appendChild(img);
-            }
-          });
-        } else {
-          var att = selection.first().toJSON();
-          var field = document.getElementById(mode === 'logo' ? 'logo_attachment_id' : 'cover_image_id');
-          if (field) {
-            field.value = String(att.id);
-          }
-          if (mode === 'logo') {
-            var logoEl = document.getElementById('lnkup-preview-logo');
-            if (!logoEl && att.url) {
-              var previewBody = document.querySelector('.lnkup-profile-preview__body');
-              if (previewBody) {
-                var img = document.createElement('img');
-                img.id = 'lnkup-preview-logo';
-                img.className = 'lnkup-profile-preview__logo';
-                img.src = att.url;
-                img.alt = '';
-                previewBody.insertBefore(img, previewBody.firstChild);
-              }
-            } else if (logoEl) {
-              logoEl.src = att.url;
-            }
-          }
-        }
-      });
-      frame.open();
-    });
-  }
-
   function bindDocUpload(root) {
     root.addEventListener('click', function (e) {
       var btn = e.target.closest('[data-doc-upload]');
@@ -221,6 +149,10 @@
         if (!form) {
           return;
         }
+        if (typeof window.lnkupUploadDocumentForm === 'function') {
+          window.lnkupUploadDocumentForm(form);
+          return;
+        }
         var data = new FormData(form);
         fetch(ajax.url, { method: 'POST', body: data, credentials: 'same-origin' })
           .then(function (r) { return r.json(); })
@@ -230,6 +162,9 @@
             if (res.success) {
               window.location.reload();
             }
+          })
+          .catch(function () {
+            toast('Upload failed — check your connection and try again.', 'error');
           });
       });
     }
@@ -241,7 +176,6 @@
       return;
     }
     bindSectionForms(root);
-    bindMediaPickers(root);
     bindDocUpload(root);
     var businessName = document.getElementById('business_name');
     if (businessName) {

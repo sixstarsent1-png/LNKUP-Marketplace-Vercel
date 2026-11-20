@@ -220,10 +220,20 @@ class LNKup_Activator {
 				'template' => 'page-templates/full-width.php',
 				'content'  => '[lnkup_vendor_public_profile]',
 			),
+			'organizers'          => array(
+				'title'    => 'Organizers',
+				'template' => 'page-templates/public-storefront.php',
+				'content'  => '[lnkup_organizer_public_profile]',
+			),
 			'sign-up'             => array(
 				'title'    => 'Sign Up',
 				'template' => 'page-templates/sign-up.php',
 				'content'  => '[lnkup_register_form]',
+			),
+			'log-in'              => array(
+				'title'    => 'Log In',
+				'template' => 'page-templates/log-in.php',
+				'content'  => '[lnkup_login_form]',
 			),
 			'connector-dashboard' => array(
 				'title'    => 'Connector Dashboard',
@@ -325,6 +335,10 @@ class LNKup_Activator {
 				'template' => 'page-templates/sign-up.php',
 				'content'  => '[lnkup_register_form]',
 			),
+			'log-in'         => array(
+				'template' => 'page-templates/log-in.php',
+				'content'  => '[lnkup_login_form]',
+			),
 			'connector-dashboard' => array(
 				'template' => 'page-templates/connector-dashboard.php',
 				'content'  => '[lnkup_connector_dashboard]',
@@ -332,6 +346,10 @@ class LNKup_Activator {
 			'connector-interest' => array(
 				'template' => 'page-templates/connector-interest.php',
 				'content'  => '[lnkup_connector_interest_form]',
+			),
+			'organizers' => array(
+				'template' => 'page-templates/public-storefront.php',
+				'content'  => '[lnkup_organizer_public_profile]',
 			),
 		);
 		$created = get_option( 'lnkup_pages_created', array() );

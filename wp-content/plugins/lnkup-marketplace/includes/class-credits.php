@@ -44,12 +44,58 @@ class LNKup_Credits {
 		return round( (float) $sum, 2 );
 	}
 
+	/**
+	 * Apply wallet credits to a pending payment. Idempotent: never credits more than the
+	 * amount still uncovered, so retries and double taps cannot debit the wallet twice.
+	 *
+	 * @param int   $payment_id Payment post ID.
+	 * @param int   $user_id    Vendor user ID (must own the payment).
+	 * @param float $amount     Requested credit amount.
+	 * @return float|WP_Error Amount newly applied.
+	 */
 	public static function apply_to_payment( $payment_id, $user_id, $amount ) {
-		$available = self::available_total( $user_id );
-		$apply     = min( $available, (float) $amount );
-		if ( $apply <= 0 ) {
-			return 0;
+		$payment_id = absint( $payment_id );
+		$user_id    = absint( $user_id );
+		if ( ! $payment_id || 'lnkup_payment' !== get_post_type( $payment_id ) ) {
+			return new WP_Error( 'invalid_payment', __( 'Invalid payment.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
+		if ( (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true ) !== $user_id ) {
+			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+		if ( 'pending' !== (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ) ) {
+			return new WP_Error( 'payment_not_pending', __( 'Credits can only be applied to an unpaid booking.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+
+		global $wpdb;
+		$lock = 'lnkup_credit_apply_' . $user_id;
+		if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return new WP_Error( 'busy', __( 'Please wait a moment and try again.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
+		}
+		try {
+			$already   = (float) get_post_meta( $payment_id, '_lnkup_credit_applied', true );
+			$total     = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
+			$uncovered = max( 0, round( $total - $already, 2 ) );
+			$apply     = round( min( self::available_total( $user_id ), (float) $amount, $uncovered ), 2 );
+			if ( $apply <= 0 ) {
+				return 0;
+			}
+			self::consume( $user_id, $apply );
+			LNKup_Wallet::debit( $user_id, $apply, 'checkout', $payment_id, 'vendor' );
+			update_post_meta( $payment_id, '_lnkup_credit_applied', round( $already + $apply, 2 ) );
+			LNKup_Financial_Audit::log( 'credit_applied', 'payment', $payment_id, array( 'amount' => $apply, 'total_applied' => round( $already + $apply, 2 ) ) );
+			return $apply;
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/**
+	 * Draw down credit rows oldest-expiring first.
+	 *
+	 * @param int   $user_id User ID.
+	 * @param float $apply   Amount to consume.
+	 */
+	private static function consume( $user_id, $apply ) {
 		global $wpdb;
 		$table   = LNKup_Financial_Tables::credits_table();
 		$credits = $wpdb->get_results(
@@ -78,10 +124,6 @@ class LNKup_Credits {
 			);
 			$remaining -= $use;
 		}
-		LNKup_Wallet::debit( $user_id, $apply, 'checkout', $payment_id, 'vendor' );
-		update_post_meta( $payment_id, '_lnkup_credit_applied', $apply );
-		LNKup_Financial_Audit::log( 'credit_applied', 'payment', $payment_id, array( 'amount' => $apply ) );
-		return $apply;
 	}
 
 	public static function list_for_user( $user_id, $limit = 25 ) {

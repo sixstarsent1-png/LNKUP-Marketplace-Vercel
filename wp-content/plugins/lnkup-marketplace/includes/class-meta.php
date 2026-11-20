@@ -39,7 +39,7 @@ class LNKup_Meta {
 						array_merge(
 							array(
 								'single'        => true,
-								'show_in_rest'  => true,
+								'show_in_rest'  => LNKup_Post_Types::is_rest_public( $post_type ),
 								'auth_callback' => array( __CLASS__, 'auth_edit_posts' ),
 							),
 							$config

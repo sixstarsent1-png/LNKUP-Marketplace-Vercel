@@ -1,6 +1,8 @@
 "use client"
 
 import { Suspense } from "react"
+import { useEffect, useState } from "react"
+import Link from "next/link"
 import {
   Users,
   CalendarDays,
@@ -24,6 +26,144 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { DemoModeNotice } from "@/components/marketplace/demo-mode-notice"
+import { AdminOpsAlertsPanel } from "@/components/admin/admin-ops-alerts-panel"
+import { isLiveApiEnabled } from "@/lib/api/config"
+import { buildAdminOpsAlerts, type AdminOpsAlert } from "@/lib/admin/ops-alerts"
+import type { ExperimentRecommendation } from "@/lib/ops/experimentation-contract"
+
+type AdminSummaryPayload = {
+  meta: { partial: boolean; mocked: boolean; unavailableReasons?: string[]; updatedAt: string }
+  kpis: {
+    activeVendors: number
+    activeOrganizers: number
+    liveEvents: number
+    paidBookings: number
+    applications?: number
+    verificationQueue?: number
+  }
+  queue: {
+    externalEventsPendingReview: number
+    verificationPending: number
+    connectorsPendingApproval: number
+  }
+}
+
+function AdminLiteOpsCards() {
+  const [summary, setSummary] = useState<AdminSummaryPayload | null>(null)
+  const [alerts, setAlerts] = useState<AdminOpsAlert[]>([])
+  const [recommendations, setRecommendations] = useState<ExperimentRecommendation[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const [summaryRes, opsRes] = await Promise.all([
+          fetch("/api/admin/summary", { cache: "no-store" }),
+          fetch("/api/ops/analytics/summary?range=7d", { cache: "no-store" }).catch(() => null),
+        ])
+        if (!summaryRes.ok) throw new Error("Admin summary unavailable")
+        const data = (await summaryRes.json()) as AdminSummaryPayload
+        if (!active) return
+        setSummary(data)
+
+        let recs: ExperimentRecommendation[] = []
+        if (opsRes?.ok) {
+          const ops = (await opsRes.json()) as {
+            recommendations?: ExperimentRecommendation[]
+          }
+          recs = ops.recommendations ?? []
+          setRecommendations(recs)
+        }
+
+        setAlerts(
+          buildAdminOpsAlerts(
+            {
+              externalEventsPendingReview: data.queue.externalEventsPendingReview,
+              verificationPending: data.queue.verificationPending,
+              connectorsPendingApproval: data.queue.connectorsPendingApproval,
+              partial: data.meta.partial,
+              unavailableReasons: data.meta.unavailableReasons,
+            },
+            recs,
+          ),
+        )
+      } catch {
+        if (active) setError("Admin Lite data unavailable. Open LNKup web admin for full ops.")
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  return (
+    <>
+      <Card className="rounded-2xl border-dashed">
+        <CardHeader>
+          <CardTitle className="text-base">Admin Lite / Internal Ops</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {loading ? <p className="text-sm text-muted-foreground">Loading internal ops snapshot…</p> : null}
+          {error ? <p className="text-sm text-muted-foreground">{error}</p> : null}
+          {summary ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {summary.meta.mocked ? "Mock" : summary.meta.partial ? "Live (partial)" : "Live"} snapshot · updated{" "}
+                {new Date(summary.meta.updatedAt).toLocaleString()}
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <StatCard label="Active vendors" value={summary.kpis.activeVendors} />
+                <StatCard label="Organizers" value={summary.kpis.activeOrganizers} />
+                <StatCard label="Live events" value={summary.kpis.liveEvents} />
+                <StatCard label="Paid bookings" value={summary.kpis.paidBookings} />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Card className="rounded-xl">
+                  <CardContent className="py-4">
+                    <p className="text-xs text-muted-foreground">External events queue</p>
+                    <p className="text-xl font-semibold">{summary.queue.externalEventsPendingReview}</p>
+                  </CardContent>
+                </Card>
+                <Card className="rounded-xl">
+                  <CardContent className="py-4">
+                    <p className="text-xs text-muted-foreground">Verification queue</p>
+                    <p className="text-xl font-semibold">{summary.queue.verificationPending}</p>
+                  </CardContent>
+                </Card>
+                <Card className="rounded-xl">
+                  <CardContent className="py-4">
+                    <p className="text-xs text-muted-foreground">Connector approvals</p>
+                    <p className="text-xl font-semibold">{summary.queue.connectorsPendingApproval}</p>
+                  </CardContent>
+                </Card>
+              </div>
+              {summary.meta.partial && summary.meta.unavailableReasons?.length ? (
+                <p className="text-xs text-muted-foreground">{summary.meta.unavailableReasons.join(" ")}</p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/admin/external-events" />}>
+                  External events
+                </Button>
+                <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/admin/verification" />}>
+                  Verification
+                </Button>
+                <Button variant="outline" size="sm" nativeButton={false} render={<Link href="/admin/connectors" />}>
+                  Connectors
+                </Button>
+              </div>
+            </>
+          ) : null}
+        </CardContent>
+      </Card>
+      {!loading ? <AdminOpsAlertsPanel alerts={alerts} recommendations={recommendations} /> : null}
+    </>
+  )
+}
 
 const gmvByMonth = [
   { month: "Feb", value: 42 },
@@ -49,17 +189,30 @@ function AdminOverviewContent() {
   const { state, retry } = usePanelState()
   const platformFee = Math.round(adminMetrics.gmv * 0.1)
   const maxBar = Math.max(...gmvByMonth.map((d) => d.value))
+  const live = isLiveApiEnabled()
 
   return (
     <PanelContent state={state} retry={retry}>
       <div className="flex flex-col gap-6">
         <PageHeader title="Platform overview" subtitle="Marketplace health across vendors, organizers, and events." />
+        <AdminLiteOpsCards />
+
+        {live ? (
+          <DemoModeNotice testId="admin-overview-demo-notice">
+            Charts and totals below are demo samples for layout only. Trust Admin Lite cards above or open LNKup web
+            admin for production metrics.
+          </DemoModeNotice>
+        ) : (
+          <DemoModeNotice testId="admin-overview-demo-notice">
+            Demo mode — platform overview uses sample data. Enable live API for Admin Lite snapshots.
+          </DemoModeNotice>
+        )}
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard label="Active vendors" value={adminMetrics.vendorCount} hint="In mock directory" icon={Store} accent />
-          <StatCard label="Organizers" value={adminMetrics.organizerCount} hint="On platform" icon={Users} />
-          <StatCard label="Live events" value={adminMetrics.liveEvents} hint="Accepting vendors" icon={CalendarDays} />
-          <StatCard label="Applications" value={adminMetrics.totalApplications} hint="All statuses" icon={FileText} />
+          <StatCard label="Active vendors" value={adminMetrics.vendorCount} hint="Demo sample" icon={Store} accent />
+          <StatCard label="Organizers" value={adminMetrics.organizerCount} hint="Demo sample" icon={Users} />
+          <StatCard label="Live events" value={adminMetrics.liveEvents} hint="Demo sample" icon={CalendarDays} />
+          <StatCard label="Applications" value={adminMetrics.totalApplications} hint="Demo sample" icon={FileText} />
         </div>
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -194,9 +194,27 @@
     });
   }
 
+  function showLoadError(mount, root) {
+    if (window.LNKupUI && window.LNKupUI.panelError) {
+      window.LNKupUI.panelError(mount, {
+        title: 'We couldn\u2019t load your invite link.',
+        desc: 'Check your connection and try again.',
+        onRetry: function () {
+          boot(root);
+        }
+      });
+      return;
+    }
+    mount.innerHTML =
+      '<p class="lnkup-alert lnkup-alert--error">We couldn\u2019t load your invite link. Refresh and try again.</p>';
+  }
+
   function boot(root) {
     var mount = root.querySelector('[data-org-recruit-mount]');
     if (!mount) return;
+    if (window.LNKupUI && window.LNKupUI.panelSkeleton && mount.dataset.loaded === '1') {
+      window.LNKupUI.panelSkeleton(mount, 1);
+    }
     fetchDashboard()
       .then(function (data) {
         if (!data.code) {
@@ -209,9 +227,9 @@
       .then(function (data) {
         render(mount, data);
       })
-      .catch(function () {
-        mount.innerHTML =
-          '<p class="lnkup-alert lnkup-alert--error">Could not load Referral Invites. Refresh and try again.</p>';
+      .catch(function (error) {
+        console.error('LNKup referrals: could not load dashboard', error);
+        showLoadError(mount, root);
       });
   }
 

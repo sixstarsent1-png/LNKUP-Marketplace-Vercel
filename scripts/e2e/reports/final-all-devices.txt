@@ -1,0 +1,30 @@
+﻿
+[6/132] [iphone-15] › tests\mobile\auth-and-honesty.spec.ts:65:7 › Live data honesty › a failed requests load shows an 
+error, never sample data
+[7/132] [iphone-15] › tests\mobile\auth-and-honesty.spec.ts:77:7 › Live data honesty › a failed wallet load shows no 
+payable sample rows
+[11/132] [iphone-15] › tests\mobile\cross-role.spec.ts:124:7 › Cross-role booking journey › a failed approval shows an 
+error and never a false success
+  1) [iphone-15] › tests\mobile\organizer-checkin.spec.ts:123:9 › Organizer event-day check-in › state changes › a 
+booth can be assigned from the check-in list 
+    Error: expect(locator).toBeVisible() failed
+    Locator: getByRole('button', { name: /^Booth \d+\. (Standard|Open)/ }).first()
+    Error: element(s) not found
+    test-results\organizer-checkin-Organize-a41b1-gned-from-the-check-in-list-iphone-15\test-failed-1.png
+[50/132] [iphone-se] › tests\mobile\auth-and-honesty.spec.ts:65:7 › Live data honesty › a failed requests load shows 
+an error, never sample data
+[51/132] [iphone-se] › tests\mobile\auth-and-honesty.spec.ts:77:7 › Live data honesty › a failed wallet load shows no 
+payable sample rows
+[55/132] [iphone-se] › tests\mobile\cross-role.spec.ts:124:7 › Cross-role booking journey › a failed approval shows an 
+error and never a false success
+[94/132] [iphone-15-pro-max] › tests\mobile\auth-and-honesty.spec.ts:65:7 › Live data honesty › a failed requests load 
+shows an error, never sample data
+[95/132] [iphone-15-pro-max] › tests\mobile\auth-and-honesty.spec.ts:77:7 › Live data honesty › a failed wallet load 
+shows no payable sample rows
+[99/132] [iphone-15-pro-max] › tests\mobile\cross-role.spec.ts:124:7 › Cross-role booking journey › a failed approval 
+shows an error and never a false success
+  1 failed
+  18 skipped
+  113 passed (32.0m)
+
+

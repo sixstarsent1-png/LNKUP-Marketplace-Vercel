@@ -4,6 +4,7 @@ import Image from "next/image"
 import { CalendarDays, MapPin } from "lucide-react"
 import { events } from "@/lib/data"
 import { PageHeader } from "@/components/marketplace/page-header"
+import { DemoModeNotice } from "@/components/marketplace/demo-mode-notice"
 import { StatCard } from "@/components/marketplace/stat-card"
 import { StatusBadge } from "@/components/marketplace/badges"
 import { Card } from "@/components/ui/card"
@@ -23,6 +24,9 @@ export default function AdminEventsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Events" subtitle="Every event listing across the marketplace." />
+      <DemoModeNotice testId="admin-events-demo-notice">
+        Demo sample only — event directory below is not live. Manage events on LNKup web admin.
+      </DemoModeNotice>
 
       <div className="grid grid-cols-3 gap-3">
         <StatCard label="Total events" value={events.length} icon={CalendarDays} accent />
