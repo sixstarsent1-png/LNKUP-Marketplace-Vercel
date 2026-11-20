@@ -4,7 +4,8 @@ import { AppText as Text } from "@/components/ui/app-text"
 import * as Location from "expo-location"
 
 import { showToast } from "@/lib/feedback/feedback"
-import { colors, radii, spacing, typeScale } from "@/lib/theme"
+import { AppIcon } from "@/components/ui/app-icon"
+import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
 const DEFAULT_RADIUS = 50
 
@@ -47,7 +48,9 @@ export function NearMeButton({ onLocation, onCityFallback }: NearMeButtonProps) 
         disabled={busy}
         accessibilityRole="button"
         accessibilityLabel="Search near me"
+        accessibilityState={{ busy }}
       >
+        <AppIcon name="navigate-outline" size={15} color={colors.black} />
         <Text style={styles.btnText}>{busy ? "Locating…" : "Near me"}</Text>
       </Pressable>
 
@@ -61,6 +64,7 @@ export function NearMeButton({ onLocation, onCityFallback }: NearMeButtonProps) 
               placeholder="City name"
               placeholderTextColor={colors.gray400}
               style={styles.input}
+              accessibilityLabel="City name"
               returnKeyType="search"
               onSubmitEditing={() => {
                 const city = cityDraft.trim()
@@ -71,6 +75,8 @@ export function NearMeButton({ onLocation, onCityFallback }: NearMeButtonProps) 
             />
             <Pressable
               style={styles.go}
+              accessibilityRole="button"
+              accessibilityLabel="Search this city"
               onPress={() => {
                 const city = cityDraft.trim()
                 if (!city) return
@@ -92,19 +98,21 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   btn: {
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.lime,
+    flexDirection: "row",
     alignItems: "center",
+    gap: spacing.xs,
+    minHeight: 40,
+    borderWidth: 1,
+    borderColor: colors.lime,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.limeMuted,
   },
   btnBusy: {
     opacity: 0.7,
   },
   btnText: {
-    fontWeight: "700",
+    fontFamily: fonts.bodySemi,
     color: colors.black,
     fontSize: typeScale.footnote,
   },

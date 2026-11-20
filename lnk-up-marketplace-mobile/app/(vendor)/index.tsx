@@ -10,6 +10,7 @@ import { Screen } from "@/components/screen"
 import { AppIcon } from "@/components/ui/app-icon"
 import { InlineBanner } from "@/components/ui/banner"
 import { PressableScale } from "@/components/ui/pressable-scale"
+import { RequestCard } from "@/components/request-card"
 import { SectionHeader } from "@/components/ui/section-header"
 import { Skeleton, SkeletonList, SkeletonStats } from "@/components/ui/skeleton"
 import { StatGrid, StatTile } from "@/components/ui/stat-tile"
@@ -24,7 +25,7 @@ import {
   type MarketplaceOpportunity,
 } from "@/lib/api/marketplace"
 import { fetchNotifications } from "@/lib/api/notifications"
-import { fetchVendorRequests, type VendorRequest } from "@/lib/api/vendor-requests"
+import { fetchVendorRequests, upcomingBookedRequests, type VendorRequest } from "@/lib/api/vendor-requests"
 import { fetchVendorReadiness, type VendorReadiness } from "@/lib/api/vendor-readiness"
 import { fetchVendorFavorites } from "@/lib/api/vendor-favorites"
 import { useVendorFavorites } from "@/lib/hooks/use-vendor-favorites"
@@ -122,6 +123,10 @@ export default function VendorHomeScreen() {
 
   const counts = useMemo(() => vendorLifecycleCounts(requests), [requests])
   const eventDay = useMemo(() => eventDayBookings(requests)[0] ?? null, [requests])
+  const upcoming = useMemo(
+    () => upcomingBookedRequests(requests, 3).filter((item) => item.id !== eventDay?.id).slice(0, 2),
+    [requests, eventDay],
+  )
   const next = useMemo(
     () => vendorNextStep(requests, readiness ? readiness.profileCompletion : null),
     [requests, readiness],
@@ -208,6 +213,28 @@ export default function VendorHomeScreen() {
               onPress={() => router.push("/(vendor)/requests?filter=confirmed")}
             />
           </StatGrid>
+
+          {upcoming.length > 0 ? (
+            <View style={styles.section}>
+              <SectionHeader
+                title="Coming up"
+                icon="calendar-outline"
+                actionLabel="All bookings"
+                onAction={() => router.push("/(vendor)/requests?filter=confirmed")}
+              />
+              <View style={styles.list}>
+                {upcoming.map((item) => (
+                  <RequestCard
+                    key={item.id}
+                    item={item}
+                    onPress={() => router.push(`/booking/${item.id}` as Href)}
+                    primaryLabel="Open pass"
+                    onPrimaryAction={() => router.push(`/pass/${item.id}` as Href)}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : null}
 
           {showTutorial ? (
             <GuidedTutorialChecklist

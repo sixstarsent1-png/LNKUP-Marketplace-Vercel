@@ -42,6 +42,8 @@ export type MarketplaceOpportunity = {
   loadInTime?: string
   /** Vendor's application status when logged in (WP marketplace search). */
   applicationStatus?: string
+  /** Event cover (or the theme's category image when the organizer has not uploaded one). */
+  imageUrl?: string
   gallery?: Array<{
     id: number
     url: string
@@ -135,6 +137,7 @@ export function mapWpToOpportunity(item: WpOpportunityItem): MarketplaceOpportun
     powerAvailable: item.power_available,
     loadInTime: item.load_in_time || undefined,
     applicationStatus: item.application_status?.trim() || undefined,
+    imageUrl: item.featured_image?.trim() || undefined,
     gallery: Array.isArray(item.gallery)
       ? item.gallery
           .map((g) => {

@@ -213,7 +213,7 @@ export default function OpportunityDetailScreen() {
           <View style={[styles.content, constrainedColumnStyle(layout.contentMaxWidth)]}>
             <View style={styles.hero}>
               <EventImage
-                uri={heroImage?.url || heroImage?.thumb}
+                uri={heroImage?.url || heroImage?.thumb || detail.imageUrl}
                 label={category ?? "Event"}
                 height={220}
                 accessibilityLabel={`${detail.title} event photo`}

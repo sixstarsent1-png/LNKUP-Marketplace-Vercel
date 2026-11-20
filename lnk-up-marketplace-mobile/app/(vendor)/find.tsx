@@ -5,6 +5,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
   View,
@@ -20,7 +21,7 @@ import { ScreenList } from "@/components/screen"
 import { AppIcon } from "@/components/ui/app-icon"
 import { InlineBanner } from "@/components/ui/banner"
 import { Button } from "@/components/ui/button"
-import { Surface } from "@/components/ui/surface"
+import { FilterChip } from "@/components/ui/chip"
 import { Meta, SectionTitle } from "@/components/ui/typography"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import { isAbortError } from "@/lib/api/wp-client"
@@ -36,12 +37,16 @@ import {
   type MarketplaceSort,
   type SearchParams,
 } from "@/lib/api/marketplace"
+import { LAUNCH_CATEGORIES } from "@/lib/api/organizer-launch"
 import { createSavedSearch } from "@/lib/api/saved-searches"
 import { useAuth } from "@/lib/auth/auth-context"
 import { showToast } from "@/lib/feedback/feedback"
 import { useVendorFavorites } from "@/lib/hooks/use-vendor-favorites"
 import { constrainedColumnStyle } from "@/lib/layout/use-breakpoint"
 import { colors, fonts, layout, radii, spacing, typeScale } from "@/lib/theme"
+
+/** Quick category chips use the same names organizers pick when creating vendor spots. */
+const QUICK_CATEGORIES: readonly string[] = LAUNCH_CATEGORIES
 
 function routeKey(query: Record<string, string | string[] | undefined>): string {
   return JSON.stringify(searchParamsToQueryRecord(queryRecordToSearchParams(query)))
@@ -275,7 +280,7 @@ export default function VendorFindScreen() {
         }
         listHeader={
           <>
-            <Surface elevated style={styles.searchSurface}>
+            <View>
               <View style={styles.searchRow}>
                 <View style={styles.inputWrap}>
                   <AppIcon name="search-outline" size={18} color={colors.gray500} />
@@ -303,7 +308,7 @@ export default function VendorFindScreen() {
                 </View>
                 <Button label="Search" onPress={handleSearch} accessibilityLabel="Run search" />
               </View>
-            </Surface>
+            </View>
 
             <View style={styles.toolbar}>
               <Pressable
@@ -327,8 +332,8 @@ export default function VendorFindScreen() {
                   </View>
                 ) : null}
               </Pressable>
-              <View style={styles.nearWrap}>
-                <NearMeButton
+        <View>
+          <NearMeButton
                   onLocation={(lat, lng, radiusMiles) =>
                     applyFilters({
                       ...filters,
@@ -350,6 +355,22 @@ export default function VendorFindScreen() {
                 />
               </View>
             </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryRow}
+              accessibilityLabel="Browse by category"
+            >
+              {QUICK_CATEGORIES.map((cat) => (
+                <FilterChip
+                  key={cat}
+                  label={cat}
+                  selected={filters.category === cat}
+                  onPress={() => applyFilters({ ...filters, category: filters.category === cat ? undefined : cat })}
+                />
+              ))}
+            </ScrollView>
 
             <View style={styles.linkRow}>
               <View style={styles.viewToggle} testID="find-view-toggle" accessibilityRole="tablist">
@@ -547,10 +568,6 @@ function opportunityKey(item: MarketplaceOpportunity): string {
 }
 
 const styles = StyleSheet.create({
-  searchSurface: {
-    padding: spacing.md,
-    gap: 0,
-  },
   searchRow: {
     flexDirection: "row",
     gap: spacing.sm,
@@ -587,8 +604,13 @@ const styles = StyleSheet.create({
   },
   toolbar: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm,
-    alignItems: "stretch",
+    alignItems: "center",
+  },
+  categoryRow: {
+    gap: spacing.sm,
+    paddingRight: spacing.lg,
   },
   filterBtn: {
     flexDirection: "row",
@@ -626,9 +648,6 @@ const styles = StyleSheet.create({
     fontSize: typeScale.micro,
     fontFamily: fonts.bodyBold,
     color: colors.black,
-  },
-  nearWrap: {
-    flex: 1,
   },
   linkRow: {
     flexDirection: "row",

@@ -53,7 +53,7 @@ export function OpportunityCard({
           accessibilityRole="button"
           accessibilityLabel={[`View details for ${item.title}`, item.eventDate, location, fee].filter(Boolean).join(", ")}
         >
-          <EventImage uri={image?.thumb || image?.url} label={category ?? "Event"} height={150} radius={0} />
+          <EventImage uri={image?.thumb || image?.url || item.imageUrl} label={category ?? "Event"} height={168} radius={0} />
         </Pressable>
         <View style={styles.overlayRow} pointerEvents="box-none">
           {category ? (
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: 6 },
   detailsPressed: { opacity: 0.7 },
   titleRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
-  title: { flex: 1, fontSize: typeScale.bodyLarge, lineHeight: 23 },
+  title: { flex: 1, fontSize: typeScale.headline, lineHeight: 24 },
   flexShrink: { flexShrink: 1 },
   badge: {
     backgroundColor: colors.lime,
