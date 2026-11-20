@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 
 import { AppIcon, type AppIconName } from "@/components/ui/app-icon"
-import { colors, fonts, radii, spacing, typography } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typography, typeScale } from "@/lib/theme"
 
 type StatTileProps = {
   label: string
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
   },
   value: {
     fontFamily: fonts.display,
-    fontSize: 22,
+    fontSize: typeScale.title,
     color: colors.black,
   },
   valueDark: {
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
   },
   label: {
     ...typography.caption,
-    fontSize: 12,
+    fontSize: typeScale.caption,
     color: colors.gray700,
   },
   labelDark: {

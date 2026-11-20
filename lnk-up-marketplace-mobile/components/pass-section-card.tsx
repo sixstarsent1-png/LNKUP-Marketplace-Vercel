@@ -2,7 +2,7 @@ import type { ReactNode } from "react"
 import { StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 export function PassSectionCard({
   title,
@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray50,
   },
   title: {
-    fontSize: 17,
+    fontSize: typeScale.bodyLarge,
     fontWeight: "700",
     color: colors.black,
   },
@@ -82,14 +82,14 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.gray200,
   },
   label: {
-    fontSize: 11,
+    fontSize: typeScale.micro,
     fontWeight: "700",
     letterSpacing: 0.4,
     color: colors.gray500,
     textTransform: "uppercase",
   },
   value: {
-    fontSize: 15,
+    fontSize: typeScale.callout,
     color: colors.black,
     lineHeight: 22,
   },
@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
   },
   bullet: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.gray700,
     lineHeight: 20,
   },

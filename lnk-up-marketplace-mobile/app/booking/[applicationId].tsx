@@ -19,7 +19,7 @@ import { formatMoney } from "@/lib/api/vendor-wallet"
 import { useAuth } from "@/lib/auth/auth-context"
 import { showToast } from "@/lib/feedback/feedback"
 import { bookingTimeline } from "@/lib/vendor/booking-timeline"
-import { spacing } from "@/lib/theme"
+import { spacing, typeScale } from "@/lib/theme"
 
 type PrimaryAction = { label: string; icon: "card-outline" | "ticket-outline" | "search-outline"; href: Href }
 
@@ -169,8 +169,8 @@ export default function BookingDetailScreen() {
 
 const styles = StyleSheet.create({
   hero: { gap: spacing.sm },
-  title: { fontSize: 26, lineHeight: 32 },
+  title: { fontSize: typeScale.display, lineHeight: 32 },
   card: { gap: spacing.md },
-  cardTitle: { fontSize: 16 },
+  cardTitle: { fontSize: typeScale.bodyLarge },
   flex: { flex: 1 },
 })

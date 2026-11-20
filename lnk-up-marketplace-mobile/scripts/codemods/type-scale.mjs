@@ -2,11 +2,12 @@
 /**
  * Replace raw `fontSize: N` in StyleSheets with the shared `typeScale` tokens.
  * Usage: node scripts/codemods/type-scale.mjs <file> [file…]
- * Sizes between steps round to the nearest step (20 and 24 become `title`, 22).
+ * Sizes between steps round to the nearest step (20 and 24 become `title`, 22; 40 becomes `hero`).
  */
 import fs from "node:fs"
 
 const SCALE = [
+  ["nano", 10],
   ["micro", 11],
   ["caption", 12],
   ["footnote", 13],
@@ -16,6 +17,9 @@ const SCALE = [
   ["headline", 18],
   ["title", 22],
   ["display", 28],
+  ["large", 32],
+  ["hero", 36],
+  ["jumbo", 48],
 ]
 
 function tokenFor(size) {

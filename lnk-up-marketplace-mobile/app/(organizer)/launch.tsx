@@ -40,7 +40,7 @@ import {
 } from "@/lib/api/organizer-launch"
 import { useAuth } from "@/lib/auth/auth-context"
 import { confirmAction, showToast } from "@/lib/feedback/feedback"
-import { colors, fonts, layout, radii, spacing, typography } from "@/lib/theme"
+import { colors, fonts, layout, radii, spacing, typography, typeScale } from "@/lib/theme"
 
 const FEE_PRESETS = [
   { label: "Free", value: 0 },
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
   fieldError: { color: colors.red600, marginTop: -spacing.sm },
   rowCard: { gap: spacing.md },
   rowCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  rowCardTitle: { fontSize: 16 },
+  rowCardTitle: { fontSize: typeScale.bodyLarge },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   addRow: {
     flexDirection: "row",
@@ -490,12 +490,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: colors.white,
   },
-  addRowText: { fontFamily: fonts.bodySemi, color: colors.black, fontSize: 14 },
+  addRowText: { fontFamily: fonts.bodySemi, color: colors.black, fontSize: typeScale.body },
   pressed: { opacity: 0.75 },
   label: { ...typography.eyebrow, letterSpacing: 0.5 },
   preview: { gap: spacing.sm },
-  previewTitle: { fontSize: 20 },
-  fee: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.black },
+  previewTitle: { fontSize: typeScale.headline },
+  fee: { fontFamily: fonts.bodyBold, fontSize: typeScale.callout, color: colors.black },
   done: { gap: spacing.md, alignItems: "flex-start" },
   doneIcon: {
     width: 56,

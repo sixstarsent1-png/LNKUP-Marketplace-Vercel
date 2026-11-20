@@ -5,7 +5,7 @@ import { useReducedMotion } from "react-native-reanimated"
 
 import { AppIcon, type AppIconName } from "@/components/ui/app-icon"
 import { AppText as Text } from "@/components/ui/app-text"
-import { colors, fonts, radii, spacing } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
 type EventImageProps = {
   uri?: string | null
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   },
   placeholderLabel: {
     fontFamily: fonts.bodySemi,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.gray700,
   },
 })

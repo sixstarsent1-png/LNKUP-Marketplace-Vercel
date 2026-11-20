@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 
-import { colors, fonts, layout, radii, shadow, spacing } from "@/lib/theme"
+import { colors, fonts, layout, radii, shadow, spacing, typeScale } from "@/lib/theme"
 
 type FilterChipProps = {
   label: string
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     fontFamily: fonts.bodySemi,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.gray700,
   },
   chipTextSelected: {
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
   },
   countText: {
     fontFamily: fonts.bodyBold,
-    fontSize: 11,
+    fontSize: typeScale.micro,
     color: colors.gray700,
   },
   countTextSelected: {
@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     fontFamily: fonts.bodySemi,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.gray500,
   },
   segmentTextSelected: {

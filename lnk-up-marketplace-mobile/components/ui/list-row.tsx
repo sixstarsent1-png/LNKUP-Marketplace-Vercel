@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 
 import { AppIcon, type AppIconName } from "@/components/ui/app-icon"
-import { colors, layout, radii, spacing, typography } from "@/lib/theme"
+import { colors, layout, radii, spacing, typography, typeScale } from "@/lib/theme"
 
 type ListRowProps = {
   title: string
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
   },
   title: {
     ...typography.label,
-    fontSize: 15,
+    fontSize: typeScale.callout,
   },
   titleDestructive: {
     color: colors.red600,

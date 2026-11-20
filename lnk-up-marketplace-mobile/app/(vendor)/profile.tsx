@@ -29,7 +29,7 @@ import { useAuth } from "@/lib/auth/auth-context"
 import { confirmAction, showToast } from "@/lib/feedback/feedback"
 import { openExternalUrl } from "@/lib/navigation/open-external-url"
 import { safeBack } from "@/lib/navigation/safe-back"
-import { colors, fonts, layout, radii, spacing } from "@/lib/theme"
+import { colors, fonts, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 type Draft = Omit<VendorProfileEdit, "profileId" | "logoUrl" | "logoAttachmentId" | "publicSlug" | "publicUrl">
 type FieldErrors = Partial<Record<keyof Draft, string>>
@@ -427,18 +427,18 @@ const styles = StyleSheet.create({
     minHeight: layout.hitTargetMin,
     gap: 2,
   },
-  backText: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.gray700 },
+  backText: { fontFamily: fonts.bodySemi, fontSize: typeScale.callout, color: colors.gray700 },
   pressed: { opacity: 0.6 },
   identity: { gap: spacing.md },
   identityRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   identityCopy: { flex: 1, gap: spacing.xs },
-  identityName: { fontSize: 22, lineHeight: 28 },
+  identityName: { fontSize: typeScale.title, lineHeight: 28 },
   identityActions: { flexDirection: "row", gap: spacing.sm },
   progressRow: { gap: 4 },
   progressTrack: { height: 6, borderRadius: radii.pill, backgroundColor: colors.gray100, overflow: "hidden" },
   progressFill: { height: 6, backgroundColor: colors.lime },
   group: { gap: spacing.md },
-  groupTitle: { fontSize: 17 },
+  groupTitle: { fontSize: typeScale.bodyLarge },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   row: { flexDirection: "row", gap: spacing.sm },
   state: { width: 96 },

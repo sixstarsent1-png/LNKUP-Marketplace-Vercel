@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { SkeletonList } from "@/components/ui/skeleton"
 import { Surface } from "@/components/ui/surface"
 import { Body, SectionTitle } from "@/components/ui/typography"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 type PanelProps = {
   title: string
@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   title: {
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     textAlign: "center",
   },
   message: {

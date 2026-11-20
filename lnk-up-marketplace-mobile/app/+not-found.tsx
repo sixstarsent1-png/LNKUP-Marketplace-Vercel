@@ -2,7 +2,7 @@ import { Link, Stack } from "expo-router"
 import { StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 
-import { colors, spacing } from "@/lib/theme"
+import { colors, spacing, typeScale } from "@/lib/theme"
 
 export default function NotFoundScreen() {
   return (
@@ -28,7 +28,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   title: {
-    fontSize: 20,
+    fontSize: typeScale.headline,
     fontWeight: "700",
     color: colors.black,
   },
@@ -36,7 +36,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   linkText: {
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontWeight: "600",
     color: colors.gray700,
     textDecorationLine: "underline",

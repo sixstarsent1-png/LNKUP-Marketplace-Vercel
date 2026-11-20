@@ -150,7 +150,7 @@ export default function OrganizerProfileScreen() {
       subtitle="How vendors see your organization"
       header={<BackLink label="Account" fallbackHref={"/(organizer)/more" as Href} />}
     >
-      {loading ? <LoadingPanel label="Loading profile…" /> : null}
+      {loading ? <LoadingPanel label="Loading profile…" variant="skeleton" count={2} /> : null}
       {!loading && error ? (
         <ErrorPanel title={error.title} message={error.message} onAction={() => void load()} />
       ) : null}

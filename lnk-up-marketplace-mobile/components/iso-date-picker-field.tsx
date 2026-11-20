@@ -8,7 +8,7 @@ import {
 } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   label: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "600",
     color: colors.gray700,
   },
@@ -150,12 +150,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontWeight: "600",
     color: colors.black,
   },
   value: {
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontWeight: "600",
     color: colors.black,
   },

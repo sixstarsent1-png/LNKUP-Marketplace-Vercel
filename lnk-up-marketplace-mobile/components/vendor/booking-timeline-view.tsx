@@ -3,7 +3,7 @@ import { StyleSheet, View } from "react-native"
 import { AppIcon, type AppIconName } from "@/components/ui/app-icon"
 import { AppText as Text } from "@/components/ui/app-text"
 import type { TimelineState, TimelineStep } from "@/lib/vendor/booking-timeline"
-import { colors, fonts, spacing } from "@/lib/theme"
+import { colors, fonts, spacing, typeScale } from "@/lib/theme"
 
 const DOT: Record<TimelineState, { icon: AppIconName; bg: string; fg: string; border: string }> = {
   done: { icon: "checkmark", bg: colors.black, fg: colors.white, border: colors.black },
@@ -74,8 +74,8 @@ const styles = StyleSheet.create({
   lineDone: { backgroundColor: colors.black },
   copy: { flex: 1, paddingTop: 2 },
   copySpaced: { paddingBottom: spacing.lg },
-  label: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.black },
+  label: { fontFamily: fonts.bodySemi, fontSize: typeScale.callout, color: colors.black },
   labelMuted: { color: colors.gray500 },
   labelStopped: { color: colors.red600 },
-  detail: { fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: colors.gray500, marginTop: 2 },
+  detail: { fontFamily: fonts.body, fontSize: typeScale.footnote, lineHeight: 18, color: colors.gray500, marginTop: 2 },
 })

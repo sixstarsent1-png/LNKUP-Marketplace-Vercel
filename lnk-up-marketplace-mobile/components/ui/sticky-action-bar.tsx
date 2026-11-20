@@ -3,7 +3,7 @@ import { StyleSheet, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { AppText as Text } from "@/components/ui/app-text"
-import { colors, fonts, layout, shadow, spacing } from "@/lib/theme"
+import { colors, fonts, layout, shadow, spacing, typeScale } from "@/lib/theme"
 
 /**
  * Bottom-pinned primary action area for detail and form screens. Clears the home indicator;
@@ -43,5 +43,5 @@ const styles = StyleSheet.create({
     ...shadow("sm"),
   },
   row: { width: "100%", flexDirection: "row", gap: spacing.sm },
-  caption: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.gray700, textAlign: "center" },
+  caption: { fontFamily: fonts.bodyMedium, fontSize: typeScale.footnote, color: colors.gray700, textAlign: "center" },
 })

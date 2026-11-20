@@ -2,7 +2,7 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native"
 
 import { AppIcon, type AppIconName } from "@/components/ui/app-icon"
 import { AppText as Text } from "@/components/ui/app-text"
-import { colors, fonts, fontScaleCaps, layout, radii, spacing } from "@/lib/theme"
+import { colors, fonts, fontScaleCaps, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 export type SegmentedTab<T extends string> = {
   value: T
@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
   },
   tabSelected: { borderBottomColor: colors.black },
   pressed: { opacity: 0.7 },
-  label: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.gray500 },
+  label: { fontFamily: fonts.bodySemi, fontSize: typeScale.body, color: colors.gray500 },
   labelSelected: { color: colors.black },
   count: {
     minWidth: 20,
@@ -97,5 +97,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   countAttention: { backgroundColor: colors.lime },
-  countText: { fontFamily: fonts.bodyBold, fontSize: 11, color: colors.black },
+  countText: { fontFamily: fonts.bodyBold, fontSize: typeScale.micro, color: colors.black },
 })

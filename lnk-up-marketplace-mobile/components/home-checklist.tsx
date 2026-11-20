@@ -6,7 +6,7 @@ import { AppIcon } from "@/components/ui/app-icon"
 import { Surface } from "@/components/ui/surface"
 import { Meta, SectionTitle } from "@/components/ui/typography"
 import type { VendorReadiness, VendorReadinessMissingItem } from "@/lib/api/vendor-readiness"
-import { colors, fonts, layout, radii, spacing, typography } from "@/lib/theme"
+import { colors, fonts, layout, radii, spacing, typography, typeScale } from "@/lib/theme"
 
 const DEFAULT_STEPS: VendorReadinessMissingItem[] = [
   {
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   bulletText: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontFamily: fonts.bodyBold,
     color: colors.black,
   },
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   action: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontFamily: fonts.bodySemi,
     color: colors.gray500,
   },

@@ -4,7 +4,7 @@ import Animated, { FadeIn, FadeOut, useReducedMotion } from "react-native-reanim
 
 import { AppIcon, type AppIconName } from "@/components/ui/app-icon"
 import { Meta, SectionTitle } from "@/components/ui/typography"
-import { colors, layout, radii, spacing } from "@/lib/theme"
+import { colors, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 type CollapsibleSectionProps = {
   title: string
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   title: {
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
   },
   body: {
     gap: spacing.md,

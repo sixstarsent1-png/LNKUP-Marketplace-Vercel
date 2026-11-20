@@ -44,7 +44,7 @@ import { confirmAction, showToast } from "@/lib/feedback/feedback"
 import { formatShortDate } from "@/lib/format/date"
 import { useKeyedSingleFlight, useSingleFlight } from "@/lib/hooks/use-single-flight"
 import { openExternalUrl } from "@/lib/navigation/open-external-url"
-import { colors, fonts, radii, spacing } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
 WebBrowser.maybeCompleteAuthSession()
 
@@ -558,12 +558,12 @@ const styles = StyleSheet.create({
   },
   heroValue: {
     fontFamily: fonts.display,
-    fontSize: 36,
+    fontSize: typeScale.hero,
     lineHeight: 44,
     color: colors.black,
   },
   heroBody: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.gray900,
   },
   card: {
@@ -591,7 +591,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   amount: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontFamily: fonts.bodyBold,
     color: colors.black,
   },

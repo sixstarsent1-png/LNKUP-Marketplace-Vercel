@@ -6,7 +6,7 @@ import { AppIcon, type AppIconName } from "@/components/ui/app-icon"
 import { Button } from "@/components/ui/button"
 import { Surface } from "@/components/ui/surface"
 import { DisplayTitle, Eyebrow, Meta } from "@/components/ui/typography"
-import { colors, spacing } from "@/lib/theme"
+import { colors, spacing, typeScale } from "@/lib/theme"
 
 export type HomeHeroVariant = "pay" | "pass" | "find"
 
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   title: {
-    fontSize: 20,
+    fontSize: typeScale.headline,
   },
   metaPay: {
     color: colors.amber700,

@@ -3,7 +3,7 @@ import { AppText as Text } from "@/components/ui/app-text"
 
 import { AppIcon, type AppIconName } from "@/components/ui/app-icon"
 import { SectionTitle } from "@/components/ui/typography"
-import { colors, fonts, layout, spacing, typography } from "@/lib/theme"
+import { colors, fonts, layout, spacing, typography, typeScale } from "@/lib/theme"
 
 type SectionHeaderProps = {
   title: string
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontFamily: fonts.bodySemi,
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.black,
     textDecorationLine: "underline",
   },

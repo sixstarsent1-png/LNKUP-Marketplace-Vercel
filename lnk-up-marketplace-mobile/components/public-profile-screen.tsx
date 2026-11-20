@@ -11,7 +11,7 @@ import type { PublicProfile } from "@/lib/api/public-profiles"
 import { useAuth } from "@/lib/auth/auth-context"
 import { loadHomePreference } from "@/lib/auth/roles"
 import { openExternalUrl } from "@/lib/navigation/open-external-url"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 type PublicProfileScreenProps = {
   title: string
@@ -89,7 +89,7 @@ export function PublicProfileScreen({ title, slug, websiteUrl, load }: PublicPro
             onAction={() => void openExternalUrl(websiteUrl, "public profile")}
           />
         ) : null}
-        {slug && loading ? <LoadingPanel label="Loading profile…" /> : null}
+        {slug && loading ? <LoadingPanel label="Loading profile…" variant="skeleton" withMedia count={1} /> : null}
         {slug && !loading && error ? (
           <ErrorPanel
             title={error.title}
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     fontWeight: "700",
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     color: colors.black,
   },
   body: {
@@ -161,22 +161,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray100,
   },
   name: {
-    fontSize: 28,
+    fontSize: typeScale.display,
     fontWeight: "800",
     color: colors.black,
   },
   tagline: {
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     color: colors.gray700,
   },
   meta: {
-    fontSize: 15,
+    fontSize: typeScale.callout,
     lineHeight: 22,
     color: colors.gray700,
   },
   bio: {
     marginTop: spacing.sm,
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     lineHeight: 24,
     color: colors.black,
   },

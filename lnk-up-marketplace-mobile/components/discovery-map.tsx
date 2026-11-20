@@ -7,7 +7,7 @@ import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { trackMobileEvent } from "@/lib/analytics/mobile-events"
 import { fetchMapPins, type MarketplaceMapPin, type MapPinsQuery } from "@/lib/api/map-pins"
 import type { WpAuth } from "@/lib/api/wp-client"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 /**
  * Web / non-native fallback: pin list instead of MapView (react-native-maps is native-only).
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   hint: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     color: colors.gray500,
     marginBottom: spacing.xs,
   },
@@ -164,12 +164,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray50,
   },
   rowTitle: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontWeight: "600",
     color: colors.black,
   },
   rowMeta: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     color: colors.gray500,
   },
   preview: {

@@ -148,7 +148,7 @@ export default function ApplyScreen() {
             ]}
             keyboardShouldPersistTaps="handled"
           >
-            {loading ? <LoadingPanel label="Loading application…" /> : null}
+            {loading ? <LoadingPanel label="Loading application…" variant="skeleton" count={2} /> : null}
 
             {!loading && error && !context ? (
               <ErrorPanel title={error.title} message={error.message} onAction={() => void load()} />

@@ -3,7 +3,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { AppIcon, type AppIconName } from "@/components/ui/app-icon"
 import { useBreakpoint } from "@/lib/layout/use-breakpoint"
-import { colors, fonts, layout } from "@/lib/theme"
+import { colors, fonts, layout, typeScale } from "@/lib/theme"
 
 /** Tab bar icon with a lime focus dot. */
 export function TabIcon({
@@ -66,7 +66,7 @@ export function useTabBarScreenOptions() {
       backgroundColor: colors.lime,
       color: colors.black,
       fontFamily: fonts.bodyBold,
-      fontSize: 10,
+      fontSize: typeScale.nano,
     },
   }
 

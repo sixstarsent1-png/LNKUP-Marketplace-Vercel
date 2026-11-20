@@ -139,6 +139,9 @@ export function surfaceStyle(variant: SurfaceVariant = "default"): ViewStyle {
 
 /** Point sizes for the type ramp; screens pick a step instead of a raw number. */
 export const typeScale = {
+  jumbo: 48,
+  hero: 36,
+  large: 32,
   display: 28,
   title: 22,
   headline: 18,
@@ -148,6 +151,7 @@ export const typeScale = {
   footnote: 13,
   caption: 12,
   micro: 11,
+  nano: 10,
 } as const
 
 /**

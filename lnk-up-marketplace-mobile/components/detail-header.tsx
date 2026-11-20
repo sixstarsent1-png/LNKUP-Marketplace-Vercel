@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 
 import { AppIcon } from "@/components/ui/app-icon"
-import { colors, fonts, layout, spacing } from "@/lib/theme"
+import { colors, fonts, layout, spacing, typeScale } from "@/lib/theme"
 
 /** Top bar for pushed detail screens: labeled back button, centered title, optional trailing slot. */
 export function DetailHeader({
@@ -59,14 +59,14 @@ const styles = StyleSheet.create({
   },
   backText: {
     fontFamily: fonts.bodySemi,
-    fontSize: 15,
+    fontSize: typeScale.callout,
     color: colors.black,
   },
   title: {
     flex: 1,
     textAlign: "center",
     fontFamily: fonts.displaySemi,
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     color: colors.black,
   },
   side: {

@@ -7,7 +7,7 @@ import { requestAccountDeletion } from "@/lib/api/account"
 import { appErrorFromWp } from "@/lib/api/errors"
 import { useAuth } from "@/lib/auth/auth-context"
 import { confirmAction, showToast } from "@/lib/feedback/feedback"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 /**
  * In-app account deletion (Apple Guideline 5.1.1(v)).
@@ -107,12 +107,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   title: {
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     fontWeight: "700",
     color: colors.red600,
   },
   body: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     lineHeight: 18,
     color: colors.gray500,
   },
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   dangerOutlineText: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontWeight: "700",
     color: colors.red600,
   },
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   hint: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "600",
     color: colors.gray500,
   },
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     fontWeight: "700",
     color: colors.black,
   },
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   dangerSolidText: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontWeight: "800",
     color: colors.white,
   },
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
   },
   cancel: {
     textAlign: "center",
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "600",
     color: colors.gray500,
     paddingTop: spacing.xs,

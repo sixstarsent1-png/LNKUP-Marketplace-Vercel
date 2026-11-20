@@ -12,7 +12,7 @@ import {
 } from "@/lib/api/push"
 import { useAuth } from "@/lib/auth/auth-context"
 import { clearPushRegistration, syncPushRegistration } from "@/lib/push/notifications"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 const CATEGORY_KEYS = Object.keys(DEFAULT_PUSH_CATEGORIES) as PushCategoryKey[]
 
@@ -139,18 +139,18 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   title: {
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     fontWeight: "700",
     color: colors.black,
   },
   body: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     lineHeight: 18,
     color: colors.gray500,
   },
   sectionLabel: {
     marginTop: spacing.sm,
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "700",
     color: colors.gray500,
     textTransform: "uppercase",
@@ -164,13 +164,13 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   label: {
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontWeight: "600",
     color: colors.black,
   },
   categoryLabel: {
     flex: 1,
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontWeight: "500",
     color: colors.black,
   },
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     color: colors.gray500,
   },
   error: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.gray500,
     marginTop: spacing.xs,
   },

@@ -14,7 +14,7 @@ import {
 } from "@/lib/api/vendor-growth"
 import { fetchVendorReviews, type VendorReviewsSnapshot } from "@/lib/api/vendor-reviews"
 import { useAuth } from "@/lib/auth/auth-context"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 function recommendationHref(actionKey: string): Href {
   switch (actionKey) {
@@ -110,7 +110,7 @@ export default function VendorGrowthScreen() {
         <Text style={styles.recruitCta}>Open invites →</Text>
       </Pressable>
 
-      {loading ? <LoadingPanel label="Loading growth…" /> : null}
+      {loading ? <LoadingPanel label="Loading growth…" variant="skeleton" count={3} /> : null}
 
       {!loading && error ? (
         <ErrorPanel title={error.title} message={error.message} onAction={() => void load("refresh")} />
@@ -269,7 +269,7 @@ function Kpi({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   back: { marginBottom: spacing.sm },
-  backText: { fontSize: 14, fontWeight: "600", color: colors.gray700 },
+  backText: { fontSize: typeScale.body, fontWeight: "600", color: colors.gray700 },
   recruitCard: {
     backgroundColor: colors.black,
     borderRadius: radii.lg,
@@ -279,20 +279,20 @@ const styles = StyleSheet.create({
   },
   recruitEyebrow: {
     color: colors.lime,
-    fontSize: 11,
+    fontSize: typeScale.micro,
     fontWeight: "800",
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },
   recruitTitle: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     fontWeight: "800",
     lineHeight: 22,
   },
   recruitCta: {
     color: colors.lime,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "700",
     marginTop: 4,
   },
@@ -312,12 +312,12 @@ const styles = StyleSheet.create({
     minWidth: 72,
   },
   scoreValue: {
-    fontSize: 40,
+    fontSize: typeScale.hero,
     fontWeight: "800",
     color: colors.black,
   },
   scoreLabel: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "700",
     color: colors.gray700,
     textTransform: "uppercase",
@@ -328,17 +328,17 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   strengthLine: {
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     fontWeight: "800",
     color: colors.black,
   },
   repLabel: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontWeight: "600",
     color: colors.gray700,
   },
   repMeta: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.gray700,
   },
   scoreCta: {
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   scoreCtaText: {
     color: colors.white,
     fontWeight: "700",
-    fontSize: 14,
+    fontSize: typeScale.body,
   },
   kpiRow: { flexDirection: "row", gap: spacing.md },
   kpi: {
@@ -363,8 +363,8 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     alignItems: "center",
   },
-  kpiValue: { fontSize: 22, fontWeight: "800", color: colors.black },
-  kpiLabel: { fontSize: 12, color: colors.gray500, marginTop: 2 },
+  kpiValue: { fontSize: typeScale.title, fontWeight: "800", color: colors.black },
+  kpiLabel: { fontSize: typeScale.caption, color: colors.gray500, marginTop: 2 },
   card: {
     backgroundColor: colors.white,
     borderRadius: radii.lg,
@@ -373,7 +373,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.sm,
   },
-  section: { fontSize: 16, fontWeight: "700", color: colors.black },
+  section: { fontSize: typeScale.bodyLarge, fontWeight: "700", color: colors.black },
   progressTrack: {
     height: 8,
     borderRadius: 999,
@@ -386,12 +386,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   progressMeta: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "600",
     color: colors.gray700,
   },
   listGap: { gap: spacing.sm },
-  bodyLine: { fontSize: 13, color: colors.gray700, lineHeight: 18 },
+  bodyLine: { fontSize: typeScale.footnote, color: colors.gray700, lineHeight: 18 },
   inlineActions: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray50,
   },
   secondaryBtnText: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "700",
     color: colors.black,
   },
@@ -420,18 +420,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray50,
   },
   recTitle: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontWeight: "700",
     color: colors.black,
   },
   recReason: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.gray700,
     lineHeight: 18,
   },
   recCta: {
     marginTop: 2,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "700",
     color: colors.black,
   },
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
   },
   milestoneMark: {
     width: 18,
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontWeight: "700",
     color: colors.gray400,
   },
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
   },
   milestoneLabel: {
     flex: 1,
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontWeight: "600",
     color: colors.black,
   },

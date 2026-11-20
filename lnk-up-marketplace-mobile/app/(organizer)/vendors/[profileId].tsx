@@ -39,7 +39,7 @@ import { useAuth } from "@/lib/auth/auth-context"
 import { openExternalUrl } from "@/lib/navigation/open-external-url"
 import { safeBack } from "@/lib/navigation/safe-back"
 import { constrainedColumnStyle } from "@/lib/layout/use-breakpoint"
-import { colors, fonts, layout, radii, spacing, typography, type StatusTone } from "@/lib/theme"
+import { colors, fonts, layout, radii, spacing, typography, type StatusTone, typeScale } from "@/lib/theme"
 
 function normalizeWebsiteUrl(raw: string): string {
   if (/^https?:\/\//i.test(raw)) return raw
@@ -627,7 +627,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   title: {
-    fontSize: 24,
+    fontSize: typeScale.title,
     lineHeight: 30,
   },
   metaRow: {
@@ -644,7 +644,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
   },
   bodyText: {
     ...typography.body,
@@ -671,11 +671,11 @@ const styles = StyleSheet.create({
   },
   setupLabel: {
     ...typography.meta,
-    fontSize: 14,
+    fontSize: typeScale.body,
   },
   setupValue: {
     flex: 1,
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontFamily: fonts.bodySemi,
     color: colors.black,
     textAlign: "right",

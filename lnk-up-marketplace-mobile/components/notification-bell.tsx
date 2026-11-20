@@ -3,7 +3,7 @@ import { AppText as Text } from "@/components/ui/app-text"
 import { router } from "expo-router"
 
 import { AppIcon } from "@/components/ui/app-icon"
-import { colors, fonts, layout, radii } from "@/lib/theme"
+import { colors, fonts, layout, radii, typeScale } from "@/lib/theme"
 
 type NotificationBellProps = {
   unreadCount: number
@@ -55,7 +55,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     color: colors.lime,
-    fontSize: 10,
+    fontSize: typeScale.nano,
     fontFamily: fonts.bodyBold,
   },
   pressed: {

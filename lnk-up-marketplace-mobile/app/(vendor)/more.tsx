@@ -25,7 +25,7 @@ import { useAuth } from "@/lib/auth/auth-context"
 import { showToast } from "@/lib/feedback/feedback"
 import { useSignOut, useSwitchRole } from "@/lib/hooks/use-account-actions"
 import { InlineBanner } from "@/components/ui/banner"
-import { colors, fonts, radii, spacing } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
 type LinkItem = {
   label: string
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontFamily: fonts.display,
-    fontSize: 18,
+    fontSize: typeScale.headline,
     color: colors.black,
   },
   identityText: {
@@ -350,18 +350,18 @@ const styles = StyleSheet.create({
   },
   profileName: {
     fontFamily: fonts.display,
-    fontSize: 20,
+    fontSize: typeScale.headline,
     lineHeight: 26,
     color: colors.white,
   },
   profileHandle: {
     fontFamily: fonts.body,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.gray200,
   },
   profileHint: {
     fontFamily: fonts.body,
-    fontSize: 14,
+    fontSize: typeScale.body,
     lineHeight: 20,
     color: colors.gray200,
   },

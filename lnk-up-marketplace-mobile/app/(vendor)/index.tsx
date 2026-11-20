@@ -34,7 +34,7 @@ import { syncAppBadge } from "@/lib/push/notifications"
 import { buildVendorTutorial } from "@/lib/tutorials/build-vendor-tutorial"
 import { useRoleTutorial } from "@/lib/tutorials/use-role-tutorial"
 import { eventDayBookings, vendorLifecycleCounts, vendorNextStep } from "@/lib/vendor/vendor-stage"
-import { colors, fonts, radii, spacing } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
 function openDetail(item: MarketplaceOpportunity) {
   if (!item.opportunityId) return
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   },
   readinessPct: { fontFamily: fonts.bodyBold, color: colors.black },
   readinessCopy: { flex: 1, gap: 2 },
-  readinessTitle: { fontSize: 16 },
+  readinessTitle: { fontSize: typeScale.bodyLarge },
   recruit: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   recruitIcon: {
     width: 40,

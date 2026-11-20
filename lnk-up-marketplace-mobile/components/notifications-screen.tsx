@@ -25,7 +25,7 @@ import {
   type LnkupNotification,
   type NotificationFilter,
 } from "@/lib/notifications/types"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 const FILTERS: Array<{ id: NotificationFilter; label: string }> = [
   { id: "all", label: "All" },
@@ -205,7 +205,7 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
             onChange={setFilter}
           />
 
-          {loading ? <LoadingPanel label="Loading notifications…" /> : null}
+          {loading ? <LoadingPanel label="Loading notifications…" variant="skeleton" count={4} /> : null}
 
           {!loading && error ? (
             <ErrorPanel title={error.title} message={error.message} onAction={() => void load()} />
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   markAllText: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "700",
     color: colors.black,
   },
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   type: {
-    fontSize: 11,
+    fontSize: typeScale.micro,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.6,
@@ -271,18 +271,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.limeDark,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     fontWeight: "700",
     color: colors.black,
   },
   cardBody: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.gray500,
     lineHeight: 20,
   },
   action: {
     marginTop: spacing.xs,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "700",
     color: colors.black,
   },
@@ -294,12 +294,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   prefsText: {
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontWeight: "700",
     color: colors.black,
   },
   prefsHint: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.gray500,
   },
 })

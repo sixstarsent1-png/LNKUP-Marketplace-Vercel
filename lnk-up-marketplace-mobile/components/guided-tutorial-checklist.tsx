@@ -5,7 +5,7 @@ import { AppIcon } from "@/components/ui/app-icon"
 import { Surface } from "@/components/ui/surface"
 import { Body, Eyebrow, Meta, SectionTitle } from "@/components/ui/typography"
 import type { RoleTutorial, TutorialStepId } from "@/lib/tutorials/tutorial-contract"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 export function GuidedTutorialChecklist({
   tutorial,
@@ -168,10 +168,10 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   stepLabel: {
-    fontSize: 14,
+    fontSize: typeScale.body,
   },
   stepDescription: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     lineHeight: 16,
   },
   cta: {
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   ctaText: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
   },
   pushCta: {
     borderWidth: 1,
@@ -193,6 +193,6 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   pushCtaText: {
-    fontSize: 14,
+    fontSize: typeScale.body,
   },
 })

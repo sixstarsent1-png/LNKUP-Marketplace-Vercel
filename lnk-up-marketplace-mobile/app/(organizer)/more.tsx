@@ -18,7 +18,7 @@ import {
 import { useAuth } from "@/lib/auth/auth-context"
 import { useSignOut, useSwitchRole } from "@/lib/hooks/use-account-actions"
 import { openExternalUrl } from "@/lib/navigation/open-external-url"
-import { colors, fonts, radii, spacing } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
 type MoreLink = {
   title: string
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontFamily: fonts.display,
-    fontSize: 18,
+    fontSize: typeScale.headline,
     color: colors.black,
   },
   identityText: {
@@ -252,13 +252,13 @@ const styles = StyleSheet.create({
   },
   profileName: {
     fontFamily: fonts.display,
-    fontSize: 20,
+    fontSize: typeScale.headline,
     lineHeight: 26,
     color: colors.white,
   },
   profileHandle: {
     fontFamily: fonts.body,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.gray200,
   },
   profileCtaRow: {
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   },
   profileCta: {
     fontFamily: fonts.bodySemi,
-    fontSize: 15,
+    fontSize: typeScale.callout,
     color: colors.lime,
   },
   section: {

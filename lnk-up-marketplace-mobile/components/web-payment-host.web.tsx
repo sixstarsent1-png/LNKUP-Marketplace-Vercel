@@ -16,7 +16,7 @@ import {
   type BoothPayResult,
   type WebPaymentRequest,
 } from "@/lib/payments/web-payment-bridge"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 type StripeInstance = {
   elements: (opts: { clientSecret: string; appearance?: object }) => StripeElements
@@ -288,22 +288,22 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: typeScale.headline,
     fontWeight: "800",
     color: colors.black,
   },
   close: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontWeight: "600",
     color: colors.gray700,
   },
   event: {
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     fontWeight: "700",
     color: colors.black,
   },
   amount: {
-    fontSize: 22,
+    fontSize: typeScale.title,
     fontWeight: "800",
     color: colors.black,
     marginTop: -spacing.sm,
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   error: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.red600,
   },
   payBtn: {
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
   payText: {
     color: colors.white,
     fontWeight: "700",
-    fontSize: 15,
+    fontSize: typeScale.callout,
   },
   disabled: {
     opacity: 0.6,

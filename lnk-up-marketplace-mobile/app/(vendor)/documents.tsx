@@ -26,7 +26,7 @@ import {
 } from "@/lib/api/vendor-documents"
 import { useAuth } from "@/lib/auth/auth-context"
 import { showToast } from "@/lib/feedback/feedback"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -192,7 +192,7 @@ export default function VendorDocumentsScreen() {
     >
       <BackLink label="Profile" fallbackHref="/(vendor)/more" />
 
-      {showInitialLoader ? <LoadingPanel label="Loading documents…" /> : null}
+      {showInitialLoader ? <LoadingPanel label="Loading documents…" variant="skeleton" count={3} /> : null}
 
       {!showInitialLoader && error && items.length === 0 ? (
         <ErrorPanel title={error.title} message={error.message} onAction={() => void load()} />
@@ -337,17 +337,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   backText: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontWeight: "600",
     color: colors.gray700,
   },
   message: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.gray700,
     marginBottom: spacing.sm,
   },
   refreshError: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.amber700,
     marginBottom: spacing.sm,
   },
@@ -370,26 +370,26 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     fontWeight: "700",
     color: colors.black,
   },
   required: {
-    fontSize: 11,
+    fontSize: typeScale.micro,
     fontWeight: "700",
     color: colors.gray500,
     textTransform: "uppercase",
   },
   status: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "600",
   },
   meta: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.gray500,
   },
   reject: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.red600,
   },
   actions: {
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   addTitle: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontWeight: "700",
     color: colors.black,
   },
@@ -456,12 +456,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   modalTitle: {
-    fontSize: 17,
+    fontSize: typeScale.bodyLarge,
     fontWeight: "800",
     color: colors.black,
   },
   modalBody: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.gray700,
     lineHeight: 20,
   },
@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    fontSize: 15,
+    fontSize: typeScale.callout,
     color: colors.black,
   },
   modalActions: {

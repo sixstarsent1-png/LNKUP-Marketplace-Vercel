@@ -8,7 +8,7 @@ import type {
 import { Surface } from "@/components/ui/surface"
 import { Meta, SectionTitle } from "@/components/ui/typography"
 import { decisionLabel, experimentStatusLabel, humanizeKey, segmentLabel } from "@/lib/format/labels"
-import { colors, fonts, radii, spacing } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
 type RecommendationAction = {
   label: string
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: fonts.bodySemi,
     color: colors.black,
-    fontSize: 14,
+    fontSize: typeScale.body,
   },
   badge: {
     fontFamily: fonts.bodySemi,
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     overflow: "hidden",
-    fontSize: 11,
+    fontSize: typeScale.micro,
   },
   guardrailWrap: {
     flexDirection: "row",
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     overflow: "hidden",
-    fontSize: 11,
+    fontSize: typeScale.micro,
   },
   guardrailDefault: {
     backgroundColor: colors.gray100,
@@ -164,6 +164,6 @@ const styles = StyleSheet.create({
   actionText: {
     color: colors.white,
     fontFamily: fonts.bodySemi,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
   },
 })

@@ -1,7 +1,8 @@
+import { useState } from "react"
 import { StyleSheet, TextInput, View, type TextInputProps } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 
-import { colors, fonts, fontScaleCaps, layout, radii, spacing, typography } from "@/lib/theme"
+import { colors, fonts, fontScaleCaps, layout, radii, spacing, typeScale, typography } from "@/lib/theme"
 
 type FormFieldProps = Omit<TextInputProps, "style" | "placeholderTextColor"> & {
   label: string
@@ -10,16 +11,35 @@ type FormFieldProps = Omit<TextInputProps, "style" | "placeholderTextColor"> & {
   tone?: "default" | "muted"
 }
 
-/** Labeled text input with consistent sizing, hint, and error text. */
-export function FormField({ label, hint, error, multiline, tone = "default", ...props }: FormFieldProps) {
+/** Labeled text input with consistent sizing, focus ring, hint, and error text. */
+export function FormField({
+  label,
+  hint,
+  error,
+  multiline,
+  tone = "default",
+  onFocus,
+  onBlur,
+  ...props
+}: FormFieldProps) {
+  const [focused, setFocused] = useState(false)
+
   return (
     <View style={styles.field}>
-      <Text style={styles.label} maxFontSizeMultiplier={fontScaleCaps.label}>
+      <Text style={[styles.label, focused && styles.labelFocused]} maxFontSizeMultiplier={fontScaleCaps.label}>
         {label}
       </Text>
       <TextInput
         maxFontSizeMultiplier={fontScaleCaps.control}
         {...props}
+        onFocus={(event) => {
+          setFocused(true)
+          onFocus?.(event)
+        }}
+        onBlur={(event) => {
+          setFocused(false)
+          onBlur?.(event)
+        }}
         accessibilityLabel={props.accessibilityLabel ?? label}
         accessibilityHint={hint}
         multiline={multiline}
@@ -28,6 +48,7 @@ export function FormField({ label, hint, error, multiline, tone = "default", ...
           styles.input,
           tone === "muted" && styles.inputMuted,
           multiline && styles.textarea,
+          focused && styles.inputFocused,
           error ? styles.inputError : null,
         ]}
       />
@@ -50,6 +71,9 @@ const styles = StyleSheet.create({
     ...typography.eyebrow,
     letterSpacing: 0.5,
   },
+  labelFocused: {
+    color: colors.black,
+  },
   input: {
     minHeight: layout.hitTargetMin,
     borderWidth: 1,
@@ -57,13 +81,17 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontFamily: fonts.body,
     color: colors.black,
     backgroundColor: colors.white,
   },
   inputMuted: {
     backgroundColor: colors.gray50,
+  },
+  inputFocused: {
+    borderColor: colors.black,
+    backgroundColor: colors.white,
   },
   inputError: {
     borderColor: colors.red600,
@@ -74,11 +102,11 @@ const styles = StyleSheet.create({
   },
   hint: {
     ...typography.meta,
-    fontSize: 12,
+    fontSize: typeScale.caption,
   },
   error: {
     ...typography.meta,
-    fontSize: 12,
+    fontSize: typeScale.caption,
     color: colors.red600,
   },
 })

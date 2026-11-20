@@ -48,7 +48,7 @@ import { getUnreadCount } from "@/lib/notifications/read-state"
 import { syncAppBadge } from "@/lib/push/notifications"
 import { buildOrganizerTutorial } from "@/lib/tutorials/build-organizer-tutorial"
 import { useRoleTutorial } from "@/lib/tutorials/use-role-tutorial"
-import { colors, fonts, radii, spacing } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
 type HeroAction = OrganizerHeroAction
 
@@ -770,7 +770,7 @@ const styles = StyleSheet.create({
   },
   recruitTitle: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     lineHeight: 22,
   },
   recruitBody: {
@@ -807,7 +807,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontFamily: fonts.bodySemi,
     color: colors.black,
-    fontSize: 15,
+    fontSize: typeScale.callout,
   },
   cardCta: {
     marginTop: spacing.xs,
@@ -815,7 +815,7 @@ const styles = StyleSheet.create({
     color: colors.black,
   },
   money: {
-    fontSize: 20,
+    fontSize: typeScale.headline,
     lineHeight: 28,
     fontFamily: fonts.bodyBold,
     color: colors.black,

@@ -7,7 +7,7 @@ import {
   resetFixtureHonesty,
   subscribeFixtureHonesty,
 } from "@/lib/api/fixture-honesty"
-import { colors, spacing } from "@/lib/theme"
+import { colors, spacing, typeScale } from "@/lib/theme"
 
 /**
  * Shown when live API mode unexpectedly falls back to demo/fixture data.
@@ -48,14 +48,14 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.lime,
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "800",
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },
   body: {
     color: colors.white,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     lineHeight: 18,
   },
 })

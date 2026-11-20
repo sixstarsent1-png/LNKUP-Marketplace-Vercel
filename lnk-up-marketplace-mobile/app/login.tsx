@@ -20,7 +20,7 @@ import { useAuth } from "@/lib/auth/auth-context"
 import type { HomeHref } from "@/lib/auth/roles"
 import { constrainedColumnStyle, useBreakpoint } from "@/lib/layout/use-breakpoint"
 import { setPendingDestination } from "@/lib/navigation/pending-destination"
-import { colors, fonts, layout, radii, spacing } from "@/lib/theme"
+import { colors, fonts, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 export default function LoginScreen() {
   const { returnTo } = useLocalSearchParams<{ returnTo?: string }>()
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   title: {
-    fontSize: 32,
+    fontSize: typeScale.large,
     textAlign: "center",
   },
   subtitle: {
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     fontFamily: fonts.body,
     color: colors.black,
     backgroundColor: colors.gray50,
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
   },
   primaryText: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
   },
   signupBlock: {
     gap: spacing.sm,
@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
   secondaryOutlineText: {
     fontFamily: fonts.bodySemi,
     color: colors.black,
-    fontSize: 15,
+    fontSize: typeScale.callout,
   },
   demoBlock: {
     gap: spacing.sm,

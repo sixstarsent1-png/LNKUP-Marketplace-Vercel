@@ -13,7 +13,7 @@ import {
   type VendorOperationsEvent,
 } from "@/lib/api/vendor-operations"
 import { useAuth } from "@/lib/auth/auth-context"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 export default function VendorOperationsScreen() {
   const { auth } = useAuth()
@@ -50,7 +50,7 @@ export default function VendorOperationsScreen() {
     >
       <BackLink label="Profile" fallbackHref="/(vendor)/more" />
 
-      {loading ? <LoadingPanel label="Loading passes…" /> : null}
+      {loading ? <LoadingPanel label="Loading passes…" variant="skeleton" count={2} /> : null}
 
       {!loading && error ? (
         <ErrorPanel title={error.title} message={error.message} onAction={() => void load("refresh")} />
@@ -98,7 +98,7 @@ export default function VendorOperationsScreen() {
 
 const styles = StyleSheet.create({
   back: { marginBottom: spacing.sm },
-  backText: { fontSize: 14, fontWeight: "600", color: colors.gray700 },
+  backText: { fontSize: typeScale.body, fontWeight: "600", color: colors.gray700 },
   list: { gap: spacing.md },
   card: {
     backgroundColor: colors.white,
@@ -108,8 +108,8 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.xs,
   },
-  title: { fontSize: 16, fontWeight: "700", color: colors.black },
-  meta: { fontSize: 13, color: colors.gray500 },
-  status: { fontSize: 13, fontWeight: "600", color: colors.gray700, marginTop: 2 },
-  cta: { marginTop: spacing.sm, fontSize: 14, fontWeight: "700", color: colors.black },
+  title: { fontSize: typeScale.bodyLarge, fontWeight: "700", color: colors.black },
+  meta: { fontSize: typeScale.footnote, color: colors.gray500 },
+  status: { fontSize: typeScale.footnote, fontWeight: "600", color: colors.gray700, marginTop: 2 },
+  cta: { marginTop: spacing.sm, fontSize: typeScale.body, fontWeight: "700", color: colors.black },
 })

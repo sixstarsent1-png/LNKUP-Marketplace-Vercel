@@ -9,7 +9,7 @@ import { Surface } from "@/components/ui/surface"
 import { Meta, SectionTitle } from "@/components/ui/typography"
 import { formatMoney } from "@/lib/api/format-money"
 import { opportunityApplyCta } from "@/lib/vendor/opportunity-cta"
-import { colors, fonts, layout, radii, spacing } from "@/lib/theme"
+import { colors, fonts, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 export { opportunityApplyCta }
 
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     maxWidth: "70%",
   },
-  overlayChipText: { fontFamily: fonts.bodySemi, fontSize: 12, color: colors.black },
+  overlayChipText: { fontFamily: fonts.bodySemi, fontSize: typeScale.caption, color: colors.black },
   saveHit: {
     width: layout.hitTargetMin,
     height: layout.hitTargetMin,
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: 6 },
   detailsPressed: { opacity: 0.7 },
   titleRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm },
-  title: { flex: 1, fontSize: 17, lineHeight: 23 },
+  title: { flex: 1, fontSize: typeScale.bodyLarge, lineHeight: 23 },
   flexShrink: { flexShrink: 1 },
   badge: {
     backgroundColor: colors.lime,
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.sm,
     overflow: "hidden",
   },
-  badgeText: { color: colors.black, fontFamily: fonts.bodySemi, fontSize: 11 },
+  badgeText: { color: colors.black, fontFamily: fonts.bodySemi, fontSize: typeScale.micro },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.xs },
   feePill: {
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
-  fee: { fontFamily: fonts.bodyBold, fontSize: 13, color: colors.black },
+  fee: { fontFamily: fonts.bodyBold, fontSize: typeScale.footnote, color: colors.black },
   spotPill: {
     backgroundColor: colors.gray50,
     borderRadius: radii.sm,
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
   },
   spotLow: { backgroundColor: colors.amber50, borderColor: colors.amber200 },
   spotNone: { backgroundColor: colors.red50, borderColor: colors.red200 },
-  spotText: { fontFamily: fonts.bodySemi, fontSize: 12, color: colors.gray700 },
+  spotText: { fontFamily: fonts.bodySemi, fontSize: typeScale.caption, color: colors.gray700 },
   spotTextStrong: { color: colors.black },
   deadlineChip: {
     backgroundColor: colors.amber50,
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
-  deadline: { fontFamily: fonts.bodySemi, fontSize: 12, color: colors.amber700 },
+  deadline: { fontFamily: fonts.bodySemi, fontSize: typeScale.caption, color: colors.amber700 },
   actions: { flexDirection: "row", gap: spacing.sm, padding: spacing.lg, paddingTop: spacing.md },
   flex: { flex: 1 },
 })

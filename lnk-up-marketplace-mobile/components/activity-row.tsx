@@ -6,7 +6,7 @@ import {
   formatMoney,
   type VendorFinancialActivityItem,
 } from "@/lib/api/vendor-wallet"
-import { colors, fonts, layout, radii, spacing, typography } from "@/lib/theme"
+import { colors, fonts, layout, radii, spacing, typography, typeScale } from "@/lib/theme"
 
 export function ActivityRow({
   item,
@@ -91,11 +91,11 @@ const styles = StyleSheet.create({
   },
   meta: {
     ...typography.meta,
-    fontSize: 12,
+    fontSize: typeScale.caption,
     textTransform: "capitalize",
   },
   amount: {
-    fontSize: 14,
+    fontSize: typeScale.body,
     fontFamily: fonts.bodyBold,
     color: colors.black,
   },

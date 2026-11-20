@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 
-import { colors, spacing } from "@/lib/theme"
+import { colors, spacing, typeScale } from "@/lib/theme"
 
 type NetworkModule = {
   getNetworkStateAsync: () => Promise<{
@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   text: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "600",
     color: colors.amber700,
     textAlign: "center",

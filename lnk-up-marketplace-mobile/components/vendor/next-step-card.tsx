@@ -7,7 +7,7 @@ import { Surface } from "@/components/ui/surface"
 import { DisplayTitle, Eyebrow, Meta } from "@/components/ui/typography"
 import { formatMoney } from "@/lib/api/vendor-wallet"
 import type { VendorNextStep } from "@/lib/vendor/vendor-stage"
-import { colors, spacing, type SurfaceVariant } from "@/lib/theme"
+import { colors, spacing, type SurfaceVariant, typeScale } from "@/lib/theme"
 
 type Model = {
   eyebrow: string
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   card: { padding: spacing.lg, gap: spacing.xs },
   eyebrowRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   urgentText: { color: colors.amber700 },
-  title: { fontSize: 22, lineHeight: 28 },
+  title: { fontSize: typeScale.title, lineHeight: 28 },
   actions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
   primary: { flex: 1 },
 })

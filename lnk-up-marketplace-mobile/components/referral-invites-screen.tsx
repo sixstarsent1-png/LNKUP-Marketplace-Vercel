@@ -13,7 +13,7 @@ import {
 } from "@/lib/api/organizer-recruit-referrals"
 import { useAuth } from "@/lib/auth/auth-context"
 import { copyToClipboard } from "@/lib/clipboard"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 function money(n: number): string {
   try {
@@ -157,7 +157,7 @@ export function ReferralInvitesScreen() {
       refreshing={refreshing}
       onRefresh={() => void load("refresh")}
     >
-      {loading && !data ? <LoadingPanel label="Loading invites…" /> : null}
+      {loading && !data ? <LoadingPanel label="Loading invites…" variant="skeleton" count={2} /> : null}
       {error && !data ? (
         <ErrorPanel title={error.title} message={error.message} onAction={() => void load("initial")} />
       ) : null}
@@ -306,25 +306,25 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     color: colors.lime,
-    fontSize: 11,
+    fontSize: typeScale.micro,
     fontWeight: "800",
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },
   heroTitle: {
     color: colors.white,
-    fontSize: 20,
+    fontSize: typeScale.headline,
     fontWeight: "800",
     lineHeight: 26,
   },
   heroBody: {
     color: colors.gray400,
-    fontSize: 14,
+    fontSize: typeScale.body,
     lineHeight: 20,
   },
   heroNote: {
     color: colors.gray500,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     lineHeight: 18,
     marginTop: spacing.xs,
   },
@@ -337,14 +337,14 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   label: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "700",
     color: colors.gray500,
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
   code: {
-    fontSize: 22,
+    fontSize: typeScale.title,
     fontWeight: "800",
     color: colors.black,
     letterSpacing: 1,
@@ -357,12 +357,12 @@ const styles = StyleSheet.create({
     borderTopColor: colors.gray200,
   },
   linkLabel: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "700",
     color: colors.black,
   },
   url: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     color: colors.gray500,
   },
   actions: {
@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     alignItems: "center",
   },
-  primaryText: { color: colors.white, fontWeight: "800", fontSize: 14 },
+  primaryText: { color: colors.white, fontWeight: "800", fontSize: typeScale.body },
   secondary: {
     flex: 1,
     borderWidth: 1,
@@ -387,10 +387,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.white,
   },
-  secondaryText: { color: colors.black, fontWeight: "700", fontSize: 14 },
-  earnings: { marginTop: spacing.xs, fontSize: 13, color: colors.gray700, fontWeight: "600" },
+  secondaryText: { color: colors.black, fontWeight: "700", fontSize: typeScale.body },
+  earnings: { marginTop: spacing.xs, fontSize: typeScale.footnote, color: colors.gray700, fontWeight: "600" },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     fontWeight: "800",
     color: colors.black,
     marginTop: spacing.sm,
@@ -404,9 +404,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   refTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  refName: { fontSize: 15, fontWeight: "700", color: colors.black, flex: 1 },
+  refName: { fontSize: typeScale.callout, fontWeight: "700", color: colors.black, flex: 1 },
   badge: {
-    fontSize: 10,
+    fontSize: typeScale.nano,
     fontWeight: "800",
     textTransform: "uppercase",
     paddingHorizontal: 8,
@@ -416,5 +416,5 @@ const styles = StyleSheet.create({
   },
   badgeActive: { backgroundColor: colors.green50, color: colors.green700 },
   badgeEnded: { backgroundColor: colors.gray100, color: colors.gray500 },
-  refMeta: { fontSize: 13, color: colors.gray500 },
+  refMeta: { fontSize: typeScale.footnote, color: colors.gray500 },
 })

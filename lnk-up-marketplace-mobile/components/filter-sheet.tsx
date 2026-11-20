@@ -5,7 +5,7 @@ import { BottomSheet } from "@/components/ui/bottom-sheet"
 import { Button } from "@/components/ui/button"
 import { FilterChip } from "@/components/ui/chip"
 import type { MarketplaceSort, SearchParams } from "@/lib/api/marketplace"
-import { colors, fonts, radii, spacing, typography } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typography, typeScale } from "@/lib/theme"
 
 const CATEGORIES = ["Food Vendor", "Retail Vendor", "Food Truck", "Beauty Vendor"] as const
 
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontFamily: fonts.body,
     color: colors.black,
     backgroundColor: colors.gray50,

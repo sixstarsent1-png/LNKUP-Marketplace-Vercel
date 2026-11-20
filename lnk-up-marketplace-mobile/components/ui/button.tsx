@@ -1,3 +1,4 @@
+import { useReducedMotion } from "react-native-reanimated"
 import type { ReactNode } from "react"
 import {
   ActivityIndicator,
@@ -11,7 +12,7 @@ import {
 import { AppText as Text } from "@/components/ui/app-text"
 
 import { AppIcon, type AppIconName } from "@/components/ui/app-icon"
-import { colors, fonts, fontScaleCaps, layout, radii, spacing } from "@/lib/theme"
+import { colors, fonts, fontScaleCaps, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 export type ButtonVariant = "primary" | "secondary" | "accent" | "danger" | "ghost"
 export type ButtonSize = "md" | "sm"
@@ -73,6 +74,7 @@ export function Button({
 }: ButtonProps) {
   const tone = variantStyles[variant]
   const isDisabled = Boolean(disabled) || loading
+  const reduceMotion = useReducedMotion()
 
   return (
     <Pressable
@@ -86,7 +88,7 @@ export function Button({
         size === "sm" ? styles.sm : styles.md,
         tone.container,
         fullWidth && styles.fullWidth,
-        pressed && !isDisabled && styles.pressed,
+        pressed && !isDisabled && (reduceMotion ? styles.pressedStill : styles.pressed),
         isDisabled && styles.disabled,
         style,
       ]}
@@ -139,14 +141,17 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.bodySemi,
-    fontSize: 15,
+    fontSize: typeScale.callout,
   },
   labelSm: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
   },
   pressed: {
     opacity: 0.82,
     transform: [{ scale: 0.98 }],
+  },
+  pressedStill: {
+    opacity: 0.82,
   },
   disabled: {
     opacity: 0.5,

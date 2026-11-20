@@ -136,10 +136,10 @@ Source: fresh screenshots of every route (`scripts/e2e/reports/mobile-shots/v31-
 
 | # | Screen | Finding | Sev | Stage | Status |
 |---|---|---|---|---|---|
-| A1 | Vendor Home | `/applications/vendor` requested twice (Home forces a refetch while the tab badge fetch is in flight) | P2 | 1 | Open |
-| A2 | Vendors inbox / Discover | Scroll views, manual "Load more", no stale-search cancel, no debounce | P2 | 1 | Open |
-| A3 | Pass, Apply | 28 and 21 raw font sizes; hand-rolled buttons and inputs | P2 | 1 | Open |
-| A4 | E2E | 18 skips: 14 are writes that run once per seed, 4 are metrics; the approval-failure and session tests write nothing yet skip on SE / Pro Max | P2 | 1 | Open |
+| A1 | Vendor Home | `/applications/vendor` requested twice (Home forces a refetch while the tab badge fetch is in flight) | P2 | 1 | Fixed (runtime), stage 1 |
+| A2 | Vendors inbox / Discover | Scroll views, manual "Load more", no stale-search cancel, no debounce | P2 | 1 | Fixed (runtime), stage 1 |
+| A3 | Pass, Apply | 28 and 21 raw font sizes; hand-rolled buttons and inputs | P2 | 1 | Fixed (runtime), stage 1 |
+| A4 | E2E | 18 skips: 14 are writes that run once per seed, 4 are metrics; the approval-failure and session tests write nothing yet skip on SE / Pro Max | P2 | 1 | Fixed (runtime), stage 1 |
 | A5 | Explore / Home rails | Cards show a placeholder although the server sends `featured_image`; the card only reads `gallery` | P1 | 3 | Open |
 | A6 | Explore | Search, filters, near me and view toggle take half the first screen before any result | P2 | 3 | Open |
 | A7 | Growth, Reviews, Documents, Operations, Referrals | Older styling: raw font sizes, spinner panels instead of skeletons, plain-text statuses, oversized stacked buttons | P2 | 2–3 | Open |
@@ -150,6 +150,8 @@ Source: fresh screenshots of every route (`scripts/e2e/reports/mobile-shots/v31-
 | A12 | Vendors request card | "$125 due" shown on requests still under review; nothing is due before approval | P1 | 4 | Open |
 | A13 | Profile hubs (vendor and organizer More) | Push preferences reloaded on every visit | P3 | 7 | Open |
 | A14 | Opportunity detail | 23 raw font sizes | P2 | 2 | Open |
+| A15 | Saved searches (server) | Delete returned success but the search stayed active (status allowlist omitted `deleted`); deleted searches reappeared and counted toward the 10-search limit | P1 | 1 | Fixed (runtime); needs WordPress deploy |
+| A16 | Opportunity detail | Heart and back controls had no event-specific label | P2 | 1 | Fixed |
 
 ### Interaction inventory (per screen: tap targets / domain calls in code)
 

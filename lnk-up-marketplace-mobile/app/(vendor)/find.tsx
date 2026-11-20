@@ -41,7 +41,7 @@ import { useAuth } from "@/lib/auth/auth-context"
 import { showToast } from "@/lib/feedback/feedback"
 import { useVendorFavorites } from "@/lib/hooks/use-vendor-favorites"
 import { constrainedColumnStyle } from "@/lib/layout/use-breakpoint"
-import { colors, fonts, layout, radii, spacing } from "@/lib/theme"
+import { colors, fonts, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 function routeKey(query: Record<string, string | string[] | undefined>): string {
   return JSON.stringify(searchParamsToQueryRecord(queryRecordToSearchParams(query)))
@@ -570,7 +570,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     paddingVertical: spacing.sm + 2,
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontFamily: fonts.body,
     color: colors.black,
   },
@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontFamily: fonts.body,
     color: colors.black,
     backgroundColor: colors.gray50,
@@ -608,7 +608,7 @@ const styles = StyleSheet.create({
   filterBtnText: {
     fontFamily: fonts.bodySemi,
     color: colors.black,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
   },
   filterBtnTextActive: {
     color: colors.black,
@@ -623,7 +623,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: typeScale.micro,
     fontFamily: fonts.bodyBold,
     color: colors.black,
   },
@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.lime,
   },
   viewToggleText: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontFamily: fonts.bodySemi,
     color: colors.gray700,
   },
@@ -688,7 +688,7 @@ const styles = StyleSheet.create({
     borderColor: colors.lime,
   },
   chipText: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontFamily: fonts.bodySemi,
     color: colors.gray900,
   },
@@ -708,7 +708,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   count: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontFamily: fonts.bodySemi,
     color: colors.gray500,
     flex: 1,
@@ -723,7 +723,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray100,
   },
   sortHint: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontFamily: fonts.bodySemi,
     color: colors.gray700,
   },
@@ -733,7 +733,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   refreshText: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontFamily: fonts.bodySemi,
     color: colors.gray500,
   },
@@ -742,7 +742,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   showingMore: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontFamily: fonts.bodySemi,
     color: colors.gray500,
   },
@@ -759,7 +759,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   saveTitle: {
-    fontSize: 18,
+    fontSize: typeScale.headline,
   },
   saveActions: {
     flexDirection: "row",

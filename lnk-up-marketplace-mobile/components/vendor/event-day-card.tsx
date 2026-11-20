@@ -6,7 +6,7 @@ import { AppText as Text } from "@/components/ui/app-text"
 import { Button } from "@/components/ui/button"
 import type { VendorRequest } from "@/lib/api/vendor-requests"
 import { isEventToday } from "@/lib/vendor/vendor-stage"
-import { colors, fonts, radii, spacing } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
 /** Event-day mode for confirmed vendors: today/tomorrow's market with the pass one tap away. */
 export function EventDayCard({ booking }: { booking: VendorRequest }) {
@@ -67,10 +67,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 4,
   },
-  badgeText: { fontFamily: fonts.bodyBold, fontSize: 12, color: colors.black, textTransform: "uppercase" },
-  title: { fontFamily: fonts.display, fontSize: 22, lineHeight: 28, color: colors.white, marginTop: spacing.sm },
-  meta: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.gray200 },
-  hint: { fontFamily: fonts.body, fontSize: 14, lineHeight: 20, color: colors.gray200, marginTop: spacing.xs },
+  badgeText: { fontFamily: fonts.bodyBold, fontSize: typeScale.caption, color: colors.black, textTransform: "uppercase" },
+  title: { fontFamily: fonts.display, fontSize: typeScale.title, lineHeight: 28, color: colors.white, marginTop: spacing.sm },
+  meta: { fontFamily: fonts.bodySemi, fontSize: typeScale.body, color: colors.gray200 },
+  hint: { fontFamily: fonts.body, fontSize: typeScale.body, lineHeight: 20, color: colors.gray200, marginTop: spacing.xs },
   actions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
   flex: { flex: 1 },
 })

@@ -3,7 +3,7 @@ import { AppText as Text } from "@/components/ui/app-text"
 import { router, type Href } from "expo-router"
 
 import type { MarketplaceMapPin } from "@/lib/api/map-pins"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 export function MapPinPreview({
   pin,
@@ -86,12 +86,12 @@ const styles = StyleSheet.create({
     }),
   },
   title: {
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontWeight: "700",
     color: colors.black,
   },
   meta: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     color: colors.gray500,
   },
   row: {
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   badge: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "700",
     color: colors.black,
     backgroundColor: colors.lime,
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   badgeMuted: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "600",
     color: colors.gray700,
     backgroundColor: colors.gray100,
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   primaryText: {
     color: colors.white,
     fontWeight: "700",
-    fontSize: 13,
+    fontSize: typeScale.footnote,
   },
   secondary: {
     flex: 1,
@@ -146,14 +146,14 @@ const styles = StyleSheet.create({
   secondaryText: {
     color: colors.black,
     fontWeight: "700",
-    fontSize: 13,
+    fontSize: typeScale.footnote,
   },
   close: {
     paddingHorizontal: spacing.sm,
     justifyContent: "center",
   },
   closeText: {
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     fontWeight: "600",
     color: colors.gray500,
   },

@@ -1,7 +1,7 @@
 import { StyleSheet, View } from "react-native"
 
 import { AppText as Text } from "@/components/ui/app-text"
-import { colors, fonts, radii, spacing } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
 /** "Step 2 of 6 · Date and location" with a segmented bar; announced as a progress bar. */
 export function StepProgress({ steps, current }: { steps: readonly string[]; current: number }) {
@@ -28,7 +28,7 @@ export function StepProgress({ steps, current }: { steps: readonly string[]; cur
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
-  label: { fontFamily: fonts.body, fontSize: 13, color: colors.gray500 },
+  label: { fontFamily: fonts.body, fontSize: typeScale.footnote, color: colors.gray500 },
   labelStrong: { fontFamily: fonts.bodySemi, color: colors.black },
   bar: { flexDirection: "row", gap: 4 },
   segment: { flex: 1, height: 4, borderRadius: radii.pill, backgroundColor: colors.gray200 },

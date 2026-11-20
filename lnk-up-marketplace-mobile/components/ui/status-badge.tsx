@@ -1,7 +1,7 @@
 import { StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 
-import { fonts, radii, spacing, statusToneColors, type StatusTone } from "@/lib/theme"
+import { fonts, radii, spacing, statusToneColors, type StatusTone, typeScale } from "@/lib/theme"
 
 /** Colored status pill. Pass a tone from the domain helpers (e.g. organizerRequestStatusTone). */
 export function StatusBadge({ label, tone = "neutral" }: { label: string; tone?: StatusTone }) {
@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontFamily: fonts.bodySemi,
-    fontSize: 11,
+    fontSize: typeScale.micro,
     letterSpacing: 0.2,
   },
 })

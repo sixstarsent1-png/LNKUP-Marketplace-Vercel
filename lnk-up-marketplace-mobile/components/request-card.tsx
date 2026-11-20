@@ -11,7 +11,7 @@ import {
   type VendorRequest,
 } from "@/lib/api/vendor-requests"
 import { formatMoney } from "@/lib/api/vendor-wallet"
-import { colors, fonts, radii, spacing, typography } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typography, typeScale } from "@/lib/theme"
 
 /** Vendor booking card: event image, status, when/where, fee, and the next action. */
 export function RequestCard({
@@ -110,10 +110,10 @@ const styles = StyleSheet.create({
   thumb: { width: 72 },
   copy: { flex: 1, gap: 4, alignItems: "flex-start" },
   titleRow: { flexDirection: "row" },
-  title: { flex: 1, fontFamily: fonts.displaySemi, fontSize: 16, lineHeight: 21, color: colors.black },
+  title: { flex: 1, fontFamily: fonts.displaySemi, fontSize: typeScale.bodyLarge, lineHeight: 21, color: colors.black },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   meta: { ...typography.meta, flexShrink: 1 },
   metaDue: { color: colors.amber700, fontFamily: fonts.bodySemi },
-  hint: { marginTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodySemi, color: colors.gray700 },
+  hint: { marginTop: spacing.sm, fontSize: typeScale.caption, fontFamily: fonts.bodySemi, color: colors.gray700 },
   primaryBtn: { marginTop: spacing.md },
 })

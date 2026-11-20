@@ -12,7 +12,7 @@ import { fetchOrganizerEvents, type OrganizerEventLite } from "@/lib/api/organiz
 import { inviteVendorFromDirectory, type OrganizerDirectoryVendor } from "@/lib/api/organizer-vendor-directory"
 import type { WpAuth } from "@/lib/api/wp-client"
 import { showToast } from "@/lib/feedback/feedback"
-import { spacing } from "@/lib/theme"
+import { spacing, typeScale } from "@/lib/theme"
 
 type InviteSheetProps = {
   vendor: OrganizerDirectoryVendor | null
@@ -116,7 +116,7 @@ export function InviteSheet({ vendor, auth, defaultEventId, onClose, onSent }: I
       }
     >
       <View style={styles.body}>
-        {loading ? <LoadingPanel label="Loading your events…" /> : null}
+        {loading ? <LoadingPanel label="Loading your events…" variant="skeleton" count={2} /> : null}
         {error ? <ErrorPanel title={error.title} message={error.message} /> : null}
         {!loading && !error && events.length === 0 ? (
           <EmptyPanel
@@ -180,6 +180,6 @@ export function InviteSheet({ vendor, auth, defaultEventId, onClose, onSent }: I
 
 const styles = StyleSheet.create({
   body: { gap: spacing.sm },
-  heading: { fontSize: 15 },
+  heading: { fontSize: typeScale.callout },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
 })

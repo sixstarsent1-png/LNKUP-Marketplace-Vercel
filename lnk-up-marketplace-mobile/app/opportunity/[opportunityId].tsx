@@ -21,7 +21,7 @@ import { useAuth } from "@/lib/auth/auth-context"
 import { showToast } from "@/lib/feedback/feedback"
 import { constrainedColumnStyle, useBreakpoint } from "@/lib/layout/use-breakpoint"
 import { safeBack } from "@/lib/navigation/safe-back"
-import { colors, fonts, layout, radii, spacing } from "@/lib/theme"
+import { colors, fonts, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 const PREVIEW_CHARS = 280
 
@@ -203,7 +203,7 @@ export default function OpportunityDetailScreen() {
         ]}
         keyboardShouldPersistTaps="handled"
       >
-        {loading ? <LoadingPanel label="Loading event…" /> : null}
+        {loading ? <LoadingPanel label="Loading event…" variant="skeleton" withMedia count={1} /> : null}
 
         {!loading && error ? (
           <ErrorPanel title={error.title} message={error.message} onAction={() => void load()} />
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     fontWeight: "700",
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     color: colors.black,
   },
   saveBtn: { minWidth: 56, alignItems: "flex-end", paddingVertical: 4 },
@@ -455,12 +455,12 @@ const styles = StyleSheet.create({
   },
   heroLetter: {
     fontFamily: fonts.display,
-    fontSize: 48,
+    fontSize: typeScale.jumbo,
     color: colors.black,
   },
   heroFallbackLabel: {
     fontFamily: fonts.bodySemi,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.gray700,
   },
   heroChips: {
@@ -482,23 +482,23 @@ const styles = StyleSheet.create({
   },
   heroChipText: {
     color: colors.white,
-    fontSize: 11,
+    fontSize: typeScale.micro,
     fontWeight: "700",
   },
   heroChipTextDark: {
     color: colors.black,
-    fontSize: 11,
+    fontSize: typeScale.micro,
     fontWeight: "700",
   },
   brand: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "800",
     letterSpacing: 1.2,
     textTransform: "uppercase",
     color: colors.gray500,
     marginTop: spacing.sm,
   },
-  title: { fontSize: 26, fontWeight: "800", color: colors.black },
+  title: { fontSize: typeScale.display, fontWeight: "800", color: colors.black },
   facts: {
     marginTop: spacing.sm,
     backgroundColor: colors.white,
@@ -526,13 +526,13 @@ const styles = StyleSheet.create({
   },
   factCopy: { flex: 1, gap: 2 },
   factLabel: {
-    fontSize: 11,
+    fontSize: typeScale.micro,
     fontWeight: "600",
     color: colors.gray500,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
-  factValue: { fontSize: 15, fontWeight: "700", color: colors.black },
+  factValue: { fontSize: typeScale.callout, fontWeight: "700", color: colors.black },
   verifiedPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
   },
-  verifiedText: { fontSize: 11, fontWeight: "700", color: colors.green700 },
+  verifiedText: { fontSize: typeScale.micro, fontWeight: "700", color: colors.green700 },
   galleryRow: { gap: spacing.sm, paddingVertical: spacing.sm },
   galleryItem: {
     width: 96,
@@ -562,7 +562,7 @@ const styles = StyleSheet.create({
   },
   galleryVideoText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "700",
     textTransform: "uppercase",
   },
@@ -576,8 +576,8 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: 4,
   },
-  statLabel: { fontSize: 11, color: colors.gray500, fontWeight: "600" },
-  statValue: { fontSize: 16, fontWeight: "800", color: colors.black },
+  statLabel: { fontSize: typeScale.micro, color: colors.gray500, fontWeight: "600" },
+  statValue: { fontSize: typeScale.bodyLarge, fontWeight: "800", color: colors.black },
   capacityTrack: {
     marginTop: 4,
     height: 4,
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
   },
-  deadlineText: { fontSize: 12, fontWeight: "700", color: colors.amber700 },
+  deadlineText: { fontSize: typeScale.caption, fontWeight: "700", color: colors.amber700 },
   aboutCard: {
     marginTop: spacing.md,
     backgroundColor: colors.white,
@@ -613,10 +613,10 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.sm,
   },
-  aboutTitle: { fontSize: 16, fontWeight: "800", color: colors.black },
-  aboutBody: { fontSize: 15, color: colors.gray700, lineHeight: 22 },
-  aboutEmpty: { fontSize: 14, color: colors.gray500, fontStyle: "italic" },
-  showMore: { fontSize: 14, fontWeight: "700", color: colors.black },
+  aboutTitle: { fontSize: typeScale.bodyLarge, fontWeight: "800", color: colors.black },
+  aboutBody: { fontSize: typeScale.callout, color: colors.gray700, lineHeight: 22 },
+  aboutEmpty: { fontSize: typeScale.body, color: colors.gray500, fontStyle: "italic" },
+  showMore: { fontSize: typeScale.body, fontWeight: "700", color: colors.black },
   logistics: {
     marginTop: spacing.sm,
     gap: spacing.sm,
@@ -638,10 +638,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  logisticsItem: { fontSize: 13, fontWeight: "600", color: colors.gray700 },
+  logisticsItem: { fontSize: typeScale.footnote, fontWeight: "600", color: colors.gray700 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm },
   chip: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "700",
     color: colors.gray700,
     backgroundColor: colors.limeMuted,
@@ -665,12 +665,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     alignItems: "center",
   },
-  primaryText: { color: colors.white, fontWeight: "700", fontSize: 16 },
+  primaryText: { color: colors.white, fontWeight: "700", fontSize: typeScale.bodyLarge },
   blocked: { gap: spacing.sm },
   appliedRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   appliedCopy: { flex: 1, gap: 4, alignItems: "flex-start" },
-  appliedTitle: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.black },
-  blockedText: { fontSize: 14, color: colors.gray700, textAlign: "center" },
+  appliedTitle: { fontFamily: fonts.bodySemi, fontSize: typeScale.callout, color: colors.black },
+  blockedText: { fontSize: typeScale.body, color: colors.gray700, textAlign: "center" },
   secondary: {
     borderWidth: 1,
     borderColor: colors.gray200,

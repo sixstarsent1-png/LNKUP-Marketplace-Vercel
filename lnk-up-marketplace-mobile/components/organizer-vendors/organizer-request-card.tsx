@@ -12,7 +12,7 @@ import {
   type OrganizerReviewAction,
   type OrganizerVendorRequest,
 } from "@/lib/api/organizer-requests"
-import { colors, fonts, radii, spacing, typography } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typography, typeScale } from "@/lib/theme"
 
 /** Vendor application card for the organizer review queues, with approve/waitlist/reject actions. */
 export function OrganizerRequestCard({
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     fontFamily: fonts.displaySemi,
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     lineHeight: 22,
     color: colors.black,
   },
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   },
   viewHint: {
     fontFamily: fonts.bodySemi,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.black,
   },
   amountPill: {
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
   },
   amountDue: {
     fontFamily: fonts.bodyBold,
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.amber700,
   },
   messageBox: {

@@ -43,7 +43,7 @@ import { confirmedVendors, fetchEventRoster, type EventRoster } from "@/lib/api/
 import { useAuth } from "@/lib/auth/auth-context"
 import { confirmAction, showToast } from "@/lib/feedback/feedback"
 import { openExternalUrl } from "@/lib/navigation/open-external-url"
-import { colors, fonts, radii, spacing } from "@/lib/theme"
+import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
 type TabKey = "overview" | "slots" | "applications" | "vendors" | "payments" | "dayof" | "packet"
 const TAB_KEYS: readonly TabKey[] = ["overview", "slots", "applications", "vendors", "payments", "dayof", "packet"]
@@ -649,16 +649,16 @@ export default function OrganizerEventWorkspaceScreen() {
 const styles = StyleSheet.create({
   hero: { gap: spacing.sm },
   heroRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  title: { fontSize: 26, lineHeight: 32 },
+  title: { fontSize: typeScale.display, lineHeight: 32 },
   section: { gap: spacing.md },
   row: { flexDirection: "row", gap: spacing.sm },
   flex: { flex: 1 },
   stateField: { width: 96 },
   slot: { gap: spacing.md },
   slotHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.sm },
-  slotTitle: { flex: 1, fontSize: 16 },
+  slotTitle: { flex: 1, fontSize: typeScale.bodyLarge },
   inventory: { gap: 6 },
-  inventoryText: { fontFamily: fonts.body, fontSize: 13, color: colors.gray700 },
+  inventoryText: { fontFamily: fonts.body, fontSize: typeScale.footnote, color: colors.gray700 },
   inventoryStrong: { fontFamily: fonts.bodyBold, color: colors.black },
   inventoryTrack: { height: 6, borderRadius: radii.pill, backgroundColor: colors.gray100, overflow: "hidden" },
   inventoryFill: { height: 6, backgroundColor: colors.black },

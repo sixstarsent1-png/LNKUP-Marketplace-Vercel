@@ -4,7 +4,7 @@ import { AppText as Text } from "@/components/ui/app-text"
 import * as Location from "expo-location"
 
 import { showToast } from "@/lib/feedback/feedback"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 const DEFAULT_RADIUS = 50
 
@@ -106,13 +106,13 @@ const styles = StyleSheet.create({
   btnText: {
     fontWeight: "700",
     color: colors.black,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
   },
   fallback: {
     gap: spacing.xs,
   },
   fallbackLabel: {
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontWeight: "600",
     color: colors.gray500,
   },
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    fontSize: 14,
+    fontSize: typeScale.body,
     color: colors.black,
     backgroundColor: colors.gray50,
   },

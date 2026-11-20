@@ -20,7 +20,7 @@ import { isLiveApiEnabled } from "@/lib/api/config"
 import { useAuth } from "@/lib/auth/auth-context"
 import type { HomeHref } from "@/lib/auth/roles"
 import { constrainedColumnStyle, useBreakpoint } from "@/lib/layout/use-breakpoint"
-import { colors, fonts, layout, radii, spacing } from "@/lib/theme"
+import { colors, fonts, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 export default function SignupScreen() {
   const params = useLocalSearchParams<{ role?: string }>()
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   title: {
-    fontSize: 32,
+    fontSize: typeScale.large,
     textAlign: "center",
   },
   subtitle: {
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     fontFamily: fonts.body,
     color: colors.black,
     backgroundColor: colors.gray50,
@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
   },
   primaryText: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
   },
   disabled: {
     opacity: 0.6,

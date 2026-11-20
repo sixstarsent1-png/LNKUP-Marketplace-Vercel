@@ -10,7 +10,7 @@ import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import { fetchVendorReviews, type VendorReviewsSnapshot } from "@/lib/api/vendor-reviews"
 import { useAuth } from "@/lib/auth/auth-context"
 import { openExternalUrl } from "@/lib/navigation/open-external-url"
-import { colors, radii, spacing } from "@/lib/theme"
+import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 export default function VendorReviewsScreen() {
   const { auth } = useAuth()
@@ -53,7 +53,7 @@ export default function VendorReviewsScreen() {
     >
       <BackLink label="Profile" fallbackHref="/(vendor)/more" />
 
-      {showLoader ? <LoadingPanel label="Loading reviews…" /> : null}
+      {showLoader ? <LoadingPanel label="Loading reviews…" variant="skeleton" count={3} /> : null}
 
       {!showLoader && error && !data ? (
         <ErrorPanel title={error.title} message={error.message} onAction={() => void load()} />
@@ -119,7 +119,7 @@ export default function VendorReviewsScreen() {
 
 const styles = StyleSheet.create({
   back: { marginBottom: spacing.sm },
-  backText: { fontSize: 14, fontWeight: "600", color: colors.gray700 },
+  backText: { fontSize: typeScale.body, fontWeight: "600", color: colors.gray700 },
   stack: { gap: spacing.md },
   summary: {
     backgroundColor: colors.lime,
@@ -127,8 +127,8 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: spacing.xs,
   },
-  score: { fontSize: 36, fontWeight: "800", color: colors.black },
-  meta: { fontSize: 13, color: colors.gray700 },
+  score: { fontSize: typeScale.display, fontWeight: "800", color: colors.black },
+  meta: { fontSize: typeScale.footnote, color: colors.gray700 },
   list: { gap: spacing.md },
   card: {
     backgroundColor: colors.white,
@@ -138,9 +138,9 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.xs,
   },
-  rating: { fontSize: 14, fontWeight: "700", color: colors.black },
-  title: { fontSize: 15, fontWeight: "700", color: colors.black },
-  body: { fontSize: 13, color: colors.gray700, lineHeight: 18 },
+  rating: { fontSize: typeScale.body, fontWeight: "700", color: colors.black },
+  title: { fontSize: typeScale.callout, fontWeight: "700", color: colors.black },
+  body: { fontSize: typeScale.footnote, color: colors.gray700, lineHeight: 18 },
   tips: {
     backgroundColor: colors.gray50,
     borderRadius: radii.lg,
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.xs,
   },
-  section: { fontSize: 14, fontWeight: "700", color: colors.black },
+  section: { fontSize: typeScale.body, fontWeight: "700", color: colors.black },
   outline: {
     borderWidth: 1,
     borderColor: colors.gray200,

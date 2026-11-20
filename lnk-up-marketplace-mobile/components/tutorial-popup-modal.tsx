@@ -6,7 +6,7 @@ import { AppIcon } from "@/components/ui/app-icon"
 import { Body, Eyebrow, Meta, SectionTitle } from "@/components/ui/typography"
 import type { RoleTutorial, TutorialStepId } from "@/lib/tutorials/tutorial-contract"
 import { constrainedColumnStyle } from "@/lib/layout/use-breakpoint"
-import { colors, fonts, layout, radii, spacing } from "@/lib/theme"
+import { colors, fonts, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 type TutorialPopupModalProps = {
   visible: boolean
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   primaryCtaText: {
-    fontSize: 15,
+    fontSize: typeScale.callout,
   },
   secondaryCta: {
     borderWidth: 1,

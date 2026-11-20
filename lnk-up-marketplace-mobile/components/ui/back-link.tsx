@@ -4,7 +4,7 @@ import type { Href } from "expo-router"
 
 import { AppIcon } from "@/components/ui/app-icon"
 import { safeBack } from "@/lib/navigation/safe-back"
-import { colors, fonts, layout, spacing } from "@/lib/theme"
+import { colors, fonts, layout, spacing, typeScale } from "@/lib/theme"
 
 /**
  * Consistent back control for secondary screens inside `Screen`. Goes back when there is history
@@ -38,5 +38,5 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   pressed: { opacity: 0.6 },
-  text: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.gray700 },
+  text: { fontFamily: fonts.bodySemi, fontSize: typeScale.callout, color: colors.gray700 },
 })

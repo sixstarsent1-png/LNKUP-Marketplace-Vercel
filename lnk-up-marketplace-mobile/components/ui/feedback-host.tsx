@@ -18,7 +18,7 @@ import {
   type PromptRequest,
   type ToastTone,
 } from "@/lib/feedback/feedback"
-import { colors, fonts, layout, radii, shadow, spacing } from "@/lib/theme"
+import { colors, fonts, layout, radii, shadow, spacing, typeScale } from "@/lib/theme"
 
 const TOAST_TONES: Record<ToastTone, { icon: AppIconName; bg: string; fg: string }> = {
   success: { icon: "checkmark-circle", bg: colors.black, fg: colors.white },
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
   toastText: {
     flex: 1,
     fontFamily: fonts.bodyMedium,
-    fontSize: 14,
+    fontSize: typeScale.body,
     lineHeight: 20,
   },
   footerButton: {

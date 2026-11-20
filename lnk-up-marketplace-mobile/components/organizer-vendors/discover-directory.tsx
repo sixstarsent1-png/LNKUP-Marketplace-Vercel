@@ -18,7 +18,7 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import type { AppErrorShape } from "@/lib/api/errors"
 import { LAUNCH_CATEGORIES } from "@/lib/api/organizer-launch"
 import type { OrganizerDirectoryVendor, OrganizerDiscoverFilters } from "@/lib/api/organizer-vendor-directory"
-import { colors, fonts, layout, radii, spacing, typography } from "@/lib/theme"
+import { colors, fonts, layout, radii, spacing, typography, typeScale } from "@/lib/theme"
 
 type DiscoverHeaderProps = {
   query: string
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
   search: {
     flex: 1,
     paddingVertical: spacing.sm + 2,
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontFamily: fonts.body,
     color: colors.black,
   },
@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
   },
   filterBtnText: {
     fontFamily: fonts.bodySemi,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.black,
   },
   badge: {
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: typeScale.micro,
     fontFamily: fonts.bodyBold,
     color: colors.black,
   },
@@ -420,7 +420,7 @@ const styles = StyleSheet.create({
   },
   resultCount: {
     ...typography.meta,
-    fontSize: 12,
+    fontSize: typeScale.caption,
     fontFamily: fonts.bodySemi,
   },
   card: {
@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     fontFamily: fonts.displaySemi,
-    fontSize: 16,
+    fontSize: typeScale.bodyLarge,
     lineHeight: 22,
     color: colors.black,
   },
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
   },
   stats: {
     fontFamily: fonts.bodySemi,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
     color: colors.gray700,
   },
   cardActions: {
@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    fontSize: 15,
+    fontSize: typeScale.callout,
     fontFamily: fonts.body,
     color: colors.black,
     backgroundColor: colors.gray50,

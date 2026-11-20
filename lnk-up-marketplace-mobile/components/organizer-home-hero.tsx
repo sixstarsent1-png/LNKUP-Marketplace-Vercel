@@ -4,7 +4,7 @@ import { router, type Href } from "expo-router"
 import { Button } from "@/components/ui/button"
 import { Surface } from "@/components/ui/surface"
 import { DisplayTitle, Eyebrow, Meta } from "@/components/ui/typography"
-import { colors, spacing } from "@/lib/theme"
+import { colors, spacing, typeScale } from "@/lib/theme"
 
 export type OrganizerHeroAction = {
   eyebrow: string
@@ -47,11 +47,11 @@ const styles = StyleSheet.create({
     color: colors.amber700,
   },
   title: {
-    fontSize: 24,
+    fontSize: typeScale.title,
     lineHeight: 30,
   },
   body: {
-    fontSize: 15,
+    fontSize: typeScale.callout,
     lineHeight: 22,
     color: colors.gray700,
   },

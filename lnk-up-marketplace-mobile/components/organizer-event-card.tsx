@@ -14,7 +14,7 @@ import {
   type EventListingState,
   type OrganizerEventLite,
 } from "@/lib/api/organizer-events"
-import { colors, fonts, radii, spacing, type StatusTone } from "@/lib/theme"
+import { colors, fonts, radii, spacing, type StatusTone, typeScale } from "@/lib/theme"
 
 const STATE_TONE: Record<EventListingState, StatusTone> = {
   draft: "waitlist",
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   thumb: { width: 84 },
   copy: { flex: 1, gap: 4, alignItems: "flex-start" },
-  title: { fontSize: 16, lineHeight: 21 },
+  title: { fontSize: typeScale.bodyLarge, lineHeight: 21 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   flexShrink: { flexShrink: 1 },
   metrics: {
@@ -105,8 +105,8 @@ const styles = StyleSheet.create({
     borderTopColor: colors.gray100,
   },
   metric: { flex: 1, alignItems: "center", gap: 2 },
-  metricValue: { fontFamily: fonts.display, fontSize: 18, color: colors.black },
+  metricValue: { fontFamily: fonts.display, fontSize: typeScale.headline, color: colors.black },
   metricAttention: { color: colors.amber700 },
-  metricLabel: { fontFamily: fonts.body, fontSize: 11, color: colors.gray500, textAlign: "center" },
+  metricLabel: { fontFamily: fonts.body, fontSize: typeScale.micro, color: colors.gray500, textAlign: "center" },
   draftHint: { marginTop: spacing.sm, color: colors.gray700, fontFamily: fonts.bodySemi },
 })

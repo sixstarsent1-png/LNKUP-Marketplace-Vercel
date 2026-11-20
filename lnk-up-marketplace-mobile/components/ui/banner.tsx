@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 
 import { AppIcon, type AppIconName } from "@/components/ui/app-icon"
-import { colors, fonts, layout, radii, spacing, typography } from "@/lib/theme"
+import { colors, fonts, layout, radii, spacing, typography, typeScale } from "@/lib/theme"
 
 export type BannerTone = "attention" | "error" | "success" | "info"
 
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: fonts.bodySemi,
-    fontSize: 14,
+    fontSize: typeScale.body,
   },
   message: {
     ...typography.meta,
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   },
   action: {
     fontFamily: fonts.bodySemi,
-    fontSize: 13,
+    fontSize: typeScale.footnote,
   },
   dismiss: {
     width: 28,
