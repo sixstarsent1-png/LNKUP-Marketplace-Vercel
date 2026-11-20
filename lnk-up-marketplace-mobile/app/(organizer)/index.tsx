@@ -33,10 +33,7 @@ import {
   type OrganizerHomeSummary,
 } from "@/lib/api/organizer-home"
 import { fetchOrganizerProfileEdit } from "@/lib/api/organizer-profile"
-import {
-  fetchOrganizerEvents,
-  type OrganizerEventLite,
-} from "@/lib/api/organizer-events"
+import { fetchOrganizerEvents, type OrganizerEventLite } from "@/lib/api/organizer-events"
 import {
   fetchOrganizerRequests,
   organizerRequestStatusLabel,
@@ -128,17 +125,13 @@ function resolveHero(summary: OrganizerHomeSummary): HeroAction {
   }
 
   const payoutIncomplete = summary.launchChecklist.find(
-    (item) =>
-      !item.complete &&
-      (checklistKey(item) === "payout_account" || checklistKey(item) === "payouts"),
+    (item) => !item.complete && (checklistKey(item) === "payout_account" || checklistKey(item) === "payouts"),
   )
   if (payoutIncomplete) {
     return {
       eyebrow: "Payouts",
       title: payoutIncomplete.label || "Finish payout setup",
-      body:
-        payoutIncomplete.description ||
-        "Set up payouts so booth fees can settle to your account.",
+      body: payoutIncomplete.description || "Set up payouts so booth fees can settle to your account.",
       cta: payoutIncomplete.ctaLabel || "Open Money",
       href: "/(organizer)/money",
       tone: "default",
@@ -157,9 +150,7 @@ function resolveHero(summary: OrganizerHomeSummary): HeroAction {
   }
 
   const createIncomplete = summary.launchChecklist.find(
-    (item) =>
-      !item.complete &&
-      (checklistKey(item) === "create_event" || checklistKey(item) === "event"),
+    (item) => !item.complete && (checklistKey(item) === "create_event" || checklistKey(item) === "event"),
   )
   if (createIncomplete || summary.stats.events === 0) {
     return {
@@ -195,9 +186,11 @@ function requestVendorsHref(request: OrganizerVendorRequest): Href {
   return "/(organizer)/vendors?tab=requests" as Href
 }
 
-function recommendationAction(
-  recommendation: OrganizerRecommendation,
-): { label: string; href?: Href; externalUrl?: string } {
+function recommendationAction(recommendation: OrganizerRecommendation): {
+  label: string
+  href?: Href
+  externalUrl?: string
+} {
   const stage = recommendation.funnelStage.toLowerCase()
   if (stage.includes("application")) {
     return { label: "Review requests", href: "/(organizer)/vendors?tab=requests" as Href }
@@ -352,7 +345,9 @@ export default function OrganizerHomeScreen() {
 
   const attentionItems = useMemo(() => {
     if (!summary) return []
-    if (!needsPublicProfile) return summary.attentionItems
+    // The hero already leads with pending requests; listing them again repeats the same card.
+    const rest = summary.attentionItems.filter((item) => item.id !== "pending-requests")
+    if (!needsPublicProfile) return rest
     return [
       {
         id: "public-profile",
@@ -360,7 +355,7 @@ export default function OrganizerHomeScreen() {
         description: "Add your organization name so vendors can find you.",
         severity: "info" as const,
       },
-      ...summary.attentionItems,
+      ...rest,
     ]
   }, [needsPublicProfile, summary])
 
@@ -379,12 +374,7 @@ export default function OrganizerHomeScreen() {
     markPopupSeen,
     onStepClick,
     onPushClick,
-  } = useRoleTutorial(
-    "organizer",
-    organizerTutorial,
-    session?.user.id ?? session?.username,
-    auth,
-  )
+  } = useRoleTutorial("organizer", organizerTutorial, session?.user.id ?? session?.username, auth)
 
   return (
     <Screen
@@ -392,9 +382,7 @@ export default function OrganizerHomeScreen() {
       subtitle={`Signed in as ${session?.user.name ?? "organizer"}`}
       refreshing={refreshing}
       onRefresh={() => void load("refresh")}
-      rightSlot={
-        <NotificationBell unreadCount={unreadCount} href="/(organizer)/notifications" />
-      }
+      rightSlot={<NotificationBell unreadCount={unreadCount} href="/(organizer)/notifications" />}
     >
       {loading && !summary ? (
         <View style={styles.stack} accessibilityLabel="Loading organizer home">
@@ -454,9 +442,7 @@ export default function OrganizerHomeScreen() {
                 value={summary.stats.events}
                 onPress={() =>
                   router.push(
-                    summary.stats.events === 0
-                      ? "/(organizer)/launch"
-                      : ("/(organizer)/events" as Href),
+                    summary.stats.events === 0 ? "/(organizer)/launch" : ("/(organizer)/events" as Href),
                   )
                 }
               />
@@ -466,7 +452,9 @@ export default function OrganizerHomeScreen() {
                     icon="checkmark-circle-outline"
                     label="Approved"
                     value={summary.stats.approvedVendors}
-                    onPress={() => router.push("/(organizer)/vendors?tab=requests&filter=awaiting_payment" as Href)}
+                    onPress={() =>
+                      router.push("/(organizer)/vendors?tab=requests&filter=awaiting_payment" as Href)
+                    }
                   />
                   <StatTile
                     icon="cash-outline"
@@ -480,9 +468,7 @@ export default function OrganizerHomeScreen() {
                     value={summary.stats.openOpportunities}
                     onPress={() =>
                       router.push(
-                        summary.stats.events === 0
-                          ? "/(organizer)/launch"
-                          : ("/(organizer)/events" as Href),
+                        summary.stats.events === 0 ? "/(organizer)/launch" : ("/(organizer)/events" as Href),
                       )
                     }
                   />
@@ -510,47 +496,49 @@ export default function OrganizerHomeScreen() {
             />
           ) : null}
 
-          <View style={styles.section}>
-            <SectionHeader title="Needs attention" icon="alert-circle-outline" />
-            {attentionItems.length === 0 ? (
-              <EmptyPanel
-                icon="checkmark-done-outline"
-                title="All clear"
-                message="No urgent organizer actions right now."
-              />
-            ) : (
-              <View style={styles.list}>
-                {attentionItems.map((item) => {
-                  const cta =
-                    item.id === "public-profile"
-                      ? "Create profile"
-                      : item.id === "payment-required"
-                        ? "Open Money"
-                        : "Review vendors"
-                  return (
-                    <PressableScale
-                      key={item.id}
-                      onPress={() => router.push(attentionHref(item.id))}
-                      accessibilityRole="button"
-                      accessibilityLabel={[item.label, item.description, cta].filter(Boolean).join(". ")}
-                    >
-                      <Surface
-                        variant={item.severity === "warning" ? "urgent" : "default"}
-                        style={styles.attentionCard}
+          {attentionItems.length === 0 && hero?.tone === "urgent" ? null : (
+            <View style={styles.section}>
+              <SectionHeader title="Needs attention" icon="alert-circle-outline" />
+              {attentionItems.length === 0 ? (
+                <EmptyPanel
+                  icon="checkmark-done-outline"
+                  title="All clear"
+                  message="No urgent organizer actions right now."
+                />
+              ) : (
+                <View style={styles.list}>
+                  {attentionItems.map((item) => {
+                    const cta =
+                      item.id === "public-profile"
+                        ? "Create profile"
+                        : item.id === "payment-required"
+                          ? "Open Money"
+                          : "Review vendors"
+                    return (
+                      <PressableScale
+                        key={item.id}
+                        onPress={() => router.push(attentionHref(item.id))}
+                        accessibilityRole="button"
+                        accessibilityLabel={[item.label, item.description, cta].filter(Boolean).join(". ")}
                       >
-                        <View style={styles.attentionText}>
-                          <Meta style={styles.cardTitle}>{item.label}</Meta>
-                          {item.description ? <Meta>{item.description}</Meta> : null}
-                          <Meta style={styles.cardCta}>{cta} →</Meta>
-                        </View>
-                        <AppIcon name="chevron-forward" size={18} color={colors.gray500} />
-                      </Surface>
-                    </PressableScale>
-                  )
-                })}
-              </View>
-            )}
-          </View>
+                        <Surface
+                          variant={item.severity === "warning" ? "urgent" : "default"}
+                          style={styles.attentionCard}
+                        >
+                          <View style={styles.attentionText}>
+                            <Meta style={styles.cardTitle}>{item.label}</Meta>
+                            {item.description ? <Meta>{item.description}</Meta> : null}
+                            <Meta style={styles.cardCta}>{cta} →</Meta>
+                          </View>
+                          <AppIcon name="chevron-forward" size={18} color={colors.gray500} />
+                        </Surface>
+                      </PressableScale>
+                    )
+                  })}
+                </View>
+              )}
+            </View>
+          )}
 
           {upcoming.length > 0 ? (
             <View style={styles.section}>
@@ -631,18 +619,12 @@ export default function OrganizerHomeScreen() {
               <Surface elevated style={styles.card}>
                 <SectionHeader title="Money snapshot" icon="cash-outline" />
                 <Meta style={styles.money}>
-                  {formatMoneyOrZero(
-                    summary.financial.collectedToDate ?? 0,
-                    summary.financial.currency,
-                  )}{" "}
+                  {formatMoneyOrZero(summary.financial.collectedToDate ?? 0, summary.financial.currency)}{" "}
                   collected
                 </Meta>
                 <Meta>
                   Pending{" "}
-                  {formatMoneyOrZero(
-                    summary.financial.pendingPayments ?? 0,
-                    summary.financial.currency,
-                  )}
+                  {formatMoneyOrZero(summary.financial.pendingPayments ?? 0, summary.financial.currency)}
                 </Meta>
                 <Meta style={styles.cardCta}>Open Money →</Meta>
               </Surface>

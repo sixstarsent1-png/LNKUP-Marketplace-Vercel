@@ -4,6 +4,7 @@ import { router, type Href } from "expo-router"
 import { AppIcon } from "@/components/ui/app-icon"
 import { AppText as Text } from "@/components/ui/app-text"
 import { EventImage } from "@/components/ui/event-image"
+import { formatShortDate } from "@/lib/format/date"
 import { PressableScale } from "@/components/ui/pressable-scale"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Surface } from "@/components/ui/surface"
@@ -40,7 +41,7 @@ export function OrganizerEventCard({ event, showStatus = true }: { event: Organi
   const confirmed = event.paidCount ?? 0
   const applications = event.requestsCount ?? 0
   const actions = toReview + (event.needsInfoCount ?? 0) + due
-  const where = [event.date, [event.city, event.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ")
+  const where = [formatShortDate(event.date), [event.city, event.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ")
   const href = `/(organizer)/events/${event.id}` as Href
 
   return (

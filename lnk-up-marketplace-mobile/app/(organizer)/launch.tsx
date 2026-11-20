@@ -68,6 +68,7 @@ export default function OrganizerLaunchScreen() {
   const [draft, setDraft] = useState<OrganizerLaunchDraft>(() => withToken(emptyLaunchDraft()))
   const [loading, setLoading] = useState(true)
   const [savingDraft, setSavingDraft] = useState(false)
+  const [deviceSaved, setDeviceSaved] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [errors, setErrors] = useState<Array<{ field: string; message: string }>>([])
   const [banner, setBanner] = useState<{ tone: "error" | "attention" | "success"; message: string } | null>(null)
@@ -103,7 +104,11 @@ export default function OrganizerLaunchScreen() {
   useEffect(() => {
     if (!hydrated.current || published) return
     const timer = setTimeout(() => {
-      if (draftHasContent(draft)) void saveDraft(draft).catch(() => undefined)
+      if (draftHasContent(draft)) {
+        void saveDraft(draft)
+          .then(() => setDeviceSaved(true))
+          .catch(() => setDeviceSaved(false))
+      }
     }, 600)
     return () => clearTimeout(timer)
   }, [draft, published])
@@ -271,7 +276,11 @@ export default function OrganizerLaunchScreen() {
     >
       <View style={styles.header}>
         <DisplayTitle accessibilityRole="header">Create event</DisplayTitle>
-        {draft.serverEventId ? <Meta>Draft saved to your account</Meta> : null}
+        {draft.serverEventId ? (
+          <Meta>Draft saved to your account</Meta>
+        ) : deviceSaved ? (
+          <Meta>Progress saved on this device</Meta>
+        ) : null}
       </View>
       <StepProgress steps={LAUNCH_STEPS} current={step} />
 
