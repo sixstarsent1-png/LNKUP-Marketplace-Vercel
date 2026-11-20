@@ -15,7 +15,7 @@ All 3.1 stages shipped to production as OTA updates on runtime 1.0.1 (iOS), one 
 - **Performance:** organizer Home and Money reuse caches on tab focus (warm return 6→0 and 4→0 calls); pull-to-refresh still forces.
 - **Server fixes (in git, need a WordPress deploy to thelnkup.com):** saved-search delete now persists (`class-saved-searches.php`), roster refusals return 403 instead of 500 (`class-event-roster.php`).
 - **Native track:** branch `native-3.2` (version 1.1.0, never OTA): QR camera check-in, photo-library logos, haptics, Stripe native SDK removed, iOS 16.4 target, SDK 57 patch alignment, `expo-doctor` 21/21. See `docs/NATIVE_BUILD_3.2.md`.
-- **Tests:** 105 unit tests (14 suites). New Playwright specs: `sweep-roles`, `sweep-errors`; cash-out request/cancel uses organizer B's seeded $25 test-mode balance. Seed also clears leftover E2E saved searches and main-event booths.
+- **Tests:** 105 unit tests (13 suites). New Playwright specs: `sweep-roles`, `sweep-errors`; cash-out request/cancel uses organizer B's seeded $25 test-mode balance. Seed also clears leftover E2E saved searches and main-event booths.
 - **Still open:** Reviews / Operations / Referrals keep older layouts; Sentry DSN and dark mode need input; event cover upload needs a WordPress endpoint; organizer Money still makes ~14 calls cold (one per event financials).
 
 ## 1. Product and stack
