@@ -140,18 +140,20 @@ Source: fresh screenshots of every route (`scripts/e2e/reports/mobile-shots/v31-
 | A2 | Vendors inbox / Discover | Scroll views, manual "Load more", no stale-search cancel, no debounce | P2 | 1 | Fixed (runtime), stage 1 |
 | A3 | Pass, Apply | 28 and 21 raw font sizes; hand-rolled buttons and inputs | P2 | 1 | Fixed (runtime), stage 1 |
 | A4 | E2E | 18 skips: 14 are writes that run once per seed, 4 are metrics; the approval-failure and session tests write nothing yet skip on SE / Pro Max | P2 | 1 | Fixed (runtime), stage 1 |
-| A5 | Explore / Home rails | Cards show a placeholder although the server sends `featured_image`; the card only reads `gallery` | P1 | 3 | Open |
-| A6 | Explore | Search, filters, near me and view toggle take half the first screen before any result | P2 | 3 | Open |
-| A7 | Growth, Reviews, Documents, Operations, Referrals | Older styling: raw font sizes, spinner panels instead of skeletons, plain-text statuses, oversized stacked buttons | P2 | 2–3 | Open |
-| A8 | Documents | Status is plain text with no badge or expiry date | P2 | 3 | Open |
-| A9 | Organizer Home | Hero card repeats the first "Needs attention" item | P2 | 4 | Open |
-| A10 | Organizer Home, Money | Every return to the tab forces 4–6 requests | P2 | 7 | Open |
-| A11 | Events list | Dates shown raw (`2027-01-04`) | P2 | 4 | Open |
-| A12 | Vendors request card | "$125 due" shown on requests still under review; nothing is due before approval | P1 | 4 | Open |
-| A13 | Profile hubs (vendor and organizer More) | Push preferences reloaded on every visit | P3 | 7 | Open |
-| A14 | Opportunity detail | 23 raw font sizes | P2 | 2 | Open |
+| A5 | Explore / Home rails | Cards show a placeholder although the server sends `featured_image`; the card only reads `gallery` | P1 | 3 | Fixed (runtime), stage 3a |
+| A6 | Explore | Search, filters, near me and view toggle take half the first screen before any result | P2 | 3 | Fixed (runtime), stage 3a |
+| A7 | Growth, Reviews, Documents, Operations, Referrals | Older styling: raw font sizes, spinner panels instead of skeletons, plain-text statuses, oversized stacked buttons | P2 | 2–3 | Partly fixed: type scale everywhere (stage 2), Growth and Documents rebuilt (3b); Reviews/Operations/Referrals keep older layouts |
+| A8 | Documents | Status is plain text with no badge or expiry date | P2 | 3 | Fixed (runtime), stage 3b |
+| A9 | Organizer Home | Hero card repeats the first "Needs attention" item | P2 | 4 | Fixed, stage 4a |
+| A10 | Organizer Home, Money | Every return to the tab forces 4–6 requests | P2 | 7 | Fixed (runtime): warm return to Home 6→0 calls, Money 4→0, stage 7 |
+| A11 | Events list | Dates shown raw (`2027-01-04`) | P2 | 4 | Fixed, stage 4a |
+| A12 | Vendors request card | "$125 due" shown on requests still under review; nothing is due before approval | P1 | 4 | Fixed (runtime), stage 4b |
+| A13 | Profile hubs (vendor and organizer More) | Push preferences reloaded on every visit | P3 | 7 | Fixed (60 s cache, cleared on save), stage 4b |
+| A14 | Opportunity detail | 23 raw font sizes | P2 | 2 | Fixed, stage 2 |
 | A15 | Saved searches (server) | Delete returned success but the search stayed active (status allowlist omitted `deleted`); deleted searches reappeared and counted toward the 10-search limit | P1 | 1 | Fixed (runtime); needs WordPress deploy |
 | A16 | Opportunity detail | Heart and back controls had no event-specific label | P2 | 1 | Fixed |
+| A17 | Pass | Every payment message (including failures) showed in a green success style; raw date and `Charlotte · NC` | P1 | 6 | Fixed (runtime) |
+| A18 | Roster (server) | Another organizer's roster request returned HTTP 500 instead of 403 | P2 | 6 | Fixed (runtime); needs WordPress deploy |
 
 ### Interaction inventory (per screen: tap targets / domain calls in code)
 

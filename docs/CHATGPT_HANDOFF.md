@@ -1,6 +1,22 @@
 # ChatGPT handoff: where LNKup stands
 
-Last updated: Nov 19, 2026.
+Last updated: Nov 20, 2026 (Mobile App 3.1 complete).
+
+## 0. Latest: Mobile App 3.1 (Nov 19–20)
+
+All 3.1 stages shipped to production as OTA updates on runtime 1.0.1 (iOS), one per stage: `8590ee6d` (1), `7b18be22` (2), `5d63dcb7` (3a), `36f280ce` (3b), `175c2849` (4a), `9f099682` (4b), `870a7c2d` (5), `8f31415f` (6), `3325da56` (7). Latest `master` commit for the app: `3a17ccb`.
+
+- **Known fixes:** single bookings request on vendor Home; Vendors inbox and Discover virtualized with auto-paging, stale-search cancel, removable filter chips and an honest end of list; Pass and Apply on shared typography, `Button` and `FormField`.
+- **Design:** one type scale (`typeScale` in `lib/theme.ts`, incl. `hero`/`large`/`jumbo`/`nano`) used everywhere; input focus ring; reduced-motion button press; skeleton loading on content screens.
+- **Vendor:** real event images on cards and detail (`featured_image`); compact Explore header with Near me chip and category chips; "Coming up" bookings on Home; plain-language status line on booking cards; Documents rebuilt (compliance progress, badges, expiry warnings, upload sheet with date picker); Growth on shared components.
+- **Organizer:** Home no longer repeats the hero item; formatted event dates; launch shows autosave status; request cards say "booth fee" until approval and "due" only after; cached push preferences.
+- **Event day:** booth picker shows Open / Taken / Current; 44pt check-in actions.
+- **Functionality sweep:** role-permission matrix (vendor vs organizer routes, other organizer's event) and error-path specs (profile save, checkout handoff, favorites, cash out, slot pricing) — honest errors, rollback, one request per double tap.
+- **Performance:** organizer Home and Money reuse caches on tab focus (warm return 6→0 and 4→0 calls); pull-to-refresh still forces.
+- **Server fixes (in git, need a WordPress deploy to thelnkup.com):** saved-search delete now persists (`class-saved-searches.php`), roster refusals return 403 instead of 500 (`class-event-roster.php`).
+- **Native track:** branch `native-3.2` (version 1.1.0, never OTA): QR camera check-in, photo-library logos, haptics, Stripe native SDK removed, iOS 16.4 target, SDK 57 patch alignment, `expo-doctor` 21/21. See `docs/NATIVE_BUILD_3.2.md`.
+- **Tests:** 105 unit tests (14 suites). New Playwright specs: `sweep-roles`, `sweep-errors`; cash-out request/cancel uses organizer B's seeded $25 test-mode balance. Seed also clears leftover E2E saved searches and main-event booths.
+- **Still open:** Reviews / Operations / Referrals keep older layouts; Sentry DSN and dark mode need input; event cover upload needs a WordPress endpoint; organizer Money still makes ~14 calls cold (one per event financials).
 
 ## 1. Product and stack
 
