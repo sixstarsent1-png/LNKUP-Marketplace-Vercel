@@ -321,49 +321,58 @@ class LNKup_Organizer_Payouts {
 	 * @param float $amount             Amount.
 	 * @param int   $payout_id          Payout ID.
 	 * @param bool  $release_processing False when mark_paid() already released processing_balance.
+	 * @param bool  $cancelled          True when the organizer cancelled (vs. a failed payout).
 	 */
-	private static function restore_failed_cashout( $user_id, $amount, $payout_id, $release_processing = true ) {
+	private static function restore_failed_cashout( $user_id, $amount, $payout_id, $release_processing = true, $cancelled = false ) {
 		global $wpdb;
 		$wallet = LNKup_Organizer_Wallet::get_or_create( $user_id );
-		if ( $wallet && $release_processing ) {
-			$wpdb->update(
-				LNKup_Treasury_Tables::organizer_wallets_table(),
+		$key    = 'payout:' . absint( $payout_id ) . ':restore';
+		$source = $cancelled ? 'payout_cancel' : 'payout_failed';
+		$note   = $cancelled
+			? __( 'Cashout cancelled — balance restored', 'lnkup-marketplace' )
+			: __( 'Cashout failed — balance restored', 'lnkup-marketplace' );
+		// Only destination cashouts move money into processing_balance (record_connect_debit).
+		$is_destination = class_exists( 'LNKup_Stripe_Connect' ) && 'destination' === LNKup_Stripe_Connect::settlement_mode_for_organizer( $user_id );
+		$release_processing = $release_processing && $is_destination;
+		if ( $is_destination ) {
+			$restored = LNKup_Organizer_Wallet::insert_entry(
 				array(
-					'processing_balance' => max( 0, (float) $wallet['processing_balance'] - $amount ),
-					'updated_at'         => current_time( 'mysql' ),
-				),
-				array( 'id' => (int) $wallet['id'] )
-			);
-		}
-		if ( class_exists( 'LNKup_Stripe_Connect' ) && 'destination' === LNKup_Stripe_Connect::settlement_mode_for_organizer( $user_id ) ) {
-			$wpdb->insert(
-				LNKup_Treasury_Tables::organizer_wallet_entries_table(),
-				array(
-					'wallet_id'     => (int) ( $wallet['id'] ?? 0 ),
-					'user_id'       => absint( $user_id ),
-					'entry_type'    => 'connect_settlement',
-					'amount'        => $amount,
-					'balance_after' => LNKup_Organizer_Wallet::sum_connect_settlement( $user_id ) + $amount,
-					'source_type'   => 'payout_failed',
-					'source_id'     => $payout_id,
-					'payout_id'     => $payout_id,
-					'note'          => __( 'Cashout failed — Connect balance restored', 'lnkup-marketplace' ),
-					'created_at'    => current_time( 'mysql' ),
+					'wallet_id'       => (int) ( $wallet['id'] ?? 0 ),
+					'user_id'         => absint( $user_id ),
+					'entry_type'      => 'connect_settlement',
+					'amount'          => $amount,
+					'balance_after'   => LNKup_Organizer_Wallet::sum_connect_settlement( $user_id ) + $amount,
+					'source_type'     => $source,
+					'source_id'       => $payout_id,
+					'payout_id'       => $payout_id,
+					'note'            => $note,
+					'idempotency_key' => $key,
 				)
 			);
-			return;
+		} else {
+			$restored = LNKup_Organizer_Wallet::add_entry(
+				$user_id,
+				$amount,
+				'available',
+				array(
+					'source_type'     => $source,
+					'source_id'       => $payout_id,
+					'payout_id'       => $payout_id,
+					'note'            => $note,
+					'idempotency_key' => $key,
+				)
+			);
 		}
-		LNKup_Organizer_Wallet::add_entry(
-			$user_id,
-			$amount,
-			'available',
-			array(
-				'source_type' => 'payout_failed',
-				'source_id'   => $payout_id,
-				'payout_id'   => $payout_id,
-				'note'        => __( 'Cashout failed — balance restored', 'lnkup-marketplace' ),
-			)
-		);
+		if ( $restored && $wallet && $release_processing ) {
+			$wpdb->query(
+				$wpdb->prepare(
+					'UPDATE ' . LNKup_Treasury_Tables::organizer_wallets_table() . ' SET processing_balance = GREATEST(0, processing_balance - %f), updated_at = %s WHERE id = %d',
+					$amount,
+					current_time( 'mysql' ),
+					(int) $wallet['id']
+				)
+			);
+		}
 	}
 
 	/**
@@ -499,17 +508,8 @@ class LNKup_Organizer_Payouts {
 		if ( 1 !== (int) $cancelled ) {
 			return new WP_Error( 'cannot_cancel', __( 'This cashout is already being processed.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
 		}
-		LNKup_Organizer_Wallet::add_entry(
-			$user_id,
-			(float) $payout['amount'],
-			'available',
-			array(
-				'source_type' => 'payout_cancel',
-				'source_id'   => $payout_id,
-				'payout_id'   => $payout_id,
-				'note'        => __( 'Cashout cancelled — balance restored', 'lnkup-marketplace' ),
-			)
-		);
+		self::restore_failed_cashout( absint( $user_id ), (float) $payout['amount'], absint( $payout_id ), true, true );
+		LNKup_Financial_Audit::log( 'organizer_payout_cancelled', 'payout', absint( $payout_id ), array( 'amount' => (float) $payout['amount'] ) );
 		return true;
 	}
 

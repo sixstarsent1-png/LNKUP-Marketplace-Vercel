@@ -261,7 +261,16 @@ class LNKup_Financial_Reports {
 				$paid[] = $payment;
 			}
 		}
-		$rows    = function_exists( 'lnkup_payment_display_rows' ) ? lnkup_payment_display_rows( $paid ) : array();
+		// Every paid payment is money collected; no grouping, so two bookings never merge.
+		$rows = array_map(
+			static function ( $payment ) {
+				return array(
+					'payment' => $payment,
+					'amount'  => LNKup_Financial::payment_booth_amount( $payment->ID ),
+				);
+			},
+			$paid
+		);
 		$cutoff  = strtotime( '-' . absint( $months ) . ' months' );
 		$buckets = array();
 		foreach ( $rows as $row ) {

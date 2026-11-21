@@ -313,9 +313,15 @@ class LNKup_Transactions {
 		}
 
 		$col = 'vendor' === $role ? 'vendor_user_id' : 'organizer_user_id';
+		// Newest money first: a payment paid today sorts by its paid date, not by when the
+		// invoice was created (old invoices paid late used to fall off the first page).
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE {$col} = %d ORDER BY created_at DESC LIMIT %d OFFSET %d",
+				"SELECT t.*, pm.meta_value AS paid_at FROM {$table} t
+				LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = t.payment_post_id AND pm.meta_key = '_lnkup_paid_at'
+				WHERE t.{$col} = %d
+				ORDER BY COALESCE(NULLIF(pm.meta_value, ''), t.created_at) DESC, t.id DESC
+				LIMIT %d OFFSET %d",
 				$user_id,
 				$limit,
 				$offset
@@ -323,6 +329,23 @@ class LNKup_Transactions {
 			ARRAY_A
 		);
 		return $rows ?: array();
+	}
+
+	/**
+	 * Total transactions for user scope (for pagination headers).
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $role    vendor|organizer.
+	 */
+	public static function count_for_user( $user_id, $role = 'vendor' ) {
+		global $wpdb;
+		$table = LNKup_Financial_Tables::transactions_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return 0;
+		}
+		$col = 'vendor' === $role ? 'vendor_user_id' : 'organizer_user_id';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$col} = %d", absint( $user_id ) ) );
 	}
 
 	/**
@@ -423,6 +446,8 @@ class LNKup_Transactions {
 			'provider'        => $row['provider'],
 			'metadata'        => is_array( $meta ) ? $meta : array(),
 			'created_at'      => $row['created_at'],
+			'paid_at'         => (string) ( $row['paid_at'] ?? ( ! empty( $row['payment_post_id'] ) ? get_post_meta( (int) $row['payment_post_id'], '_lnkup_paid_at', true ) : '' ) ),
+			'amount_cents'    => (int) round( (float) $row['amount'] * 100 ),
 		);
 		if ( ! empty( $row['payment_post_id'] ) && class_exists( 'LNKup_Payments' ) ) {
 			$formatted['audit'] = LNKup_Payments::get_audit( (int) $row['payment_post_id'] );

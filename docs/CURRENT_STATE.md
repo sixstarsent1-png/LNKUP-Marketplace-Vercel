@@ -6,8 +6,19 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
-**Plugin version:** 12.21.0  
+**Plugin version:** 12.22.0  
 **Theme version:** 1.6.0
+
+### v12.22.0 (Financial reconciliation — ledger integrity, money contract, repair)
+
+Deliverables, file list and test results: [finance/README.md](finance/README.md). Root causes: [finance/ROOT_CAUSE.md](finance/ROOT_CAUSE.md). Definitions: [finance/MONEY_DEFINITIONS.md](finance/MONEY_DEFINITIONS.md).
+
+- **Ledger:** `entry_type` widened to `varchar(32)` (every `connect_settlement` insert used to fail silently); unique `idempotency_key`; insert-first atomic balance updates; per-payment `GET_LOCK` around finalize; settle recovery via `_lnkup_settled_at` (automatic only after `lnkup_fin_auto_recovery_since`).
+- **Pure reads:** money GETs no longer reconcile; `POST /financial/sync`, Cash Out and the locked hourly cron (`lnkup_financial_hourly`) do.
+- **Correctness:** late `payment_failed` cannot unpay; fee snapshot kept at settle; platform recovery credits net not gross; cancelled destination cashouts release processing; Checkout Session intent lookup; async Checkout / payout cancel/update / dispute-closed webhooks.
+- **Money contract v1** (`money` on organizer dashboard/wallet/balances, vendor dashboard): integer cents, source, `synced_at`, unavailable instead of $0, payout state + Cash Out reason. Web, Next.js and mobile mappers read it (mobile not published).
+- **Lists:** transactions newest-paid-first with paging headers; ledger paging with payment/payout references; one row per booking.
+- **Admin:** read-only `admin/financial/reconcile` + `ledger-audit`, approval-gated `admin/financial/repair` (dry run → token → offsets, never deletes), wp-admin → LNKup → Reconciliation.
 
 ### v12.21.0 (Organizer Experience 2.0 — tenancy, capacity, money, Requests, operations)
 

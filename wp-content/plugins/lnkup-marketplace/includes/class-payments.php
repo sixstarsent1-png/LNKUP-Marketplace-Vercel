@@ -183,7 +183,9 @@ class LNKup_Payments {
 		}
 
 		update_post_meta( $payment_id, '_lnkup_payment_status', 'paid' );
-		update_post_meta( $payment_id, '_lnkup_paid_at', current_time( 'mysql' ) );
+		if ( '' === (string) get_post_meta( $payment_id, '_lnkup_paid_at', true ) ) {
+			update_post_meta( $payment_id, '_lnkup_paid_at', current_time( 'mysql' ) );
+		}
 		if ( $intent_id ) {
 			update_post_meta( $payment_id, '_lnkup_stripe_payment_intent', sanitize_text_field( $intent_id ) );
 		}
@@ -328,9 +330,10 @@ class LNKup_Payments {
 	/**
 	 * Read-only payment audit for organizer revenue debugging.
 	 *
-	 * @param int $payment_id Payment post ID.
+	 * @param int  $payment_id Payment post ID.
+	 * @param bool $live       Also read the PaymentIntent status from Stripe (single-payment views only).
 	 */
-	public static function get_audit( $payment_id ) {
+	public static function get_audit( $payment_id, $live = false ) {
 		$payment_id = absint( $payment_id );
 		if ( ! $payment_id || 'lnkup_payment' !== get_post_type( $payment_id ) ) {
 			return null;
@@ -339,8 +342,9 @@ class LNKup_Payments {
 		$opp_id   = (int) get_post_meta( $payment_id, '_lnkup_opportunity_id', true );
 		$opp_fee  = $opp_id ? (float) get_post_meta( $opp_id, '_lnkup_vendor_fee', true ) : 0;
 		$spot_fee = (float) get_post_meta( $payment_id, '_lnkup_vendor_spot_fee', true );
-		$breakdown = class_exists( 'LNKup_Fee_Engine' ) ? LNKup_Fee_Engine::calculate_for_payment( $payment_id ) : array();
-		$ledger    = class_exists( 'LNKup_Organizer_Wallet' ) && LNKup_Organizer_Wallet::has_connect_settlement_for_payment( $payment_id );
+		$breakdown = class_exists( 'LNKup_Fee_Engine' ) ? LNKup_Fee_Engine::settlement_breakdown( $payment_id ) : array();
+		$ledger    = class_exists( 'LNKup_Organizer_Wallet' ) && LNKup_Organizer_Wallet::has_wallet_entry_for_payment( $payment_id );
+		$settled   = class_exists( 'LNKup_Financial_Service' ) && LNKup_Financial_Service::is_settled( $payment_id );
 		$stored_checkout_fee = (float) get_post_meta( $payment_id, '_lnkup_vendor_checkout_fee', true );
 		$organizer_id        = (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true );
 		$event_id            = (int) get_post_meta( $payment_id, '_lnkup_event_id', true );
@@ -349,7 +353,7 @@ class LNKup_Payments {
 			: 0;
 		$payment_status = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
 		$stripe_intent  = (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
-		$stripe_status  = $stripe_intent && class_exists( 'LNKup_Financial_Service' )
+		$stripe_status  = $live && $stripe_intent && class_exists( 'LNKup_Financial_Service' )
 			? LNKup_Financial_Service::stripe_intent_status( $stripe_intent )
 			: '';
 		$fee_mismatch   = 'pending' === $payment_status && abs( $stored_checkout_fee - $current_checkout_fee ) > 0.01;
@@ -387,7 +391,14 @@ class LNKup_Payments {
 			'stripe_payment_intent'          => $stripe_intent,
 			'stripe_intent_status'           => $stripe_status,
 			'can_reconcile'                  => ( 'paid' !== $payment_status && $stripe_intent )
-				|| ( 'paid' === $payment_status && ! $ledger && 'destination' === (string) get_post_meta( $payment_id, '_lnkup_settlement_mode', true ) ),
+				|| ( 'paid' === $payment_status && ! $settled ),
+			'settled'                        => $settled,
+			'settled_at'                     => (string) get_post_meta( $payment_id, '_lnkup_settled_at', true ),
+			'paid_at'                        => (string) get_post_meta( $payment_id, '_lnkup_paid_at', true ),
+			'stripe_charge_id'               => (string) get_post_meta( $payment_id, '_lnkup_stripe_charge_id', true ),
+			'stripe_transfer_id'             => (string) get_post_meta( $payment_id, '_lnkup_stripe_transfer_id', true ),
+			'stripe_balance_transaction_id'  => (string) get_post_meta( $payment_id, '_lnkup_stripe_balance_transaction_id', true ),
+			'fee_breakdown_source'           => (string) ( $breakdown['breakdown_source'] ?? '' ),
 			'application_fee_cents'          => $app_fee_cents,
 			'application_fee_dollars'        => round( $app_fee_cents / 100, 2 ),
 			'expected_application_fee'       => round( $expected_app_fee, 2 ),

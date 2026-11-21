@@ -43,6 +43,8 @@ $lnkup_financial_files = array(
 	'class-stripe-webhooks.php',
 	'class-checkout.php',
 	'class-financial-service.php',
+	'class-financial-reconciliation.php',
+	'class-financial-repair.php',
 );
 
 foreach ( $lnkup_financial_files as $file ) {
@@ -66,4 +68,10 @@ if ( class_exists( 'LNKup_Financial_Health_Score' ) ) {
 }
 if ( class_exists( 'LNKup_Stripe_Connect' ) ) {
 	LNKup_Stripe_Connect::init();
+}
+if ( class_exists( 'LNKup_Financial_Reconciliation' ) ) {
+	LNKup_Financial_Reconciliation::init();
+}
+if ( class_exists( 'LNKup_Financial_Repair' ) ) {
+	LNKup_Financial_Repair::init();
 }

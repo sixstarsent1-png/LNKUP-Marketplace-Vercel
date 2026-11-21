@@ -350,6 +350,43 @@ class LNKup_Fee_Engine {
 	}
 
 	/**
+	 * Fee breakdown for settling an already-charged payment.
+	 *
+	 * Starts from the charge-time snapshot (what was sent to Stripe), overlays Stripe's
+	 * actual destination amounts when known, and only falls back to today's fee settings
+	 * for legacy payments without a snapshot.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 */
+	public static function settlement_breakdown( $payment_id ) {
+		$fresh    = self::calculate_for_payment( $payment_id );
+		$snapshot = json_decode( (string) get_post_meta( $payment_id, '_lnkup_fee_breakdown', true ), true );
+		$has_snap = is_array( $snapshot ) && isset( $snapshot['platform_fee'] );
+		$out      = $has_snap ? array_merge( $fresh, $snapshot ) : $fresh;
+		$source   = $has_snap ? 'charge_snapshot' : 'calculated';
+
+		$charge_cents = (int) get_post_meta( $payment_id, '_lnkup_stripe_charge_amount_cents', true );
+		$fee_cents    = (int) get_post_meta( $payment_id, '_lnkup_application_fee_cents', true );
+		$destination  = (string) get_post_meta( $payment_id, '_lnkup_stripe_destination_account', true );
+		if ( '' !== $destination && $charge_cents > 0 && $fee_cents >= 0 && $fee_cents < $charge_cents ) {
+			$out['gross_amount']       = round( $charge_cents / 100, 2 );
+			$out['platform_fee']       = round( $fee_cents / 100, 2 );
+			$out['lnkup_platform_fee'] = $out['platform_fee'];
+			$out['organizer_net']      = round( ( $charge_cents - $fee_cents ) / 100, 2 );
+			$source                    = 'stripe';
+		}
+
+		if ( ! $has_snap || ! isset( $snapshot['reserve_amount'] ) ) {
+			$settings              = lnkup_get_settings();
+			$out['reserve_amount'] = round( (float) $out['organizer_net'] * ( (float) ( $settings['reserve_percent'] ?? 0 ) / 100 ), 2 );
+			$out['reserve_hold']   = $out['reserve_amount'];
+		}
+		$out['payout_eligible_amount'] = max( 0, round( (float) $out['organizer_net'] - (float) $out['reserve_amount'], 2 ) );
+		$out['breakdown_source']       = $source;
+		return $out;
+	}
+
+	/**
 	 * Seed default global fee rule if none exist.
 	 */
 	public static function seed_defaults() {

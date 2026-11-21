@@ -176,7 +176,7 @@ class LNKup_Treasury_Tables {
 				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 				wallet_id bigint(20) unsigned NOT NULL DEFAULT 0,
 				user_id bigint(20) unsigned NOT NULL DEFAULT 0,
-				entry_type varchar(16) NOT NULL DEFAULT 'credit',
+				entry_type varchar(32) NOT NULL DEFAULT 'credit',
 				amount decimal(14,2) NOT NULL DEFAULT 0.00,
 				balance_after decimal(14,2) NOT NULL DEFAULT 0.00,
 				source_type varchar(32) NOT NULL DEFAULT '',
@@ -185,11 +185,14 @@ class LNKup_Treasury_Tables {
 				payout_id bigint(20) unsigned NOT NULL DEFAULT 0,
 				note varchar(255) NOT NULL DEFAULT '',
 				metadata longtext,
+				idempotency_key varchar(96) DEFAULT NULL,
 				created_at datetime NOT NULL,
 				PRIMARY KEY (id),
 				KEY wallet_id (wallet_id),
 				KEY user_id (user_id),
-				KEY source (source_type, source_id)
+				KEY source (source_type, source_id),
+				KEY payment_post_id (payment_post_id),
+				UNIQUE KEY idempotency_key (idempotency_key)
 			) {$charset};"
 		);
 

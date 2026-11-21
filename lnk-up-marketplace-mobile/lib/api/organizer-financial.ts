@@ -39,6 +39,11 @@ export type OrganizerFinancialSnapshot = {
   stripeSynced?: boolean
   balanceSource?: string
   connectSettlement?: number
+  /** Stripe balance could not be read: available/pending are unknown, never shown as $0. */
+  balanceUnavailable?: boolean
+  /** Why Cash Out is disabled (server money contract), e.g. "no_available_balance". */
+  cashOutReason?: string
+  lastSyncedAt?: string
   categories: MoneyCategory[]
   connect: OrganizerConnectState
 }
@@ -49,6 +54,59 @@ export type MoneyCategory = {
   label: string
   amount: number
   hint?: string
+  /** Source could not be read; render "Unavailable" instead of the amount. */
+  unavailable?: boolean
+}
+
+/** Server money contract v1 (`money` on organizer financial endpoints). */
+export type MoneyContractMetric = {
+  cents: number | null
+  status: "ok" | "unavailable" | string
+  source: string
+  synced_at: string | null
+}
+
+export type MoneyContract = {
+  version: number
+  settlement_mode: string
+  last_synced_at?: string | null
+  payouts?: { state: string; label: string; method?: string; can_cash_out: boolean; cash_out_reason: string }
+  metrics: Record<string, MoneyContractMetric | undefined>
+}
+
+/** Category keys from `money_categories` → contract metric keys. */
+const CONTRACT_METRIC_FOR_CATEGORY: Record<string, string> = {
+  gross: "collected",
+  fees: "platform_fees",
+  refunds: "refunds",
+  net: "net_earnings",
+  pending: "pending",
+  available: "available",
+  in_transit: "in_transit",
+  paid_out: "paid_out",
+}
+
+export function readMoneyContract(raw: unknown): MoneyContract | null {
+  const money = raw && typeof raw === "object" ? (raw as { money?: unknown }).money : undefined
+  if (!money || typeof money !== "object") return null
+  const contract = money as MoneyContract
+  return contract.metrics && typeof contract.metrics === "object" ? contract : null
+}
+
+/** Dollars for a readable metric; undefined when missing or unavailable. */
+export function contractDollars(metric: MoneyContractMetric | undefined): number | undefined {
+  if (!metric || metric.status !== "ok" || metric.cents == null) return undefined
+  return metric.cents / 100
+}
+
+const CASH_OUT_REASON_COPY: Record<string, string> = {
+  payouts_not_active: "Finish payout setup to cash out.",
+  balance_unavailable: "We couldn’t read your payout balance right now. Pull to refresh in a moment.",
+  no_available_balance: "Nothing is available to cash out yet. New card payments usually become available within a few days.",
+}
+
+export function cashOutReasonCopy(reason?: string): string | undefined {
+  return reason ? CASH_OUT_REASON_COPY[reason] : undefined
 }
 
 export type ConnectStateKind =
@@ -410,6 +468,27 @@ export function mapOrganizerFinancialSnapshot(data: unknown): OrganizerFinancial
         ? Boolean((d.stripe_balance as { synced?: boolean }).synced)
         : undefined
 
+  const money = readMoneyContract(d)
+  if (money) {
+    return applyMoneyContract(
+      {
+        paidVendorCount: pickNumber(stats?.paid, stats?.paid_vendors, d.paid_vendor_count, d.paid_vendors),
+        paymentRequiredCount: pickNumber(
+          stats?.payment_required,
+          stats?.unpaid,
+          stats?.awaiting_payment,
+          d.payment_required_count,
+          d.outstanding_vendors,
+        ),
+        currency: "USD",
+        wordpressFinancialUrl: getOrganizerFinancialUrl(),
+        categories: mapMoneyCategories(d.money_categories),
+        connect: mapConnectState(connect, money.settlement_mode),
+      },
+      money,
+    )
+  }
+
   return {
     collectedToDate: collectedToDate ?? (hasDashboardRevenue ? 0 : undefined),
     pendingPayments:
@@ -464,6 +543,50 @@ export function mapOrganizerFinancialSnapshot(data: unknown): OrganizerFinancial
     wordpressFinancialUrl: getOrganizerFinancialUrl(),
     categories: mapMoneyCategories(d.money_categories),
     connect: mapConnectState(connect, display.settlement_mode ?? wallet?.settlement_mode),
+  }
+}
+
+/** Contract figures win over legacy fields; unavailable metrics stay undefined, never 0. */
+function applyMoneyContract(
+  base: Pick<
+    OrganizerFinancialSnapshot,
+    "paidVendorCount" | "paymentRequiredCount" | "currency" | "wordpressFinancialUrl" | "categories" | "connect"
+  >,
+  money: MoneyContract,
+): OrganizerFinancialSnapshot {
+  const m = money.metrics
+  const categories = base.categories.map((category) => {
+    const metric = m[CONTRACT_METRIC_FOR_CATEGORY[category.key] ?? ""]
+    if (!metric) return category
+    const dollars = contractDollars(metric)
+    return dollars == null ? { ...category, amount: 0, unavailable: true } : { ...category, amount: dollars }
+  })
+  const payouts = money.payouts
+  const eligible = payouts ? payouts.cash_out_reason !== "payouts_not_active" : base.connect.canCashout
+  const payoutStatus: OrganizerFinancialSnapshot["payoutStatus"] = !payouts
+    ? "unknown"
+    : payouts.state === "active" || payouts.state === "manual"
+      ? "active"
+      : payouts.state === "verifying"
+        ? "pending"
+        : "setup_required"
+
+  return {
+    ...base,
+    categories,
+    collectedToDate: contractDollars(m.collected),
+    pendingPayments: contractDollars(m.pending),
+    availableBalance: contractDollars(m.available),
+    pendingBalance: contractDollars(m.pending),
+    reserveBalance: contractDollars(m.reserve),
+    connectSettlement: contractDollars(m.lnkup_settled),
+    stripeSynced: money.settlement_mode === "destination" ? m.available?.status === "ok" : undefined,
+    balanceSource: m.available?.source,
+    balanceUnavailable: m.available?.status === "unavailable",
+    cashOutReason: payouts?.can_cash_out ? undefined : payouts?.cash_out_reason || undefined,
+    lastSyncedAt: money.last_synced_at ?? undefined,
+    payoutStatus,
+    connect: { ...base.connect, canCashout: eligible },
   }
 }
 

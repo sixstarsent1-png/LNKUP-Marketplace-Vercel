@@ -11,19 +11,120 @@ class LNKup_Financial_Cron {
 
 	const HOOK = 'lnkup_financial_daily';
 
+	const HOURLY_HOOK = 'lnkup_financial_hourly';
+
+	/** Option holding the last hourly reconciliation run summary. */
+	const HEALTH_OPTION = 'lnkup_fin_reconcile_health';
+
+	/** Max users synced per hourly run (each sync may call Stripe). */
+	const SYNC_BATCH = 25;
+
 	public static function init() {
 		add_action( self::HOOK, array( __CLASS__, 'run_daily' ) );
+		add_action( self::HOURLY_HOOK, array( __CLASS__, 'run_hourly' ) );
 		add_action( 'lnkup_financial_reminder', array( __CLASS__, 'send_reminder_email' ), 10, 2 );
+		add_action( 'init', array( __CLASS__, 'maybe_schedule_hourly' ), 20 );
 	}
 
 	public static function schedule() {
 		if ( ! wp_next_scheduled( self::HOOK ) ) {
 			wp_schedule_event( time() + 7200, 'daily', self::HOOK );
 		}
+		self::maybe_schedule_hourly();
+	}
+
+	public static function maybe_schedule_hourly() {
+		if ( ! wp_next_scheduled( self::HOURLY_HOOK ) ) {
+			wp_schedule_event( time() + 300, 'hourly', self::HOURLY_HOOK );
+		}
 	}
 
 	public static function unschedule() {
 		wp_clear_scheduled_hook( self::HOOK );
+		wp_clear_scheduled_hook( self::HOURLY_HOOK );
+	}
+
+	/**
+	 * Hourly: retry failed webhooks, then sync users with payments that are unpaid-with-a-Stripe-
+	 * reference or paid-but-unsettled since the auto-recovery cutoff. Serialized by a DB lock.
+	 */
+	public static function run_hourly() {
+		$started = microtime( true );
+		$result  = LNKup_Financial_Service::with_lock(
+			'fin_hourly',
+			static function () {
+				LNKup_Stripe_Webhooks::retry_failed();
+				$synced = array();
+				$errors = array();
+				foreach ( self::users_needing_sync() as $row ) {
+					$sync = 'organizer' === $row['role']
+						? LNKup_Financial_Service::sync_organizer( $row['user_id'] )
+						: LNKup_Financial_Service::sync_vendor( $row['user_id'] );
+					if ( is_wp_error( $sync ) ) {
+						$errors[] = $row['role'] . ':' . $row['user_id'] . ' ' . $sync->get_error_code();
+						continue;
+					}
+					$synced[] = $row['role'] . ':' . $row['user_id'];
+				}
+				return array( 'synced' => $synced, 'errors' => $errors );
+			},
+			0
+		);
+		$summary = array(
+			'ran_at'      => current_time( 'mysql' ),
+			'duration_ms' => (int) round( ( microtime( true ) - $started ) * 1000 ),
+			'skipped'     => is_wp_error( $result ),
+			'synced'      => is_wp_error( $result ) ? array() : $result['synced'],
+			'errors'      => is_wp_error( $result ) ? array( $result->get_error_code() ) : $result['errors'],
+		);
+		update_option( self::HEALTH_OPTION, $summary, false );
+		return $summary;
+	}
+
+	/**
+	 * Organizers and vendors with payments the hourly sync can act on.
+	 *
+	 * @return array<int, array{user_id:int, role:string}>
+	 */
+	public static function users_needing_sync() {
+		global $wpdb;
+		$cutoff = (string) get_option( 'lnkup_fin_auto_recovery_since', '' );
+		if ( '' === $cutoff ) {
+			return array();
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT p.ID, st.meta_value AS status, org.meta_value AS organizer_id, ven.meta_value AS vendor_id
+				FROM {$wpdb->posts} p
+				INNER JOIN {$wpdb->postmeta} st ON st.post_id = p.ID AND st.meta_key = '_lnkup_payment_status'
+				LEFT JOIN {$wpdb->postmeta} org ON org.post_id = p.ID AND org.meta_key = '_lnkup_organizer_user_id'
+				LEFT JOIN {$wpdb->postmeta} ven ON ven.post_id = p.ID AND ven.meta_key = '_lnkup_vendor_user_id'
+				LEFT JOIN {$wpdb->postmeta} pi ON pi.post_id = p.ID AND pi.meta_key = '_lnkup_stripe_payment_intent'
+				LEFT JOIN {$wpdb->postmeta} cs ON cs.post_id = p.ID AND cs.meta_key = '_lnkup_stripe_checkout_session'
+				LEFT JOIN {$wpdb->postmeta} sa ON sa.post_id = p.ID AND sa.meta_key = '_lnkup_settled_at'
+				LEFT JOIN {$wpdb->postmeta} pa ON pa.post_id = p.ID AND pa.meta_key = '_lnkup_paid_at'
+				WHERE p.post_type = 'lnkup_payment'
+				AND (
+					( st.meta_value IN ('pending','processing','failed') AND p.post_date >= %s
+						AND ( COALESCE(pi.meta_value,'') <> '' OR COALESCE(cs.meta_value,'') <> '' ) )
+					OR ( st.meta_value = 'paid' AND COALESCE(sa.meta_value,'') = '' AND COALESCE(NULLIF(pa.meta_value,''), p.post_date) >= %s )
+				)
+				ORDER BY p.ID DESC LIMIT 200",
+				$cutoff,
+				$cutoff
+			),
+			ARRAY_A
+		);
+		$users = array();
+		foreach ( (array) $rows as $row ) {
+			if ( 'paid' === $row['status'] && absint( $row['organizer_id'] ) ) {
+				$users[ 'organizer:' . absint( $row['organizer_id'] ) ] = array( 'user_id' => absint( $row['organizer_id'] ), 'role' => 'organizer' );
+			} elseif ( absint( $row['vendor_id'] ) ) {
+				$users[ 'vendor:' . absint( $row['vendor_id'] ) ] = array( 'user_id' => absint( $row['vendor_id'] ), 'role' => 'vendor' );
+			}
+		}
+		return array_slice( array_values( $users ), 0, self::SYNC_BATCH );
 	}
 
 	public static function run_daily() {

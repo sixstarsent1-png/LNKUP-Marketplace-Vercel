@@ -47,7 +47,11 @@ class LNKup_Stripe_Webhooks {
 			$result = null;
 			switch ( $type ) {
 				case 'checkout.session.completed':
+				case 'checkout.session.async_payment_succeeded':
 					$result = self::handle_checkout_completed( $obj );
+					break;
+				case 'checkout.session.async_payment_failed':
+					self::handle_checkout_async_failed( $obj );
 					break;
 				case 'payment_intent.succeeded':
 					$result = self::handle_payment_intent_succeeded( $obj );
@@ -83,8 +87,22 @@ class LNKup_Stripe_Webhooks {
 					break;
 				case 'payout.paid':
 				case 'payout.created':
+				case 'payout.updated':
 				case 'payout.failed':
+				case 'payout.canceled':
 					LNKup_Stripe_Connect::handle_payout_event( $obj, $type );
+					break;
+				case 'charge.dispute.closed':
+					LNKup_Financial_Audit::log(
+						'dispute_closed',
+						'payment',
+						self::payment_from_intent( (string) ( $obj['payment_intent'] ?? '' ) ),
+						array(
+							'dispute_id' => sanitize_text_field( (string) ( $obj['id'] ?? '' ) ),
+							'status'     => sanitize_key( (string) ( $obj['status'] ?? '' ) ),
+							'amount'     => (int) ( $obj['amount'] ?? 0 ),
+						)
+					);
 					break;
 				default:
 					break;
@@ -229,6 +247,25 @@ class LNKup_Stripe_Webhooks {
 	}
 
 	/**
+	 * Delayed Checkout payment (ACH) failed after session completion.
+	 *
+	 * @param array $session Checkout session.
+	 */
+	private static function handle_checkout_async_failed( $session ) {
+		$payment_id = absint( $session['client_reference_id'] ?? ( $session['metadata']['payment_post_id'] ?? 0 ) );
+		if ( ! $payment_id ) {
+			return;
+		}
+		$intent_id = is_string( $session['payment_intent'] ?? null ) ? $session['payment_intent'] : (string) ( $session['payment_intent']['id'] ?? '' );
+		self::handle_payment_intent_failed(
+			array(
+				'id'       => $intent_id,
+				'metadata' => array( 'payment_post_id' => (string) $payment_id ),
+			)
+		);
+	}
+
+	/**
 	 * ACH / delayed PaymentIntent — record processing without finalizing.
 	 *
 	 * @param array $intent Payment intent.
@@ -286,6 +323,14 @@ class LNKup_Stripe_Webhooks {
 	private static function handle_payment_intent_failed( $intent ) {
 		$payment_id = self::resolve_payment_id( $intent );
 		if ( $payment_id ) {
+			// A failed attempt must never overwrite a completed payment (events can arrive out of
+			// order, and a retry may succeed on a newer PaymentIntent).
+			$status = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
+			$stored = (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
+			if ( in_array( $status, array( 'paid', 'refunded', 'disputed' ), true ) || ( '' !== $stored && $stored !== (string) ( $intent['id'] ?? '' ) ) ) {
+				LNKup_Financial_Audit::log( 'payment_failed_ignored', 'payment', $payment_id, array( 'status' => $status, 'intent_id' => (string) ( $intent['id'] ?? '' ) ) );
+				return;
+			}
 			update_post_meta( $payment_id, '_lnkup_payment_status', 'failed' );
 			LNKup_Transactions::record_from_payment_post( $payment_id, 'payment_failed' );
 			LNKup_Financial_Activity::record( 'payment_failed', array(

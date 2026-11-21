@@ -3,7 +3,7 @@
  * Plugin Name: LNKup Marketplace
  * Plugin URI: https://lnkup.com
  * Description: Custom marketplace functionality for LNKup — vendor opportunities, applications, payments, and event management.
- * Version: 12.21.0
+ * Version: 12.22.0
  * Author: LNKup
  * Author URI: https://lnkup.com
  * License: GPL v2 or later
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'LNKUP_VERSION', '12.21.0' );
+define( 'LNKUP_VERSION', '12.22.0' );
 define( 'LNKUP_PLUGIN_FILE', __FILE__ );
 define( 'LNKUP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LNKUP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -276,6 +276,7 @@ $lnkup_core_files = array(
 	'includes/class-financial-cron.php',
 	'admin/class-financial-admin.php',
 	'admin/class-financial-connect-admin.php',
+	'admin/class-financial-reconciliation-admin.php',
 	'includes/class-growth-tables.php',
 	'includes/class-growth-kpis.php',
 	'includes/class-growth-snapshots.php',
@@ -370,6 +371,7 @@ function lnkup_marketplace_init() {
 	LNKup_Financial_Cron::init();
 	LNKup_Financial_Admin::init();
 	LNKup_Financial_Connect_Admin::init();
+	LNKup_Financial_Reconciliation_Admin::init();
 	LNKup_Financial_Service::init();
 	LNKup_Invoices::init();
 	LNKup_Growth_REST::init();
@@ -448,6 +450,11 @@ function lnkup_maybe_upgrade_db() {
 	} catch ( Throwable $page_error ) {
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 		error_log( 'LNKup page migration failed: ' . $page_error->getMessage() );
+	}
+
+	// Payments paid before this moment are only repaired through the approval-gated repair tool.
+	if ( '' === (string) get_option( 'lnkup_fin_auto_recovery_since', '' ) ) {
+		add_option( 'lnkup_fin_auto_recovery_since', current_time( 'mysql' ), '', false );
 	}
 
 	LNKup_Marketplace_Cron::schedule();

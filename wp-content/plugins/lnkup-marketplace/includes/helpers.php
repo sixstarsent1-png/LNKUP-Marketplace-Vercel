@@ -1639,7 +1639,33 @@ function lnkup_get_payments_for_user( $user_id, $role = 'vendor' ) {
 }
 
 /**
- * One display row per event. Installments add up. A fee line and a full charge keep the larger total.
+ * When money moved for a payment: paid date, else creation date (MySQL datetime).
+ *
+ * @param WP_Post $payment Payment post.
+ */
+function lnkup_payment_activity_date( $payment ) {
+	$paid_at = (string) get_post_meta( $payment->ID, '_lnkup_paid_at', true );
+	return '' !== $paid_at ? $paid_at : (string) $payment->post_date;
+}
+
+/**
+ * Sort display rows newest money first (paid date, then creation date).
+ *
+ * @param array $rows Rows from lnkup_payment_display_rows().
+ */
+function lnkup_sort_payment_rows_by_activity( $rows ) {
+	usort(
+		$rows,
+		static function ( $a, $b ) {
+			return strcmp( lnkup_payment_activity_date( $b['payment'] ), lnkup_payment_activity_date( $a['payment'] ) );
+		}
+	);
+	return $rows;
+}
+
+/**
+ * One display row per booking (application). Installments add up. A fee line and a full charge
+ * for the same booking keep the larger total. Separate bookings at the same event stay separate.
  *
  * @param array $payments Payment posts.
  * @return array<int, array{payment: WP_Post, amount: float}>
@@ -1650,14 +1676,8 @@ function lnkup_payment_display_rows( $payments ) {
 		if ( ! $payment instanceof WP_Post ) {
 			continue;
 		}
-		$event_id = (int) get_post_meta( $payment->ID, '_lnkup_event_id', true );
-		if ( ! $event_id ) {
-			$opp_id = (int) get_post_meta( $payment->ID, '_lnkup_opportunity_id', true );
-			if ( $opp_id ) {
-				$event_id = (int) get_post_meta( $opp_id, '_lnkup_event_id', true );
-			}
-		}
-		$key            = $event_id > 0 ? 'event-' . $event_id : 'pay-' . $payment->ID;
+		$app_id         = (int) get_post_meta( $payment->ID, '_lnkup_application_id', true );
+		$key            = $app_id > 0 ? 'app-' . $app_id : 'pay-' . $payment->ID;
 		$amount         = (float) get_post_meta( $payment->ID, '_lnkup_total_amount', true );
 		$is_installment = (int) get_post_meta( $payment->ID, '_lnkup_installment_id', true ) > 0;
 		if ( ! isset( $groups[ $key ] ) ) {

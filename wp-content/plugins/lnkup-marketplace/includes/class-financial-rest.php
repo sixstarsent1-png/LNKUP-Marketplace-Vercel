@@ -35,6 +35,11 @@ class LNKup_Financial_REST {
 			'callback' => array( __CLASS__, 'transactions' ),
 		) ) );
 
+		register_rest_route( self::NS, '/financial/sync', array_merge( $fin, array(
+			'methods'  => WP_REST_Server::CREATABLE,
+			'callback' => array( __CLASS__, 'sync' ),
+		) ) );
+
 		register_rest_route( self::NS, '/financial/invoices', array_merge( $fin, array(
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'invoices' ),
@@ -581,31 +586,57 @@ class LNKup_Financial_REST {
 	}
 
 	public static function transactions( $request ) {
+		$response = self::transactions_list( $request );
+		if ( $response instanceof WP_REST_Response && ! $response->is_error() ) {
+			$limit = min( 100, max( 1, absint( $request->get_param( 'limit' ) ?: 25 ) ) );
+			$total = LNKup_Transactions::count_for_user( get_current_user_id(), self::resolve_financial_role( $request ) );
+			$response->header( 'X-WP-Total', (string) $total );
+			$response->header( 'X-WP-TotalPages', (string) max( 1, (int) ceil( $total / $limit ) ) );
+		}
+		return $response;
+	}
+
+	/**
+	 * @param WP_REST_Request $request Request.
+	 */
+	private static function transactions_list( $request ) {
 		return self::respond( function () use ( $request ) {
-			$role = self::resolve_financial_role( $request );
-			$uid  = get_current_user_id();
-			if ( 'organizer' === $role && class_exists( 'LNKup_Financial_Service' ) ) {
-				$lock = 'lnkup_org_reconcile_' . $uid;
-				if ( ! get_transient( $lock ) ) {
-					try {
-						LNKup_Financial_Service::reconcile_organizer_payments( $uid );
-					} catch ( Throwable $e ) {
-						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-							// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-							error_log( 'LNKup reconcile on transactions: ' . $e->getMessage() );
-						}
-					}
-					set_transient( $lock, 1, MINUTE_IN_SECONDS );
-				}
-			}
-			$rows = LNKup_Transactions::list_for_user( array(
+			$role  = self::resolve_financial_role( $request );
+			$uid   = get_current_user_id();
+			$limit = min( 100, max( 1, absint( $request->get_param( 'limit' ) ?: 25 ) ) );
+			$page  = max( 1, absint( $request->get_param( 'page' ) ?: 1 ) );
+			$rows  = LNKup_Transactions::list_for_user( array(
 				'user_id' => $uid,
 				'role'    => $role,
-				'limit'   => $request->get_param( 'limit' ) ?: 25,
+				'limit'   => $limit,
+				'offset'  => ( $page - 1 ) * $limit,
 				'all'     => LNKup_Capabilities::user_has_manage_all() && $request->get_param( 'all' ),
 			) );
 			$rows = is_array( $rows ) ? $rows : array();
 			return array_map( array( 'LNKup_Transactions', 'format' ), $rows );
+		} );
+	}
+
+	/**
+	 * Explicit "refresh from Stripe" for the signed-in organizer or vendor (rate limited).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function sync( $request ) {
+		return self::respond( function () use ( $request ) {
+			$uid      = get_current_user_id();
+			$role     = self::resolve_financial_role( $request );
+			$throttle = 'lnkup_fin_sync_' . $role . '_' . $uid;
+			if ( get_transient( $throttle ) ) {
+				return array(
+					'throttled' => true,
+					'synced_at' => (string) get_user_meta( $uid, '_lnkup_financial_synced_at', true ),
+				);
+			}
+			set_transient( $throttle, 1, 30 );
+			return 'organizer' === $role
+				? LNKup_Financial_Service::sync_organizer( $uid )
+				: LNKup_Financial_Service::sync_vendor( $uid );
 		} );
 	}
 
@@ -954,7 +985,7 @@ class LNKup_Financial_REST {
 		if ( ! self::can_access_payment( $payment_id ) ) {
 			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 		}
-		$audit = LNKup_Payments::get_audit( $payment_id );
+		$audit = LNKup_Payments::get_audit( $payment_id, true );
 		if ( ! $audit ) {
 			return new WP_Error( 'not_found', __( 'Payment not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}
@@ -1187,6 +1218,7 @@ class LNKup_Financial_REST {
 				$payload,
 				array(
 					'balances' => $payload['wallet'],
+					'money'    => LNKup_Financial_Service::organizer_money_contract( get_current_user_id(), $payload ),
 				)
 			);
 		} );
@@ -1198,8 +1230,15 @@ class LNKup_Financial_REST {
 		} );
 	}
 
-	public static function organizer_wallet_entries() {
-		return rest_ensure_response( LNKup_Organizer_Wallet::list_entries( get_current_user_id() ) );
+	public static function organizer_wallet_entries( $request = null ) {
+		$uid      = get_current_user_id();
+		$per_page = $request instanceof WP_REST_Request ? min( 100, max( 1, absint( $request->get_param( 'per_page' ) ?: 50 ) ) ) : 50;
+		$page     = $request instanceof WP_REST_Request ? max( 1, absint( $request->get_param( 'page' ) ?: 1 ) ) : 1;
+		$total    = LNKup_Organizer_Wallet::count_entries( $uid );
+		$response = rest_ensure_response( LNKup_Organizer_Wallet::list_entries( $uid, $per_page, ( $page - 1 ) * $per_page ) );
+		$response->header( 'X-WP-Total', (string) $total );
+		$response->header( 'X-WP-TotalPages', (string) max( 1, (int) ceil( $total / $per_page ) ) );
+		return $response;
 	}
 
 	public static function organizer_cashout( $request ) {

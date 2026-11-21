@@ -22,6 +22,7 @@ import {
   CONNECT_APP_DEEP_LINK,
   activityStatusLabel,
   cancelOrganizerPayout,
+  cashOutReasonCopy,
   connectStateCopy,
   fetchConnectLoginLink,
   fetchConnectOnboardingLink,
@@ -50,6 +51,7 @@ WebBrowser.maybeCompleteAuthSession()
 
 const HERO_KEY = "available"
 const PAYOUT_HISTORY_LIMIT = 10
+const UNAVAILABLE_LABEL = "Unavailable"
 
 export default function OrganizerMoneyScreen() {
   const { auth } = useAuth()
@@ -217,7 +219,10 @@ export default function OrganizerMoneyScreen() {
   const listCategories =
     summary?.categories.filter((item) => item.key !== HERO_KEY && item !== netCategory) ?? []
   const heroAmount = heroCategory?.amount ?? availableAmt
-  const cashoutEnabled = Boolean(connect?.canCashout) && heroAmount > 0
+  const heroUnavailable = Boolean(heroCategory?.unavailable || summary?.balanceUnavailable)
+  const heroText = heroUnavailable ? UNAVAILABLE_LABEL : formatMoneyOrZero(heroAmount, currency)
+  const cashoutEnabled = Boolean(connect?.canCashout) && !heroUnavailable && heroAmount > 0
+  const cashOutReason = cashOutReasonCopy(summary?.cashOutReason)
   const anyConnectBusy = onboardBusy || manageBusy
   const visiblePayouts = (payouts ?? []).slice(0, PAYOUT_HISTORY_LIMIT)
 
@@ -264,11 +269,11 @@ export default function OrganizerMoneyScreen() {
               <View
                 style={styles.hero}
                 accessible
-                accessibilityLabel={`${heroCategory?.label ?? "Available to cash out"} ${formatMoneyOrZero(heroAmount, currency)}`}
+                accessibilityLabel={`${heroCategory?.label ?? "Available to cash out"} ${heroText}`}
               >
                 <Eyebrow style={styles.heroEyebrow}>{heroCategory?.label ?? "Available to cash out"}</Eyebrow>
                 <Text style={styles.heroValue} adjustsFontSizeToFit numberOfLines={1}>
-                  {formatMoneyOrZero(heroAmount, currency)}
+                  {heroText}
                 </Text>
                 <Meta style={styles.heroBody}>
                   {netCategory
@@ -326,7 +331,7 @@ export default function OrganizerMoneyScreen() {
                 <View style={styles.cashoutBlock}>
                   <FormField
                     label="Cash out amount"
-                    hint={`Available to cash out: ${formatMoneyOrZero(heroAmount, currency)}`}
+                    hint={`Available to cash out: ${heroText}`}
                     value={cashoutAmount}
                     onChangeText={(raw) => {
                       setCashoutError(null)
@@ -347,7 +352,7 @@ export default function OrganizerMoneyScreen() {
                     onPress={() => void cashout()}
                   />
                   {!cashoutEnabled ? (
-                    <Meta>Nothing to cash out yet. Paid booth fees show here once they settle.</Meta>
+                    <Meta>{cashOutReason ?? "Nothing to cash out yet. Paid booth fees show here once they settle."}</Meta>
                   ) : null}
                 </View>
               ) : null}
@@ -489,7 +494,11 @@ function MoneyBreakdown({ categories, currency }: { categories: MoneyCategory[];
           key={category.key}
           title={category.label}
           meta={category.hint}
-          rightSlot={<Text style={styles.amount}>{formatMoneyOrZero(category.amount, currency)}</Text>}
+          rightSlot={
+            <Text style={styles.amount}>
+              {category.unavailable ? UNAVAILABLE_LABEL : formatMoneyOrZero(category.amount, currency)}
+            </Text>
+          }
         />
       ))}
     </ListGroup>

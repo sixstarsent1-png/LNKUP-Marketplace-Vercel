@@ -8,6 +8,11 @@ export type OrganizerFinancialSnapshot = {
   availableBalance?: number
   pendingBalance?: number
   reserveBalance?: number
+  paidOut?: number
+  /** Stripe balance could not be read; available/pending are unknown, not zero. */
+  balanceUnavailable?: boolean
+  canCashOut?: boolean
+  cashOutReason?: string
   payoutStatus?: "active" | "setup_required" | "pending" | "unknown"
   currency?: string
   wordpressFinancialUrl?: string
@@ -15,6 +20,43 @@ export type OrganizerFinancialSnapshot = {
 }
 
 export type OrganizerMoneySummary = OrganizerFinancialSnapshot
+
+type MoneyMetric = { cents: number | null; status: string; source: string; synced_at: string | null }
+
+type MoneyContract = {
+  version: number
+  settlement_mode: string
+  payouts?: { state: string; label: string; can_cash_out: boolean; cash_out_reason: string }
+  metrics: Record<string, MoneyMetric | undefined>
+}
+
+function readMoneyContract(d: Record<string, unknown>): MoneyContract | null {
+  const money = d.money as MoneyContract | undefined
+  return money && typeof money === "object" && money.metrics ? money : null
+}
+
+/** Dollars for an ok metric; undefined when missing or unavailable (never a fake 0). */
+function metricDollars(metric: MoneyMetric | undefined): number | undefined {
+  if (!metric || metric.status !== "ok" || metric.cents == null) return undefined
+  return metric.cents / 100
+}
+
+function payoutStatusFromContract(state: string): OrganizerFinancialSnapshot["payoutStatus"] {
+  switch (state) {
+    case "active":
+    case "manual":
+      return "active"
+    case "verifying":
+      return "pending"
+    case "setup_incomplete":
+    case "action_required":
+    case "paused":
+    case "not_connected":
+      return "setup_required"
+    default:
+      return "unknown"
+  }
+}
 
 export type OrganizerFinancialActivityItem = {
   id: string
@@ -79,6 +121,28 @@ export function mapOrganizerFinancialSnapshot(data: unknown): OrganizerFinancial
     Number(stats?.paid ?? stats?.paid_vendors ?? d.paid_vendor_count ?? d.paid_vendors ?? 0) || undefined
   const paymentRequiredCount =
     Number(stats?.payment_required ?? stats?.awaiting_payment ?? d.payment_required_count ?? 0) || undefined
+
+  const money = readMoneyContract(d)
+  if (money) {
+    const m = money.metrics
+    return {
+      collectedToDate: metricDollars(m.collected),
+      pendingPayments: pending,
+      paidVendorCount,
+      paymentRequiredCount,
+      availableBalance: metricDollars(m.available),
+      pendingBalance: metricDollars(m.pending),
+      reserveBalance: metricDollars(m.reserve),
+      paidOut: metricDollars(m.paid_out),
+      balanceUnavailable: m.available?.status === "unavailable",
+      canCashOut: money.payouts?.can_cash_out ?? false,
+      cashOutReason: money.payouts?.cash_out_reason || undefined,
+      payoutStatus: payoutStatusFromContract(money.payouts?.state ?? ""),
+      currency: "USD",
+      wordpressFinancialUrl: getOrganizerFinancialUrl(),
+      raw: data,
+    }
+  }
 
   return {
     collectedToDate: collected,

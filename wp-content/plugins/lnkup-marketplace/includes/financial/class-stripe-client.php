@@ -74,6 +74,46 @@ class LNKup_Stripe_Client {
 	}
 
 	/**
+	 * Read-only GET against any Stripe resource (supports expand[] and list filters).
+	 *
+	 * Always uses the HTTP transport so arbitrary list/retrieve paths work regardless
+	 * of SDK resource coverage. Never sends POST/DELETE.
+	 *
+	 * @param string $path           Resource path, e.g. "payment_intents/pi_123".
+	 * @param array  $params         Query params.
+	 * @param string $stripe_account Optional connected account ID.
+	 * @return array|WP_Error
+	 */
+	public function read( $path, $params = array(), $stripe_account = '' ) {
+		if ( ! $this->secret_key ) {
+			return new WP_Error( 'not_configured', __( 'Stripe is not configured.', 'lnkup-marketplace' ) );
+		}
+		$path = ltrim( (string) $path, '/' );
+		if ( '' === $path || ! preg_match( '#^[a-z_]+(/[A-Za-z0-9_]+)*$#', $path ) ) {
+			return new WP_Error( 'invalid_path', __( 'Invalid Stripe resource path.', 'lnkup-marketplace' ) );
+		}
+		$headers = array( 'Authorization' => 'Bearer ' . $this->secret_key );
+		if ( '' !== $stripe_account ) {
+			$headers['Stripe-Account'] = $stripe_account;
+		}
+		$url      = 'https://api.stripe.com/v1/' . $path . ( $params ? '?' . http_build_query( $params ) : '' );
+		$response = wp_remote_get( $url, array( 'headers' => $headers, 'timeout' => 30 ) );
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		$body = json_decode( wp_remote_retrieve_body( $response ), true );
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( $code >= 400 || ! is_array( $body ) || ! empty( $body['error'] ) ) {
+			return new WP_Error(
+				'stripe_error',
+				(string) ( $body['error']['message'] ?? __( 'Stripe API error.', 'lnkup-marketplace' ) ),
+				array( 'status' => $code ?: 502 )
+			);
+		}
+		return $body;
+	}
+
+	/**
 	 * @param array $params Params.
 	 * @return array|WP_Error
 	 */

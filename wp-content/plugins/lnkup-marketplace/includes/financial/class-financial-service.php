@@ -132,13 +132,145 @@ class LNKup_Financial_Service {
 		return array( 'success' => true, 'status' => 'processing', 'payment_id' => $payment_id );
 	}
 
+	/**
+	 * Run a callback while holding a MySQL named lock (serializes webhook, confirm, cron and sync).
+	 *
+	 * @param string   $name     Lock name (prefixed, max 64 chars).
+	 * @param callable $callback Work to run.
+	 * @param int      $timeout  Seconds to wait for the lock.
+	 * @return mixed|WP_Error Callback result, or WP_Error when the lock is busy.
+	 */
+	public static function with_lock( $name, callable $callback, $timeout = 10 ) {
+		global $wpdb;
+		$key = substr( 'lnkup_' . sanitize_key( $name ), 0, 64 );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$got = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $key, absint( $timeout ) ) );
+		if ( 1 !== $got ) {
+			return new WP_Error(
+				'lnkup_busy',
+				__( 'This payment is already being processed. Refresh in a moment.', 'lnkup-marketplace' ),
+				array( 'status' => 409 )
+			);
+		}
+		try {
+			return $callback();
+		} finally {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $key ) );
+		}
+	}
+
+	/**
+	 * Whether settle_treasury() has completed for a payment (marker or legacy ledger row).
+	 *
+	 * @param int $payment_id Payment post ID.
+	 */
+	public static function is_settled( $payment_id ) {
+		if ( '' !== (string) get_post_meta( $payment_id, '_lnkup_settled_at', true ) ) {
+			return true;
+		}
+		return class_exists( 'LNKup_Organizer_Wallet' ) && LNKup_Organizer_Wallet::has_wallet_entry_for_payment( $payment_id );
+	}
+
+	/**
+	 * Settle a paid payment that never reached the ledger (crash between mark_paid and settle).
+	 *
+	 * Caller must hold the payment lock.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 * @return bool True when settlement ran now.
+	 */
+	private static function ensure_settled( $payment_id ) {
+		if ( 'paid' !== (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ) || self::is_settled( $payment_id ) ) {
+			return false;
+		}
+		if ( ! self::auto_recovery_allowed( $payment_id ) ) {
+			if ( class_exists( 'LNKup_Financial_Audit' ) ) {
+				LNKup_Financial_Audit::log( 'historical_settlement_skipped', 'payment', $payment_id, array( 'reason' => 'paid_before_auto_recovery_cutoff' ) );
+			}
+			return false;
+		}
+		self::settle_treasury( $payment_id );
+		if ( class_exists( 'LNKup_Financial_Audit' ) ) {
+			LNKup_Financial_Audit::log( 'settlement_recovered', 'payment', $payment_id, array() );
+		}
+		return true;
+	}
+
+	/**
+	 * Settle one historical paid payment for an approved repair run (bypasses the auto-recovery cutoff).
+	 *
+	 * @param int   $payment_id Payment post ID.
+	 * @param array $context    Repair context for the audit log (run id, actor).
+	 * @return bool|WP_Error True when settlement ran, false when nothing to do.
+	 */
+	public static function repair_settle( $payment_id, $context = array() ) {
+		$payment_id = absint( $payment_id );
+		return self::with_lock(
+			'pay_' . $payment_id,
+			static function () use ( $payment_id, $context ) {
+				if ( 'paid' !== (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ) || self::is_settled( $payment_id ) ) {
+					return false;
+				}
+				self::settle_treasury( $payment_id );
+				LNKup_Financial_Audit::log( 'repair_settlement_applied', 'payment', $payment_id, $context );
+				return true;
+			},
+			15
+		);
+	}
+
+	/**
+	 * Automatic ledger recovery only touches payments paid after the reconciliation release.
+	 *
+	 * Older gaps are repaired through the approval-gated LNKup_Financial_Repair tool so
+	 * historical balances never change silently.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 */
+	public static function auto_recovery_allowed( $payment_id ) {
+		$cutoff = (string) get_option( 'lnkup_fin_auto_recovery_since', '' );
+		if ( '' === $cutoff ) {
+			return false;
+		}
+		$paid_at = (string) get_post_meta( $payment_id, '_lnkup_paid_at', true );
+		if ( '' === $paid_at ) {
+			$paid_at = (string) get_post_field( 'post_date', $payment_id );
+		}
+		return $paid_at >= $cutoff;
+	}
+
+	/**
+	 * Mark paid and settle exactly once, serialized per payment.
+	 *
+	 * @param int    $payment_id Payment ID.
+	 * @param string $intent_id  Stripe intent ID.
+	 * @param array  $context    Extra context.
+	 */
 	public static function finalize_payment( $payment_id, $intent_id = '', $context = array() ) {
+		$payment_id = absint( $payment_id );
+		return self::with_lock(
+			'pay_' . $payment_id,
+			static function () use ( $payment_id, $intent_id, $context ) {
+				return self::finalize_payment_locked( $payment_id, $intent_id, $context );
+			},
+			15
+		);
+	}
+
+	/**
+	 * @param int    $payment_id Payment ID.
+	 * @param string $intent_id  Stripe intent ID.
+	 * @param array  $context    Extra context.
+	 */
+	private static function finalize_payment_locked( $payment_id, $intent_id, $context ) {
 		$status = get_post_meta( $payment_id, '_lnkup_payment_status', true );
 		if ( 'paid' === $status ) {
+			$recovered = self::ensure_settled( $payment_id );
 			if ( class_exists( 'LNKup_Financial_Audit' ) ) {
-				LNKup_Financial_Audit::log( 'finalize_skipped', 'payment', $payment_id, array_merge( $context, array( 'reason' => 'already_paid' ) ) );
+				LNKup_Financial_Audit::log( 'finalize_skipped', 'payment', $payment_id, array_merge( $context, array( 'reason' => 'already_paid', 'settlement_recovered' => $recovered ) ) );
 			}
-			return array( 'already_paid' => true );
+			return array( 'already_paid' => true, 'settlement_recovered' => $recovered );
 		}
 
 		if ( $intent_id ) {
@@ -148,7 +280,9 @@ class LNKup_Financial_Service {
 		LNKup_Payments::mark_paid( $payment_id, $intent_id );
 		LNKup_Transactions::sync_extended_fields( $payment_id );
 
-		self::settle_treasury( $payment_id );
+		if ( ! self::is_settled( $payment_id ) ) {
+			self::settle_treasury( $payment_id );
+		}
 
 		if ( class_exists( 'LNKup_Financial_Audit' ) ) {
 			LNKup_Financial_Audit::log( 'finalize_completed', 'payment', $payment_id, array_merge( $context, array(
@@ -173,11 +307,18 @@ class LNKup_Financial_Service {
 			return new WP_Error( 'invalid_payment', __( 'Invalid payment.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 
+		$intent_id = $intent_id ?: (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
+		if ( 0 !== strpos( (string) $intent_id, 'pi_' ) ) {
+			$from_session = self::intent_from_checkout_session( $payment_id );
+			if ( '' !== $from_session ) {
+				$intent_id = $from_session;
+			}
+		}
+
 		self::backfill_stripe_payment_meta( $payment_id, $intent_id );
 
 		$status = get_post_meta( $payment_id, '_lnkup_payment_status', true );
 		if ( 'paid' !== $status ) {
-			$intent_id = $intent_id ?: (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
 			if ( $intent_id && 0 === strpos( $intent_id, 'pi_' ) ) {
 				$verified = self::verify_intent_for_payment( $payment_id, $intent_id );
 				if ( 'processing' === $verified ) {
@@ -207,15 +348,55 @@ class LNKup_Financial_Service {
 			);
 		}
 
-		$mode = get_post_meta( $payment_id, '_lnkup_settlement_mode', true );
-		if ( 'destination' === $mode && class_exists( 'LNKup_Organizer_Wallet' ) ) {
-			if ( ! LNKup_Organizer_Wallet::has_connect_settlement_for_payment( $payment_id ) ) {
-				self::settle_treasury( $payment_id );
-				return array( 'success' => true, 'action' => 'settlement_backfilled', 'payment_id' => $payment_id );
-			}
+		$settled = self::with_lock(
+			'pay_' . $payment_id,
+			static function () use ( $payment_id ) {
+				return self::ensure_settled( $payment_id );
+			},
+			15
+		);
+		if ( is_wp_error( $settled ) ) {
+			return $settled;
 		}
 
-		return array( 'success' => true, 'action' => 'already_settled', 'payment_id' => $payment_id );
+		return array(
+			'success'    => true,
+			'action'     => $settled ? 'settlement_backfilled' : 'already_settled',
+			'payment_id' => $payment_id,
+		);
+	}
+
+	/**
+	 * Resolve the PaymentIntent for a hosted Checkout Session payment (GET only).
+	 *
+	 * Stores the intent on the payment when the session belongs to it.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 * @return string PaymentIntent ID or ''.
+	 */
+	private static function intent_from_checkout_session( $payment_id ) {
+		$session_id = (string) get_post_meta( $payment_id, '_lnkup_stripe_checkout_session', true );
+		if ( 0 !== strpos( $session_id, 'cs_' ) || ! class_exists( 'LNKup_Stripe_Client' ) ) {
+			return '';
+		}
+		$client = new LNKup_Stripe_Client();
+		if ( ! $client->is_available() ) {
+			return '';
+		}
+		$session = $client->read( 'checkout/sessions/' . $session_id );
+		if ( is_wp_error( $session ) ) {
+			return '';
+		}
+		$ref = absint( $session['client_reference_id'] ?? 0 );
+		if ( $ref && $ref !== (int) $payment_id ) {
+			return '';
+		}
+		$intent_id = is_string( $session['payment_intent'] ?? null ) ? $session['payment_intent'] : (string) ( $session['payment_intent']['id'] ?? '' );
+		if ( 0 !== strpos( $intent_id, 'pi_' ) ) {
+			return '';
+		}
+		update_post_meta( $payment_id, '_lnkup_stripe_payment_intent', sanitize_text_field( $intent_id ) );
+		return $intent_id;
 	}
 
 	/**
@@ -236,37 +417,28 @@ class LNKup_Financial_Service {
 			$status     = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
 			$intent_id  = (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
 
+			if ( ! self::auto_recovery_allowed( $payment_id ) ) {
+				continue;
+			}
 			if ( 'paid' === $status ) {
-				$mode     = (string) get_post_meta( $payment_id, '_lnkup_settlement_mode', true );
-				$dest     = (string) get_post_meta( $payment_id, '_lnkup_stripe_destination_account', true );
-				$has_cs   = class_exists( 'LNKup_Organizer_Wallet' ) && LNKup_Organizer_Wallet::has_connect_settlement_for_payment( $payment_id );
-				$has_row  = class_exists( 'LNKup_Organizer_Wallet' ) && LNKup_Organizer_Wallet::has_wallet_entry_for_payment( $payment_id );
-
-				if ( $has_cs ) {
+				if ( self::is_settled( $payment_id ) ) {
 					continue;
 				}
-
-				// Destination charge missing connect_settlement mirror.
-				if ( ( 'destination' === $mode || '' !== $dest ) && '' !== $dest && ! $has_cs ) {
-					$result = self::reconcile_payment( $payment_id, $intent_id );
-					if ( ! is_wp_error( $result ) ) {
-						$reconciled++;
-					}
-					continue;
-				}
-
-				// Platform charge (no destination) missing any ledger — settle treasury credit.
-				if ( '' === $dest && ! $has_row ) {
-					self::settle_treasury( $payment_id );
+				$result = self::reconcile_payment( $payment_id, $intent_id );
+				if ( ! is_wp_error( $result ) && 'settlement_backfilled' === ( $result['action'] ?? '' ) ) {
 					$reconciled++;
 				}
 				continue;
-			} elseif ( ! $intent_id ) {
+			}
+			if ( ! in_array( $status, array( 'pending', 'processing', 'failed', '' ), true ) ) {
+				continue;
+			}
+			if ( ! $intent_id && '' === (string) get_post_meta( $payment_id, '_lnkup_stripe_checkout_session', true ) ) {
 				continue;
 			}
 
 			$result = self::reconcile_payment( $payment_id, $intent_id );
-			if ( ! is_wp_error( $result ) ) {
+			if ( ! is_wp_error( $result ) && empty( $result['already_paid'] ) ) {
 				$reconciled++;
 			}
 		}
@@ -295,11 +467,12 @@ class LNKup_Financial_Service {
 		$payments   = lnkup_get_payments_for_user( $user_id, 'vendor' );
 		foreach ( (array) $payments as $payment ) {
 			$payment_id = (int) $payment->ID;
-			if ( 'paid' === get_post_meta( $payment_id, '_lnkup_payment_status', true ) ) {
+			$status     = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
+			if ( ! in_array( $status, array( 'pending', 'processing', 'failed', '' ), true ) || ! self::auto_recovery_allowed( $payment_id ) ) {
 				continue;
 			}
 			$intent_id = (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
-			if ( ! $intent_id ) {
+			if ( ! $intent_id && '' === (string) get_post_meta( $payment_id, '_lnkup_stripe_checkout_session', true ) ) {
 				continue;
 			}
 			$result = self::reconcile_payment( $payment_id, $intent_id );
@@ -323,8 +496,14 @@ class LNKup_Financial_Service {
 			return false;
 		}
 
+		if ( 0 !== strpos( (string) $intent_id, 'pi_' ) ) {
+			return false;
+		}
 		$client = new LNKup_Stripe_Client();
-		$intent = $client->retrieve_payment_intent( $intent_id );
+		if ( ! $client->is_available() ) {
+			return false;
+		}
+		$intent = $client->read( 'payment_intents/' . $intent_id, array( 'expand' => array( 'latest_charge' ) ) );
 		if ( is_wp_error( $intent ) ) {
 			return $intent;
 		}
@@ -348,8 +527,24 @@ class LNKup_Financial_Service {
 		if ( $destination ) {
 			update_post_meta( $payment_id, '_lnkup_stripe_destination_account', sanitize_text_field( $destination ) );
 		}
-		if ( $amount_cents > 0 && $app_fee_cents >= 0 ) {
+		if ( $amount_cents > 0 && $app_fee_cents >= 0 && $destination ) {
 			update_post_meta( $payment_id, '_lnkup_stripe_destination_amount', ( $amount_cents - $app_fee_cents ) / 100 );
+		}
+
+		$charge = is_array( $intent['latest_charge'] ?? null ) ? $intent['latest_charge'] : array();
+		$refs   = array(
+			'_lnkup_stripe_charge_id'              => (string) ( $charge['id'] ?? ( is_string( $intent['latest_charge'] ?? null ) ? $intent['latest_charge'] : '' ) ),
+			'_lnkup_stripe_balance_transaction_id' => is_string( $charge['balance_transaction'] ?? null ) ? $charge['balance_transaction'] : '',
+			'_lnkup_stripe_transfer_id'            => is_string( $charge['transfer'] ?? null ) ? $charge['transfer'] : '',
+		);
+		foreach ( $refs as $key => $value ) {
+			if ( '' !== $value ) {
+				update_post_meta( $payment_id, $key, sanitize_text_field( $value ) );
+			}
+		}
+		update_post_meta( $payment_id, '_lnkup_stripe_livemode', ! empty( $intent['livemode'] ) ? '1' : '0' );
+		if ( ! empty( $charge['created'] ) && '' === (string) get_post_meta( $payment_id, '_lnkup_stripe_charged_at', true ) ) {
+			update_post_meta( $payment_id, '_lnkup_stripe_charged_at', gmdate( 'Y-m-d H:i:s', (int) $charge['created'] ) );
 		}
 
 		return true;
@@ -365,7 +560,7 @@ class LNKup_Financial_Service {
 			return;
 		}
 		$organizer_id = (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true );
-		$breakdown    = LNKup_Fee_Engine::calculate_for_payment( $payment_id );
+		$breakdown    = LNKup_Fee_Engine::settlement_breakdown( $payment_id );
 		if ( class_exists( 'LNKup_Stripe_Connect' ) ) {
 			LNKup_Stripe_Connect::persist_payment_settlement_meta( $payment_id, $organizer_id, $breakdown, 'settle' );
 		}
@@ -408,6 +603,7 @@ class LNKup_Financial_Service {
 				),
 			) );
 		}
+		update_post_meta( $payment_id, '_lnkup_settled_at', current_time( 'mysql' ) );
 		LNKup_Financial_Audit::log( 'treasury_settled', 'payment', $payment_id, array_merge( $breakdown, array( 'settlement_mode' => $mode ) ) );
 	}
 
@@ -420,7 +616,64 @@ class LNKup_Financial_Service {
 	 * @param string $client_token Optional idempotency key from the client.
 	 */
 	public static function request_organizer_cashout( $user_id, $amount, $type = 'standard', $client_token = '' ) {
+		// Cashout is a write: bring the ledger current (missed webhooks, Connect recovery) first.
+		self::sync_organizer( $user_id );
 		return LNKup_Organizer_Payouts::request_cashout( $user_id, $amount, $type, $client_token );
+	}
+
+	/**
+	 * Bring an organizer's payments and ledger current with Stripe. Write path only.
+	 *
+	 * Runs from the hourly cron, cashout, and the explicit POST /financial/sync. Never from GET.
+	 *
+	 * @param int $user_id Organizer user ID.
+	 * @return array|WP_Error Summary.
+	 */
+	public static function sync_organizer( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( ! $user_id ) {
+			return new WP_Error( 'invalid_user', __( 'Invalid user.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		return self::with_lock(
+			'org_sync_' . $user_id,
+			static function () use ( $user_id ) {
+				$reconciled = self::reconcile_organizer_payments( $user_id );
+				if ( class_exists( 'LNKup_Transactions' ) ) {
+					LNKup_Transactions::backfill_amounts_from_payments( $user_id );
+				}
+				update_user_meta( $user_id, '_lnkup_financial_synced_at', current_time( 'mysql' ) );
+				return array(
+					'reconciled' => (int) $reconciled,
+					'synced_at'  => current_time( 'mysql' ),
+				);
+			},
+			5
+		);
+	}
+
+	/**
+	 * Vendor counterpart of sync_organizer(): finalize payments Stripe already collected.
+	 *
+	 * @param int $user_id Vendor user ID.
+	 * @return array|WP_Error Summary.
+	 */
+	public static function sync_vendor( $user_id ) {
+		$user_id = absint( $user_id );
+		if ( ! $user_id ) {
+			return new WP_Error( 'invalid_user', __( 'Invalid user.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		return self::with_lock(
+			'vendor_sync_' . $user_id,
+			static function () use ( $user_id ) {
+				$reconciled = self::reconcile_vendor_payments( $user_id );
+				update_user_meta( $user_id, '_lnkup_financial_synced_at', current_time( 'mysql' ) );
+				return array(
+					'reconciled' => (int) $reconciled,
+					'synced_at'  => current_time( 'mysql' ),
+				);
+			},
+			5
+		);
 	}
 
 	/**
@@ -433,9 +686,11 @@ class LNKup_Financial_Service {
 		$payload  = self::organizer_balance_payload( $user_id );
 		$balances = $payload['wallet'];
 		return array(
+			'money'            => self::organizer_money_contract( $user_id, $payload ),
 			'balances'         => $balances,
 			'display_balances' => $payload['display_balances'],
 			'entries'          => LNKup_Organizer_Wallet::list_entries( $user_id ),
+			'entries_total'    => LNKup_Organizer_Wallet::count_entries( $user_id ),
 			'escrow'           => class_exists( 'LNKup_Escrow' ) ? LNKup_Escrow::list_for_user( $user_id ) : array(),
 			'reserves'         => class_exists( 'LNKup_Reserves' ) ? LNKup_Reserves::list_for_user( $user_id ) : array(),
 			'connect'          => $payload['connect'],
@@ -467,23 +722,7 @@ class LNKup_Financial_Service {
 	public static function organizer_balance_payload( $user_id = 0 ) {
 		$user_id = $user_id ?: get_current_user_id();
 
-		// Ensure platform-settled booth payments get ledger claims before balance reads.
-		$lock = 'lnkup_org_wallet_reconcile_' . absint( $user_id );
-		if ( $user_id && ! get_transient( $lock ) ) {
-			try {
-				self::reconcile_organizer_payments( $user_id );
-				if ( class_exists( 'LNKup_Transactions' ) ) {
-					LNKup_Transactions::backfill_amounts_from_payments( $user_id );
-				}
-			} catch ( Throwable $e ) {
-				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-					error_log( 'LNKup reconcile on organizer wallet: ' . $e->getMessage() );
-				}
-			}
-			set_transient( $lock, 1, MINUTE_IN_SECONDS );
-		}
-
+		// Pure read. Ledger catch-up runs in sync_organizer() (cron, cashout, POST /financial/sync).
 		$wallet  = array();
 		if ( class_exists( 'LNKup_Organizer_Wallet' ) ) {
 			try {
@@ -613,6 +852,270 @@ class LNKup_Financial_Service {
 				? $stripe_balance['source_types']
 				: array(),
 		);
+	}
+
+	/**
+	 * Canonical organizer money contract (v1), shared by web and mobile.
+	 *
+	 * Every metric is integer cents with its source and sync time. A figure that cannot be
+	 * read (Stripe unreachable) is reported as status "unavailable" with cents null — never 0.
+	 * Definitions live in docs/finance/MONEY_DEFINITIONS.md.
+	 *
+	 * @param int        $user_id         Organizer user ID.
+	 * @param array|null $balance_payload Optional organizer_balance_payload() result.
+	 * @param array      $ledger_totals   Optional collected / fees / refunds in dollars.
+	 */
+	public static function organizer_money_contract( $user_id = 0, $balance_payload = null, $ledger_totals = array() ) {
+		$user_id = $user_id ? absint( $user_id ) : get_current_user_id();
+		if ( ! is_array( $balance_payload ) ) {
+			$balance_payload = self::organizer_balance_payload( $user_id );
+		}
+		$wallet  = (array) ( $balance_payload['wallet'] ?? array() );
+		$stripe  = (array) ( $balance_payload['stripe_balance'] ?? array() );
+		$display = (array) ( $balance_payload['display_balances'] ?? array() );
+		$connect = (array) ( $balance_payload['connect'] ?? array() );
+		$mode    = (string) ( $wallet['settlement_mode'] ?? ( $connect['settlement_mode'] ?? 'platform_treasury' ) );
+		$now     = gmdate( 'c' );
+		$synced  = ! empty( $stripe['synced'] );
+		$cents   = static function ( $dollars ) {
+			return (int) round( (float) $dollars * 100 );
+		};
+		$metric  = static function ( $value, $source, $synced_at = null, $status = 'ok' ) {
+			return array(
+				'cents'     => 'ok' === $status ? (int) $value : null,
+				'status'    => $status,
+				'source'    => $source,
+				'synced_at' => $synced_at,
+			);
+		};
+
+		if ( ! array_key_exists( 'collected', $ledger_totals ) ) {
+			$ledger_totals['collected'] = class_exists( 'LNKup_Financial' ) ? LNKup_Financial::organizer_collected_revenue( $user_id ) : 0;
+		}
+		$collected = $cents( $ledger_totals['collected'] );
+		$fees      = $cents( $ledger_totals['platform_fees'] ?? 0 );
+		$refunds   = $cents( $ledger_totals['refunds'] ?? 0 );
+
+		$destination = 'destination' === $mode;
+		if ( $destination ) {
+			$balance_status = $synced ? 'ok' : 'unavailable';
+			$available      = $metric( $cents( $display['available'] ?? 0 ), 'stripe_connect', $synced ? $now : null, $balance_status );
+			$pending        = $metric( $cents( $stripe['pending'] ?? 0 ), 'stripe_connect', $synced ? $now : null, $balance_status );
+		} else {
+			$available = $metric( $cents( $wallet['available'] ?? 0 ), 'ledger' );
+			$pending   = $metric( $cents( $wallet['pending'] ?? 0 ), 'ledger' );
+		}
+
+		$lnkup_paid = 0;
+		if ( class_exists( 'LNKup_Organizer_Payouts' ) ) {
+			foreach ( (array) LNKup_Organizer_Payouts::list_for_user( $user_id, 500 ) as $payout ) {
+				if ( in_array( (string) ( $payout['status'] ?? '' ), array( 'paid', 'completed' ), true ) ) {
+					$lnkup_paid += $cents( $payout['net_amount'] ?? $payout['amount'] ?? 0 );
+				}
+			}
+		}
+
+		$bank = $destination ? self::connect_payout_totals( $user_id ) : null;
+		if ( $destination ) {
+			$bank_status = ! empty( $bank['ok'] ) ? 'ok' : 'unavailable';
+			$paid_out    = $metric( (int) ( $bank['paid_cents'] ?? 0 ), 'stripe_connect_payouts', $bank['synced_at'] ?? null, $bank_status );
+			$in_transit  = $metric( (int) ( $bank['in_transit_cents'] ?? 0 ), 'stripe_connect_payouts', $bank['synced_at'] ?? null, $bank_status );
+		} else {
+			$paid_out   = $metric( $lnkup_paid, 'lnkup_cashouts' );
+			$in_transit = $metric( $cents( $wallet['processing'] ?? 0 ), 'ledger' );
+		}
+
+		$payouts = self::organizer_payout_state( $connect, $mode, $available );
+
+		return array(
+			'version'         => 1,
+			'currency'        => 'usd',
+			'generated_at'    => $now,
+			'last_synced_at'  => (string) get_user_meta( $user_id, '_lnkup_financial_synced_at', true ) ?: null,
+			'settlement_mode' => $mode,
+			'payouts'         => $payouts,
+			'metrics'         => array(
+				'collected'           => $metric( $collected, 'wordpress_payments' ),
+				'platform_fees'       => $metric( $fees, 'wordpress_payments' ),
+				'refunds'             => $metric( $refunds, 'wordpress_payments' ),
+				'net_earnings'        => $metric( max( 0, $collected - $fees - $refunds ), 'wordpress_payments' ),
+				'available'           => $available,
+				'pending'             => $pending,
+				'in_transit'          => $in_transit,
+				'paid_out'            => $paid_out,
+				'processing'          => $metric( $cents( $wallet['processing'] ?? 0 ), 'ledger' ),
+				'lnkup_cashouts_paid' => $metric( $lnkup_paid, 'ledger' ),
+				'reserve'             => $metric( $cents( $wallet['reserve_hold'] ?? 0 ), 'ledger' ),
+				'lnkup_settled'       => $metric( $cents( $wallet['connect_settlement'] ?? 0 ), 'ledger' ),
+				'platform_held'       => $metric( $cents( (float) ( $wallet['treasury_available'] ?? 0 ) + (float) ( $wallet['treasury_pending'] ?? 0 ) ), 'ledger' ),
+			),
+		);
+	}
+
+	/**
+	 * Canonical vendor money contract (v1): what the vendor paid, from payment records.
+	 *
+	 * @param int $user_id Vendor user ID.
+	 */
+	public static function vendor_money_contract( $user_id ) {
+		$totals = array(
+			'paid'       => 0,
+			'processing' => 0,
+			'outstanding' => 0,
+			'refunded'   => 0,
+		);
+		$counts = array_fill_keys( array_keys( $totals ), 0 );
+		foreach ( (array) lnkup_get_payments_for_user( absint( $user_id ), 'vendor' ) as $payment ) {
+			$id     = (int) $payment->ID;
+			$status = (string) get_post_meta( $id, '_lnkup_payment_status', true );
+			$amount = (int) round( (float) get_post_meta( $id, '_lnkup_total_amount', true ) * 100 );
+			$bucket = array(
+				'paid'       => 'paid',
+				'processing' => 'processing',
+				'pending'    => 'outstanding',
+				'failed'     => 'outstanding',
+				'refunded'   => 'refunded',
+			)[ $status ] ?? '';
+			if ( 'refunded' === $bucket ) {
+				$amount = (int) round( (float) get_post_meta( $id, '_lnkup_refund_amount', true ) * 100 ) ?: $amount;
+			}
+			if ( '' !== $bucket ) {
+				$totals[ $bucket ] += $amount;
+				++$counts[ $bucket ];
+			}
+		}
+		$metrics = array();
+		foreach ( $totals as $key => $value ) {
+			$metrics[ $key ] = array(
+				'cents'     => $value,
+				'count'     => $counts[ $key ],
+				'status'    => 'ok',
+				'source'    => 'wordpress_payments',
+				'synced_at' => null,
+			);
+		}
+		return array(
+			'version'        => 1,
+			'currency'       => 'usd',
+			'generated_at'   => gmdate( 'c' ),
+			'last_synced_at' => (string) get_user_meta( absint( $user_id ), '_lnkup_financial_synced_at', true ) ?: null,
+			'metrics'        => $metrics,
+		);
+	}
+
+	/**
+	 * Payout status shown next to balances. "Active" requires a ready Connect account; Cash Out
+	 * additionally requires a synced, positive available balance.
+	 *
+	 * @param array  $connect   Onboarding status.
+	 * @param string $mode      Settlement mode.
+	 * @param array  $available Available metric.
+	 */
+	private static function organizer_payout_state( $connect, $mode, $available ) {
+		$status = (string) ( $connect['status'] ?? 'not_started' );
+		$map    = array(
+			'active'                => array( 'active', __( 'Payouts active', 'lnkup-marketplace' ) ),
+			'pending'               => array( 'setup_incomplete', __( 'Finish payout setup', 'lnkup-marketplace' ) ),
+			'restricted'            => array( 'setup_incomplete', __( 'Finish payout setup', 'lnkup-marketplace' ) ),
+			'pending_verification'  => array( 'verifying', __( 'Verifying payout details', 'lnkup-marketplace' ) ),
+			'verification_required' => array( 'action_required', __( 'Payout details needed', 'lnkup-marketplace' ) ),
+			'disabled'              => array( 'paused', __( 'Payouts paused', 'lnkup-marketplace' ) ),
+			'rejected'              => array( 'paused', __( 'Payouts paused', 'lnkup-marketplace' ) ),
+			'not_started'           => array( 'not_connected', __( 'Set up payouts', 'lnkup-marketplace' ) ),
+		);
+		list( $state, $label ) = $map[ $status ] ?? $map['not_started'];
+		if ( 'active' === $state && 'destination' !== $mode ) {
+			$state = 'setup_incomplete';
+			$label = __( 'Finish payout setup', 'lnkup-marketplace' );
+		}
+		$connect_off = false === ( $connect['available'] ?? true ) || 'connect_not_configured' === ( $connect['code'] ?? '' );
+		if ( $connect_off && 'destination' !== $mode ) {
+			$state = 'manual';
+			$label = __( 'Paid by LNKup', 'lnkup-marketplace' );
+		}
+
+		// Mirrors LNKup_Organizer_Payouts::request_cashout_locked(): destination cashouts need a
+		// ready account; platform-settled balances are paid out by LNKup unless payouts are paused.
+		$eligible = 'destination' === $mode ? 'active' === $state : 'paused' !== $state;
+
+		$reason = '';
+		if ( ! $eligible ) {
+			$reason = 'payouts_not_active';
+		} elseif ( 'ok' !== $available['status'] ) {
+			$reason = 'balance_unavailable';
+		} elseif ( (int) $available['cents'] < 100 ) {
+			$reason = 'no_available_balance';
+		}
+
+		$detail = '';
+		if ( 'active' === $state ) {
+			$detail = __( 'Vendor payments go straight to your payout account.', 'lnkup-marketplace' );
+		} elseif ( 'manual' === $state ) {
+			$detail = __( 'LNKup sends your cash outs to you directly.', 'lnkup-marketplace' );
+		}
+
+		return array(
+			'state'           => $state,
+			'label'           => $label,
+			'detail'          => $detail,
+			'method'          => 'destination' === $mode ? 'connect' : 'lnkup',
+			'can_cash_out'    => '' === $reason,
+			'cash_out_reason' => $reason,
+		);
+	}
+
+	/**
+	 * Stripe payouts on the organizer's connected account (paid + in transit), cached 5 minutes.
+	 *
+	 * @param int $user_id Organizer user ID.
+	 * @return array{ok:bool, paid_cents:int, in_transit_cents:int, synced_at:?string}
+	 */
+	private static function connect_payout_totals( $user_id ) {
+		$cache_key = 'lnkup_connect_payouts_' . absint( $user_id );
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+		$fail    = array( 'ok' => false, 'paid_cents' => 0, 'in_transit_cents' => 0, 'synced_at' => null );
+		$account = class_exists( 'LNKup_Stripe_Connect' ) ? LNKup_Stripe_Connect::get_account( $user_id, 'organizer' ) : null;
+		$acct_id = (string) ( $account['stripe_account_id'] ?? '' );
+		$client  = new LNKup_Stripe_Client();
+		if ( '' === $acct_id || ! $client->is_available() ) {
+			return $fail;
+		}
+		$paid       = 0;
+		$in_transit = 0;
+		$after      = '';
+		for ( $page = 0; $page < 5; $page++ ) {
+			$params = array( 'limit' => 100 );
+			if ( '' !== $after ) {
+				$params['starting_after'] = $after;
+			}
+			$list = $client->read( 'payouts', $params, $acct_id );
+			if ( is_wp_error( $list ) ) {
+				return $fail;
+			}
+			foreach ( (array) ( $list['data'] ?? array() ) as $payout ) {
+				$status = (string) ( $payout['status'] ?? '' );
+				if ( 'paid' === $status ) {
+					$paid += (int) ( $payout['amount'] ?? 0 );
+				} elseif ( in_array( $status, array( 'pending', 'in_transit' ), true ) ) {
+					$in_transit += (int) ( $payout['amount'] ?? 0 );
+				}
+				$after = (string) ( $payout['id'] ?? '' );
+			}
+			if ( empty( $list['has_more'] ) ) {
+				break;
+			}
+		}
+		$result = array(
+			'ok'               => true,
+			'paid_cents'       => $paid,
+			'in_transit_cents' => $in_transit,
+			'synced_at'        => gmdate( 'c' ),
+		);
+		set_transient( $cache_key, $result, 5 * MINUTE_IN_SECONDS );
+		return $result;
 	}
 
 	/**
@@ -881,14 +1384,10 @@ class LNKup_Financial_Service {
 	 */
 	public static function vendor_dashboard( $user_id = 0 ) {
 		$user_id = $user_id ?: get_current_user_id();
-		$reconcile_lock = 'lnkup_vendor_reconcile_' . $user_id;
-		if ( ! get_transient( $reconcile_lock ) ) {
-			self::reconcile_vendor_payments( $user_id );
-			set_transient( $reconcile_lock, 1, MINUTE_IN_SECONDS );
-		}
 		$base    = LNKup_Financial::vendor_dashboard( $user_id );
 		$report  = LNKup_Financial_Reports::vendor_report( $user_id );
 		return array_merge( $base, $report, array(
+			'money'  => self::vendor_money_contract( $user_id ),
 			'charts' => array(
 				'monthly_spending' => $report['by_month'] ?? array(),
 			),
@@ -992,7 +1491,17 @@ class LNKup_Financial_Service {
 				'synced'     => ! empty( $stripe_balance ) && empty( $stripe_balance['error'] ),
 			)
 		);
+		$money = self::organizer_money_contract(
+			$uid,
+			$balance_payload,
+			array(
+				'collected'     => $gross_collected,
+				'platform_fees' => $platform_fees,
+				'refunds'       => $refunds_total,
+			)
+		);
 		return array_merge( $data, array(
+			'money'               => $money,
 			'money_categories'    => $categories,
 			'gross_revenue'       => $gross_collected,
 			'platform_fees'       => $reports['platform_fees'] ?? 0,

@@ -103,6 +103,18 @@
       }
     }
 
+    var money = payload.money || null;
+    if (money && money.metrics) {
+      settlement = money.settlement_mode || settlement;
+      isDest = settlement === 'destination';
+      available = metricDollars(money.metrics.available, available);
+      pending = metricDollars(money.metrics.pending, pending);
+      processing = metricDollars(money.metrics.processing, processing);
+      reserve = metricDollars(money.metrics.reserve, reserve);
+      ledgerSettled = metricDollars(money.metrics.lnkup_settled, ledgerSettled);
+      stripeSynced = !isDest || isMetricOk(money.metrics.available);
+    }
+
     return {
       available: available,
       pending: pending,
@@ -117,8 +129,113 @@
       stripeBal: stripeBal,
       stripeSynced: stripeSynced,
       balanceSource: balanceSource,
-      sourceTypes: sourceTypes
+      sourceTypes: sourceTypes,
+      money: money,
+      payouts: (money && money.payouts) || null
     };
+  }
+
+  /** Whether a money-contract metric could be read (status ok with integer cents). */
+  function isMetricOk(metric) {
+    return !!metric && metric.status === 'ok' && metric.cents != null;
+  }
+
+  /** Dollars from a contract metric, or the legacy fallback when the contract is absent. */
+  function metricDollars(metric, fallback) {
+    if (!metric) {
+      return Number(fallback || 0);
+    }
+    return isMetricOk(metric) ? Number(metric.cents) / 100 : 0;
+  }
+
+  /** "$12.34", or "Unavailable" when the source could not be read — never a fake $0. */
+  function metricLabel(metric, fallbackDollars) {
+    if (metric) {
+      return isMetricOk(metric) ? '$' + (Number(metric.cents) / 100).toFixed(2) : t('money_unavailable', 'Unavailable');
+    }
+    return '$' + Number(fallbackDollars || 0).toFixed(2);
+  }
+
+  function contractMetric(payload, key) {
+    var money = payload && payload.money;
+    return money && money.metrics ? (money.metrics[key] || null) : null;
+  }
+
+  var CASH_OUT_REASON_COPY = {
+    payouts_not_active: 'Finish payout setup to cash out.',
+    balance_unavailable: 'We could not read your payout balance right now. Refresh in a moment.',
+    no_available_balance: 'Nothing is available to cash out yet. New card payments usually become available within a few days.'
+  };
+
+  function lastSyncedLine(money) {
+    if (!money) {
+      return '';
+    }
+    var when = money.last_synced_at ? String(money.last_synced_at).slice(0, 16).replace('T', ' ') : '';
+    return '<p class="lnkup-muted lnkup-fin-synced" data-testid="lnkup-fin-last-synced">' +
+      (when ? 'Last synced with Stripe ' + escapeHtml(when) : 'Not synced with Stripe yet') +
+      ' · <button type="button" class="lnkup-link-btn" data-fin-sync>Sync now</button></p>';
+  }
+
+  /** POST /financial/sync, then reload money panels. */
+  function bindSyncButtons(root) {
+    (root || document).querySelectorAll('[data-fin-sync]').forEach(function (btn) {
+      if (btn.getAttribute('data-fin-sync-bound') === '1') {
+        return;
+      }
+      btn.setAttribute('data-fin-sync-bound', '1');
+      btn.addEventListener('click', function () {
+        btn.disabled = true;
+        btn.textContent = 'Syncing…';
+        fetchFinancialJson('/sync', { method: 'POST', body: {} }).then(function (res) {
+          btn.disabled = false;
+          btn.textContent = 'Sync now';
+          if (!res.ok) {
+            finToast(res.error || 'Could not sync with Stripe.', 'error');
+            return;
+          }
+          if (res.data && res.data.throttled) {
+            finToast('Synced moments ago. Try again in a few seconds.', 'info');
+            return;
+          }
+          finToast('Synced with Stripe.', 'success');
+          document.querySelectorAll('#lnkup-organizer-financial .lnkup-fin-panel, #lnkup-vendor-financial .lnkup-fin-panel').forEach(function (panel) {
+            panel.dataset.loaded = '';
+          });
+          refreshOrganizerBalanceHero();
+          var active = document.querySelector('#lnkup-organizer-financial .lnkup-fin-panel:not([hidden])');
+          if (active) {
+            active.dispatchEvent(new CustomEvent('lnkup-fin-panel-open', { bubbles: true }));
+          }
+        });
+      });
+    });
+  }
+
+  /** Organizer money in flow order from the server contract. */
+  function moneyContractGrid(money) {
+    var m = money.metrics || {};
+    var rows = [
+      ['collected', 'Gross collected', 'What vendors paid, before fees and refunds.'],
+      ['platform_fees', 'Platform fees', 'LNKup fees on those bookings.'],
+      ['refunds', 'Refunds', 'Money returned to vendors.'],
+      ['net_earnings', 'Net earnings', 'Collected minus platform fees and refunds.'],
+      ['pending', 'Pending', 'Still settling. Not available to cash out yet.'],
+      ['available', 'Available to cash out', 'Ready to send to your bank.'],
+      ['in_transit', 'In transit', 'On the way to your bank.'],
+      ['paid_out', 'Paid out', money.settlement_mode === 'destination' ? 'Payouts that reached your bank, including automatic payouts.' : 'Cashouts that reached your bank.']
+    ];
+    var html = '<div class="lnkup-fin-kpi-grid lnkup-fin-money-grid" data-testid="lnkup-fin-money-categories">';
+    rows.forEach(function (row) {
+      var metric = m[row[0]] || null;
+      var unavailable = metric && !isMetricOk(metric);
+      html += '<div class="lnkup-fin-kpi lnkup-fin-kpi--' + escapeHtml(row[0]) + (unavailable ? ' is-unavailable' : '') + '" data-metric="' + escapeHtml(row[0]) + '">' +
+        '<p class="lnkup-fin-kpi__label">' + escapeHtml(row[1]) + '</p>' +
+        '<p class="lnkup-fin-kpi__value">' + escapeHtml(metricLabel(metric, 0)) + '</p>' +
+        '<p class="lnkup-fin-kpi__hint">' + escapeHtml(row[2]) + '</p></div>';
+    });
+    html += '</div>';
+    return html;
   }
 
   function formatSourceTypesBreakdown(sourceTypes) {
@@ -146,6 +263,16 @@
     dash.balances = walletData.balances || walletData.wallet || dash.balances || {};
     dash.stripe_balance = walletData.stripe_balance || dash.stripe_balance || {};
     dash.display_balances = walletData.display_balances || dash.display_balances || {};
+    if (walletData.money) {
+      dash.money = Object.assign({}, walletData.money, {
+        metrics: Object.assign({}, (dash.money && dash.money.metrics) || {}, walletData.money.metrics || {}, dash.money && dash.money.metrics ? {
+          collected: dash.money.metrics.collected,
+          platform_fees: dash.money.metrics.platform_fees,
+          refunds: dash.money.metrics.refunds,
+          net_earnings: dash.money.metrics.net_earnings
+        } : {})
+      });
+    }
     if (!dash.connect && walletData.connect) {
       dash.connect = walletData.connect;
     }
@@ -951,25 +1078,25 @@
       hero.hidden = true;
       return;
     }
-    var balances = resolveOrganizerBalances(dash || {});
-    var connect = (dash && dash.connect) || {};
-    var primaryAmt = balances.available;
-    if (balances.isDest && !balances.stripeSynced && primaryAmt <= 0) {
-      primaryAmt = balances.ledgerClaim || balances.ledgerSettled || 0;
-    }
-    var collected = Number((dash && (dash.collected || dash.gross_revenue)) || balances.ledgerSettled || 0);
-    var paidOut = Number((dash && dash.payouts_paid) || 0);
-    function moneyCell(label, amount) {
-      return '<div class="lnkup-home-stat"><dt>' + escapeHtml(label) + '</dt><dd>$' + Number(amount).toFixed(2) + '</dd></div>';
+    dash = dash || {};
+    var balances = resolveOrganizerBalances(dash);
+    var connect = dash.connect || {};
+    var collected = Number(dash.collected || dash.gross_revenue || 0);
+    var paidOut = Number(dash.payouts_paid || 0);
+    function moneyCell(label, key, fallback) {
+      return '<div class="lnkup-home-stat" data-metric="' + escapeHtml(key) + '"><dt>' + escapeHtml(label) + '</dt><dd>' +
+        escapeHtml(metricLabel(contractMetric(dash, key), fallback)) + '</dd></div>';
     }
     var html = '<dl class="lnkup-home-stats">';
-    html += moneyCell('Available', primaryAmt);
-    html += moneyCell('Pending', balances.pending);
-    html += moneyCell('Collected', collected);
-    html += moneyCell('Paid out', paidOut);
+    html += moneyCell('Available', 'available', balances.available);
+    html += moneyCell('Pending', 'pending', balances.pending);
+    html += moneyCell('Collected', 'collected', collected);
+    html += moneyCell('Paid out', 'paid_out', paidOut);
     html += '</dl>';
-    html += '<p class="lnkup-money-payout">' + payoutBadgeChip(connect) + '</p>';
+    html += '<p class="lnkup-money-payout">' + payoutBadgeChip(connect, balances.payouts) + '</p>';
+    html += lastSyncedLine(balances.money);
     hero.innerHTML = html;
+    bindSyncButtons(hero);
   }
 
   function paymentAuditBreakdown(audit) {
@@ -1018,7 +1145,7 @@
       html += '<td>' + escapeHtml(t.event_title || t.public_id) + '</td>';
       html += '<td>$' + Number(t.amount || 0).toFixed(2) + '</td>';
       html += '<td>' + statusChip(t.status) + '</td>';
-      html += '<td>' + escapeHtml((t.created_at || '').slice(0, 10)) + '</td>';
+      html += '<td>' + escapeHtml((t.paid_at || t.created_at || '').slice(0, 10)) + '</td>';
       html += '<td>' + (pid && audit.can_reconcile
         ? '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-fin-reconcile" data-payment-id="' + pid + '">' + (audit.payment_status === 'paid' ? 'Reconcile' : 'Sync payment') + '</button>'
         : '') + '</td>';
@@ -1027,6 +1154,89 @@
     });
     html += '</tbody></table></div>';
     return html;
+  }
+
+  var REVENUE_PAGE_SIZE = 25;
+
+  /** "Load more" for vendor revenue: re-renders the accumulated rows, newest paid first. */
+  function bindRevenuePaging(panel, rows) {
+    var btn = panel.querySelector('[data-fin-revenue-more]');
+    if (!btn) {
+      return;
+    }
+    btn.addEventListener('click', function () {
+      var page = Number(btn.getAttribute('data-page')) || 2;
+      btn.disabled = true;
+      fetchFinancialJson('/transactions?limit=' + REVENUE_PAGE_SIZE + '&page=' + page).then(function (result) {
+        if (!result.ok) {
+          btn.disabled = false;
+          finToast(result.error || 'Could not load more payments.', 'error');
+          return;
+        }
+        var next = result.data || [];
+        var all = rows.concat(next);
+        panel.innerHTML = vendorRevenueTable(all) +
+          (next.length === REVENUE_PAGE_SIZE ? '<p><button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" data-fin-revenue-more data-page="' + (page + 1) + '">Load more</button></p>' : '');
+        bindVendorRevenuePanel(panel);
+        bindRevenuePaging(panel, all);
+      });
+    });
+  }
+
+  /** Ledger table cells: type, signed amount, payment/payout reference, note, date. */
+  function ledgerRowCells(r) {
+    var ref = r.reference || {};
+    var parts = [];
+    if (ref.payment_id) {
+      parts.push(escapeHtml(ref.payment_title || ('Payment #' + ref.payment_id)) + (ref.paid_at ? ' <span class="lnkup-muted">paid ' + escapeHtml(String(ref.paid_at).slice(0, 10)) + '</span>' : ''));
+    }
+    if (ref.payout_id) {
+      parts.push('Payout #' + escapeHtml(String(ref.payout_id)));
+    }
+    if (ref.charge_id || ref.intent_id) {
+      parts.push('<code class="lnkup-fin-ref">' + escapeHtml(ref.charge_id || ref.intent_id) + '</code>');
+    }
+    return [
+      escapeHtml(String(r.entry_type || '').replace(/_/g, ' ')),
+      moneyFlowCell(r),
+      parts.join('<br>') || '<span class="lnkup-muted">—</span>',
+      escapeHtml(r.note || ''),
+      escapeHtml((r.created_at || '').slice(0, 10))
+    ];
+  }
+
+  /** "Load more" for the wallet ledger (GET /organizer-wallet/entries?page=N). */
+  function bindLedgerPaging(panel) {
+    var btn = panel.querySelector('[data-fin-ledger-more]');
+    if (!btn) {
+      return;
+    }
+    btn.addEventListener('click', function () {
+      var page = Number(btn.getAttribute('data-page')) || 2;
+      btn.disabled = true;
+      fetchFinancialJson('/organizer-wallet/entries?per_page=50&page=' + page).then(function (result) {
+        if (!result.ok) {
+          btn.disabled = false;
+          finToast(result.error || 'Could not load more ledger rows.', 'error');
+          return;
+        }
+        var next = result.data || [];
+        var body = panel.querySelector('[data-testid="lnkup-fin-ledger"] tbody');
+        if (body) {
+          next.forEach(function (r) {
+            var tr = document.createElement('tr');
+            tr.innerHTML = ledgerRowCells(r).map(function (cell) { return '<td>' + cell + '</td>'; }).join('');
+            body.appendChild(tr);
+          });
+        }
+        if (next.length < 50) {
+          btn.remove();
+          return;
+        }
+        btn.disabled = false;
+        btn.setAttribute('data-page', String(page + 1));
+      });
+    });
   }
 
   function bindVendorRevenuePanel(panel) {
@@ -1135,7 +1345,9 @@
       if (!dashRes.ok && balanceRes.ok) {
         html += infoCard('Revenue summary', '<p class="lnkup-muted">Revenue charts could not load. Your tracked balance is still shown.</p><p><button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" data-fin-retry-overview>Retry</button></p>', 'warn');
       }
-      if (Array.isArray(dash.money_categories) && dash.money_categories.length) {
+      if (dash.money && dash.money.metrics) {
+        html += moneyContractGrid(dash.money);
+      } else if (Array.isArray(dash.money_categories) && dash.money_categories.length) {
         html += moneyCategoryGrid(dash.money_categories, balances);
       } else {
         html += kpiGrid([
@@ -1151,15 +1363,20 @@
       if (byEvent.length) {
         html += eventBreakdownTable(byEvent);
       }
-      if (balances.stripeSynced) {
+      if (balances.isDest && !balances.stripeSynced) {
+        html += infoCard(t('account_balance', 'Account balance'), '<p>We could not read your payout balance from Stripe right now, so Available and Pending show as unavailable instead of $0.</p>', 'warn');
+      } else if (balances.stripeSynced && !dash.money) {
         html += infoCard(t('account_balance', 'Account balance'), '<p>Available: <strong>$' + balances.available.toFixed(2) + '</strong> · Pending: <strong>$' + balances.pending.toFixed(2) + '</strong></p>', 'success');
       }
       html += '<div class="lnkup-fin-overview-cards">';
-      html += payoutStatusCard(connect);
-      var cashoutReady = connect.status === 'active' && connect.payouts_enabled;
+      html += payoutStatusCard(connect, balances.payouts);
+      var cashoutReady = balances.payouts
+        ? !!balances.payouts.can_cash_out
+        : connect.status === 'active' && connect.payouts_enabled;
+      var notReadyCopy = (balances.payouts && CASH_OUT_REASON_COPY[balances.payouts.cash_out_reason]) || 'Complete payout setup to cash out vendor revenue.';
       var cashoutBody = cashoutReady
         ? '<p class="lnkup-fin-cashout-ready">You can request a cashout from your available balance.</p>'
-        : '<p class="lnkup-muted">Complete payout setup to cash out vendor revenue.</p>';
+        : '<p class="lnkup-muted">' + escapeHtml(notReadyCopy) + '</p>';
       html += infoCard('Cashout readiness', cashoutBody, cashoutReady ? 'success' : '');
       html += infoCard('Recent financial activity', activityList(activity));
       html += '</div>';
@@ -1321,7 +1538,7 @@
         message: 'Your payout account is active. Vendor payments can be routed to your organizer balance.',
         badge: t('payout_status_active', 'Payouts active'),
         badgeMod: 'success',
-        secondary: 'Settlement method: Direct organizer payouts'
+        secondary: 'Vendor payments go straight to your payout account.'
       };
     }
     if (status === 'pending' || status === 'pending_verification') {
@@ -1369,16 +1586,40 @@
     };
   }
 
-  function payoutBadgeChip(connect) {
+  var PAYOUT_STATE_MOD = {
+    active: 'success',
+    setup_incomplete: 'warn',
+    verifying: 'pending',
+    action_required: 'warn',
+    paused: 'muted',
+    not_connected: 'warn',
+    manual: 'muted'
+  };
+
+  /** Contract payout state wins over raw Connect status (it also checks settlement mode). */
+  function payoutCopyFor(connect, payouts) {
     var copy = payoutStatusCopy(connect || {});
-    return '<span class="lnkup-fin-payout-badge lnkup-fin-payout-badge--' + escapeHtml(copy.badgeMod) + '">' + escapeHtml(copy.badge) + '</span>';
+    if (payouts && payouts.state) {
+      copy.badge = payouts.label || copy.badge;
+      copy.badgeMod = PAYOUT_STATE_MOD[payouts.state] || copy.badgeMod;
+      copy.secondary = payouts.detail || '';
+      if (payouts.state !== 'active' && copy.badgeMod === 'success') {
+        copy.badgeMod = 'warn';
+      }
+    }
+    return copy;
   }
 
-  function payoutStatusCard(connect) {
-    var copy = payoutStatusCopy(connect);
+  function payoutBadgeChip(connect, payouts) {
+    var copy = payoutCopyFor(connect, payouts);
+    return '<span class="lnkup-fin-payout-badge lnkup-fin-payout-badge--' + escapeHtml(copy.badgeMod) + '" data-testid="lnkup-fin-payout-badge">' + escapeHtml(copy.badge) + '</span>';
+  }
+
+  function payoutStatusCard(connect, payouts) {
+    var copy = payoutCopyFor(connect, payouts);
     var html = '<div class="lnkup-fin-payout-card lnkup-fin-payout-card--' + escapeHtml(copy.badgeMod) + '">';
     html += '<div class="lnkup-fin-payout-card__header"><h4 class="lnkup-fin-info-card__title">' + escapeHtml(copy.title) + '</h4>';
-    html += payoutBadgeChip(connect) + '</div>';
+    html += payoutBadgeChip(connect, payouts) + '</div>';
     html += '<p>' + escapeHtml(copy.message) + '</p>';
     if (copy.secondary) {
       html += '<p class="lnkup-muted lnkup-fin-payout-card__secondary">' + escapeHtml(copy.secondary) + '</p>';
@@ -1594,17 +1835,23 @@
       var balances = resolveOrganizerBalances(data || {});
       var connect = data.connect || {};
       var maxCashout = Math.max(0, Number(balances.available) || 0);
-      var setupReady = connect.status === 'active' || balances.settlement === 'platform_treasury';
+      var payouts = balances.payouts;
+      var setupReady = payouts ? payouts.cash_out_reason !== 'payouts_not_active' : (connect.status === 'active' || balances.settlement === 'platform_treasury');
       var settling = balances.isDest && balances.stripeSynced && maxCashout <= 0 && Number(balances.pending) > 0;
       var balanceBlocked = balances.isDest && !balances.stripeSynced;
-      var canCashout = setupReady && maxCashout > 0 && !balanceBlocked;
+      var canCashout = payouts ? !!payouts.can_cash_out && maxCashout > 0 : (setupReady && maxCashout > 0 && !balanceBlocked);
       var instantEnabled = !!(connect.instant_payouts_enabled || (ajax.settings && ajax.settings.connect_instant_payouts_enabled));
       var html = '';
-      if (!setupReady && connect.available) {
+      var reasonCopy = payouts && !payouts.can_cash_out ? CASH_OUT_REASON_COPY[payouts.cash_out_reason] : '';
+      if (reasonCopy) {
+        html += '<p class="lnkup-fin-connect-banner" data-testid="lnkup-cashout-reason">' + escapeHtml(reasonCopy) + '</p>';
+      } else if (!setupReady && connect.available) {
         html += '<p class="lnkup-fin-connect-banner">Finish payout setup before cashing out.</p>';
       }
-      if (balanceBlocked) {
+      if (!reasonCopy && balanceBlocked) {
         html += '<p class="lnkup-fin-connect-banner">Could not load your live Stripe payout balance. Refresh and try again.</p>';
+      } else if (reasonCopy) {
+        html += lastSyncedLine(balances.money);
       } else if (settling) {
         html += '<p class="lnkup-muted">Card payments can take a few days to become available for payout.</p>';
       } else if (balances.isDest && balances.stripeSynced && Number(balances.platformRecoverable) > 0) {
@@ -1615,7 +1862,7 @@
         html += '<p class="lnkup-muted">Max cashout uses your live available balance in destination mode.</p>';
       }
       html += '<form class="lnkup-fin-cashout-card" id="lnkup-cashout-form">' +
-        '<p>Available <strong>$' + maxCashout.toFixed(2) + '</strong></p>';
+        '<p>Available <strong>' + escapeHtml(metricLabel(contractMetric(data, 'available'), maxCashout)) + '</strong></p>';
       var sourceBreakdown = formatSourceTypesBreakdown(balances.sourceTypes);
       if (sourceBreakdown) {
         html += '<p class="lnkup-muted">' + escapeHtml(sourceBreakdown) + '</p>';
@@ -1634,6 +1881,7 @@
       }
       html += '<p class="lnkup-muted"><a href="#" class="lnkup-fin-goto-payouts">View payout history →</a></p>';
       panel.innerHTML = html;
+      bindSyncButtons(panel);
       var payoutsLink = panel.querySelector('.lnkup-fin-goto-payouts');
       if (payoutsLink) {
         payoutsLink.addEventListener('click', function (e) {
@@ -1974,15 +2222,23 @@
           var stripeBal = data.stripe_balance || balances.stripeBal || {};
           var html = '<div class="lnkup-fin-wallet-panels">';
           html += '<h3>Summary</h3>';
+          html += lastSyncedLine(balances.money);
           html += kpiGrid([
-            { label: 'Available', value: '$' + balances.available.toFixed(2) },
-            { label: 'Pending', value: '$' + balances.pending.toFixed(2) },
-            { label: 'Processing', value: '$' + balances.processing.toFixed(2) },
-            { label: 'Lifetime paid', value: '$' + Number((data.balances && data.balances.lifetime_paid) || 0).toFixed(2) },
-            { label: 'Reserve', value: '$' + balances.reserve.toFixed(2) },
-            { label: 'LNKup settled', value: '$' + balances.ledgerSettled.toFixed(2) }
+            { label: 'Available', value: metricLabel(contractMetric(data, 'available'), balances.available) },
+            { label: 'Pending', value: metricLabel(contractMetric(data, 'pending'), balances.pending) },
+            { label: 'In transit', value: metricLabel(contractMetric(data, 'in_transit'), balances.processing) },
+            { label: 'Paid out', value: metricLabel(contractMetric(data, 'paid_out'), (data.balances && data.balances.lifetime_paid) || 0) },
+            { label: 'Reserve', value: metricLabel(contractMetric(data, 'reserve'), balances.reserve) },
+            { label: 'LNKup settled', value: metricLabel(contractMetric(data, 'lnkup_settled'), balances.ledgerSettled) }
           ]);
-          if (balances.stripeSynced) {
+          var held = contractMetric(data, 'platform_held');
+          if (isMetricOk(held) && Number(held.cents) > 0) {
+            var heldNext = balances.payouts && balances.payouts.state === 'active'
+              ? 'moves to your payout account when you cash out.'
+              : 'is paid out once you finish payout setup.';
+            html += '<p class="lnkup-muted" data-testid="lnkup-fin-platform-held">$' + (Number(held.cents) / 100).toFixed(2) + ' from your bookings is held by LNKup and ' + heldNext + '</p>';
+          }
+          if (balances.stripeSynced && !balances.money) {
             html += infoCard(t('account_balance', 'Account balance'), '<p>Available: <strong>$' + balances.available.toFixed(2) + '</strong> · Pending: <strong>$' + Number(stripeBal.pending || balances.pending).toFixed(2) + '</strong></p>', 'success');
             if (Number(balances.platformRecoverable) > 0) {
               html += '<p class="lnkup-muted">Includes $' + Number(balances.platformRecoverable).toFixed(2) + ' held on LNKup (moves to your payout account on cash out).</p>';
@@ -1990,18 +2246,22 @@
           }
           var connect = data.connect || {};
           html += '<h3>Connect status</h3>';
-          html += payoutStatusCard(connect);
+          html += payoutStatusCard(connect, balances.payouts);
           html += connectWalletBanner(connect);
           if (connect.status !== 'active' && connect.available) {
             html += '<button type="button" class="lnkup-btn lnkup-btn--sm" id="lnkup-connect-onboard">Finish payout setup</button>';
           }
           html += '<h3>Ledger</h3>';
-          html += tableFromRows(['Type', 'Amount', 'Note', 'Date'], (data.entries || []).map(function (r) {
-            return [escapeHtml(r.entry_type), moneyFlowCell(r), escapeHtml(r.note || ''), escapeHtml((r.created_at || '').slice(0, 10))];
-          }));
+          var entries = data.entries || [];
+          html += '<div data-testid="lnkup-fin-ledger">' + tableFromRows(['Type', 'Amount', 'Reference', 'Note', 'Date'], entries.map(ledgerRowCells)) + '</div>';
+          if (Number(data.entries_total || 0) > entries.length) {
+            html += '<p><button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" data-fin-ledger-more data-page="2">Load more</button></p>';
+          }
           html += '</div>';
           setTimeout(function () {
             bindConnectOnboardButton();
+            bindSyncButtons(panel);
+            bindLedgerPaging(panel);
           }, 0);
           return html;
         });
@@ -2015,14 +2275,17 @@
       if (panel.id === 'lnkup-fin-org-vendor-revenue') {
         if (!panel.dataset.loaded) {
           panel.innerHTML = '<div class="lnkup-fin-skeleton"></div>';
-          fetchFinancialJson('/transactions?limit=25').then(function (result) {
+          fetchFinancialJson('/transactions?limit=' + REVENUE_PAGE_SIZE + '&page=1').then(function (result) {
             panel.dataset.loaded = '1';
             if (!result.ok) {
               failPanel(panel, result.error);
               return;
             }
-            panel.innerHTML = vendorRevenueTable(result.data || []);
+            var rows = result.data || [];
+            panel.innerHTML = vendorRevenueTable(rows) +
+              (rows.length === REVENUE_PAGE_SIZE ? '<p><button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" data-fin-revenue-more data-page="2">Load more</button></p>' : '');
             bindVendorRevenuePanel(panel);
+            bindRevenuePaging(panel, rows);
           }).catch(function () {
             panel.dataset.loaded = '1';
             failPanel(panel);

@@ -5694,7 +5694,7 @@ class LNKup_Shortcodes {
 
 		ob_start();
 		$payments = lnkup_get_payments_for_user( get_current_user_id(), $role );
-		$rows     = function_exists( 'lnkup_payment_display_rows' ) ? lnkup_payment_display_rows( $payments ) : array();
+		$rows     = function_exists( 'lnkup_payment_display_rows' ) ? lnkup_sort_payment_rows_by_activity( lnkup_payment_display_rows( $payments ) ) : array();
 		if ( 'vendor' === $role ) {
 			?>
 		<div class="lnkup-mp lnkup-vendor-dash" id="payments">

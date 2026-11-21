@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "currency": "usd",
+  "generated_at": "2026-11-17T15:00:00+00:00",
+  "last_synced_at": "2026-11-17 09:58:00",
+  "settlement_mode": "destination",
+  "payouts": {
+    "state": "active",
+    "label": "Payouts active",
+    "detail": "Vendor payments go straight to your payout account.",
+    "method": "connect",
+    "can_cash_out": false,
+    "cash_out_reason": "balance_unavailable"
+  },
+  "metrics": {
+    "collected": { "cents": 266772, "status": "ok", "source": "wordpress_payments", "synced_at": null },
+    "platform_fees": { "cents": 15800, "status": "ok", "source": "wordpress_payments", "synced_at": null },
+    "refunds": { "cents": 0, "status": "ok", "source": "wordpress_payments", "synced_at": null },
+    "net_earnings": { "cents": 250972, "status": "ok", "source": "wordpress_payments", "synced_at": null },
+    "available": { "cents": null, "status": "unavailable", "source": "stripe_connect", "synced_at": null },
+    "pending": { "cents": null, "status": "unavailable", "source": "stripe_connect", "synced_at": null },
+    "in_transit": { "cents": 23000, "status": "ok", "source": "stripe_connect_payouts", "synced_at": "2026-11-17T15:00:00+00:00" },
+    "paid_out": { "cents": 92000, "status": "ok", "source": "stripe_connect_payouts", "synced_at": "2026-11-17T15:00:00+00:00" },
+    "processing": { "cents": 0, "status": "ok", "source": "ledger", "synced_at": null },
+    "lnkup_cashouts_paid": { "cents": 0, "status": "ok", "source": "ledger", "synced_at": null },
+    "reserve": { "cents": 0, "status": "ok", "source": "ledger", "synced_at": null },
+    "lnkup_settled": { "cents": 92000, "status": "ok", "source": "ledger", "synced_at": null },
+    "platform_held": { "cents": 0, "status": "ok", "source": "ledger", "synced_at": null }
+  }
+}

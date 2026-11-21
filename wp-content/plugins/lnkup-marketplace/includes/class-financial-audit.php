@@ -21,6 +21,13 @@ class LNKup_Financial_Audit {
 		global $wpdb;
 		$table = LNKup_Financial_Tables::audit_table();
 		$now   = current_time( 'mysql' );
+		if ( empty( $args['metadata'] ) ) {
+			// Callers pass context (breakdowns, sources, reasons) as top-level keys; keep it.
+			$extra = array_diff_key( (array) $args, array_flip( array( 'amount', 'actor_user_id', 'metadata' ) ) );
+			if ( $extra ) {
+				$args['metadata'] = $extra;
+			}
+		}
 		$wpdb->insert(
 			$table,
 			array(

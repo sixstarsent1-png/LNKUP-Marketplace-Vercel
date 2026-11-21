@@ -61,7 +61,7 @@ class LNKup_Financial_Render {
 
 	private static function organizer_recent_activity() {
 		$payments = function_exists( 'lnkup_get_payments_for_user' ) ? lnkup_get_payments_for_user( get_current_user_id(), 'organizer' ) : array();
-		$rows     = function_exists( 'lnkup_payment_display_rows' ) ? lnkup_payment_display_rows( $payments ) : array();
+		$rows     = function_exists( 'lnkup_payment_display_rows' ) ? lnkup_sort_payment_rows_by_activity( lnkup_payment_display_rows( $payments ) ) : array();
 		$rows     = array_slice( $rows, 0, 5 );
 		ob_start();
 		?>
@@ -80,7 +80,8 @@ class LNKup_Financial_Render {
 							$vendor_id = (int) get_post_meta( $payment->ID, '_lnkup_vendor_user_id', true );
 							$vendor    = $vendor_id ? get_the_author_meta( 'display_name', $vendor_id ) : $payment->post_title;
 						}
-						$when = $payment->post_date ? date_i18n( 'M j, Y', strtotime( $payment->post_date ) ) : '';
+						$activity = lnkup_payment_activity_date( $payment );
+						$when     = $activity ? date_i18n( 'M j, Y', strtotime( $activity ) ) : '';
 						$meta = implode( ' · ', array_filter( array( $event_id ? get_the_title( $event_id ) : '', $when ) ) );
 						?>
 						<li class="lnkup-request-row">

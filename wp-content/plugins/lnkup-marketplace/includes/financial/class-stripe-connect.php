@@ -868,8 +868,16 @@ class LNKup_Stripe_Connect {
 
 		$app_fee_cents = (int) round( (float) ( $breakdown['platform_fee'] ?? 0 ) * 100 );
 		update_post_meta( $payment_id, '_lnkup_settlement_mode', $mode );
-		update_post_meta( $payment_id, '_lnkup_application_fee_cents', $app_fee_cents );
-		update_post_meta( $payment_id, '_lnkup_fee_breakdown', wp_json_encode( $breakdown ) );
+		// At settle the charge already happened: keep the fee Stripe was sent (or reported) and
+		// the charge-time breakdown instead of re-deriving them from today's fee settings.
+		$frozen = 'settle' === $context && '' !== (string) get_post_meta( $payment_id, '_lnkup_fee_breakdown', true );
+		if ( ! $frozen ) {
+			update_post_meta( $payment_id, '_lnkup_application_fee_cents', $app_fee_cents );
+			update_post_meta( $payment_id, '_lnkup_fee_breakdown', wp_json_encode( $breakdown ) );
+		} else {
+			update_post_meta( $payment_id, '_lnkup_fee_breakdown_settled', wp_json_encode( $breakdown ) );
+			$app_fee_cents = (int) get_post_meta( $payment_id, '_lnkup_application_fee_cents', true );
+		}
 		if ( 'destination' === $mode ) {
 			if ( '' === $existing_dest ) {
 				$account = self::get_account( $organizer_id, 'organizer' );
@@ -2042,10 +2050,15 @@ class LNKup_Stripe_Connect {
 		if ( '' !== $provider_ref && '' !== $stripe_id && $provider_ref !== $stripe_id ) {
 			return;
 		}
-		if ( 'payout.paid' === $type ) {
+		$status = (string) ( $payout['status'] ?? '' );
+		if ( 'payout.paid' === $type || ( 'payout.updated' === $type && 'paid' === $status ) ) {
 			LNKup_Organizer_Payouts::mark_paid( $local_id, $stripe_id );
-		} elseif ( 'payout.failed' === $type ) {
-			LNKup_Organizer_Payouts::handle_async_failure( $local_id, (string) ( $payout['failure_message'] ?? '' ) );
+		} elseif ( in_array( $type, array( 'payout.failed', 'payout.canceled' ), true ) || ( 'payout.updated' === $type && in_array( $status, array( 'failed', 'canceled' ), true ) ) ) {
+			$reason = (string) ( $payout['failure_message'] ?? '' );
+			if ( '' === $reason && 'canceled' === $status ) {
+				$reason = __( 'Payout was canceled', 'lnkup-marketplace' );
+			}
+			LNKup_Organizer_Payouts::handle_async_failure( $local_id, $reason );
 		}
 	}
 
