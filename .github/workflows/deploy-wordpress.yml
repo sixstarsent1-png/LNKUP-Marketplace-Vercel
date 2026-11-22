@@ -7,6 +7,7 @@ on:
   #   branches: [main, master]
   #   paths:
   #     - "wp-content/plugins/lnkup-marketplace/**"
+  #     - "wp-content/plugins/lnkup-communications/**"
   #     - "wp-content/themes/lnkup-theme/**"
   #     - ".github/workflows/deploy-wordpress.yml"
 
@@ -36,7 +37,7 @@ jobs:
           chmod 700 ~/.ssh
           ssh-keyscan -p "$SG_SSH_PORT" "$SG_SSH_HOST" >> ~/.ssh/known_hosts
 
-      - name: Rsync plugin and theme
+      - name: Rsync plugins and theme
         env:
           SG_SSH_HOST: ${{ secrets.SG_SSH_HOST }}
           SG_SSH_PORT: ${{ secrets.SG_SSH_PORT }}
@@ -64,6 +65,16 @@ jobs:
             -e "$SSH" \
             wp-content/themes/lnkup-theme/ \
             "$THEME_DEST"
+
+          # lib/action-scheduler is committed (no composer step), so vendor-style excludes do not apply.
+          COMMS_DEST="${SG_SSH_USER}@${SG_SSH_HOST}:${SG_WP_ROOT}/wp-content/plugins/lnkup-communications/"
+          rsync -az --delete \
+            --exclude node_modules \
+            --exclude .git \
+            --exclude tests \
+            -e "$SSH" \
+            wp-content/plugins/lnkup-communications/ \
+            "$COMMS_DEST"
 
       - name: Composer install on server
         env:

@@ -105,6 +105,7 @@ class LNKup_Vendor_Profile_REST {
 				'public_url'    => $slug
 					? add_query_arg( 'vendor', $slug, lnkup_page_url_helper( 'vendors' ) )
 					: '',
+				'matching'      => class_exists( 'LNKup_Match_REST' ) ? LNKup_Match_REST::preferences_payload( (int) $profile_id ) : null,
 			)
 		);
 	}
@@ -189,6 +190,13 @@ class LNKup_Vendor_Profile_REST {
 		if ( class_exists( 'LNKup_Vendor_Reputation' ) ) {
 			LNKup_Vendor_Reputation::ensure_public_slug( $profile_id );
 			LNKup_Vendor_Reputation::refresh( $profile_id );
+		}
+
+		if ( class_exists( 'LNKup_Match_REST' ) ) {
+			$applied = LNKup_Match_REST::apply_preferences( (int) $profile_id, isset( $body['matching'] ) && is_array( $body['matching'] ) ? $body['matching'] : array() );
+			if ( is_wp_error( $applied ) ) {
+				return $applied;
+			}
 		}
 
 		return rest_ensure_response(

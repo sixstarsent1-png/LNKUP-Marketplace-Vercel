@@ -421,6 +421,10 @@ class LNKup_Checkins {
 		if ( '' === $token ) {
 			return new WP_Error( 'not_found', __( 'Invalid QR pass.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}
+		$indexed_app = class_exists( 'LNKup_Pass_Tokens' ) ? LNKup_Pass_Tokens::lookup_application( $token ) : 0;
+		if ( $indexed_app ) {
+			return self::record( $indexed_app, 'checked_in', 'qr', absint( $event_id ) );
+		}
 		$packets = get_posts(
 			array(
 				'post_type'      => 'lnkup_packet',
@@ -537,7 +541,15 @@ class LNKup_Checkins {
 			return false;
 		}
 		$pay_status = (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true );
-		return in_array( $pay_status, array( 'refunded', 'cancelled', 'canceled', 'failed' ), true );
+		if ( in_array( $pay_status, array( 'refunded', 'cancelled', 'canceled', 'failed', 'disputed', 'chargeback_lost' ), true ) ) {
+			return true;
+		}
+		// Partial refunds (e.g. goodwill credits) keep check-in unless the organizer opted to block them.
+		if ( 'partially_refunded' === $pay_status ) {
+			$event_id = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
+			return $event_id && (bool) get_post_meta( $event_id, '_lnkup_block_checkin_partial_refund', true );
+		}
+		return false;
 	}
 
 	/**

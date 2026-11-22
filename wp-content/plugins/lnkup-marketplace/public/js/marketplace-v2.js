@@ -442,6 +442,67 @@
     });
   }
 
+  function useMatching() {
+    return !!(cfg.matching && cfg.matching.vendor && cfg.isVendor && cfg.matchRestUrl);
+  }
+
+  /**
+   * Personalized sections from the matching engine (lnkup/v1/match/vendor/recommendations).
+   */
+  function matchApi(section) {
+    var qs = new URLSearchParams({ section: section, per_page: '8', html: section === 'tours' || section === 'series' ? '0' : '1' });
+    return fetch(cfg.matchRestUrl + '/vendor/recommendations?' + qs.toString(), {
+      credentials: 'same-origin',
+      headers: { 'X-WP-Nonce': cfg.restNonce || '' }
+    }).then(function (r) {
+      var ct = r.headers.get('content-type') || '';
+      if (ct.indexOf('application/json') === -1) {
+        throw new Error('api_error');
+      }
+      return r.json().then(function (body) {
+        if (!r.ok || (body && body.code)) {
+          console.error('Matching API error', r.status, body);
+          throw new Error((body && body.message) || 'Request failed');
+        }
+        return body;
+      });
+    });
+  }
+
+  function renderTourCards(items) {
+    return items.map(function (tour) {
+      var url = window.location.pathname + '?tour_id=' + encodeURIComponent(tour.id);
+      var fee = tour.fee_max > 0
+        ? (tour.fee_min === tour.fee_max ? '$' + tour.fee_min : '$' + tour.fee_min + '–$' + tour.fee_max)
+        : '';
+      var reason = tour.match && tour.match.reasons && tour.match.reasons[0] ? tour.match.reasons[0] : '';
+      return '<article class="lnkup-card lnkup-tour-card" data-testid="lnkup-tour-card" data-tour-id="' + escapeAttr(tour.id) + '">' +
+        '<p class="lnkup-badge lnkup-badge--outline">' + escapeHtml(tour.type === 'series' ? 'Recurring market' : 'Tour') + '</p>' +
+        '<h3 class="lnkup-tour-card__title">' + escapeHtml(tour.title) + '</h3>' +
+        (reason ? '<p class="lnkup-match-reason">' + escapeHtml(reason) + '</p>' : '') +
+        '<p class="lnkup-muted">' + escapeHtml((tour.places || []).slice(0, 3).join(' · ')) + '</p>' +
+        '<p class="lnkup-muted">' + escapeHtml(tour.next_date ? 'Next: ' + tour.next_date : '') + (fee ? ' · ' + escapeHtml(fee) : '') + '</p>' +
+        '<a class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" href="' + escapeAttr(url) + '">View stops</a>' +
+        '</article>';
+    }).join('');
+  }
+
+  function matchingTabDefs() {
+    if (!useMatching()) return [];
+    var defs = [
+      { key: 'match_recommended', label: 'Recommended for You', fetch: function () { return matchApi('recommended'); } },
+      { key: 'match_markets', label: 'Near Your Cities', fetch: function () { return matchApi('preferred_markets'); } },
+      { key: 'match_new', label: 'New Opportunities', fetch: function () { return matchApi('new'); } },
+      { key: 'match_deadlines', label: 'Deadlines Approaching', fetch: function () { return matchApi('deadlines'); } },
+      { key: 'match_previous', label: 'Previously Worked With', fetch: function () { return matchApi('previous_organizers'); } }
+    ];
+    if (cfg.matching.tours) {
+      defs.push({ key: 'match_tours', label: 'Tours Accepting Vendors', fetch: function () { return matchApi('tours'); }, render: renderTourCards });
+      defs.push({ key: 'match_series', label: 'Recurring Markets', fetch: function () { return matchApi('series'); }, render: renderTourCards });
+    }
+    return defs;
+  }
+
   function initExploreMore() {
     if (!phaseAtLeast('1b') || !cfg.restUrl) return;
     var explore = document.getElementById('lnkup-explore-more');
@@ -452,9 +513,9 @@
     if (!explore || !loading || !tabsWrap || !tablist || !panels) return;
 
     var collections = getExploreCollections();
-    var tabDefs = [
+    var tabDefs = matchingTabDefs().concat([
       { key: 'recommended', label: 'Recommended', fetch: function () {
-        if (!cfg.isLoggedIn) return Promise.resolve({ items: [] });
+        if (!cfg.isLoggedIn || useMatching()) return Promise.resolve({ items: [] });
         return api('/sections/recommended', { query: { limit: 8 } });
       } },
       { key: 'trending', label: 'Trending', fetch: function () {
@@ -466,7 +527,7 @@
       { key: 'applied', label: 'Most Applied', fetch: function () {
         return api('/sections/trending', { query: { section: 'most_applied', limit: 8 } });
       } }
-    ];
+    ]);
 
     Promise.allSettled(tabDefs.map(function (def) {
       return def.fetch().then(function (data) {
@@ -480,7 +541,8 @@
         var data = result.value.data;
         var items = (data && data.items) ? data.items : [];
         if (!items.length) return;
-        var html = data.html || '';
+        var html = def.render ? def.render(items) : (data.html || '');
+        if (!html) return;
         exploreTabCache[def.key] = '<div class="lnkup-event-grid lnkup-mp-v2__rail lnkup-mp-v2__rail-scroll-x">' + html + '</div>';
         tabs.push({ key: def.key, label: def.label });
       });
@@ -832,8 +894,8 @@
         if (data.button_state === 'already_applied' || data.button_state === 'applied') {
           triggerEl.textContent = 'Applied';
           triggerEl.classList.add('is-disabled');
-        } else if (data.button_state === 'closed' || data.button_state === 'full') {
-          triggerEl.textContent = data.button_state === 'full' ? 'Full' : 'Closed';
+        } else if (data.button_state === 'closed' || data.button_state === 'full' || data.button_state === 'declined') {
+          triggerEl.textContent = data.button_state === 'full' ? 'Full' : (data.button_state === 'declined' ? 'Declined' : 'Closed');
           triggerEl.classList.add('is-disabled');
         }
       }

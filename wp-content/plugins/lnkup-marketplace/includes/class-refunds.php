@@ -184,14 +184,34 @@ class LNKup_Refunds {
 			update_post_meta( $payment_id, '_lnkup_credit_refund_amount', round( self::credited_amount( $payment_id ) + $amount, 2 ) );
 			$provider_ref = 'credit_' . $refund_id;
 		} else {
-			$result = LNKup_Financial_Service::refund( $payment_id, $amount );
-			if ( is_wp_error( $result ) ) {
-				self::set_status( $refund_id, 'pending' );
-				LNKup_Financial_Audit::log( 'refund_provider_error', 'refund', $refund_id, array( 'code' => $result->get_error_code() ) );
-				return new WP_Error( 'refund_failed', __( 'The refund could not be sent. Nothing was charged back; try again shortly.', 'lnkup-marketplace' ), array( 'status' => 502 ) );
+			// The card only ever paid total − wallet credit; the credit-covered part goes back to
+			// the wallet instead of asking Stripe for more than it collected (B-9).
+			$card_open   = max( 0, round( self::card_collected( $payment_id ) - $card_done, 2 ) );
+			$card_amount = round( min( $amount, $card_open ), 2 );
+			$wallet_part = round( $amount - $card_amount, 2 );
+			if ( $card_amount > 0 ) {
+				$result = LNKup_Financial_Service::refund( $payment_id, $card_amount );
+				if ( is_wp_error( $result ) ) {
+					self::set_status( $refund_id, 'pending' );
+					LNKup_Financial_Audit::log( 'refund_provider_error', 'refund', $refund_id, array( 'code' => $result->get_error_code() ) );
+					return new WP_Error( 'refund_failed', __( 'The refund could not be sent. Nothing was charged back; try again shortly.', 'lnkup-marketplace' ), array( 'status' => 502 ) );
+				}
+				$provider_ref = is_array( $result ) ? (string) ( $result['provider_ref'] ?? '' ) : '';
+				update_post_meta( $payment_id, '_lnkup_refund_amount', round( $card_done + $card_amount, 2 ) );
 			}
-			$provider_ref = is_array( $result ) ? (string) ( $result['provider_ref'] ?? '' ) : '';
-			update_post_meta( $payment_id, '_lnkup_refund_amount', round( $card_done + $amount, 2 ) );
+			if ( $wallet_part > 0 ) {
+				$restored = LNKup_Credits::restore_for_payment( $payment_id, 'refund_credit_portion', $wallet_part );
+				if ( $restored > 0 ) {
+					update_post_meta( $payment_id, '_lnkup_credit_refund_amount', round( self::credited_amount( $payment_id ) + $restored, 2 ) );
+					$provider_ref = trim( $provider_ref . ',credit_' . $refund_id, ',' );
+				}
+				$amount = round( $card_amount + $restored, 2 );
+			}
+			if ( $amount <= 0 ) {
+				self::set_status( $refund_id, 'failed' );
+				LNKup_Financial_Audit::log( 'refund_failed', 'refund', $refund_id, array( 'reason' => 'nothing_collected' ) );
+				return new WP_Error( 'fully_refunded', __( 'There is nothing left to refund on this booking.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+			}
 		}
 
 		$wpdb->update(
@@ -223,6 +243,23 @@ class LNKup_Refunds {
 	}
 
 	/**
+	 * Dollars actually collected by card for a payment (excludes wallet credit).
+	 *
+	 * @param int $payment_id Payment ID.
+	 */
+	public static function card_collected( $payment_id ) {
+		$total  = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
+		$credit = (float) get_post_meta( $payment_id, '_lnkup_credit_applied', true );
+		$cap    = max( 0, round( $total - $credit, 2 ) );
+		$partials = get_post_meta( $payment_id, '_lnkup_partial_charges', true );
+		$charged  = (int) get_post_meta( $payment_id, '_lnkup_stripe_charge_amount_cents', true );
+		if ( $charged > 0 && ( ! is_array( $partials ) || ! $partials ) ) {
+			$cap = min( $cap, round( $charged / 100, 2 ) );
+		}
+		return $cap;
+	}
+
+	/**
 	 * Set the payment to refunded / partially_refunded from card refunds plus credit refunds.
 	 *
 	 * @param int $payment_id Payment ID.
@@ -240,6 +277,64 @@ class LNKup_Refunds {
 		}
 		if ( $returned + 0.004 >= $total && class_exists( 'LNKup_Escrow' ) ) {
 			LNKup_Escrow::cancel_for_payment( $payment_id );
+		}
+		$app_id = (int) get_post_meta( $payment_id, '_lnkup_application_id', true );
+		if ( $app_id ) {
+			LNKup_Invoices::mark_refunded_for_application( $app_id, $returned + 0.004 >= $total );
+			if ( $returned + 0.004 >= $total ) {
+				self::close_booking_after_money_returned( $app_id, 'refunded' );
+			}
+		}
+		self::announce_refund_progress( (int) $payment_id, (int) round( $returned * 100 ), $returned + 0.004 >= $total );
+	}
+
+	/**
+	 * A fully refunded or lost-chargeback booking is no longer booked: lock the pass, cancel the
+	 * application (which releases the inventory hold) and keep every payment record intact (B-8).
+	 *
+	 * @param int    $app_id Application ID.
+	 * @param string $reason refunded|chargeback_lost.
+	 */
+	public static function close_booking_after_money_returned( $app_id, $reason ) {
+		LNKup_Packets::lock_for_application( $app_id );
+		$status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+		if ( in_array( $status, array( 'paid', 'payment_required', 'approved' ), true ) ) {
+			update_post_meta( $app_id, '_lnkup_cancellation_reason', sanitize_key( $reason ) );
+			LNKup_Applications::transition( $app_id, 'cancelled', array( 'reason' => $reason, 'source' => 'financial' ) );
+		}
+	}
+
+	/**
+	 * Fire `lnkup_payment_refund_synced` once per increase in the cumulative returned amount.
+	 *
+	 * Every refund path (admin approval, Stripe Dashboard webhook, dispute credit) lands in
+	 * sync_payment_refund_status(), so reward reversals and net-fee reporting listen here
+	 * instead of on `lnkup_refund_completed`, which only the admin path fires.
+	 *
+	 * @param int  $payment_id     Payment ID.
+	 * @param int  $returned_cents Cumulative cents returned (card + credit).
+	 * @param bool $is_full        Whether the booking is now fully refunded.
+	 */
+	private static function announce_refund_progress( $payment_id, $returned_cents, $is_full ) {
+		global $wpdb;
+		$lock = 'lnkup_refund_sync_' . absint( $payment_id );
+		if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return;
+		}
+		try {
+			$announced = (int) get_post_meta( $payment_id, '_lnkup_refund_sync_announced_cents', true );
+			if ( $returned_cents <= $announced ) {
+				return;
+			}
+			update_post_meta( $payment_id, '_lnkup_refund_sync_announced_cents', $returned_cents );
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		try {
+			do_action( 'lnkup_payment_refund_synced', $payment_id, $returned_cents, (bool) $is_full );
+		} catch ( Throwable $e ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( 'LNKup refund sync listener failed for payment ' . $payment_id . ': ' . $e->getMessage() );
 		}
 	}
 

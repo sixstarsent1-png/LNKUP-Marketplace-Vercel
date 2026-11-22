@@ -15,6 +15,7 @@ class LNKup_External_Events {
 	const CLAIM_PENDING        = 'claim_pending';
 	const CLAIM_CLAIMED        = 'claimed';
 	const CLAIM_HIDDEN         = 'hidden';
+	const CLAIM_DISPUTED       = 'claim_disputed';
 
 	const WORKFLOW_IMPORTED        = 'imported';
 	const WORKFLOW_PENDING_REVIEW  = 'pending_review';
@@ -1469,12 +1470,22 @@ class LNKup_External_Events {
 		if ( ! $event ) {
 			return new WP_Error( 'not_found', __( 'External event not found.', 'lnkup-marketplace' ) );
 		}
-		if ( self::CLAIM_CLAIMED === $event['claim_status'] && (int) $event['claimed_event_id'] > 0 ) {
+		$trust_on         = class_exists( 'LNKup_Event_Claims' ) && 'off' !== LNKup_Trust::claim_review_mode();
+		$claimed_event_id = (int) $event['claimed_event_id'];
+		if ( self::CLAIM_CLAIMED === $event['claim_status'] && $claimed_event_id > 0
+			&& ( ! $trust_on || (int) get_post_meta( $claimed_event_id, '_lnkup_organizer_user_id', true ) === $organizer_id ) ) {
 			return array(
-				'event_id'          => (int) $event['claimed_event_id'],
+				'event_id'          => $claimed_event_id,
 				'already_claimed'   => true,
 				'external_event_id' => $external_id,
 			);
+		}
+
+		if ( $trust_on ) {
+			$rate = LNKup_Event_Claims::check_rate( $organizer_id, $external_id );
+			if ( is_wp_error( $rate ) ) {
+				return $rate;
+			}
 		}
 
 		$token_row = self::get_token_row( $token );
@@ -1488,9 +1499,19 @@ class LNKup_External_Events {
 			return new WP_Error( 'token_expired', __( 'This claim link has expired.', 'lnkup-marketplace' ) );
 		}
 
+		if ( $trust_on ) {
+			$review = self::review_claim( $event, $token_row, $organizer_id );
+			if ( null !== $review ) {
+				return $review;
+			}
+		}
+
 		$event_id = self::create_lnk_event_from_external( $event, $organizer_id );
 		if ( is_wp_error( $event_id ) ) {
 			return $event_id;
+		}
+		if ( $trust_on ) {
+			self::apply_claim_authenticity( (int) $event_id, $event, $token_row, $organizer_id );
 		}
 
 		$events_table = LNKup_External_Events_Tables::events_table();
@@ -1534,6 +1555,279 @@ class LNKup_External_Events {
 			'external_event_id' => $external_id,
 			'dashboard_url'     => lnkup_organizer_view_url( 'applications' ),
 		);
+	}
+
+	/**
+	 * Trust review before a claim creates anything.
+	 *
+	 * @param array<string, mixed> $event        External row.
+	 * @param array<string, mixed> $token_row    Claim token row.
+	 * @param int                  $organizer_id Claiming organizer.
+	 * @return array<string, mixed>|null Response when the claim waits for review; null to continue.
+	 */
+	protected static function review_claim( array $event, array $token_row, int $organizer_id ) {
+		$external_id = (int) $event['id'];
+		$match       = LNKup_Event_Claims::binding( $organizer_id, (string) $token_row['email'] );
+		$evidence    = array(
+			array(
+				'source'      => 'claim_link',
+				'match'       => $match,
+				'token_email' => self::mask_email( (string) $token_row['email'] ),
+				'source_url'  => (string) ( $event['source_url'] ?? '' ),
+				'at'          => current_time( 'mysql', true ),
+			),
+		);
+
+		$claimed_event_id = (int) $event['claimed_event_id'];
+		$other_owner      = $claimed_event_id > 0 ? (int) get_post_meta( $claimed_event_id, '_lnkup_organizer_user_id', true ) : 0;
+		$rival_pending    = self::has_rival_pending_claim( $external_id, $organizer_id );
+		if ( ( $other_owner && $other_owner !== $organizer_id ) || $rival_pending ) {
+			self::mark_token_used( (int) $token_row['id'], $organizer_id );
+			self::set_claim_status( $external_id, self::CLAIM_DISPUTED );
+			$case_id = LNKup_Trust_Cases::open(
+				array(
+					'case_type'    => 'event_claim_conflict',
+					'severity'     => 'elevated',
+					'subject_type' => 'external_event',
+					'subject_id'   => $external_id,
+					'event_id'     => $claimed_event_id,
+					'signal_key'   => 'conflict_' . $organizer_id,
+					'summary'      => sprintf( 'Organizer #%d claimed external event #%d, which another organizer already claimed.', $organizer_id, $external_id ),
+					'evidence'     => array_merge( $evidence, array( array( 'source' => 'existing_owner', 'organizer_user_id' => $other_owner, 'event_id' => $claimed_event_id ) ) ),
+					'opened_by'    => $organizer_id,
+					'next_step'    => __( 'Contact both organizers through known channels. Do not transfer the listing until ownership is confirmed. Existing bookings stay active.', 'lnkup-marketplace' ),
+				)
+			);
+			LNKup_Event_Claims::record(
+				array(
+					'external_event_id' => $external_id,
+					'organizer_user_id' => $organizer_id,
+					'token_id'          => (int) $token_row['id'],
+					'match_type'        => $match,
+					'status'            => LNKup_Event_Claims::STATUS_DISPUTED,
+					'evidence'          => $evidence,
+					'case_id'           => $case_id,
+				)
+			);
+			self::log_claim_timeline( $external_id, 'claim_disputed', $organizer_id );
+			return self::claim_review_response( $external_id, 'disputed' );
+		}
+
+		if ( LNKup_Event_Claims::MATCH_NONE === $match && 'enforce' === LNKup_Trust::claim_review_mode() ) {
+			self::mark_token_used( (int) $token_row['id'], $organizer_id );
+			self::set_claim_status( $external_id, self::CLAIM_PENDING );
+			$case_id = LNKup_Trust_Cases::open(
+				array(
+					'case_type'    => 'event_claim_mismatch',
+					'severity'     => 'review',
+					'subject_type' => 'external_event',
+					'subject_id'   => $external_id,
+					'signal_key'   => 'mismatch_' . $organizer_id,
+					'summary'      => sprintf( 'Organizer #%d used a claim link sent to a different email for external event #%d.', $organizer_id, $external_id ),
+					'evidence'     => $evidence,
+					'opened_by'    => $organizer_id,
+					'next_step'    => __( 'Confirm the organizer controls the event (official site email, domain, or authorization letter), then approve or reject the claim.', 'lnkup-marketplace' ),
+				)
+			);
+			LNKup_Event_Claims::record(
+				array(
+					'external_event_id' => $external_id,
+					'organizer_user_id' => $organizer_id,
+					'token_id'          => (int) $token_row['id'],
+					'match_type'        => $match,
+					'status'            => LNKup_Event_Claims::STATUS_PENDING,
+					'evidence'          => $evidence,
+					'case_id'           => $case_id,
+				)
+			);
+			self::log_claim_timeline( $external_id, 'claim_pending_review', $organizer_id );
+			return self::claim_review_response( $external_id, 'pending' );
+		}
+
+		return null;
+	}
+
+	/**
+	 * Set authenticity on a just-claimed event and open a review case when it is not auto-verified.
+	 *
+	 * @param int                  $event_id     New LNKup event.
+	 * @param array<string, mixed> $event        External row.
+	 * @param array<string, mixed> $token_row    Claim token row.
+	 * @param int                  $organizer_id Organizer.
+	 */
+	protected static function apply_claim_authenticity( int $event_id, array $event, array $token_row, int $organizer_id ): void {
+		$external_id = (int) $event['id'];
+		$match       = LNKup_Event_Claims::binding( $organizer_id, (string) $token_row['email'] );
+		$payout      = class_exists( 'LNKup_Stripe_Connect' ) && LNKup_Stripe_Connect::is_enabled() && LNKup_Stripe_Connect::is_connect_ready( $organizer_id );
+		$auto        = LNKup_Event_Claims::MATCH_NONE !== $match && $payout && LNKup_Trust::flag( 'trust_auto_promote_claims' );
+		$status      = $auto ? LNKup_Event_Authenticity::ORGANIZER_CONTROLLED : LNKup_Event_Authenticity::CLAIM_PENDING;
+
+		LNKup_Event_Authenticity::set_status( $event_id, $status, sprintf( 'Claimed from external listing #%d (%s match).', $external_id, $match ), $organizer_id );
+
+		$evidence = array(
+			array(
+				'source'           => 'claim_link',
+				'match'            => $match,
+				'token_email'      => self::mask_email( (string) $token_row['email'] ),
+				'payout_connected' => $payout,
+				'source_url'       => (string) ( $event['source_url'] ?? '' ),
+				'at'               => current_time( 'mysql', true ),
+			),
+		);
+		$case_id = 0;
+		if ( ! $auto ) {
+			$mismatch = LNKup_Event_Claims::MATCH_NONE === $match;
+			$case_id  = LNKup_Trust_Cases::open(
+				array(
+					'case_type'    => $mismatch ? 'event_claim_mismatch' : 'event_claim_review',
+					'severity'     => $mismatch ? 'review' : 'low',
+					'subject_type' => 'event',
+					'subject_id'   => $event_id,
+					'event_id'     => $event_id,
+					'signal_key'   => 'claim_' . $external_id,
+					'summary'      => $mismatch
+						? sprintf( 'Event #%d was claimed with a link sent to a different email (external #%d).', $event_id, $external_id )
+						: sprintf( 'Event #%d was claimed by the invited organizer (external #%d); confirm and verify.', $event_id, $external_id ),
+					'evidence'     => $evidence,
+					'opened_by'    => $organizer_id,
+					'next_step'    => __( 'Approve the claim to mark the listing organizer-managed, or reject it to restrict the listing.', 'lnkup-marketplace' ),
+				)
+			);
+		}
+		LNKup_Event_Claims::record(
+			array(
+				'external_event_id' => $external_id,
+				'event_id'          => $event_id,
+				'organizer_user_id' => $organizer_id,
+				'token_id'          => (int) $token_row['id'],
+				'match_type'        => $match,
+				'status'            => $auto ? LNKup_Event_Claims::STATUS_APPROVED : LNKup_Event_Claims::STATUS_PENDING,
+				'evidence'          => $evidence,
+				'case_id'           => $case_id,
+			)
+		);
+	}
+
+	/**
+	 * Create the LNKup event for a claim an admin approved after review.
+	 *
+	 * @param int $external_id  External event ID.
+	 * @param int $organizer_id Organizer who claimed it.
+	 * @return int|WP_Error LNKup event ID.
+	 */
+	public static function create_event_for_approved_claim( int $external_id, int $organizer_id ) {
+		global $wpdb;
+		$event = self::get_row( $external_id );
+		if ( ! $event ) {
+			return new WP_Error( 'not_found', __( 'External event not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		if ( (int) $event['claimed_event_id'] > 0 ) {
+			return (int) $event['claimed_event_id'];
+		}
+
+		// create_event_from_request() owns the event for the current user; act as the organizer for this call only.
+		$admin_id = get_current_user_id();
+		wp_set_current_user( $organizer_id );
+		try {
+			$event_id = self::create_lnk_event_from_external( $event, $organizer_id );
+		} finally {
+			wp_set_current_user( $admin_id );
+		}
+		if ( is_wp_error( $event_id ) ) {
+			return $event_id;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update(
+			LNKup_External_Events_Tables::events_table(),
+			array(
+				'claim_status'     => self::CLAIM_CLAIMED,
+				'claimed_event_id' => (int) $event_id,
+				'updated_at'       => current_time( 'mysql' ),
+			),
+			array( 'id' => $external_id )
+		);
+		self::mark_interests_after_claim( $external_id, (int) $event_id );
+		self::log_claim_timeline( $external_id, 'claim_approved', $organizer_id );
+		return (int) $event_id;
+	}
+
+	/**
+	 * Public setter for trust review decisions.
+	 *
+	 * @param int    $external_id External event ID.
+	 * @param string $status      Claim status.
+	 * @return true|WP_Error
+	 */
+	public static function set_claim_review_status( int $external_id, string $status ) {
+		if ( ! in_array( $status, array( self::CLAIM_UNCLAIMED, self::CLAIM_PENDING, self::CLAIM_CLAIMED, self::CLAIM_DISPUTED ), true ) ) {
+			return new WP_Error( 'invalid_status', __( 'Invalid claim status.', 'lnkup-marketplace' ) );
+		}
+		return self::set_claim_status( $external_id, $status );
+	}
+
+	protected static function has_rival_pending_claim( int $external_id, int $organizer_id ): bool {
+		global $wpdb;
+		$table = LNKup_Trust_Tables::claim_evidence_table();
+		if ( ! LNKup_Trust_Tables::exists( $table ) ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$table} WHERE external_event_id = %d AND organizer_user_id <> %d AND status IN ('pending','disputed')",
+				$external_id,
+				$organizer_id
+			)
+		) > 0;
+	}
+
+	protected static function mark_token_used( int $token_id, int $organizer_id ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update(
+			LNKup_External_Events_Tables::claim_tokens_table(),
+			array(
+				'used_at'           => current_time( 'mysql' ),
+				'organizer_user_id' => $organizer_id,
+			),
+			array( 'id' => $token_id )
+		);
+		delete_user_meta( $organizer_id, '_lnkup_pending_external_claim' );
+	}
+
+	/**
+	 * @param int    $external_id External event ID.
+	 * @param string $state       pending|disputed.
+	 * @return array<string, mixed>
+	 */
+	protected static function claim_review_response( int $external_id, string $state ): array {
+		return array(
+			'event_id'          => 0,
+			'external_event_id' => $external_id,
+			'pending_review'    => true,
+			'review_state'      => $state,
+			'message'           => 'disputed' === $state
+				? __( 'This event is already managed on LNKup. We opened a review and will contact you. Nothing changes for the current listing in the meantime.', 'lnkup-marketplace' )
+				: __( 'Thanks! This claim link was sent to a different email, so LNKup will confirm you manage this event before the listing moves to your account. We will email you once it is reviewed.', 'lnkup-marketplace' ),
+			'dashboard_url'     => lnkup_organizer_view_url( 'events' ),
+		);
+	}
+
+	protected static function log_claim_timeline( int $external_id, string $action, int $organizer_id ): void {
+		self::track( 'external_event_' . $action, $organizer_id, $external_id, array() );
+		if ( class_exists( 'LNKup_External_Events_Timeline' ) ) {
+			LNKup_External_Events_Timeline::log( $external_id, $action, $organizer_id, array() );
+		}
+	}
+
+	protected static function mask_email( string $email ): string {
+		$email = strtolower( trim( $email ) );
+		$at    = strpos( $email, '@' );
+		if ( false === $at ) {
+			return '';
+		}
+		return substr( $email, 0, 1 ) . '***' . substr( $email, $at );
 	}
 
 	/**

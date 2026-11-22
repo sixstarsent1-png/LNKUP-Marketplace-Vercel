@@ -10,6 +10,9 @@ import { opportunityMatchesId } from "@/lib/api/marketplace-discovery"
 import { useMarketplaceFilters } from "@/lib/hooks/use-marketplace-filters"
 import { useMarketplaceSearch } from "@/lib/hooks/use-marketplace-search"
 import { useMarketplaceRails } from "@/lib/hooks/use-marketplace-rails"
+import { useVendorMatchSections } from "@/lib/hooks/use-match"
+import { MatchRails } from "@/components/marketplace/match-rails"
+import type { VendorMatchSection } from "@/lib/api/match"
 import { useAuth } from "@/lib/hooks/use-auth"
 import { useFavorites } from "@/lib/hooks/use-favorites"
 import { useSavedSearches } from "@/lib/hooks/use-saved-searches"
@@ -29,6 +32,16 @@ import { Button } from "@/components/ui/button"
 import type { PanelState } from "@/lib/use-panel-state"
 import type { SavedSearchFilters } from "@/lib/api/saved-searches"
 
+const MATCH_SECTIONS: readonly VendorMatchSection[] = [
+  "recommended",
+  "preferred_markets",
+  "new",
+  "deadlines",
+  "previous_organizers",
+  "tours",
+  "series",
+]
+
 const DiscoveryMap = dynamic(
   () => import("@/components/marketplace/discovery-map").then((m) => m.DiscoveryMap),
   { ssr: false, loading: () => <SkeletonList count={1} /> },
@@ -47,6 +60,10 @@ function FindEventsContent() {
 
   const search = useMarketplaceSearch(filters)
   const { rails, loading: railsLoading } = useMarketplaceRails("find", !hasFilters, filters)
+  const { results: matchResults, loading: matchLoading } = useVendorMatchSections(
+    MATCH_SECTIONS,
+    isAuthenticated && !hasFilters,
+  )
 
   const savedSearchFilters: SavedSearchFilters = useMemo(
     () => ({
@@ -223,6 +240,7 @@ function FindEventsContent() {
                     </span>
                   </span>
                 </Button>
+                <MatchRails sections={MATCH_SECTIONS} results={matchResults} loading={matchLoading} />
                 <OpportunityRailList rails={rails} loading={railsLoading} />
               </div>
             )}

@@ -32,7 +32,10 @@ class LNKup_Capabilities {
 	}
 
 	/**
-	 * Check if user owns a post via meta key.
+	 * Check if user owns a post via the given meta key only.
+	 *
+	 * Applications carry both `_lnkup_vendor_user_id` and `_lnkup_organizer_user_id`, so the
+	 * check must not fall back to another key: a vendor is not the organizer of their own application.
 	 *
 	 * @param int    $post_id  Post ID.
 	 * @param int    $user_id  User ID.
@@ -43,18 +46,7 @@ class LNKup_Capabilities {
 			return true;
 		}
 		$owner = (int) get_post_meta( $post_id, $meta_key, true );
-		if ( $owner && $owner === (int) $user_id ) {
-			return true;
-		}
-		$vendor_user = (int) get_post_meta( $post_id, '_lnkup_vendor_user_id', true );
-		if ( $vendor_user && $vendor_user === (int) $user_id ) {
-			return true;
-		}
-		$organizer_user = (int) get_post_meta( $post_id, '_lnkup_organizer_user_id', true );
-		if ( $organizer_user && $organizer_user === (int) $user_id ) {
-			return true;
-		}
-		return false;
+		return $owner && $owner === (int) $user_id;
 	}
 
 	/**
@@ -105,6 +97,71 @@ class LNKup_Capabilities {
 			return true;
 		}
 		return (bool) LNKup_Organizer_CRM::get_relationship( $organizer_id, $vendor_id );
+	}
+
+	/**
+	 * Organizer may see a vendor's private contact details and compliance status.
+	 *
+	 * Only after the vendor applied to one of the organizer's events or accepted
+	 * their invite. Favoriting or listing a vendor does not unlock contact data.
+	 *
+	 * @param int $organizer_id Organizer user ID.
+	 * @param int $profile_id   Vendor profile post ID.
+	 */
+	public static function organizer_can_view_vendor_contact( $organizer_id, $profile_id ) {
+		static $cache = array();
+		$organizer_id = absint( $organizer_id );
+		$profile_id   = absint( $profile_id );
+		if ( ! $organizer_id || ! $profile_id ) {
+			return false;
+		}
+		if ( self::user_has_manage_all( $organizer_id ) ) {
+			return true;
+		}
+		// Only grants are cached: an application or accepted invite later in the request must unlock access.
+		$key = $organizer_id . ':' . $profile_id;
+		if ( isset( $cache[ $key ] ) ) {
+			return true;
+		}
+		$vendor_id = (int) get_post_meta( $profile_id, '_lnkup_owner_user_id', true );
+		if ( ! $vendor_id ) {
+			return false;
+		}
+		$applied = get_posts(
+			array(
+				'post_type'      => 'lnkup_application',
+				'post_status'    => 'any',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_vendor_user_id', 'value' => $vendor_id ),
+					array( 'key' => '_lnkup_organizer_user_id', 'value' => $organizer_id ),
+				),
+			)
+		);
+		if ( $applied ) {
+			$cache[ $key ] = true;
+			return true;
+		}
+		$accepted = get_posts(
+			array(
+				'post_type'      => 'lnkup_vendor_invite',
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_vendor_user_id', 'value' => $vendor_id ),
+					array( 'key' => '_lnkup_organizer_user_id', 'value' => $organizer_id ),
+					array( 'key' => '_lnkup_status', 'value' => 'accepted' ),
+				),
+			)
+		);
+		if ( $accepted ) {
+			$cache[ $key ] = true;
+		}
+		return ! empty( $accepted );
 	}
 
 	/**
@@ -172,6 +229,39 @@ class LNKup_Capabilities {
 	}
 
 	/**
+	 * Organizer owns a tour / series (lnkup_tour).
+	 *
+	 * @param int $tour_id      Tour ID.
+	 * @param int $organizer_id Organizer user ID.
+	 */
+	public static function organizer_owns_tour( $tour_id, $organizer_id = 0 ) {
+		$organizer_id = $organizer_id ?: get_current_user_id();
+		$tour_id      = absint( $tour_id );
+		if ( ! $organizer_id || ! $tour_id || 'lnkup_tour' !== get_post_type( $tour_id ) ) {
+			return false;
+		}
+		if ( self::user_has_manage_all( $organizer_id ) ) {
+			return true;
+		}
+		return (int) get_post_meta( $tour_id, '_lnkup_organizer_user_id', true ) === (int) $organizer_id;
+	}
+
+	/**
+	 * A stop belongs to the tour and to the tour's organizer (no forged or cross-organizer stops).
+	 *
+	 * @param int $tour_id  Tour ID.
+	 * @param int $event_id Event ID.
+	 */
+	public static function event_is_tour_stop( $tour_id, $event_id ) {
+		$tour_id  = absint( $tour_id );
+		$event_id = absint( $event_id );
+		return $tour_id && $event_id
+			&& 'lnkup_event' === get_post_type( $event_id )
+			&& (int) get_post_meta( $event_id, '_lnkup_tour_id', true ) === $tour_id
+			&& (int) get_post_meta( $event_id, '_lnkup_organizer_user_id', true ) === (int) get_post_meta( $tour_id, '_lnkup_organizer_user_id', true );
+	}
+
+	/**
 	 * Event-scoped capability for the owner, admins, or staff per LNKup_Event_Staff::capability_matrix().
 	 *
 	 * Capabilities: view_roster, check_in, edit_ops, edit_packets, edit_map, broadcast,
@@ -186,12 +276,75 @@ class LNKup_Capabilities {
 		if ( self::organizer_owns_event( $event_id, $user_id ) ) {
 			return true;
 		}
+		if ( class_exists( 'LNKup_Org_Teams' ) && LNKup_Org_Teams::can( $user_id, $event_id, $capability ) ) {
+			return true;
+		}
 		if ( in_array( $capability, array( 'owner', 'manage_staff' ), true ) || ! class_exists( 'LNKup_Event_Staff' ) ) {
 			return false;
 		}
 		$role   = LNKup_Event_Staff::role_for( $event_id, $user_id );
 		$matrix = LNKup_Event_Staff::capability_matrix();
 		return '' !== $role && in_array( $capability, $matrix[ $role ] ?? array(), true );
+	}
+
+	/**
+	 * Event-scoped check for organizer-side actions: owner, manage-all, organization team
+	 * (LNKup_Org_Teams), then per-event staff. Capabilities beyond the staff vocabulary:
+	 * manage_applications, view_documents, manage_refunds, cancel_event.
+	 *
+	 * @param int    $user_id    User ID.
+	 * @param int    $event_id   Event ID.
+	 * @param string $capability Capability key.
+	 */
+	public static function user_can_act_on_event( $user_id, $event_id, $capability ) {
+		return self::staff_can( absint( $event_id ), sanitize_key( $capability ), absint( $user_id ) );
+	}
+
+	/**
+	 * Organizer-side capability on the event an application belongs to.
+	 *
+	 * @param int    $app_id     Application ID.
+	 * @param string $capability Capability key.
+	 * @param int    $user_id    User ID (defaults to current user).
+	 */
+	public static function can_on_application( $app_id, $capability, $user_id = 0 ) {
+		$app_id = absint( $app_id );
+		if ( ! $app_id || 'lnkup_application' !== get_post_type( $app_id ) ) {
+			return false;
+		}
+		$event_id = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
+		return $event_id && self::staff_can( $event_id, sanitize_key( $capability ), $user_id ?: get_current_user_id() );
+	}
+
+	/**
+	 * Whether the user may open the organizer workspace: organizers, platform admins, or
+	 * active organization team members (teams flag on). What they can do inside is still
+	 * decided per event by staff_can().
+	 *
+	 * @param int $user_id User ID (defaults to current user).
+	 */
+	public static function can_access_org_workspace( $user_id = 0 ) {
+		$user_id = $user_id ?: get_current_user_id();
+		if ( ! $user_id ) {
+			return false;
+		}
+		if ( LNKup_Roles::is_organizer( $user_id ) || self::user_has_manage_all( $user_id ) ) {
+			return true;
+		}
+		return class_exists( 'LNKup_Org_Teams' ) && array() !== LNKup_Org_Teams::orgs_for_user( $user_id );
+	}
+
+	/**
+	 * Team member without an organizer account of their own (sees the staff workspace).
+	 *
+	 * @param int $user_id User ID (defaults to current user).
+	 */
+	public static function is_team_only_member( $user_id = 0 ) {
+		$user_id = $user_id ?: get_current_user_id();
+		return $user_id
+			&& ! LNKup_Roles::is_organizer( $user_id )
+			&& ! self::user_has_manage_all( $user_id )
+			&& self::can_access_org_workspace( $user_id );
 	}
 
 	/**

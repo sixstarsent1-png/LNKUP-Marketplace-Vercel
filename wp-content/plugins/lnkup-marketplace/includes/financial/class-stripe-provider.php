@@ -216,6 +216,10 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 		}
 		$amount_cents   = (int) round( $amount * 100 );
 		$prior_refunded = (int) round( (float) get_post_meta( $payment_id, '_lnkup_refund_amount', true ) * 100 );
+		$partials       = get_post_meta( $payment_id, '_lnkup_partial_charges', true );
+		if ( is_array( $partials ) && $partials ) {
+			return $this->refund_across_intents( $payment_id, (string) $intent, $partials, $amount_cents, $prior_refunded );
+		}
 		$params         = array(
 			'payment_intent' => $intent,
 			'amount'         => $amount_cents,
@@ -232,6 +236,79 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 			return $result;
 		}
 		return array( 'provider_ref' => $result['id'] ?? '' );
+	}
+
+	/**
+	 * Deposit / installment bookings are paid by several PaymentIntents. Spread a refund over
+	 * them newest-first, never exceeding what each intent collected or already returned (B-9).
+	 *
+	 * @param int    $payment_id     Payment post ID.
+	 * @param string $current_intent Latest PaymentIntent on the payment.
+	 * @param array  $partials       Map of intent ID => array( cents ).
+	 * @param int    $amount_cents   Amount to refund.
+	 * @param int    $prior_refunded Cents refunded before this request (idempotency key salt).
+	 * @return array|WP_Error
+	 */
+	private function refund_across_intents( $payment_id, $current_intent, $partials, $amount_cents, $prior_refunded ) {
+		$capacity = array();
+		foreach ( $partials as $ref => $row ) {
+			if ( 0 === strpos( (string) $ref, 'pi_' ) ) {
+				$capacity[ (string) $ref ] = (int) ( $row['cents'] ?? 0 );
+			}
+		}
+		if ( '' !== $current_intent && 0 === strpos( $current_intent, 'pi_' ) && ! isset( $capacity[ $current_intent ] ) ) {
+			$capacity[ $current_intent ] = (int) get_post_meta( $payment_id, '_lnkup_stripe_charge_amount_cents', true );
+		}
+		$done = get_post_meta( $payment_id, '_lnkup_refunded_by_intent', true );
+		$done = is_array( $done ) ? $done : array();
+
+		// Pieces sent by an earlier attempt of this same request (same prior_refunded) count already.
+		$inflight  = get_post_meta( $payment_id, '_lnkup_refund_inflight', true );
+		$inflight  = is_array( $inflight ) ? $inflight : array();
+		$try_key   = 'p' . $prior_refunded;
+		$plan      = array();
+		$remaining = $amount_cents - (int) ( $inflight[ $try_key ] ?? 0 );
+		foreach ( array_reverse( $capacity, true ) as $intent_id => $cents ) {
+			if ( $remaining <= 0 ) {
+				break;
+			}
+			$open = max( 0, $cents - (int) ( $done[ $intent_id ] ?? 0 ) );
+			if ( $open <= 0 ) {
+				continue;
+			}
+			$take                 = min( $open, $remaining );
+			$plan[ $intent_id ]   = $take;
+			$remaining           -= $take;
+		}
+		if ( $remaining > 0 ) {
+			return new WP_Error( 'refund_exceeds_charges', __( 'This refund is larger than what the card payments collected.', 'lnkup-marketplace' ) );
+		}
+
+		$refs        = array();
+		$destination = 'destination' === get_post_meta( $payment_id, '_lnkup_settlement_mode', true );
+		foreach ( $plan as $intent_id => $cents ) {
+			$params = array(
+				'payment_intent' => $intent_id,
+				'amount'         => $cents,
+			);
+			if ( $destination ) {
+				$params['reverse_transfer'] = true;
+			}
+			$result = $this->client->create_refund( $params, 'lnkup_refund_' . absint( $payment_id ) . '_' . $intent_id . '_' . $cents . '_' . $prior_refunded );
+			if ( is_wp_error( $result ) ) {
+				// Already-sent pieces stay recorded so a retry only sends what is missing.
+				update_post_meta( $payment_id, '_lnkup_refunded_by_intent', $done );
+				update_post_meta( $payment_id, '_lnkup_refund_inflight', $inflight );
+				return $result;
+			}
+			$done[ $intent_id ]   = (int) ( $done[ $intent_id ] ?? 0 ) + $cents;
+			$inflight[ $try_key ] = (int) ( $inflight[ $try_key ] ?? 0 ) + $cents;
+			$refs[]               = (string) ( $result['id'] ?? '' );
+		}
+		unset( $inflight[ $try_key ] );
+		update_post_meta( $payment_id, '_lnkup_refunded_by_intent', $done );
+		update_post_meta( $payment_id, '_lnkup_refund_inflight', $inflight );
+		return array( 'provider_ref' => implode( ',', array_filter( $refs ) ) );
 	}
 
 	public function get_or_create_customer( $user_id ) {

@@ -68,6 +68,7 @@
     "phase23:verify": "npm run typecheck && node scripts/phase23-verify.mjs",
     "phase24:verify": "npm run typecheck && node scripts/phase24-verify.mjs",
     "phase26:verify": "npm run typecheck && node scripts/phase26-verify.mjs",
+    "phase27:verify": "npm run typecheck && node scripts/phase27-verify.mjs",
     "device-smoke:verify": "node scripts/device-smoke-verify.mjs",
     "store-preflight:verify": "node scripts/store-preflight-verify.mjs",
     "doctor": "npx expo-doctor",

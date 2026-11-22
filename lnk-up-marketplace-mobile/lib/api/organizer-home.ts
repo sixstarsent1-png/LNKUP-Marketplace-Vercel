@@ -34,6 +34,88 @@ export type OrganizerChecklistItem = {
   eventId?: string
 }
 
+export type OrganizerActivationStage = {
+  key: string
+  title: string
+  status: "complete" | "in_progress" | "not_started"
+  missing: string[]
+}
+
+/** Server activation model (lnkup/v1/organizer/activation) — same stages as the web Get started view. */
+export type OrganizerActivation = {
+  percent: number
+  completed: number
+  total: number
+  isActivated: boolean
+  currentStage: string
+  nextAction?: { stage: string; title: string; label: string; missing: string[] }
+  stages: OrganizerActivationStage[]
+  applicationUrl?: string
+}
+
+/** Stage key → the checklist key the home screen already knows how to route. */
+const ACTIVATION_ROUTE_KEY: Record<string, string> = {
+  organization: "public_profile",
+  payouts: "payout_account",
+  first_event: "create_event",
+  publication: "vendor_categories",
+  first_applications: "review_applications",
+  first_paid_booking: "collect_payment",
+}
+
+export function mapOrganizerActivation(raw: unknown): OrganizerActivation | undefined {
+  const data = (raw as { data?: unknown })?.data ?? raw
+  if (!data || typeof data !== "object") return undefined
+  const d = data as Record<string, unknown>
+  if (!Array.isArray(d.stages)) return undefined
+  const stages: OrganizerActivationStage[] = (d.stages as Record<string, unknown>[]).map((s) => ({
+    key: String(s.key ?? ""),
+    title: String(s.title ?? ""),
+    status: s.status === "complete" || s.status === "in_progress" ? s.status : "not_started",
+    missing: Array.isArray(s.missing) ? s.missing.map(String) : [],
+  }))
+  const next = d.next_action as Record<string, unknown> | null | undefined
+  const share = d.share as Record<string, unknown> | null | undefined
+  return {
+    percent: Number(d.percent ?? 0) || 0,
+    completed: Number(d.completed ?? 0) || 0,
+    total: Number(d.total ?? stages.length) || stages.length,
+    isActivated: Boolean(d.is_activated),
+    currentStage: String(d.current_stage ?? ""),
+    nextAction: next
+      ? {
+          stage: String(next.stage ?? ""),
+          title: String(next.title ?? ""),
+          label: String(next.label ?? ""),
+          missing: Array.isArray(next.missing) ? next.missing.map(String) : [],
+        }
+      : undefined,
+    stages,
+    applicationUrl: share && typeof share.application_url === "string" && share.application_url ? share.application_url : undefined,
+  }
+}
+
+/** Activation stages as home checklist items (eventId keeps per-event deep links working). */
+export function activationChecklist(
+  activation: OrganizerActivation,
+  fallback: OrganizerChecklistItem[] = [],
+): OrganizerChecklistItem[] {
+  const eventId = fallback.find((item) => item.eventId)?.eventId
+  return activation.stages.map((stage) => {
+    let key = ACTIVATION_ROUTE_KEY[stage.key] ?? stage.key
+    if (stage.key === "first_event" && eventId) key = "booth_fee"
+    if (stage.key === "first_applications" && stage.status === "not_started") key = "invite_vendors"
+    return {
+      id: `activation-${stage.key}`,
+      key,
+      label: stage.title,
+      description: stage.missing.length ? `Still needed: ${stage.missing.join(", ")}` : undefined,
+      complete: stage.status === "complete",
+      eventId,
+    }
+  })
+}
+
 export type OrganizerHomeSummary = {
   stats: {
     events: number
@@ -50,6 +132,7 @@ export type OrganizerHomeSummary = {
     severity?: "info" | "warning" | "urgent"
   }>
   launchChecklist: OrganizerChecklistItem[]
+  activation?: OrganizerActivation
   financial?: OrganizerFinancialSnapshot
   intelligence: {
     diagnostics: OrganizerFunnelDiagnostic[]
@@ -73,6 +156,7 @@ export function mapOrganizerHomeSummary(
   widgets: Record<string, unknown>,
   checklistRaw: unknown,
   financial?: OrganizerFinancialSnapshot,
+  activationRaw?: unknown,
 ): OrganizerHomeSummary {
   const pending = Number(widgets.pending_applications ?? 0) || 0
   const approved = Number(intel.approved_vendors ?? 0) || 0
@@ -83,7 +167,7 @@ export function mapOrganizerHomeSummary(
     ? checklistRaw
     : ((checklistRaw as { items?: unknown[] })?.items ?? [])
 
-  const launchChecklist = (checklistSource as Record<string, unknown>[]).map((item, index) => {
+  const legacyChecklist = (checklistSource as Record<string, unknown>[]).map((item, index) => {
     const key = String(item.key ?? item.id ?? `check-${index}`)
     return {
       id: String(item.id ?? key),
@@ -110,6 +194,8 @@ export function mapOrganizerHomeSummary(
       eventId: checklistEventId(item),
     }
   })
+  const activation = activationRaw === undefined ? undefined : mapOrganizerActivation(activationRaw)
+  const launchChecklist = activation ? activationChecklist(activation, legacyChecklist) : legacyChecklist
 
   const attentionItems: OrganizerHomeSummary["attentionItems"] = []
   if (pending > 0) {
@@ -146,6 +232,7 @@ export function mapOrganizerHomeSummary(
     },
     attentionItems,
     launchChecklist,
+    activation,
     financial,
     intelligence: {
       diagnostics,
@@ -248,7 +335,7 @@ async function loadOrganizerHome(auth?: WpAuth, force = false): Promise<Organize
         throw new Error("Sign in as an organizer to continue.")
       }
 
-      const [intelSettled, widgetsSettled, checklist, moneySettled] = await Promise.all([
+      const [intelSettled, widgetsSettled, checklist, moneySettled, activation] = await Promise.all([
         wpFetchJson<Record<string, unknown>>("/intelligence/organizer/summary", { auth }).then(
           (value) => ({ ok: true as const, value }),
           (reason: unknown) => ({ ok: false as const, reason }),
@@ -262,6 +349,8 @@ async function loadOrganizerHome(auth?: WpAuth, force = false): Promise<Organize
           (value) => ({ ok: true as const, value }),
           () => ({ ok: false as const, value: null }),
         ),
+        // Older WordPress builds lack the route; the checklist mapper is the fallback.
+        wpFetchJson<unknown>("/organizer/activation", { auth }).catch(() => undefined),
       ])
 
       if (!intelSettled.ok && !widgetsSettled.ok) {
@@ -274,7 +363,7 @@ async function loadOrganizerHome(auth?: WpAuth, force = false): Promise<Organize
       const widgets = widgetsSettled.ok ? widgetsSettled.value : {}
       const financial = moneySettled.ok ? moneySettled.value.summary : undefined
 
-      return mapOrganizerHomeSummary(intel, widgets, checklist, financial)
+      return mapOrganizerHomeSummary(intel, widgets, checklist, financial, activation)
     },
     () => buildMockOrganizerHome(),
   )

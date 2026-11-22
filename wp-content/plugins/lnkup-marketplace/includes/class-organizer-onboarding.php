@@ -526,6 +526,9 @@ class LNKup_Organizer_Onboarding {
 			'vendor_fee'              => (float) get_post_meta( $opp_id, '_lnkup_vendor_fee', true ),
 			'spots_total'             => (int) get_post_meta( $opp_id, '_lnkup_spots_total', true ),
 			'find_events_url'         => add_query_arg( 'q', rawurlencode( $event->post_title ), lnkup_page_url_helper( 'opportunities' ) ),
+			'application_url'         => add_query_arg( 'apply', $opp_id, lnkup_page_url_helper( 'opportunities' ) ),
+			'event_url'               => self::event_public_url( $event_id ),
+			'organizer_url'           => self::organizer_public_url( (int) get_post_meta( $event_id, '_lnkup_organizer_user_id', true ) ),
 			'view_event_url'          => add_query_arg( 'event', $event_id, $dash_url ),
 			'manage_applications_url' => lnkup_organizer_view_url( 'applications', array( 'event_filter' => $event_id, 'filter' => 'pending' ) ),
 			'invite_vendors_url'      => lnkup_organizer_view_url(
@@ -1016,6 +1019,12 @@ class LNKup_Organizer_Onboarding {
 	 * @return array<string, mixed>|WP_Error
 	 */
 	public static function create_opportunities_for_event( int $event_id, array $input, int $organizer_id ) {
+		if ( class_exists( 'LNKup_Organizer_Setups' ) ) {
+			$input = LNKup_Organizer_Setups::apply_to_input( $input, $organizer_id );
+			if ( is_wp_error( $input ) ) {
+				return $input;
+			}
+		}
 		$rows = self::normalize_opportunity_rows( $input );
 		if ( is_wp_error( $rows ) ) {
 			return $rows;
@@ -1056,6 +1065,10 @@ class LNKup_Organizer_Onboarding {
 			if ( null === $first ) {
 				$first = $result;
 			}
+		}
+
+		if ( class_exists( 'LNKup_Organizer_Setups' ) ) {
+			LNKup_Organizer_Setups::after_create( $rows, $created );
 		}
 
 		$payload = is_array( $first ) ? $first : array();
@@ -1244,8 +1257,11 @@ class LNKup_Organizer_Onboarding {
 	 * @return string live|draft
 	 */
 	public static function sync_event_listing_status( int $event_id ): string {
-		$status  = self::event_has_open_slot( $event_id ) ? 'live' : 'draft';
 		$current = (string) get_post_meta( $event_id, '_lnkup_event_status', true );
+		if ( class_exists( 'LNKup_Event_Status' ) && in_array( $current, LNKup_Event_Status::TERMINAL, true ) ) {
+			return $current;
+		}
+		$status = self::event_has_open_slot( $event_id ) ? 'live' : 'draft';
 		if ( $current !== $status ) {
 			update_post_meta( $event_id, '_lnkup_event_status', $status );
 		}
@@ -1802,7 +1818,8 @@ class LNKup_Organizer_Onboarding {
 				if ( '' === $value || null === $value || array() === $value ) {
 					continue;
 				}
-				update_post_meta( $new_opp, $meta_key, $value );
+				// Question definitions are JSON strings; re-slash so update_post_meta() keeps escapes.
+				update_post_meta( $new_opp, $meta_key, '_lnkup_application_questions' === $meta_key && is_string( $value ) ? wp_slash( $value ) : $value );
 			}
 
 			$spots = (int) get_post_meta( $opp->ID, '_lnkup_spots_total', true );
@@ -1862,6 +1879,8 @@ class LNKup_Organizer_Onboarding {
 			'_lnkup_instant_approval',
 			'_lnkup_invite_only',
 			'_lnkup_load_in_time',
+			'_lnkup_application_questions',
+			'_lnkup_documents_required_to_apply',
 		);
 	}
 }

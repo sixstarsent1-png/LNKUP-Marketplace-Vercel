@@ -370,7 +370,11 @@ class LNKup_Organizer_Launch_REST {
 				'opportunity_ids'  => $opp_result['opportunity_ids'] ?? array( $opp_id ),
 				'opportunities'    => $opp_result['opportunities'] ?? array(),
 				'view_event_url'   => $opp_result['view_event_url'] ?? ( $event_result['view_event_url'] ?? '' ),
-				'application_url'  => $opp_result['find_events_url'] ?? '',
+				'application_url'  => $opp_result['application_url'] ?? ( $opp_result['find_events_url'] ?? '' ),
+				'find_events_url'  => $opp_result['find_events_url'] ?? '',
+				'event_url'        => $opp_result['event_url'] ?? '',
+				'organizer_url'    => $opp_result['organizer_url'] ?? '',
+				'share_links'      => $event_id ? LNKup_Organizer_Onboarding::event_share_links( $event_id ) : array(),
 				'operations_url'   => $opp_result['operations_url'] ?? '',
 				'message'          => $opp_result['message'] ?? __( 'Event and opportunity published.', 'lnkup-marketplace' ),
 			)
@@ -413,6 +417,7 @@ class LNKup_Organizer_Launch_REST {
 			'gallery_ids'            => 'gallery_ids',
 			'featured_image_id'      => 'featured_image_id',
 			'venue_hidden'           => 'venue_hidden',
+			'setup_id'               => 'setup_id',
 		);
 
 		foreach ( $map as $from => $to ) {

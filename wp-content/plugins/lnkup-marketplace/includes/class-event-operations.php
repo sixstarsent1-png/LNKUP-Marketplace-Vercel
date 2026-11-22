@@ -31,22 +31,32 @@ class LNKup_Event_Operations {
 				'meta_key'       => '_lnkup_event_id',
 				'meta_value'     => $event_id,
 				'fields'         => 'ids',
+				'no_found_rows'  => true,
 			)
 		);
-		$kpis = self::compute_kpis( $apps );
-		return array(
-			'event_id'          => $event_id,
-			'title'             => $event->post_title,
-			'date'              => get_post_meta( $event_id, '_lnkup_event_date', true ),
-			'city'              => get_post_meta( $event_id, '_lnkup_city', true ),
-			'lifecycle'         => LNKup_Event_Lifecycle::get( $event_id ),
-			'kpis'              => $kpis,
-			'readiness_summary' => LNKup_Vendor_Readiness::event_readiness_summary( $event_id ),
-			'compliance'        => self::compliance_alerts( $event_id, $apps ),
-			'feed'              => array_slice( LNKup_Operations_Log::get_for_event( $event_id, 15 ), 0, 15 ),
-			'emergency'         => self::emergency_contacts( $event_id ),
-			'weather'           => class_exists( 'LNKup_Weather_Service' ) ? LNKup_Weather_Service::for_event( $event_id ) : array(),
-		);
+		// fields=>ids skips meta priming; load all application meta in one query.
+		if ( $apps ) {
+			update_meta_cache( 'post', $apps );
+		}
+		LNKup_Vendor_Readiness::begin_batch();
+		try {
+			$kpis = self::compute_kpis( $apps );
+			return array(
+				'event_id'          => $event_id,
+				'title'             => $event->post_title,
+				'date'              => get_post_meta( $event_id, '_lnkup_event_date', true ),
+				'city'              => get_post_meta( $event_id, '_lnkup_city', true ),
+				'lifecycle'         => LNKup_Event_Lifecycle::get( $event_id ),
+				'kpis'              => $kpis,
+				'readiness_summary' => LNKup_Vendor_Readiness::event_readiness_summary( $event_id ),
+				'compliance'        => self::compliance_alerts( $event_id, $apps ),
+				'feed'              => array_slice( LNKup_Operations_Log::get_for_event( $event_id, 15 ), 0, 15 ),
+				'emergency'         => self::emergency_contacts( $event_id ),
+				'weather'           => class_exists( 'LNKup_Weather_Service' ) ? LNKup_Weather_Service::for_event( $event_id ) : array(),
+			);
+		} finally {
+			LNKup_Vendor_Readiness::end_batch();
+		}
 	}
 
 	/**
@@ -137,8 +147,12 @@ class LNKup_Event_Operations {
 					'meta_key'       => '_lnkup_event_id',
 					'meta_value'     => absint( $event_id ),
 					'fields'         => 'ids',
+					'no_found_rows'  => true,
 				)
 			);
+			if ( $app_ids ) {
+				update_meta_cache( 'post', $app_ids );
+			}
 		}
 		$alerts = array();
 		foreach ( $app_ids as $app_id ) {
@@ -456,10 +470,55 @@ class LNKup_Event_Operations {
 	 * @param int $event_id Event post ID.
 	 */
 	public static function bootstrap_from_event( $event_id ) {
+		global $wpdb;
 		$event_id = absint( $event_id );
 		if ( ! $event_id || 'lnkup_event' !== get_post_type( $event_id ) ) {
 			return false;
 		}
+		// Seeding only depends on capacity and schedule, so reads skip it until those change.
+		$signature = self::bootstrap_signature( $event_id );
+		if ( get_post_meta( $event_id, self::BOOTSTRAP_META, true ) === $signature ) {
+			return true;
+		}
+		$lock = 'lnkup_ops_boot_' . $event_id;
+		if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return false;
+		}
+		try {
+			self::seed_operations( $event_id );
+			update_post_meta( $event_id, self::BOOTSTRAP_META, $signature );
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		return true;
+	}
+
+	const BOOTSTRAP_META = '_lnkup_ops_bootstrap_sig';
+
+	/**
+	 * @param int $event_id Event ID.
+	 */
+	private static function bootstrap_signature( $event_id ) {
+		$opps   = get_posts(
+			array(
+				'post_type'      => 'lnkup_opportunity',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_key'       => '_lnkup_event_id',
+				'meta_value'     => $event_id,
+			)
+		);
+		$spots  = $opps ? (int) get_post_meta( (int) $opps[0], '_lnkup_spots_total', true ) : 0;
+		return md5( implode( '|', array( 'v1', $spots, (string) get_post_meta( $event_id, '_lnkup_event_date', true ), (string) get_post_meta( $event_id, '_lnkup_start_time', true ) ) ) );
+	}
+
+	/**
+	 * Create default booths, a load-in window and parking when none exist (idempotent).
+	 *
+	 * @param int $event_id Event ID.
+	 */
+	private static function seed_operations( $event_id ) {
 		$opp_id = 0;
 		$opps   = get_posts(
 			array(

@@ -106,6 +106,22 @@ flowchart LR
 
 ---
 
+## Trust, Safety & Compliance OS
+
+Stages 1–3 shipped (audit, critical fixes, case queue, audit log, organizer verification, event authenticity, organization teams). Stages 4–13 are queued in [TRUST_SAFETY_ROADMAP.md](TRUST_SAFETY_ROADMAP.md); findings are in [TRUST_SAFETY_AUDIT.md](TRUST_SAFETY_AUDIT.md).
+
+---
+
+## Phase 27 — Vendor Passport & Reputation OS (product-driven follow-on)
+
+**Status:** Built behind flags — [PHASE_27_VENDOR_PASSPORT.md](PHASE_27_VENDOR_PASSPORT.md) · [PHASE_27_RELEASE_CHECKLIST.md](PHASE_27_RELEASE_CHECKLIST.md)
+
+**Goal:** Turn existing profiles, verification, documents, reviews and participation history into one portable, privacy-aware vendor identity with transparent (non-score) reputation indicators.
+
+**Shipped paths:** `includes/passport/*`, `admin/class-passport-admin.php`, `public/js/passport.js`, `lnkup-communications/includes/listeners/class-comms-listen-passport.php`, Expo `app/(vendor)/passport.tsx` + `lib/api/passport.ts`, `node scripts/phase27-verify.mjs` / `npm run phase27:verify`.
+
+---
+
 ## Intentional non-phases
 
 Unless product direction changes:

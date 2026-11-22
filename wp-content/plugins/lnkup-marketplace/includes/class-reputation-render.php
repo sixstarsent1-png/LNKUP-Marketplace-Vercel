@@ -126,8 +126,24 @@ class LNKup_Reputation_Render {
 					?>
 				</span>
 			</header>
+			<?php if ( ! empty( $review['verified_participation'] ) ) : ?>
+				<span class="lnkup-badge lnkup-badge--outline"><?php esc_html_e( 'Verified participation', 'lnkup-marketplace' ); ?></span>
+			<?php endif; ?>
 			<?php if ( ! empty( $review['public_text'] ) ) : ?>
 				<p class="lnkup-rep-review-card__body"><?php echo esc_html( $review['public_text'] ); ?></p>
+			<?php endif; ?>
+			<?php if ( ! empty( $review['positive_tags'] ) ) : ?>
+				<ul class="lnkup-vendor-card__chips">
+					<?php foreach ( (array) $review['positive_tags'] as $tag ) : ?>
+						<li class="lnkup-badge lnkup-badge--outline"><?php echo esc_html( is_array( $tag ) ? (string) ( $tag['label'] ?? '' ) : (string) $tag ); ?></li>
+					<?php endforeach; ?>
+				</ul>
+			<?php endif; ?>
+			<?php if ( ! empty( $review['vendor_response']['text'] ) ) : ?>
+				<blockquote class="lnkup-rep-review-card__response">
+					<strong><?php esc_html_e( 'Vendor response', 'lnkup-marketplace' ); ?></strong>
+					<p><?php echo esc_html( (string) $review['vendor_response']['text'] ); ?></p>
+				</blockquote>
 			<?php endif; ?>
 		</article>
 		<?php
@@ -200,6 +216,48 @@ class LNKup_Reputation_Render {
 			<?php endif; ?>
 			<?php echo self::badge_grid( $reputation['badges'] ?? array() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	/**
+	 * Transparent reputation indicators (no internal score).
+	 *
+	 * @param array<string,mixed> $indicators LNKup_Reputation_Summary payload.
+	 */
+	public static function indicators_card( $indicators ) {
+		if ( ! is_array( $indicators ) || ! $indicators ) {
+			return '';
+		}
+		$verification = $indicators['verification'] ?? array();
+		$experience   = $indicators['experience'] ?? array();
+		$feedback     = $indicators['organizer_feedback'] ?? array();
+		$documents    = $indicators['document_readiness'] ?? array();
+		$explain      = $indicators['explanations'] ?? array();
+		$rows         = array(
+			array( 'verification', __( 'Business verification', 'lnkup-marketplace' ), ! empty( $verification['is_verified'] ) ? (string) $verification['label'] : __( 'Not verified yet', 'lnkup-marketplace' ) ),
+			array( 'experience', __( 'Marketplace experience', 'lnkup-marketplace' ), (string) ( $experience['label'] ?? '' ) ),
+			array( 'organizer_feedback', __( 'Organizer feedback', 'lnkup-marketplace' ), (string) ( $feedback['label'] ?? '' ) ),
+			array( 'document_readiness', __( 'Documents', 'lnkup-marketplace' ), (string) ( $documents['label'] ?? '' ) ),
+		);
+		ob_start();
+		?>
+		<dl class="lnkup-passport-indicators" data-testid="lnkup-passport-indicators">
+			<?php foreach ( $rows as $row ) : ?>
+				<div class="lnkup-passport-indicators__row" data-indicator="<?php echo esc_attr( $row[0] ); ?>">
+					<dt><?php echo esc_html( $row[1] ); ?></dt>
+					<dd>
+						<?php echo esc_html( $row[2] ); ?>
+						<?php if ( ! empty( $explain[ $row[0] ] ) ) : ?>
+							<span class="lnkup-passport-indicators__why"><?php echo esc_html( $explain[ $row[0] ] ); ?></span>
+						<?php endif; ?>
+					</dd>
+				</div>
+			<?php endforeach; ?>
+		</dl>
+		<?php if ( ! empty( $indicators['new_vendor_note'] ) ) : ?>
+			<p class="lnkup-muted lnkup-passport-indicators__new"><?php echo esc_html( $indicators['new_vendor_note'] ); ?></p>
+		<?php endif; ?>
 		<?php
 		return ob_get_clean();
 	}
@@ -328,11 +386,13 @@ class LNKup_Reputation_Render {
 	 * @param array<string, mixed> $data Public profile DTO.
 	 */
 	public static function public_metrics_row( $data ) {
-		$metrics = $data['metrics'] ?? ( $data['reputation']['metrics'] ?? array() );
-		$rows = array(
-			array( __( 'Events completed', 'lnkup-marketplace' ), (string) ( $metrics['completed_events'] ?? count( $data['events'] ?? array() ) ) ),
-			array( __( 'Repeat bookings', 'lnkup-marketplace' ), (string) ( $metrics['repeat_bookings'] ?? 0 ) ),
-			array( __( 'On-time check-ins', 'lnkup-marketplace' ), (string) ( $metrics['on_time_check_in_rate'] ?? 0 ) . '%' ),
+		$indicators = $data['indicators'] ?? array();
+		$experience = $indicators['experience'] ?? array();
+		$feedback   = $indicators['organizer_feedback'] ?? array();
+		$rows       = array(
+			array( __( 'Confirmed events', 'lnkup-marketplace' ), (string) (int) ( $experience['confirmed_events'] ?? 0 ) ),
+			array( __( 'Organizers worked with', 'lnkup-marketplace' ), (string) (int) ( $experience['distinct_organizers'] ?? 0 ) ),
+			array( __( 'Organizer feedback', 'lnkup-marketplace' ), (string) ( $feedback['label'] ?? __( 'No reviews yet', 'lnkup-marketplace' ) ) ),
 		);
 		if ( ! empty( $data['years_in_business'] ) ) {
 			$rows[] = array( __( 'Years in business', 'lnkup-marketplace' ), (string) $data['years_in_business'] );

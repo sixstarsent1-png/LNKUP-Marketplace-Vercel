@@ -10,6 +10,11 @@ defined( 'ABSPATH' ) || exit;
 class LNKup_Financial_Audit {
 
 	/**
+	 * Prefix marking a hashed (not raw) value in the legacy ip_address column.
+	 */
+	const IP_HASH_PREFIX = 'h:';
+
+	/**
 	 * Append audit record.
 	 *
 	 * @param string $action      Action slug.
@@ -28,20 +33,87 @@ class LNKup_Financial_Audit {
 				$args['metadata'] = $extra;
 			}
 		}
+		$actor   = isset( $args['actor_user_id'] ) ? absint( $args['actor_user_id'] ) : get_current_user_id();
+		$ip_hash = class_exists( 'LNKup_Trust' ) ? LNKup_Trust::ip_hash() : '';
 		$wpdb->insert(
 			$table,
 			array(
 				'action'        => sanitize_key( $action ),
-				'actor_user_id' => isset( $args['actor_user_id'] ) ? absint( $args['actor_user_id'] ) : get_current_user_id(),
+				'actor_user_id' => $actor,
 				'entity_type'   => sanitize_key( $entity_type ),
 				'entity_id'     => absint( $entity_id ),
 				'amount'        => isset( $args['amount'] ) ? round( (float) $args['amount'], 2 ) : null,
 				'metadata'      => ! empty( $args['metadata'] ) ? wp_json_encode( $args['metadata'] ) : null,
-				'ip_address'    => isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '',
+				'ip_address'    => self::short_hash( $ip_hash ),
 				'created_at'    => $now,
 			),
 			array( '%s', '%d', '%s', '%d', '%f', '%s', '%s', '%s' )
 		);
+
+		if ( class_exists( 'LNKup_Audit_Log' ) ) {
+			LNKup_Audit_Log::log(
+				'fin_' . sanitize_key( $action ),
+				$entity_type,
+				$entity_id,
+				array(
+					'actor_user_id' => $actor,
+					'new'           => array(
+						'amount'   => isset( $args['amount'] ) ? round( (float) $args['amount'], 2 ) : null,
+						'metadata' => $args['metadata'] ?? null,
+					),
+					'ip_hash'       => $ip_hash,
+				)
+			);
+		}
+	}
+
+	/**
+	 * Fit a keyed IP hash into the legacy varchar(45) column.
+	 *
+	 * @param string $ip_hash Full hex HMAC.
+	 */
+	public static function short_hash( $ip_hash ) {
+		return '' === (string) $ip_hash ? '' : self::IP_HASH_PREFIX . substr( (string) $ip_hash, 0, 40 );
+	}
+
+	/**
+	 * One-time migration: replace stored raw IP addresses with keyed hashes.
+	 *
+	 * @param int $batch Rows per run.
+	 * @return int Rows updated this run.
+	 */
+	public static function migrate_hash_ip_addresses( $batch = 500 ) {
+		global $wpdb;
+		if ( get_option( 'lnkup_fin_audit_ip_hashed_v1' ) || ! class_exists( 'LNKup_Trust' ) ) {
+			return 0;
+		}
+		$table = LNKup_Financial_Tables::audit_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return 0;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, ip_address FROM {$table} WHERE ip_address <> '' AND ip_address NOT LIKE %s LIMIT %d",
+				$wpdb->esc_like( self::IP_HASH_PREFIX ) . '%',
+				absint( $batch )
+			),
+			ARRAY_A
+		);
+		foreach ( (array) $rows as $row ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->update(
+				$table,
+				array( 'ip_address' => self::short_hash( LNKup_Trust::ip_hash( (string) $row['ip_address'] ) ) ),
+				array( 'id' => (int) $row['id'] ),
+				array( '%s' ),
+				array( '%d' )
+			);
+		}
+		if ( count( (array) $rows ) < $batch ) {
+			update_option( 'lnkup_fin_audit_ip_hashed_v1', current_time( 'mysql', true ), false );
+		}
+		return count( (array) $rows );
 	}
 
 	/**

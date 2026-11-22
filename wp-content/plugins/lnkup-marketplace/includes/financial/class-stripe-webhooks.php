@@ -63,10 +63,10 @@ class LNKup_Stripe_Webhooks {
 					self::handle_payment_intent_failed( $obj );
 					break;
 				case 'charge.refunded':
-					self::handle_charge_refunded( $obj );
+					$result = self::with_payment_lock_for_intent( (string) ( $obj['payment_intent'] ?? '' ), array( __CLASS__, 'handle_charge_refunded' ), $obj );
 					break;
 				case 'charge.dispute.created':
-					self::handle_dispute_created( $obj );
+					$result = self::with_payment_lock_for_intent( (string) ( $obj['payment_intent'] ?? '' ), array( __CLASS__, 'handle_dispute_created' ), $obj );
 					break;
 				case 'customer.subscription.created':
 				case 'customer.subscription.updated':
@@ -95,7 +95,13 @@ class LNKup_Stripe_Webhooks {
 				case 'charge.dispute.funds_withdrawn':
 				case 'charge.dispute.funds_reinstated':
 				case 'charge.dispute.closed':
-					self::handle_dispute_money( $obj, $type );
+					$result = self::with_payment_lock_for_intent(
+						(string) ( $obj['payment_intent'] ?? '' ),
+						static function ( $dispute ) use ( $type ) {
+							return self::handle_dispute_money( $dispute, $type );
+						},
+						$obj
+					);
 					break;
 				default:
 					break;
@@ -124,28 +130,39 @@ class LNKup_Stripe_Webhooks {
 			return 0;
 		}
 		$event_id = sanitize_text_field( $event['id'] ?? '' );
-		if ( $event_id ) {
-			$exists = (int) $wpdb->get_var(
-				$wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE event_id = %s", $event_id )
-			);
-			if ( $exists ) {
-				return (int) $wpdb->get_var(
-					$wpdb->prepare( "SELECT id FROM {$table} WHERE event_id = %s LIMIT 1", $event_id )
-				);
-			}
+		if ( '' === $event_id ) {
+			return 0;
 		}
-		$wpdb->insert(
-			$table,
-			array(
-				'event_id'    => $event_id,
-				'event_type'  => sanitize_text_field( $event['type'] ?? '' ),
-				'payload'     => wp_json_encode( $event ),
-				'status'      => 'pending',
-				'attempts'    => 0,
-				'created_at'  => current_time( 'mysql' ),
+		// INSERT IGNORE on the unique event_id: concurrent deliveries resolve to one row.
+		$wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"INSERT IGNORE INTO {$table} (event_id, event_type, payload, status, attempts, created_at) VALUES (%s, %s, %s, 'pending', 0, %s)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$event_id,
+				sanitize_text_field( $event['type'] ?? '' ),
+				wp_json_encode( $event ),
+				current_time( 'mysql' )
 			)
 		);
-		return (int) $wpdb->insert_id;
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE event_id = %s LIMIT 1", $event_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+
+	/**
+	 * Atomically move a logged event into `processing`. Only one caller can win the claim.
+	 *
+	 * @param int $log_id Webhook log row ID.
+	 * @return bool True when this request owns processing.
+	 */
+	public static function claim_event( $log_id ) {
+		global $wpdb;
+		$table = LNKup_Financial_Tables::webhook_events_table();
+		$rows  = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = 'processing', updated_at = %s WHERE id = %d AND status IN ('pending','failed')", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				current_time( 'mysql' ),
+				absint( $log_id )
+			)
+		);
+		return 1 === (int) $rows;
 	}
 
 	/**
@@ -178,7 +195,7 @@ class LNKup_Stripe_Webhooks {
 		$stale_before = wp_date( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS );
 		$rows         = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE attempts < 5 AND ( status = 'failed' OR ( status = 'pending' AND created_at < %s ) ) ORDER BY id ASC LIMIT 10",
+				"SELECT * FROM {$table} WHERE attempts < 5 AND ( status = 'failed' OR ( status IN ('pending','processing') AND COALESCE(updated_at, created_at) < %s ) ) ORDER BY id ASC LIMIT 10",
 				$stale_before
 			),
 			ARRAY_A
@@ -187,9 +204,18 @@ class LNKup_Stripe_Webhooks {
 			return;
 		}
 		foreach ( $rows as $row ) {
-			if ( 'pending' === $row['status'] ) {
-				// Count the attempt up front so an event that keeps crashing stops after 5 tries.
-				$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET attempts = attempts + 1 WHERE id = %d", (int) $row['id'] ) );
+			// Claim atomically; interrupted rows count the attempt up front so a crashing event stops after 5 tries
+			// (failed rows already counted theirs in mark_failed).
+			$claimed = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table} SET attempts = attempts + IF(status = 'failed', 0, 1), status = 'processing', updated_at = %s WHERE id = %d AND ( status = 'failed' OR ( status IN ('pending','processing') AND COALESCE(updated_at, created_at) < %s ) )",
+					current_time( 'mysql' ),
+					(int) $row['id'],
+					$stale_before
+				)
+			);
+			if ( 1 !== (int) $claimed ) {
+				continue;
 			}
 			$event = json_decode( $row['payload'], true );
 			if ( is_array( $event ) ) {
@@ -365,12 +391,28 @@ class LNKup_Stripe_Webhooks {
 	/**
 	 * @param array $charge Charge object.
 	 */
-	private static function handle_charge_refunded( $charge ) {
+	public static function handle_charge_refunded( $charge ) {
 		$payment_id = self::payment_from_intent( $charge['payment_intent'] ?? '' );
 		if ( ! $payment_id ) {
-			return;
+			return null;
 		}
-		$refunded = (float) ( ( $charge['amount_refunded'] ?? 0 ) / 100 );
+		// Deposits/installments have one charge per PaymentIntent: keep a per-charge map and sum it,
+		// so a refund on one charge never overwrites refunds already recorded on another.
+		$charge_key = sanitize_text_field( (string) ( $charge['id'] ?? $charge['payment_intent'] ?? 'charge' ) );
+		$by_charge  = get_post_meta( $payment_id, '_lnkup_refunded_by_charge', true );
+		$by_charge  = is_array( $by_charge ) ? $by_charge : array();
+		if ( ! $by_charge ) {
+			$legacy = (int) round( (float) get_post_meta( $payment_id, '_lnkup_refund_amount', true ) * 100 );
+			if ( $legacy > 0 ) {
+				$by_charge['legacy'] = $legacy;
+			}
+		}
+		$by_charge[ $charge_key ] = max( (int) ( $by_charge[ $charge_key ] ?? 0 ), (int) ( $charge['amount_refunded'] ?? 0 ) );
+		if ( isset( $by_charge['legacy'] ) && count( $by_charge ) > 1 && $by_charge['legacy'] <= $by_charge[ $charge_key ] ) {
+			unset( $by_charge['legacy'] );
+		}
+		update_post_meta( $payment_id, '_lnkup_refunded_by_charge', $by_charge );
+		$refunded = round( array_sum( $by_charge ) / 100, 2 );
 		update_post_meta( $payment_id, '_lnkup_refund_amount', $refunded );
 		LNKup_Refunds::sync_payment_refund_status( $payment_id );
 		if ( class_exists( 'LNKup_Stripe_Connect' ) ) {
@@ -378,6 +420,29 @@ class LNKup_Stripe_Webhooks {
 		}
 		LNKup_Transactions::sync_extended_fields( $payment_id );
 		do_action( 'lnkup_refund_synced', $payment_id, $refunded );
+		return null;
+	}
+
+	/**
+	 * Run a webhook handler under the same per-payment lock finalize/settle use.
+	 *
+	 * @param string   $intent_id PaymentIntent ID on the Stripe object.
+	 * @param callable $handler   Handler receiving the Stripe object.
+	 * @param array    $obj       Stripe object.
+	 * @return mixed|WP_Error WP_Error when the lock is busy (event is retried by cron).
+	 */
+	private static function with_payment_lock_for_intent( $intent_id, $handler, $obj ) {
+		$payment_id = self::payment_from_intent( $intent_id );
+		if ( ! $payment_id ) {
+			return call_user_func( $handler, $obj );
+		}
+		return LNKup_Financial_Service::with_lock(
+			'pay_' . $payment_id,
+			static function () use ( $handler, $obj ) {
+				return call_user_func( $handler, $obj );
+			},
+			15
+		);
 	}
 
 	/**
@@ -388,7 +453,7 @@ class LNKup_Stripe_Webhooks {
 	 * @param array  $dispute Dispute object.
 	 * @param string $type    Event type.
 	 */
-	private static function handle_dispute_money( $dispute, $type ) {
+	public static function handle_dispute_money( $dispute, $type ) {
 		$payment_id = self::payment_from_intent( (string) ( $dispute['payment_intent'] ?? '' ) );
 		$status     = sanitize_key( (string) ( $dispute['status'] ?? '' ) );
 		$amount     = (int) ( $dispute['amount'] ?? 0 );
@@ -418,6 +483,11 @@ class LNKup_Stripe_Webhooks {
 			LNKup_Organizer_Wallet::reverse_for_chargeback( $payment_id, $amount );
 			LNKup_Escrow::cancel_for_payment( $payment_id );
 			LNKup_Financial_Disputes::close_chargeback( $payment_id, 'lost' );
+			$app_id = (int) get_post_meta( $payment_id, '_lnkup_application_id', true );
+			if ( $app_id ) {
+				LNKup_Refunds::close_booking_after_money_returned( $app_id, 'chargeback_lost' );
+			}
+			do_action( 'lnkup_payment_chargeback_lost', $payment_id, $amount );
 		} elseif ( 'won' === $status ) {
 			if ( in_array( (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ), array( 'disputed', 'chargeback_lost' ), true ) ) {
 				update_post_meta( $payment_id, '_lnkup_payment_status', 'paid' );
@@ -430,7 +500,7 @@ class LNKup_Stripe_Webhooks {
 	/**
 	 * @param array $dispute Dispute object.
 	 */
-	private static function handle_dispute_created( $dispute ) {
+	public static function handle_dispute_created( $dispute ) {
 		$payment_id = self::payment_from_intent( $dispute['payment_intent'] ?? '' );
 		if ( $payment_id ) {
 			LNKup_Financial_Disputes::open_from_chargeback( $payment_id, $dispute['reason'] ?? '' );
@@ -461,7 +531,33 @@ class LNKup_Stripe_Webhooks {
 			'meta_key'       => '_lnkup_stripe_payment_intent',
 			'meta_value'     => $intent_id,
 		) );
-		return $posts[0] ?? 0;
+		if ( $posts ) {
+			return (int) $posts[0];
+		}
+		// Earlier deposit/installment charges are only kept in the partial-charges map.
+		if ( ! preg_match( '/^pi_[A-Za-z0-9]+$/', (string) $intent_id ) ) {
+			return 0;
+		}
+		$posts = get_posts( array(
+			'post_type'      => 'lnkup_payment',
+			'posts_per_page' => 2,
+			'fields'         => 'ids',
+			'post_status'    => 'any',
+			'meta_query'     => array(
+				array(
+					'key'     => '_lnkup_partial_charges',
+					'value'   => '"' . $intent_id . '"',
+					'compare' => 'LIKE',
+				),
+			),
+		) );
+		foreach ( $posts as $candidate ) {
+			$partials = get_post_meta( (int) $candidate, '_lnkup_partial_charges', true );
+			if ( is_array( $partials ) && isset( $partials[ $intent_id ] ) ) {
+				return (int) $candidate;
+			}
+		}
+		return 0;
 	}
 
 	/**

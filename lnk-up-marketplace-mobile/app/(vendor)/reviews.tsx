@@ -1,3 +1,4 @@
+import { router, type Href } from "expo-router"
 import { useCallback, useEffect, useState } from "react"
 import { Pressable, StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
@@ -67,8 +68,10 @@ export default function VendorReviewsScreen() {
               {data.reviewCount} review{data.reviewCount === 1 ? "" : "s"}
               {data.label ? ` · ${data.label}` : ""}
             </Text>
-            <Text style={styles.meta}>Reputation score {Math.round(data.score)}</Text>
           </View>
+          <Pressable style={styles.outline} onPress={() => router.push("/(vendor)/passport?tab=reviews" as Href)}>
+            <Text style={styles.outlineText}>Respond or report in your Passport</Text>
+          </Pressable>
 
           {data.reviews.length === 0 ? (
             <EmptyPanel

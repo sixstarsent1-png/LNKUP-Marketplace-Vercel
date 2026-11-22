@@ -90,6 +90,43 @@ class LNKup_Credits {
 	}
 
 	/**
+	 * Give back wallet credit applied to a payment that will never be collected (voided / expired)
+	 * or whose card refund cannot include the credit-covered portion. Idempotent per payment.
+	 *
+	 * @param int    $payment_id Payment post ID.
+	 * @param string $reason     Audit reason.
+	 * @param float  $amount     Amount to restore; 0 = everything still applied.
+	 * @return float Amount restored.
+	 */
+	public static function restore_for_payment( $payment_id, $reason, $amount = 0.0 ) {
+		$payment_id = absint( $payment_id );
+		$user_id    = (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true );
+		if ( ! $payment_id || ! $user_id ) {
+			return 0.0;
+		}
+		global $wpdb;
+		$lock = 'lnkup_credit_apply_' . $user_id;
+		if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return 0.0;
+		}
+		try {
+			$applied  = (float) get_post_meta( $payment_id, '_lnkup_credit_applied', true );
+			$restored = (float) get_post_meta( $payment_id, '_lnkup_credit_restored', true );
+			$open     = max( 0, round( $applied - $restored, 2 ) );
+			$give     = $amount > 0 ? round( min( (float) $amount, $open ), 2 ) : $open;
+			if ( $give <= 0 ) {
+				return 0.0;
+			}
+			self::grant( $user_id, $give, 'refund', sanitize_key( $reason ), $payment_id );
+			update_post_meta( $payment_id, '_lnkup_credit_restored', round( $restored + $give, 2 ) );
+			LNKup_Financial_Audit::log( 'credit_restored', 'payment', $payment_id, array( 'amount' => $give, 'reason' => sanitize_key( $reason ) ) );
+			return $give;
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/**
 	 * Draw down credit rows oldest-expiring first.
 	 *
 	 * @param int   $user_id User ID.

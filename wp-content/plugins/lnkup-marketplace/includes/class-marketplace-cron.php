@@ -14,8 +14,12 @@ class LNKup_Marketplace_Cron {
 	/**
 	 * Init hooks.
 	 */
+	const HOOK_SAVED_SEARCH_BATCH = 'lnkup_saved_search_batch';
+	const SAVED_SEARCH_BATCH      = 200;
+
 	public static function init() {
 		add_action( self::HOOK_DAILY, array( __CLASS__, 'run_daily' ) );
+		add_action( self::HOOK_SAVED_SEARCH_BATCH, array( __CLASS__, 'check_saved_searches' ) );
 		add_action( 'publish_lnkup_opportunity', array( __CLASS__, 'on_new_opportunity' ), 20, 2 );
 		add_action( 'init', array( __CLASS__, 'sync_with_phase' ), 25 );
 	}
@@ -94,6 +98,9 @@ class LNKup_Marketplace_Cron {
 			$event_date = $event_id ? get_post_meta( $event_id, '_lnkup_event_date', true ) : '';
 			if ( $event_date && $event_date < $today ) {
 				update_post_meta( $app->ID, '_lnkup_event_completed_at', current_time( 'mysql' ) );
+				if ( 'paid' === (string) get_post_meta( $app->ID, '_lnkup_application_status', true ) ) {
+					LNKup_Applications::transition( $app->ID, 'completed', array( 'source' => 'event_completed' ) );
+				}
 				do_action( 'lnkup_application_event_completed', (int) $app->ID, $event_id );
 				$organizer_id = (int) get_post_meta( $app->ID, '_lnkup_organizer_user_id', true );
 				if ( $organizer_id && ! get_post_meta( $app->ID, '_lnkup_review_id', true ) ) {
@@ -128,15 +135,24 @@ class LNKup_Marketplace_Cron {
 	}
 
 	/**
-	 * Check saved searches for all vendors (daily + weekly digest).
+	 * Check saved searches (daily + weekly digest) for one page of vendors who have
+	 * saved searches; reschedules itself for the next page.
+	 *
+	 * @param int $page 1-based page.
 	 */
-	private static function check_saved_searches() {
+	public static function check_saved_searches( $page = 1 ) {
 		if ( ! lnkup_marketplace_phase_at_least( '1c' ) || ! LNKup_Saved_Searches::alerts_enabled() || ! lnkup_is_marketplace_open() ) {
 			return;
 		}
 
+		$page  = max( 1, (int) $page );
+		$batch = LNKup_Saved_Searches::alert_user_ids( $page, self::SAVED_SEARCH_BATCH );
+		if ( $batch['has_more'] ) {
+			wp_schedule_single_event( time() + 60, self::HOOK_SAVED_SEARCH_BATCH, array( $page + 1 ) );
+		}
+
 		$max = LNKup_Saved_Searches::max_matches_per_email();
-		foreach ( LNKup_Saved_Searches::get_alert_candidates() as $entry ) {
+		foreach ( LNKup_Saved_Searches::get_alert_candidates( null, $batch['ids'] ) as $entry ) {
 			$user_id = (int) $entry['user_id'];
 			$search  = $entry['search'];
 			$freq    = $search['frequency'] ?? LNKup_Saved_Searches::FREQ_DAILY;
@@ -184,6 +200,29 @@ class LNKup_Marketplace_Cron {
 				LNKup_Saved_Searches::touch_alert_timestamps( $user_id, $search['id'], false );
 			}
 		}
+	}
+
+	/**
+	 * Vendors who have saved anything (favorites meta), instead of every vendor account.
+	 *
+	 * @return int[]
+	 */
+	private static function favorite_user_ids() {
+		static $ids = null;
+		if ( null === $ids ) {
+			$ids = array_map(
+				'intval',
+				get_users(
+					array(
+						'role__in'     => array( 'lnkup_vendor' ),
+						'meta_key'     => 'lnkup_favorites', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+						'meta_compare' => 'EXISTS',
+						'fields'       => 'ID',
+					)
+				)
+			);
+		}
+		return $ids;
 	}
 
 	/**
@@ -235,8 +274,7 @@ class LNKup_Marketplace_Cron {
 					continue;
 				}
 
-				$vendors = get_users( array( 'role' => 'lnkup_vendor', 'fields' => 'ID' ) );
-				foreach ( $vendors as $uid ) {
+				foreach ( self::favorite_user_ids() as $uid ) {
 					if ( ! LNKup_Vendor_Personalization::is_favorite( $uid, 'opportunities', $opp_id ) ) {
 						continue;
 					}
@@ -250,7 +288,7 @@ class LNKup_Marketplace_Cron {
 					if ( ! lnkup_vendor_can_discover_opportunity( $uid, $opp_id ) ) {
 						continue;
 					}
-					LNKup_Notifications::send_favorite_deadline_reminder( $uid, $row['title'], $row['deadline'], $window );
+					LNKup_Notifications::send_favorite_deadline_reminder( $uid, $row['title'], $row['deadline'], $window, $opp_id );
 					update_user_meta( $uid, $meta_key, gmdate( 'Y-m-d' ) );
 				}
 			}
@@ -265,8 +303,8 @@ class LNKup_Marketplace_Cron {
 		$table = LNKup_Marketplace_Index::table_name();
 		$rows  = $wpdb->get_results( "SELECT opportunity_id, title, spots_remaining, spots_total FROM {$table} WHERE spots_total > 0 AND spots_remaining > 0 AND (spots_remaining / spots_total) <= 0.1", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+		$fav_users = $rows ? self::favorite_user_ids() : array();
 		foreach ( (array) $rows as $row ) {
-			$fav_users = get_users( array( 'role' => 'lnkup_vendor', 'fields' => 'ID' ) );
 			foreach ( $fav_users as $uid ) {
 				if ( LNKup_Vendor_Personalization::is_favorite( $uid, 'opportunities', $row['opportunity_id'] ) ) {
 					LNKup_Notifications::send_almost_full( $uid, $row['title'], $row['spots_remaining'] );

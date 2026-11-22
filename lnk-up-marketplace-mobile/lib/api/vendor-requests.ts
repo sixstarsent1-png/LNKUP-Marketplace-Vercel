@@ -36,6 +36,8 @@ export type VendorRequest = {
   amountDue?: number
   currency?: string
   paymentId?: string
+  /** Payment status; a processing or paid payment blocks withdrawal. */
+  paymentStatus?: string
   /** Open organizer question when status is info_requested. */
   infoRequest?: VendorInfoRequest
   /** Event cover image from WordPress. */
@@ -131,6 +133,7 @@ export function mapWpVendorApplication(item: WpVendorApplicationItem): VendorReq
     amountDue: item.amount_due ?? item.vendor_fee,
     currency: item.currency ?? "USD",
     paymentId: item.payment_id ? String(item.payment_id) : undefined,
+    paymentStatus: item.payment_status || undefined,
     infoRequest: mapInfoRequest(item.info_request),
     imageUrl: typeof item.featured_image === "string" && item.featured_image ? item.featured_image : undefined,
   }

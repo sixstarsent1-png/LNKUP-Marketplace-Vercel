@@ -32,14 +32,17 @@ class LNKup_Organizer_Launch_Checklist {
 		$organizer_id = absint( $organizer_id );
 		$dash_url     = lnkup_page_url_helper( 'organizer-dashboard' );
 
-		$events   = isset( $preload['events'] ) ? $preload['events'] : self::load_events( $organizer_id );
+		// One source of truth with the activation model: all events count (not just the oldest)
+		// and the "primary" slot is the most complete one, preferring the live event.
+		$facts    = class_exists( 'LNKup_Organizer_Activation' ) ? LNKup_Organizer_Activation::facts( $organizer_id ) : null;
+		$events   = isset( $preload['events'] ) ? $preload['events'] : ( $facts ? $facts['events'] : self::load_events( $organizer_id ) );
 		$events   = self::sort_events_asc( $events );
-		$opps     = isset( $preload['opps'] ) ? $preload['opps'] : self::load_opportunities( $organizer_id, $events );
-		$apps     = isset( $preload['apps'] ) ? $preload['apps'] : lnkup_get_applications_for_user( $organizer_id, 'organizer' );
-		$payments = isset( $preload['payments'] ) ? $preload['payments'] : lnkup_get_payments_for_user( $organizer_id, 'organizer' );
+		$opps     = isset( $preload['opps'] ) ? $preload['opps'] : ( $facts ? $facts['opps'] : self::load_opportunities( $organizer_id, $events ) );
+		$apps     = isset( $preload['apps'] ) ? $preload['apps'] : ( $facts ? $facts['apps'] : lnkup_get_applications_for_user( $organizer_id, 'organizer' ) );
+		$payments = isset( $preload['payments'] ) ? $preload['payments'] : ( $facts ? $facts['payments'] : lnkup_get_payments_for_user( $organizer_id, 'organizer' ) );
 
-		$primary_event = self::primary_event( $events );
-		$primary_opp   = self::primary_opportunity( $opps, $primary_event );
+		$primary_event = $facts && $facts['primary_event'] ? $facts['primary_event'] : self::primary_event( $events );
+		$primary_opp   = $facts && $facts['primary_opp'] ? $facts['primary_opp'] : self::primary_opportunity( $opps, $primary_event );
 		$event_id      = $primary_event ? (int) $primary_event->ID : 0;
 		$opp_id        = $primary_opp ? (int) $primary_opp->ID : 0;
 
@@ -67,6 +70,7 @@ class LNKup_Organizer_Launch_Checklist {
 		$welcome_seen = $organizer_id > 0 && (bool) get_user_meta( $organizer_id, self::META_WELCOME, true );
 
 		return array(
+			'start_url'            => function_exists( 'lnkup_organizer_view_url' ) ? lnkup_organizer_view_url( 'start' ) : '',
 			'completed'            => $completed,
 			'total'                => $total,
 			'percent'              => $total > 0 ? (int) round( ( $completed / $total ) * 100 ) : 0,
@@ -251,8 +255,8 @@ class LNKup_Organizer_Launch_Checklist {
 	private static function item_booth_fee( ?WP_Post $opp, string $dash_url ): array {
 		$status = self::STATUS_NOT_STARTED;
 		if ( $opp ) {
-			$fee    = (float) get_post_meta( $opp->ID, '_lnkup_vendor_fee', true );
-			$status = $fee > 0 ? self::STATUS_COMPLETE : self::STATUS_IN_PROGRESS;
+			// A price the organizer set counts — including $0 for free booths.
+			$status = '' !== (string) get_post_meta( $opp->ID, '_lnkup_vendor_fee', true ) ? self::STATUS_COMPLETE : self::STATUS_IN_PROGRESS;
 		}
 		return array(
 			'key'         => 'booth_fee',
@@ -322,7 +326,10 @@ class LNKup_Organizer_Launch_Checklist {
 	 */
 	private static function item_payout_account( int $organizer_id, string $dash_url ): array {
 		$status = self::STATUS_NOT_STARTED;
-		if ( class_exists( 'LNKup_Stripe_Connect' ) && ! LNKup_Stripe_Connect::is_enabled() ) {
+		if ( class_exists( 'LNKup_Organizer_Activation' ) ) {
+			$payout = LNKup_Organizer_Activation::payout( $organizer_id );
+			$status = $payout['ready'] ? self::STATUS_COMPLETE : ( $payout['started'] ? self::STATUS_IN_PROGRESS : self::STATUS_NOT_STARTED );
+		} elseif ( class_exists( 'LNKup_Stripe_Connect' ) && ! LNKup_Stripe_Connect::is_enabled() ) {
 			$status = self::STATUS_COMPLETE;
 		} elseif ( class_exists( 'LNKup_Stripe_Connect' ) && LNKup_Stripe_Connect::is_connect_ready( $organizer_id ) ) {
 			$status = self::STATUS_COMPLETE;

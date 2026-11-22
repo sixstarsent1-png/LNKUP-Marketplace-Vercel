@@ -1,8 +1,10 @@
 "use client"
 
+import { useState } from "react"
 import { Star } from "lucide-react"
 import type { OrganizerReview } from "@/lib/api/vendor-reputation"
 import { trackLnkupEvent } from "@/lib/analytics/track-event"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -15,10 +17,38 @@ const CATEGORY_LABELS: Record<string, string> = {
   customerEngagement: "Customer engagement",
 }
 
-export function ReviewCard({ review }: { review: OrganizerReview }) {
+export function ReviewCard({ review, canRespond = false }: { review: OrganizerReview; canRespond?: boolean }) {
   const categories = review.categories
     ? Object.entries(review.categories).filter(([, v]) => typeof v === "number")
     : []
+  const [response, setResponse] = useState(review.vendorResponse ?? "")
+  const [draft, setDraft] = useState(review.vendorResponse ?? "")
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleSaveResponse() {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/vendor/reviews/${encodeURIComponent(review.id)}/response`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: draft }),
+      })
+      const json = (await res.json().catch(() => ({}))) as { message?: string }
+      if (!res.ok) {
+        setError(json.message ?? "We couldn't save your response.")
+        return
+      }
+      setResponse(draft.trim())
+      setEditing(false)
+    } catch {
+      setError("We couldn't save your response. Check your connection and try again.")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <Card
@@ -45,6 +75,9 @@ export function ReviewCard({ review }: { review: OrganizerReview }) {
         <span className="text-xs text-muted-foreground">
           {[review.organizerName, review.eventDate, review.createdAt].filter(Boolean).join(" · ")}
         </span>
+        {review.verifiedParticipation && (
+          <span className="w-fit rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground">Verified participation</span>
+        )}
         {review.text && (
           <p className="text-sm text-muted-foreground">&ldquo;{review.text}&rdquo;</p>
         )}
@@ -61,6 +94,53 @@ export function ReviewCard({ review }: { review: OrganizerReview }) {
                 {CATEGORY_LABELS[key] ?? key}: {value}/5
               </span>
             ))}
+          </div>
+        )}
+        {response && !editing && (
+          <blockquote className="mt-1 border-l-2 border-accent pl-3 text-sm" data-testid="vendor-review-response">
+            <span className="block text-xs font-medium">Your response</span>
+            {response}
+          </blockquote>
+        )}
+        {canRespond && !editing && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-fit"
+            onClick={(e) => {
+              e.stopPropagation()
+              setEditing(true)
+            }}
+          >
+            {response ? "Edit response" : "Respond publicly"}
+          </Button>
+        )}
+        {canRespond && editing && (
+          <div className="flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
+            <label htmlFor={`response-${review.id}`} className="text-xs font-medium">
+              Public response (does not change the review)
+            </label>
+            <textarea
+              id={`response-${review.id}`}
+              className="min-h-20 rounded-xl border bg-background p-2 text-sm"
+              maxLength={2000}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+            {error && (
+              <p role="alert" className="text-xs text-destructive">
+                {error}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button type="button" size="sm" disabled={saving || draft.trim().length < 2} onClick={() => void handleSaveResponse()}>
+                {saving ? "Saving…" : "Save response"}
+              </Button>
+              <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>

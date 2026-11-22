@@ -109,6 +109,27 @@ class LNKup_Post_Types {
 				'menu_icon' => 'dashicons-email',
 				'supports' => array( 'title' ),
 			),
+			'lnkup_tour' => array(
+				'label'  => __( 'Tours & Series', 'lnkup-marketplace' ),
+				'public' => false,
+				'show_ui' => true,
+				'menu_icon' => 'dashicons-location-alt',
+				'supports' => array( 'title', 'editor', 'thumbnail' ),
+			),
+			'lnkup_brand' => array(
+				'label'  => __( 'Event Brands', 'lnkup-marketplace' ),
+				'public' => false,
+				'show_ui' => true,
+				'menu_icon' => 'dashicons-awards',
+				'supports' => array( 'title', 'editor', 'thumbnail' ),
+			),
+			'lnkup_event_template' => array(
+				'label'  => __( 'Event Templates', 'lnkup-marketplace' ),
+				'public' => false,
+				'show_ui' => true,
+				'menu_icon' => 'dashicons-admin-page',
+				'supports' => array( 'title' ),
+			),
 			'lnkup_vendor_flag' => array(
 				'label'  => __( 'Vendor Flags', 'lnkup-marketplace' ),
 				'public' => false,

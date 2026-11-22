@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import type { CommsPreferences, CommsPreferencesUpdate } from "@/lib/api/comms"
 import { isLiveApiEnabled } from "@/lib/api/config"
 import {
   mockNotificationPreferences,
@@ -86,6 +87,33 @@ export function useNotificationPreferences(enabled = true) {
     [live],
   )
 
+  /** Category × channel update (lnkup-communications). Optimistic; reverts on failure. */
+  const updateComms = useCallback(async (update: CommsPreferencesUpdate, optimistic: CommsPreferences): Promise<boolean> => {
+    let previous: NotificationPreferences | null = null
+    setPreferences((prev) => {
+      previous = prev
+      return prev ? { ...prev, comms: optimistic } : prev
+    })
+    setSaving(true)
+    try {
+      const response = await fetch("/api/notifications/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(update),
+      })
+      const { data, error: apiError } = await parseApiResponse<NotificationPreferences>(response)
+      if (apiError) throw new Error(apiError.message)
+      if (data) setPreferences(data)
+      return true
+    } catch (err) {
+      console.error("[useNotificationPreferences] updateComms", err)
+      setPreferences(previous)
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchPreferences()
   }, [fetchPreferences])
@@ -98,6 +126,7 @@ export function useNotificationPreferences(enabled = true) {
     saving,
     retry: fetchPreferences,
     updatePreference,
+    updateComms,
     isLive: live,
   }
 }

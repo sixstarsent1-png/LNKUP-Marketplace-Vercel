@@ -22,7 +22,36 @@ class LNKup_Fraud_Flags {
 				'created_at' => current_time( 'mysql' ),
 			)
 		);
-		LNKup_Financial_Audit::log( 'fraud_flagged', 'fraud_flag', (int) $wpdb->insert_id );
+		$flag_id = (int) $wpdb->insert_id;
+		LNKup_Financial_Audit::log( 'fraud_flagged', 'fraud_flag', $flag_id );
+
+		if ( class_exists( 'LNKup_Trust_Cases' ) ) {
+			$case_severity = array(
+				'low'      => 'low',
+				'medium'   => 'review',
+				'high'     => 'elevated',
+				'critical' => 'critical',
+			);
+			LNKup_Trust_Cases::open(
+				array(
+					'case_type'    => 'fraud_flag',
+					'severity'     => $case_severity[ sanitize_key( $severity ) ] ?? 'review',
+					'subject_type' => 'user',
+					'subject_id'   => absint( $user_id ),
+					'signal_key'   => sanitize_key( $flag_type ),
+					'summary'      => sanitize_text_field( $flag_type . ( $details ? ': ' . $details : '' ) ),
+					'evidence'     => array(
+						array(
+							'source'        => 'fraud_flags',
+							'fraud_flag_id' => $flag_id,
+							'details'       => sanitize_text_field( $details ),
+							'at'            => current_time( 'mysql', true ),
+						),
+					),
+					'next_step'    => __( 'Review recent payments and refunds for this account. Do not restrict without a documented reason.', 'lnkup-marketplace' ),
+				)
+			);
+		}
 	}
 
 	public static function check_refund_patterns( $user_id ) {

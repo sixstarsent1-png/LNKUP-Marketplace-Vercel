@@ -17,7 +17,12 @@ function idFrom(data: Record<string, unknown>, ...keys: string[]): string | null
   return null
 }
 
-function routeForType(type: string, applicationId: string | null, eventId: string | null): TypedRoute | null {
+function routeForType(
+  type: string,
+  applicationId: string | null,
+  eventId: string | null,
+  tourId: string | null = null,
+): TypedRoute | null {
   const app = (path: string, fallback: string): TypedRoute =>
     applicationId ? { href: `${path}/${applicationId}`, specific: true } : { href: fallback, specific: false }
   const list = (href: string): TypedRoute => ({ href, specific: false })
@@ -47,7 +52,10 @@ function routeForType(type: string, applicationId: string | null, eventId: strin
     case "discovery_almost_full":
     case "discovery_profile_match":
     case "discovery_invite":
+    case "discovery_weekly_matches":
       return list("/(vendor)/find")
+    case "discovery_tour_match":
+      return tourId ? { href: `/tour/${encodeURIComponent(tourId)}`, specific: true } : list("/(vendor)/find")
     case "discovery_saved_search":
       return list("/(vendor)/saved-searches")
     case "discovery_favorite_deadline":
@@ -56,7 +64,12 @@ function routeForType(type: string, applicationId: string | null, eventId: strin
       return list("/(organizer)/launch")
     case "activation_org_review":
     case "review_requested":
+    case "organizer_recruit_vendors":
       return list("/(organizer)/vendors")
+    case "organizer_open_spots":
+      return eventId
+        ? { href: `/(organizer)/vendors/find?event=${encodeURIComponent(eventId)}`, specific: true }
+        : list("/(organizer)/vendors/find")
     case "organizer_event_needs_attention":
       return eventId
         ? { href: `/(organizer)/events/${encodeURIComponent(eventId)}`, specific: true }
@@ -79,11 +92,15 @@ function routeForType(type: string, applicationId: string | null, eventId: strin
  */
 export function hrefFromNotificationData(data: Record<string, unknown> | undefined): string | null {
   if (!data) return null
+  // lnkup-communications pushes carry the exact screen; trust it when it is an allowlisted route.
+  const serverHref = typeof data.href === "string" ? data.href : null
+  if (data.notificationId != null && serverHref && destinationScope(serverHref)) return serverHref
   const type = typeof data.type === "string" ? data.type : ""
   const typed = routeForType(
     type,
     idFrom(data, "applicationId", "application_id"),
     idFrom(data, "eventId", "event_id"),
+    idFrom(data, "tourId", "tour_id"),
   )
   if (typed?.specific) return typed.href
 
@@ -97,9 +114,11 @@ export function hrefFromNotificationData(data: Record<string, unknown> | undefin
  * web link, so they fall back to the push routing rules for their type and booking.
  */
 export function inAppHrefForNotification(
-  item: Pick<LnkupNotification, "href" | "type" | "requestId" | "applicationId">,
+  item: Pick<LnkupNotification, "href" | "type" | "requestId" | "applicationId"> & Partial<Pick<LnkupNotification, "deepLink">>,
   roles: string[] | undefined,
 ): string | null {
+  const server = item.deepLink ? safeDestination(item.deepLink, roles) : null
+  if (server) return server
   const direct = item.href ? safeDestination(item.href, roles) : null
   if (direct) return direct
   const routed = hrefFromNotificationData({

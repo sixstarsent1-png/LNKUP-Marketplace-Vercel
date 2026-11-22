@@ -420,6 +420,20 @@ export default function OrganizerVendorsScreen() {
 
             <SegmentedControl options={segmentOptions} value={segment} onChange={setSegment} />
 
+            {segment === "discover" ? (
+              <InlineBanner
+                tone="info"
+                title="Recruit for an event"
+                message="See discoverable vendors that match one of your events and invite them to apply."
+                actionLabel="Find vendors"
+                onAction={() =>
+                  router.push(
+                    (eventFilter ? `/(organizer)/vendors/find?event=${eventFilter}` : "/(organizer)/vendors/find") as Href,
+                  )
+                }
+              />
+            ) : null}
+
             {segment === "requests" ? (
               <RequestsQueueHeader
                 loading={loading}

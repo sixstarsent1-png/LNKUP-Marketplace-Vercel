@@ -323,7 +323,9 @@
       tags: tags,
       event_id: parseInt((document.getElementById('lnkup-import-event') || {}).value, 10) || 0,
       opportunity_id: parseInt((document.getElementById('lnkup-import-opportunity') || {}).value, 10) || 0,
-      send_invites: !!(document.getElementById('lnkup-import-send-invites') || {}).checked
+      send_invites: !!(document.getElementById('lnkup-import-send-invites') || {}).checked,
+      consent_basis: (document.getElementById('lnkup-import-consent') || {}).value || '',
+      preset: (document.getElementById('lnkup-import-preset') || {}).value || ''
     };
   }
 
@@ -350,6 +352,10 @@
       if (!confirmed) {
         toast('Confirm invite sending before running import.', 'error');
         return Promise.reject(new Error('confirm_required'));
+      }
+      if (!options.consent_basis) {
+        toast('Choose how these vendors agreed to hear from you before sending invites.', 'error');
+        return Promise.reject(new Error('consent_required'));
       }
       if (!cfg.allowInvite) {
         toast('Invites during import are disabled by the platform.', 'error');
@@ -505,6 +511,10 @@
     if (sendInvites && confirmWrap) {
       sendInvites.addEventListener('change', function () {
         confirmWrap.hidden = !sendInvites.checked;
+        var consentWrap = document.getElementById('lnkup-import-consent-wrap');
+        if (consentWrap) {
+          consentWrap.hidden = !sendInvites.checked;
+        }
       });
     }
 

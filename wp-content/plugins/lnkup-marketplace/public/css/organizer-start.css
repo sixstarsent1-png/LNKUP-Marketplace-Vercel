@@ -1,0 +1,264 @@
+/* Organizer Get started view + home banner. */
+.lnkup-start {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.lnkup-start__head {
+	display: flex;
+	justify-content: space-between;
+	gap: 16px;
+	align-items: flex-start;
+	flex-wrap: wrap;
+}
+
+.lnkup-start__meter {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+}
+
+.lnkup-start__meter strong {
+	font-size: 28px;
+	line-height: 1;
+}
+
+.lnkup-start__progress {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 8px 16px;
+}
+
+.lnkup-start__progress div {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.lnkup-start__progress progress {
+	flex: 1;
+	min-width: 120px;
+	accent-color: #8bb81f;
+}
+
+.lnkup-start__next {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 16px;
+	padding: 16px 20px;
+	border-radius: 16px;
+	background: #0b0b0c;
+	color: #fff;
+}
+
+.lnkup-start__next .lnkup-muted {
+	color: rgba(255, 255, 255, 0.72);
+}
+
+.lnkup-start__next--done {
+	background: #eef9d3;
+	color: #0b0b0c;
+}
+
+.lnkup-start__stages {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.lnkup-start__stage {
+	border: 1px solid #e3e3e0;
+	border-radius: 16px;
+	padding: 16px 20px;
+	background: #fff;
+}
+
+.lnkup-start__stage.is-complete {
+	border-color: #c8f542;
+}
+
+.lnkup-start__stage-head {
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+}
+
+.lnkup-start__stage-head h3 {
+	margin: 0 0 4px;
+	font-size: 16px;
+}
+
+.lnkup-start__stage-head p {
+	margin: 0;
+}
+
+.lnkup-start__stage-head > div {
+	flex: 1;
+}
+
+.lnkup-start__num {
+	flex: 0 0 28px;
+	height: 28px;
+	border-radius: 50%;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 700;
+	background: #f2f2ef;
+}
+
+.lnkup-start__stage.is-complete .lnkup-start__num {
+	background: #c8f542;
+}
+
+.lnkup-start__items {
+	list-style: none;
+	margin: 10px 0;
+	padding: 0 0 0 40px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 16px;
+}
+
+.lnkup-start__items li.is-done {
+	color: #4d6b00;
+}
+
+.lnkup-start__form {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px 16px;
+	padding-left: 40px;
+}
+
+.lnkup-start__form label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-weight: 600;
+	font-size: 13px;
+}
+
+.lnkup-start__wide,
+.lnkup-start__form .lnkup-start__actions {
+	grid-column: 1 / -1;
+}
+
+.lnkup-start__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	padding-left: 40px;
+}
+
+.lnkup-start__form .lnkup-start__actions {
+	padding-left: 0;
+}
+
+.lnkup-start__msg.is-error {
+	color: #b42318;
+}
+
+.lnkup-start__share {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding-left: 40px;
+}
+
+.lnkup-start__share label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-weight: 600;
+	font-size: 13px;
+}
+
+.lnkup-start__copy {
+	display: flex;
+	gap: 8px;
+}
+
+.lnkup-start__copy input,
+.lnkup-start__copy textarea {
+	flex: 1;
+	font-family: ui-monospace, Menlo, Consolas, monospace;
+	font-size: 12px;
+}
+
+.lnkup-start__setups {
+	padding-left: 40px;
+	margin-top: 12px;
+}
+
+.lnkup-start__setups h4 {
+	margin: 0 0 6px;
+}
+
+.lnkup-start__setup-list {
+	list-style: none;
+	margin: 0 0 8px;
+	padding: 0;
+}
+
+.lnkup-start__setup-list li {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	padding: 4px 0;
+	flex-wrap: wrap;
+}
+
+.lnkup-start-banner {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 18px;
+	border-radius: 16px;
+	border: 1px solid #e3e3e0;
+	background: #fff;
+	text-decoration: none;
+	color: inherit;
+	margin-bottom: 12px;
+}
+
+.lnkup-start-banner > span:first-child {
+	display: flex;
+	flex-direction: column;
+}
+
+.lnkup-start-banner--new {
+	background: #0b0b0c;
+	color: #fff;
+	border-color: #0b0b0c;
+}
+
+.lnkup-start-banner--new .lnkup-muted {
+	color: rgba(255, 255, 255, 0.72);
+}
+
+@media (max-width: 640px) {
+	.lnkup-start__form {
+		grid-template-columns: 1fr;
+		padding-left: 0;
+	}
+
+	.lnkup-start__items,
+	.lnkup-start__actions,
+	.lnkup-start__share,
+	.lnkup-start__setups {
+		padding-left: 0;
+	}
+
+	.lnkup-start__copy {
+		flex-direction: column;
+	}
+}

@@ -9,8 +9,20 @@ import { BackLink } from "@/components/ui/back-link"
 import { Button } from "@/components/ui/button"
 import { FormField } from "@/components/ui/form-field"
 import { SectionTitle } from "@/components/ui/typography"
-import { fetchApplyContext, submitApplication, type ApplyContext } from "@/lib/api/apply"
-import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
+import { ApplyQuestions } from "@/components/apply/apply-questions"
+import {
+  DECLINED_MESSAGE,
+  fetchApplyContext,
+  newIdempotencyKey,
+  reapplyNote,
+  saveApplyDraft,
+  submitApplication,
+  submitApplyDraft,
+  type ApplyAnswerValue,
+  type ApplyContext,
+  type DraftInput,
+} from "@/lib/api/apply"
+import { appErrorFromWp, WpFetchError, type AppErrorShape } from "@/lib/api/errors"
 import { useAuth } from "@/lib/auth/auth-context"
 import { constrainedColumnStyle } from "@/lib/layout/use-breakpoint"
 import { safeBack } from "@/lib/navigation/safe-back"
@@ -29,8 +41,18 @@ export default function ApplyScreen() {
   const [accepted, setAccepted] = useState(false)
   const [termsError, setTermsError] = useState<string | null>(null)
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null)
+  const [setupNotes, setSetupNotes] = useState("")
+  const [answers, setAnswers] = useState<Record<string, ApplyAnswerValue>>({})
+  const [invalid, setInvalid] = useState<string[]>([])
+  const [priceChanged, setPriceChanged] = useState(false)
+  const [blockedCode, setBlockedCode] = useState<string | null>(null)
+  const [draftState, setDraftState] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const idempotencyKey = useRef(newIdempotencyKey())
+  const draftRevision = useRef<number | null>(null)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const id = Number(opportunityId)
+  const draftsOn = Boolean(context?.features.drafts && context.canApply)
 
   const load = useCallback(async () => {
     if (!id) {
@@ -49,6 +71,13 @@ export default function ApplyScreen() {
       const data = await fetchApplyContext(id, auth)
       setContext(data)
       setCategory(data.defaultCategory ?? data.categories[0] ?? "")
+      if (data.draft && data.features.drafts) {
+        draftRevision.current = data.draft.revision
+        if (data.draft.fields.selectedCategory) setCategory(data.draft.fields.selectedCategory)
+        setMessage(data.draft.fields.message)
+        setSetupNotes(data.draft.fields.setupNotes)
+        setAnswers(data.draft.answers)
+      }
     } catch (err) {
       setError(appErrorFromWp(err))
     } finally {
@@ -59,6 +88,49 @@ export default function ApplyScreen() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(
+    () => () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+    },
+    [],
+  )
+
+  const saveDraftNow = useCallback(
+    async (input: DraftInput): Promise<boolean> => {
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current)
+        saveTimer.current = null
+      }
+      setDraftState("saving")
+      try {
+        const saved = await saveApplyDraft(id, input, draftRevision.current, auth)
+        if (saved) draftRevision.current = saved.revision
+        setDraftState("saved")
+        return true
+      } catch (err) {
+        if (err instanceof WpFetchError && err.code === "lnkup_draft_conflict") {
+          // Another device saved first: reload the newest version rather than overwrite it.
+          await load()
+        }
+        setDraftState("error")
+        return false
+      }
+    },
+    [auth, id, load],
+  )
+
+  function queueDraftSave(next: Partial<DraftInput>) {
+    if (!draftsOn) return
+    const input: DraftInput = {
+      selectedCategory: next.selectedCategory ?? category,
+      message: next.message ?? message,
+      setupNotes: next.setupNotes ?? setupNotes,
+      answers: next.answers ?? answers,
+    }
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => void saveDraftNow(input), 900)
+  }
 
   if (!isAuthenticated) {
     return <Redirect href={{ pathname: "/login", params: { returnTo: `/apply/${id}` } }} />
@@ -87,20 +159,51 @@ export default function ApplyScreen() {
     submittingRef.current = true
     setSubmitting(true)
     setError(null)
+    setInvalid([])
     try {
-      const result = await submitApplication(
-        {
-          opportunityId: context.opportunityId,
-          selectedCategory: category,
-          message,
-          acceptedTerms: true,
-        },
-        auth,
-      )
+      let result
+      if (draftsOn) {
+        const saved = await saveDraftNow({ selectedCategory: category, message, setupNotes, answers })
+        if (!saved) {
+          setError({ code: "unknown", title: "Couldn't save", message: "We couldn't save your application. Try again.", retryable: true })
+          return
+        }
+        result = await submitApplyDraft(
+          context.opportunityId,
+          { acceptedTerms: true, acceptCurrentPrice: priceChanged, idempotencyKey: idempotencyKey.current },
+          auth,
+        )
+      } else {
+        result = await submitApplication(
+          {
+            opportunityId: context.opportunityId,
+            selectedCategory: category,
+            message,
+            setupNotes,
+            answers,
+            acceptedTerms: true,
+            idempotencyKey: idempotencyKey.current,
+          },
+          auth,
+        )
+      }
       setSubmittedMessage(
         result.message ?? "Track it under Bookings. You only pay if the organizer approves you.",
       )
     } catch (err) {
+      if (err instanceof WpFetchError) {
+        if (err.code === "duplicate" || err.code === "previously_declined") {
+          setBlockedCode(err.code)
+          return
+        }
+        if (err.code === "lnkup_answers_required" || err.code === "lnkup_invalid_answer") {
+          const fields = err.data?.fields
+          setInvalid(Array.isArray(fields) ? fields.map(String) : [])
+        }
+        if (err.code === "lnkup_price_changed") {
+          setPriceChanged(true)
+        }
+      }
       setError(appErrorFromWp(err))
     } finally {
       submittingRef.current = false
@@ -108,8 +211,18 @@ export default function ApplyScreen() {
     }
   }
 
-  const canApplyForm = Boolean(context?.canApply && !context?.buttonDisabled)
+  const canApplyForm = Boolean(context?.canApply && !context?.buttonDisabled && !blockedCode)
   const feeLabel = context?.vendorFee != null && context.vendorFee > 0 ? `$${context.vendorFee}` : "Fee TBD"
+  const blockReason = blockedCode ?? context?.blockReason
+  const blockedTitle =
+    blockReason === "duplicate" ? "You already applied" : blockReason === "previously_declined" ? "Application declined" : "Applications unavailable"
+  const blockedMessage =
+    blockReason === "duplicate"
+      ? "Track this application under Bookings."
+      : blockReason === "previously_declined"
+        ? DECLINED_MESSAGE
+        : "Applications are not open for this opportunity yet."
+  const note = reapplyNote(context?.previousApplication ?? null)
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
@@ -197,10 +310,15 @@ export default function ApplyScreen() {
 
                 {!canApplyForm ? (
                   <View style={styles.blockedWrap}>
-                    <ErrorPanel
-                      title="Applications unavailable"
-                      message={context.blockReason ?? "Applications are not open for this opportunity yet."}
-                    />
+                    <ErrorPanel title={blockedTitle} message={blockedMessage} />
+                    {blockReason === "duplicate" || blockReason === "previously_declined" ? (
+                      <Button
+                        label="View bookings"
+                        icon="ticket-outline"
+                        fullWidth
+                        onPress={() => router.replace("/(vendor)/requests")}
+                      />
+                    ) : null}
                     <Button
                       label="Back to Explore"
                       variant="secondary"
@@ -210,6 +328,11 @@ export default function ApplyScreen() {
                   </View>
                 ) : (
                   <>
+                    {note ? (
+                      <View style={styles.noteCard} testID="apply-reapply-note">
+                        <Text style={styles.noteText}>{note}</Text>
+                      </View>
+                    ) : null}
                     {error ? (
                       <ErrorPanel
                         title={error.title}
@@ -229,7 +352,10 @@ export default function ApplyScreen() {
                             return (
                               <Pressable
                                 key={item}
-                                onPress={() => setCategory(item)}
+                                onPress={() => {
+                                  setCategory(item)
+                                  queueDraftSave({ selectedCategory: item })
+                                }}
                                 style={[styles.chip, active && styles.chipActive]}
                                 accessibilityRole="button"
                                 accessibilityState={{ selected: active }}
@@ -247,10 +373,46 @@ export default function ApplyScreen() {
                       label="Message (optional)"
                       hint="Helps the organizer review you faster."
                       value={message}
-                      onChangeText={setMessage}
+                      onChangeText={(text) => {
+                        setMessage(text)
+                        queueDraftSave({ message: text })
+                      }}
                       placeholder="Tell the organizer about your booth…"
                       multiline
                     />
+
+                    <FormField
+                      label="Setup notes (optional)"
+                      hint="Power, tent size, vehicle access…"
+                      value={setupNotes}
+                      onChangeText={(text) => {
+                        setSetupNotes(text)
+                        queueDraftSave({ setupNotes: text })
+                      }}
+                      multiline
+                    />
+
+                    <ApplyQuestions
+                      questions={context.questions}
+                      answers={answers}
+                      invalid={invalid}
+                      documents={context.vendorDocuments}
+                      onChange={(questionId, value) => {
+                        const next = { ...answers, [questionId]: value }
+                        setAnswers(next)
+                        queueDraftSave({ answers: next })
+                      }}
+                    />
+
+                    {draftsOn && draftState !== "idle" ? (
+                      <Text style={styles.helper} accessibilityLiveRegion="polite" testID="apply-draft-state">
+                        {draftState === "saving"
+                          ? "Saving…"
+                          : draftState === "saved"
+                            ? "Saved. You can finish this later on any device."
+                            : "Couldn't save your progress. Your answers are still here."}
+                      </Text>
+                    ) : null}
 
                     <Pressable
                       style={[styles.termsRow, termsError ? styles.termsRowError : null]}
@@ -279,7 +441,7 @@ export default function ApplyScreen() {
             <View style={styles.stickyFooter}>
               <View style={constrainedColumnStyle(layout.contentMaxWidth)}>
                 <Button
-                  label={context.buttonLabel}
+                  label={priceChanged ? "Submit at the new price" : context.buttonLabel}
                   loadingLabel="Submitting…"
                   loading={submitting}
                   fullWidth
@@ -401,6 +563,18 @@ const styles = StyleSheet.create({
   },
   blockedWrap: {
     gap: spacing.md,
+  },
+  noteCard: {
+    backgroundColor: colors.gray50,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    padding: spacing.md,
+  },
+  noteText: {
+    fontSize: typeScale.body,
+    color: colors.gray700,
+    lineHeight: 20,
   },
   field: {
     gap: spacing.sm,

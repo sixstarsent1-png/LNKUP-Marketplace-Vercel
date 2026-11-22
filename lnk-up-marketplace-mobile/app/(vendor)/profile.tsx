@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native"
 import { router, useNavigation, type Href } from "expo-router"
 import * as DocumentPicker from "expo-document-picker"
 
+import { MatchingPreferencesCard } from "@/components/matching-preferences-card"
 import { ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { ProfileMark } from "@/components/profile-mark"
 import { Screen } from "@/components/screen"
@@ -403,6 +404,8 @@ export default function VendorProfileScreen() {
               error={visibleErrors.instagram}
             />
           </View>
+
+          <MatchingPreferencesCard auth={auth ?? undefined} />
 
           <ListGroup title="More">
             <ListRow icon="document-text-outline" title="Documents" meta="Insurance, permits and licenses" onPress={() => router.push("/(vendor)/documents")} />

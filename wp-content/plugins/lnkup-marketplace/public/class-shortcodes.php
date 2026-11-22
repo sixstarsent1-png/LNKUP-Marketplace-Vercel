@@ -102,7 +102,14 @@ class LNKup_Shortcodes {
 		if ( empty( $_GET['lnkup_verify_invoice'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return;
 		}
-		$token   = sanitize_text_field( wp_unslash( $_GET['lnkup_verify_invoice'] ) );
+		$ip_hash  = md5( (string) ( $_SERVER['REMOTE_ADDR'] ?? '' ) . wp_salt( 'nonce' ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		$rate_key = 'lnkup_inv_verify_' . $ip_hash;
+		$attempts = (int) get_transient( $rate_key );
+		if ( $attempts >= 20 ) {
+			wp_die( esc_html__( 'Too many verification attempts. Please try again later.', 'lnkup-marketplace' ), 429 );
+		}
+		set_transient( $rate_key, $attempts + 1, 10 * MINUTE_IN_SECONDS );
+		$token   = sanitize_text_field( wp_unslash( $_GET['lnkup_verify_invoice'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$invoice = LNKup_Invoices::verify_by_token( $token );
 		if ( ! $invoice ) {
 			wp_die( esc_html__( 'Invalid or expired invoice verification link.', 'lnkup-marketplace' ), 404 );
@@ -185,6 +192,10 @@ class LNKup_Shortcodes {
 		wp_register_script( 'lnkup-marketplace', LNKUP_PLUGIN_URL . 'public/js/marketplace.js', array(), LNKUP_VERSION, true );
 		wp_register_script( 'lnkup-marketplace-v2', LNKUP_PLUGIN_URL . 'public/js/marketplace-v2.js', array( 'lnkup-marketplace' ), LNKUP_VERSION, true );
 		wp_register_script( 'lnkup-marketplace-map', LNKUP_PLUGIN_URL . 'public/js/marketplace-map.js', array( 'lnkup-marketplace-v2' ), LNKUP_VERSION, true );
+		wp_register_style( 'lnkup-apply-wizard', LNKUP_PLUGIN_URL . 'public/css/apply-wizard.css', $v2, LNKUP_VERSION );
+		wp_register_script( 'lnkup-apply-wizard', LNKUP_PLUGIN_URL . 'public/js/apply-wizard.js', array( 'lnkup-marketplace' ), LNKUP_VERSION, true );
+		wp_register_script( 'lnkup-tour-apply', LNKUP_PLUGIN_URL . 'public/js/tour-apply.js', array( 'lnkup-apply-wizard' ), LNKUP_VERSION, true );
+		wp_register_script( 'lnkup-app-questions-editor', LNKUP_PLUGIN_URL . 'public/js/application-questions-editor.js', array( 'lnkup-apply-wizard' ), LNKUP_VERSION, true );
 		wp_register_script( 'lnkup-marketplace-compare', LNKUP_PLUGIN_URL . 'public/js/marketplace-compare.js', array( 'lnkup-marketplace-v2' ), LNKUP_VERSION, true );
 		wp_register_style( 'lnkup-public-profile', LNKUP_PLUGIN_URL . 'public/css/public-profile.css', $v2, LNKUP_VERSION );
 		wp_register_script( 'lnkup-public-vendor-profile', LNKUP_PLUGIN_URL . 'public/js/public-vendor-profile.js', array(), LNKUP_VERSION, true );
@@ -223,6 +234,8 @@ class LNKup_Shortcodes {
 		wp_register_script( 'lnkup-vendor-home', LNKUP_PLUGIN_URL . 'public/js/vendor-home.js', array( 'lnkup-marketplace-v2', 'lnkup-ui' ), LNKUP_VERSION, true );
 		wp_register_style( 'lnkup-vendor-profile', LNKUP_PLUGIN_URL . 'public/css/vendor-profile.css', array_merge( $component_deps, array( 'lnkup-vendor-dashboard' ) ), LNKUP_VERSION );
 		wp_register_script( 'lnkup-vendor-profile', LNKUP_PLUGIN_URL . 'public/js/vendor-profile.js', array( 'lnkup-marketplace', 'jquery' ), LNKUP_VERSION, true );
+		wp_register_style( 'lnkup-passport', LNKUP_PLUGIN_URL . 'public/css/passport.css', $v2, LNKUP_VERSION );
+		wp_register_script( 'lnkup-passport', LNKUP_PLUGIN_URL . 'public/js/passport.js', array(), LNKUP_VERSION, true );
 		wp_register_style( 'lnkup-connector', LNKUP_PLUGIN_URL . 'public/css/connector.css', $v2, LNKUP_VERSION );
 		wp_register_script( 'lnkup-connector', LNKUP_PLUGIN_URL . 'public/js/connector.js', array( 'lnkup-marketplace', 'lnkup-ui' ), LNKUP_VERSION, true );
 	}
@@ -271,6 +284,15 @@ class LNKup_Shortcodes {
 			if ( $vendor_discovery ) {
 				wp_enqueue_script( 'lnkup-marketplace-v2' );
 			}
+			$apply_flags = lnkup_get_settings();
+			// The wizard also powers withdraw buttons and draft resume cards on vendor Requests.
+			if ( ! empty( $apply_flags['apply_wizard_enabled'] ) || ! empty( $apply_flags['tour_multi_apply_enabled'] ) || ( $vendor_dash && in_array( $vendor_view, array( 'home', 'applications' ), true ) ) ) {
+				wp_enqueue_style( 'lnkup-apply-wizard' );
+				wp_enqueue_script( 'lnkup-apply-wizard' );
+			}
+			if ( $feed && ! empty( $_GET['tour_id'] ) && ! empty( $apply_flags['tour_multi_apply_enabled'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				wp_enqueue_script( 'lnkup-tour-apply' );
+			}
 		}
 		if ( $feed && lnkup_marketplace_phase_at_least( '1b' ) ) {
 			wp_enqueue_script( 'lnkup-marketplace-map' );
@@ -298,6 +320,28 @@ class LNKup_Shortcodes {
 		if ( is_page( 'vendor-profile' ) ) {
 			wp_enqueue_style( 'lnkup-vendor-profile' );
 			wp_enqueue_script( 'lnkup-vendor-profile' );
+		}
+		if ( $public_profile ) {
+			wp_enqueue_style( 'lnkup-passport' );
+		}
+		if ( $vendor_dash && 'passport' === $vendor_view && is_user_logged_in() ) {
+			wp_enqueue_style( 'lnkup-reputation' );
+			wp_enqueue_style( 'lnkup-passport' );
+			wp_enqueue_script( 'lnkup-passport' );
+			wp_localize_script(
+				'lnkup-passport',
+				'lnkupPassport',
+				array(
+					'root'         => esc_url_raw( rest_url( 'lnkup/v1' ) ),
+					'nonce'        => wp_create_nonce( 'wp_rest' ),
+					'profileUrl'   => esc_url_raw( lnkup_page_url_helper( 'vendor-profile' ) ),
+					'documentsUrl' => esc_url_raw( add_query_arg( 'view', 'documents', lnkup_page_url_helper( 'vendor-dashboard' ) ) ),
+					'findUrl'      => esc_url_raw( lnkup_page_url_helper( 'opportunities' ) ),
+					'flags'        => class_exists( 'LNKup_Passport_Settings' ) ? array_intersect_key( LNKup_Passport_Settings::snapshot(), array_flip( LNKup_Passport_Settings::FLAGS ) ) : array(),
+					'documentTypes' => LNKup_Documents::document_types(),
+					'reportReasons' => LNKup_Vendor_Reviews::report_reasons(),
+				)
+			);
 		}
 
 		$needs_reputation = $public_profile || ( $vendor_dash && 'reviews' === $vendor_view ) || $invite_banner || $org['page'];
@@ -349,9 +393,77 @@ class LNKup_Shortcodes {
 		if ( $org['page'] ) {
 			wp_enqueue_style( 'lnkup-organizer-crm' );
 			wp_enqueue_script( 'lnkup-organizer-crm' );
+			wp_enqueue_style( 'lnkup-apply-wizard' );
+			wp_enqueue_script( 'lnkup-app-questions-editor' );
 		}
 		if ( $invite_banner ) {
 			wp_enqueue_script( 'lnkup-organizer-crm' );
+		}
+		if ( $org['page'] && is_user_logged_in() ) {
+			wp_enqueue_style( 'lnkup-organizer-start', LNKUP_PLUGIN_URL . 'public/css/organizer-start.css', array(), LNKUP_VERSION );
+		}
+		if ( $org['page'] && 'start' === $org['view'] && is_user_logged_in() ) {
+			wp_enqueue_script( 'lnkup-organizer-start', LNKUP_PLUGIN_URL . 'public/js/organizer-start.js', array(), LNKUP_VERSION, true );
+			wp_localize_script(
+				'lnkup-organizer-start',
+				'lnkupStart',
+				array(
+					'root'  => esc_url_raw( rest_url( 'lnkup/v1' ) ),
+					'nonce' => wp_create_nonce( 'wp_rest' ),
+				)
+			);
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$review_classic = isset( $_GET['mode'] ) && 'classic' === sanitize_key( wp_unslash( $_GET['mode'] ) );
+		if ( $org['page'] && '' === $org['detail'] && 'applications' === $org['view'] && is_user_logged_in() && LNKup_Feature_Flags::application_review() && ( ! $review_classic || LNKup_Capabilities::is_team_only_member() ) ) {
+			wp_enqueue_style( 'lnkup-organizer-review', LNKUP_PLUGIN_URL . 'public/css/organizer-review.css', array(), lnkup_asset_version( 'public/css/organizer-review.css' ) );
+			wp_enqueue_script( 'lnkup-organizer-review', LNKUP_PLUGIN_URL . 'public/js/organizer-review.js', array(), lnkup_asset_version( 'public/js/organizer-review.js' ), true );
+			wp_localize_script(
+				'lnkup-organizer-review',
+				'lnkupReview',
+				array(
+					'root'      => esc_url_raw( rest_url( 'lnkup/v1' ) ),
+					'nonce'     => wp_create_nonce( 'wp_rest' ),
+					'offers'    => LNKup_Feature_Flags::waitlist_offers(),
+					'dashboard' => esc_url_raw( lnkup_page_url_helper( 'organizer-dashboard' ) ),
+				)
+			);
+		}
+		if ( $org['page'] && is_user_logged_in() && LNKup_Capabilities::is_team_only_member() ) {
+			wp_enqueue_style( 'lnkup-org-team', LNKUP_PLUGIN_URL . 'public/css/org-team.css', array(), LNKUP_VERSION );
+		}
+		if ( $org['page'] && 'tours' === $org['view'] && is_user_logged_in() && LNKup_Feature_Flags::portfolio() ) {
+			wp_enqueue_style( 'lnkup-portfolio', LNKUP_PLUGIN_URL . 'public/css/portfolio.css', array(), lnkup_asset_version( 'public/css/portfolio.css' ) );
+			wp_enqueue_script( 'lnkup-portfolio', LNKUP_PLUGIN_URL . 'public/js/portfolio.js', array(), lnkup_asset_version( 'public/js/portfolio.js' ), true );
+			wp_localize_script(
+				'lnkup-portfolio',
+				'lnkupPortfolio',
+				array(
+					'root'      => esc_url_raw( rest_url( 'lnkup/v1' ) ),
+					'nonce'     => wp_create_nonce( 'wp_rest' ),
+					'viewUrl'   => esc_url_raw( lnkup_organizer_view_url( 'tours' ) ),
+					'dashboard' => esc_url_raw( lnkup_page_url_helper( 'organizer-dashboard' ) ),
+					'documents' => class_exists( 'LNKup_Documents' ) ? LNKup_Documents::document_types() : array(),
+				)
+			);
+		}
+		if ( $org['page'] && 'team' === $org['view'] && is_user_logged_in() ) {
+			wp_enqueue_style( 'lnkup-org-team', LNKUP_PLUGIN_URL . 'public/css/org-team.css', array(), LNKUP_VERSION );
+			wp_enqueue_script( 'lnkup-org-team', LNKUP_PLUGIN_URL . 'public/js/org-team.js', array(), LNKUP_VERSION, true );
+			wp_localize_script(
+				'lnkup-org-team',
+				'lnkupOrgTeam',
+				array(
+					'root'        => esc_url_raw( rest_url( 'lnkup/v1' ) ),
+					'nonce'       => wp_create_nonce( 'wp_rest' ),
+					'homeUrl'     => esc_url_raw( lnkup_organizer_view_url( 'home' ) ),
+					// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+					'inviteToken' => isset( $_GET['lnkup_team_invite'] ) ? sanitize_text_field( wp_unslash( $_GET['lnkup_team_invite'] ) ) : '',
+				)
+			);
+		}
+		if ( $org['page'] && class_exists( 'LNKup_Match_Settings' ) && ( LNKup_Match_Settings::enabled( 'matching_organizer_discovery_enabled' ) || LNKup_Match_Settings::enabled( 'matching_tours_enabled' ) ) ) {
+			wp_enqueue_script( 'lnkup-find-vendors', LNKUP_PLUGIN_URL . 'public/js/find-vendors.js', array( 'lnkup-organizer-crm' ), LNKUP_VERSION, true );
 		}
 		if ( $org['page'] && '' === $org['detail'] && 'vendors' === $org['view'] ) {
 			wp_enqueue_style( 'lnkup-vendor-import' );
@@ -394,6 +506,9 @@ class LNKup_Shortcodes {
 			wp_enqueue_style( 'lnkup-connector' );
 			wp_enqueue_script( 'lnkup-connector' );
 		}
+		if ( is_page( array( 'affiliate-program', 'partner-with-lnkup' ) ) ) {
+			wp_enqueue_style( 'lnkup-connector' );
+		}
 
 		if ( wp_script_is( 'lnkup-ui', 'enqueued' ) && class_exists( 'LNKup_UI_Copy' ) ) {
 			wp_localize_script( 'lnkup-ui', 'lnkupUiCopy', LNKup_UI_Copy::for_js() );
@@ -409,7 +524,15 @@ class LNKup_Shortcodes {
 					'opportunityNonce'      => wp_create_nonce( 'lnkup_opportunity' ),
 					'restUrl'               => esc_url_raw( rest_url( 'lnkup/v1/marketplace' ) ),
 					'applicationsRestUrl'   => esc_url_raw( rest_url( 'lnkup/v1/applications' ) ),
+					'vendorProfileRestUrl'  => esc_url_raw( rest_url( 'lnkup/v1/vendor/profile' ) ),
 					'crmRestUrl'            => esc_url_raw( rest_url( 'lnkup/v1/crm' ) ),
+					'matchRestUrl'          => esc_url_raw( rest_url( 'lnkup/v1/match' ) ),
+					'toursRestUrl'          => esc_url_raw( rest_url( 'lnkup/v1/tours' ) ),
+					'matching'              => array(
+						'vendor'    => class_exists( 'LNKup_Match_Settings' ) && LNKup_Match_Settings::enabled( 'matching_vendor_discovery_enabled' ),
+						'organizer' => class_exists( 'LNKup_Match_Settings' ) && LNKup_Match_Settings::enabled( 'matching_organizer_discovery_enabled' ),
+						'tours'     => class_exists( 'LNKup_Match_Settings' ) && LNKup_Match_Settings::enabled( 'matching_tours_enabled' ),
+					),
 					'reputationRestUrl'     => esc_url_raw( rest_url( 'lnkup/v1/reputation' ) ),
 					'operationsRestUrl'     => esc_url_raw( rest_url( 'lnkup/v1/operations' ) ),
 					'packetsRestUrl'        => esc_url_raw( rest_url( 'lnkup/v1/packets' ) ),
@@ -483,6 +606,7 @@ class LNKup_Shortcodes {
 			'reviews'      => 'render_reviews',
 			'operations'   => 'render_operations',
 			'help'         => 'render_help',
+			'passport'     => 'render_passport',
 		);
 
 		if ( ! isset( $map[ $view ] ) ) {
@@ -498,8 +622,12 @@ class LNKup_Shortcodes {
 	 */
 	public static function render_organizer_dashboard() {
 		LNKup_Capabilities::require_login();
-		if ( ! LNKup_Roles::is_organizer() && ! LNKup_Capabilities::user_has_manage_all() ) {
+		$is_invite = class_exists( 'LNKup_Org_Workspace' ) && LNKup_Org_Workspace::is_invite_request();
+		if ( ! LNKup_Capabilities::can_access_org_workspace() && ! $is_invite ) {
 			return '<p class="lnkup-alert lnkup-alert--error">' . esc_html__( 'Organizer access required.', 'lnkup-marketplace' ) . '</p>';
+		}
+		if ( LNKup_Capabilities::is_team_only_member() || ( $is_invite && ! LNKup_Capabilities::can_access_org_workspace() ) ) {
+			return self::render_staff_dashboard();
 		}
 
 		$vendor_profile = isset( $_GET['vendor'] ) ? absint( $_GET['vendor'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -533,6 +661,30 @@ class LNKup_Shortcodes {
 		}
 
 		return LNKup_Organizer_Dashboard_Views::render( lnkup_organizer_dashboard_view() );
+	}
+
+	/**
+	 * Team members without an organizer account: staff home, review queue, team access and the
+	 * event pages their grants allow (each page re-checks access for its event).
+	 */
+	private static function render_staff_dashboard() {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$event_id = isset( $_GET['event'] ) ? absint( $_GET['event'] ) : 0;
+		if ( $event_id && ! empty( $_GET['scan'] ) ) {
+			return self::render_qr_scan_view( $event_id );
+		}
+		if ( $event_id && ! empty( $_GET['roster'] ) ) {
+			return self::render_event_roster_view( $event_id );
+		}
+		if ( $event_id && ! empty( $_GET['ops'] ) ) {
+			return self::render_event_operations_view( $event_id );
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		$view = lnkup_organizer_dashboard_view();
+		if ( 'team' === $view || ( 'applications' === $view && LNKup_Feature_Flags::application_review() ) || 'help' === $view ) {
+			return LNKup_Organizer_Dashboard_Views::render( $view );
+		}
+		return '<div class="lnkup-mp lnkup-organizer-dash">' . LNKup_Org_Workspace::render_staff_home( get_current_user_id() ) . '</div>';
 	}
 
 	/**
@@ -1173,6 +1325,75 @@ class LNKup_Shortcodes {
 	}
 
 	/**
+	 * Tour/series header on Find Events (?tour_id=): stops, per-stop availability and matching stops.
+	 *
+	 * @param int $tour_id Tour ID.
+	 */
+	private static function render_tour_panel( $tour_id ) {
+		if ( ! $tour_id || ! class_exists( 'LNKup_Tours' ) || ! LNKup_Match_Settings::enabled( 'matching_tours_enabled' ) ) {
+			return '';
+		}
+		$tour = LNKup_Tours::detail( $tour_id, get_current_user_id() );
+		if ( is_wp_error( $tour ) ) {
+			return '';
+		}
+		$multi_apply = class_exists( 'LNKup_Application_Groups' ) && LNKup_Application_Groups::enabled();
+		ob_start();
+		?>
+		<section class="lnkup-card lnkup-tour-panel" data-testid="lnkup-tour-panel" aria-labelledby="lnkup-tour-title">
+			<input type="hidden" data-filter="tour_id" value="<?php echo esc_attr( (string) $tour_id ); ?>" />
+			<p class="lnkup-badge lnkup-badge--outline"><?php echo esc_html( 'series' === $tour['type'] ? __( 'Recurring market', 'lnkup-marketplace' ) : __( 'Tour', 'lnkup-marketplace' ) ); ?></p>
+			<h2 id="lnkup-tour-title"><?php echo esc_html( $tour['title'] ); ?></h2>
+			<?php if ( $tour['organizer_name'] ) : ?>
+				<p class="lnkup-muted"><?php echo esc_html( sprintf( __( 'by %s', 'lnkup-marketplace' ), $tour['organizer_name'] ) ); ?></p>
+			<?php endif; ?>
+			<?php if ( $tour['matching_stops'] ) : ?>
+				<p class="lnkup-match-reason"><?php echo esc_html( sprintf( _n( '%d stop matches your markets', '%d stops match your markets', $tour['matching_stops'], 'lnkup-marketplace' ), $tour['matching_stops'] ) ); ?></p>
+			<?php endif; ?>
+			<p class="lnkup-muted"><?php esc_html_e( 'Each stop has its own application, booth inventory and payment. Applying to one stop does not apply you to the others.', 'lnkup-marketplace' ); ?></p>
+			<ol class="lnkup-tour-stops">
+				<?php foreach ( $tour['stops'] as $stop ) : ?>
+					<li class="lnkup-tour-stop<?php echo $stop['matches_me'] ? ' is-match' : ''; ?>" data-testid="lnkup-tour-stop" data-event-id="<?php echo esc_attr( (string) $stop['event_id'] ); ?>">
+						<strong><?php echo esc_html( trim( $stop['city'] . ', ' . $stop['state'], ', ' ) ?: $stop['title'] ); ?></strong>
+						<span class="lnkup-muted"><?php echo esc_html( $stop['date'] ? date_i18n( 'M j, Y', strtotime( $stop['date'] ) ) : __( 'Date TBA', 'lnkup-marketplace' ) ); ?></span>
+						<?php if ( null !== $stop['fee_min'] ) : ?>
+							<span><?php echo esc_html( $stop['fee_min'] === $stop['fee_max'] ? lnkup_currency( $stop['fee_min'] ) : lnkup_currency( $stop['fee_min'] ) . '–' . lnkup_currency( $stop['fee_max'] ) ); ?></span>
+						<?php endif; ?>
+						<span class="lnkup-badge <?php echo $stop['accepting'] ? 'lnkup-badge--success' : 'lnkup-badge--muted'; ?>"><?php echo esc_html( $stop['accepting'] ? __( 'Accepting vendors', 'lnkup-marketplace' ) : __( 'Not accepting', 'lnkup-marketplace' ) ); ?></span>
+						<?php if ( $stop['matches_me'] ) : ?>
+							<span class="lnkup-badge lnkup-badge--outline"><?php esc_html_e( 'Matches you', 'lnkup-marketplace' ); ?></span>
+						<?php endif; ?>
+						<?php if ( ! $multi_apply ) : ?>
+							<?php foreach ( (array) $stop['opportunities'] as $stop_opp ) : ?>
+								<?php if ( ! empty( $stop_opp['is_open'] ) && ( '' === (string) ( $stop_opp['application_status'] ?? '' ) || ! empty( $stop_opp['can_apply_again'] ) ) ) : ?>
+									<a class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" data-testid="lnkup-tour-stop-apply" href="<?php echo esc_url( add_query_arg( array( 'tour_id' => $tour_id, 'apply' => (int) $stop_opp['opportunity_id'] ), lnkup_page_url_helper( 'opportunities' ) ) ); ?>">
+										<?php echo esc_html( count( $stop['opportunities'] ) > 1 ? sprintf( __( 'Apply: %s', 'lnkup-marketplace' ), $stop_opp['title'] ) : __( 'Apply to this stop', 'lnkup-marketplace' ) ); ?>
+									</a>
+								<?php elseif ( '' !== (string) ( $stop_opp['application_status'] ?? '' ) ) : ?>
+									<span class="lnkup-status lnkup-status--<?php echo esc_attr( (string) $stop_opp['application_status'] ); ?>"><?php echo esc_html( lnkup_application_status_label( (string) $stop_opp['application_status'] ) ); ?></span>
+								<?php endif; ?>
+							<?php endforeach; ?>
+						<?php endif; ?>
+					</li>
+				<?php endforeach; ?>
+			</ol>
+			<?php if ( class_exists( 'LNKup_Application_Groups' ) && LNKup_Application_Groups::enabled() ) : ?>
+				<?php if ( is_user_logged_in() && LNKup_Roles::is_vendor( get_current_user_id() ) ) : ?>
+					<button type="button" class="lnkup-btn lnkup-btn--primary" data-tour-apply-open="<?php echo esc_attr( (string) $tour_id ); ?>" aria-controls="lnkup-tour-apply-<?php echo esc_attr( (string) $tour_id ); ?>" aria-expanded="false" data-testid="lnkup-tour-apply-open">
+						<?php echo esc_html( 'series' === $tour['type'] ? __( 'Apply to several dates', 'lnkup-marketplace' ) : __( 'Apply to several stops', 'lnkup-marketplace' ) ); ?>
+					</button>
+					<div class="lnkup-tour-apply" id="lnkup-tour-apply-<?php echo esc_attr( (string) $tour_id ); ?>" data-tour-apply="<?php echo esc_attr( (string) $tour_id ); ?>" data-tours-rest-url="<?php echo esc_url( rest_url( 'lnkup/v1/tours' ) ); ?>" hidden></div>
+				<?php elseif ( ! is_user_logged_in() ) : ?>
+					<a class="lnkup-btn lnkup-btn--primary" href="<?php echo esc_url( lnkup_login_url_for( add_query_arg( 'tour_id', $tour_id, lnkup_page_url_helper( 'opportunities' ) ) ) ); ?>"><?php esc_html_e( 'Log in to apply to several stops', 'lnkup-marketplace' ); ?></a>
+				<?php endif; ?>
+			<?php endif; ?>
+			<a class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" href="<?php echo esc_url( lnkup_page_url_helper( 'opportunities' ) ); ?>"><?php esc_html_e( 'View all events', 'lnkup-marketplace' ); ?></a>
+		</section>
+		<?php
+		return ob_get_clean();
+	}
+
+	/**
 	 * Opportunities feed shortcode — Marketplace V2.
 	 */
 	public static function render_opportunities_feed() {
@@ -1294,6 +1515,7 @@ class LNKup_Shortcodes {
 			</div>
 		<?php endif; ?>
 		<div class="lnkup-mp lnkup-mp-v2" id="lnkup-marketplace" data-rest="<?php echo esc_url( rest_url( 'lnkup/v1/marketplace' ) ); ?>" data-phase="<?php echo esc_attr( $phase ); ?>"<?php echo $apply ? ' data-initial-apply="' . esc_attr( (string) $apply ) . '"' : ''; ?><?php echo $market_page ? ' data-market-page-url="' . esc_attr( $market_page['url'] ) . '"' : ''; ?>>
+			<?php echo self::render_tour_panel( (int) ( $filter_args['tour_id'] ?? 0 ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<header class="lnkup-mp-v2__hero lnkup-page-header">
 				<?php if ( is_user_logged_in() && class_exists( 'LNKup_Roles' ) && LNKup_Roles::is_vendor() ) : ?>
 					<?php
@@ -3003,6 +3225,7 @@ class LNKup_Shortcodes {
 										<a class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost" href="<?php echo esc_url( $preview ); ?>" target="_blank" rel="noopener" data-testid="lnkup-slot-preview"><?php esc_html_e( 'Preview as vendor', 'lnkup-marketplace' ); ?></a>
 									<?php endif; ?>
 									<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--primary lnkup-opp-pricing-save" data-opportunity-id="<?php echo esc_attr( (string) $slot->ID ); ?>"><?php esc_html_e( 'Save', 'lnkup-marketplace' ); ?></button>
+									<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" data-edit-app-questions="<?php echo esc_attr( (string) $slot->ID ); ?>" aria-expanded="false" data-testid="lnkup-slot-questions"><?php esc_html_e( 'Questions', 'lnkup-marketplace' ); ?></button>
 									<?php if ( $is_closed ) : ?>
 										<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" data-slot-status="open" data-opportunity-id="<?php echo esc_attr( (string) $slot->ID ); ?>"><?php esc_html_e( 'Reopen', 'lnkup-marketplace' ); ?></button>
 									<?php elseif ( $has_apps ) : ?>
@@ -3314,6 +3537,19 @@ class LNKup_Shortcodes {
 						<input type="hidden" name="action" value="lnkup_create_event" />
 						<input type="hidden" name="client_token" id="lnkup_event_client_token" value="<?php echo esc_attr( wp_generate_uuid4() ); ?>" />
 						<input type="hidden" name="save_mode" id="lnkup_event_save_mode" value="publish" />
+						<?php
+						$lnkup_setup_id = isset( $_GET['setup'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['setup'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+						$lnkup_setup    = ( '' !== $lnkup_setup_id && class_exists( 'LNKup_Organizer_Setups' ) ) ? LNKup_Organizer_Setups::get( get_current_user_id(), $lnkup_setup_id ) : null;
+						if ( $lnkup_setup ) :
+							$lnkup_setup_view = LNKup_Organizer_Setups::format( $lnkup_setup );
+							?>
+							<input type="hidden" name="setup_id" value="<?php echo esc_attr( $lnkup_setup_view['id'] ); ?>" />
+							<div class="lnkup-notice lnkup-notice--info" data-testid="lnkup-create-setup-notice" role="status">
+								<strong><?php echo esc_html( sprintf( /* translators: %s: setup name */ __( 'Using saved setup: %s', 'lnkup-marketplace' ), $lnkup_setup_view['name'] ) ); ?></strong>
+								<p><?php echo esc_html( implode( ' · ', array_map( static fn( $s ) => $s['title'] . ( null === $s['vendor_fee'] ? '' : ' — $' . number_format( (float) $s['vendor_fee'], 2 ) ), $lnkup_setup_view['slots'] ) ) ); ?></p>
+								<p class="lnkup-muted"><?php esc_html_e( 'These booth types, prices, requirements and application questions are copied to the new event. Any booth rows below are ignored.', 'lnkup-marketplace' ); ?></p>
+							</div>
+						<?php endif; ?>
 						<input type="hidden" name="ticketing_url" id="lnkup_create_event_ticketing_url" value="" />
 
 						<section class="lnkup-panel lnkup-organizer-create-section" id="lnkup-create-step-1">
@@ -3806,8 +4042,10 @@ class LNKup_Shortcodes {
 		$reliability_intel = class_exists( 'LNKup_Vendor_Reliability_Intel' )
 			? LNKup_Vendor_Reliability_Intel::for_profile( $profile_id, get_current_user_id() )
 			: null;
-		$completed_events = (int) ( $profile['reliability']['completed_events'] ?? $profile['completed_events'] ?? 0 );
-		$avg_rating       = ! empty( $profile['avg_rating'] ) ? (string) $profile['avg_rating'] : '—';
+		$indicators       = (array) ( $profile['indicators'] ?? array() );
+		$feedback         = (array) ( $indicators['organizer_feedback'] ?? array() );
+		$completed_events = (int) ( $indicators['experience']['confirmed_events'] ?? $profile['reliability']['completed_events'] ?? $profile['completed_events'] ?? 0 );
+		$avg_rating       = ! empty( $feedback['display_average'] ) ? number_format_i18n( (float) $feedback['average'], 1 ) : (string) ( $feedback['label'] ?? '—' );
 		$city_label       = ! empty( $profile['city'] ) ? (string) $profile['city'] : ( ! empty( $profile['location'] ) ? (string) $profile['location'] : '' );
 		$has_booked       = (bool) get_posts(
 			array(
@@ -3836,9 +4074,17 @@ class LNKup_Shortcodes {
 						<?php if ( $city_label ) : ?> · <?php echo esc_html( $city_label ); ?><?php endif; ?>
 					</p>
 					<div class="lnkup-crm-profile__badges">
-						<?php echo LNKup_Reputation_Render::score_badge( $profile['vendor_score'], $profile['reputation_label'] ?? '', ! empty( $profile['reputation']['is_new'] ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-						<?php if ( ! empty( $profile['avg_rating'] ) ) : ?>
-							<?php echo LNKup_Reputation_Render::star_rating( $profile['avg_rating'], $profile['review_count'] ?? 0 ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php if ( LNKup_Capabilities::user_has_manage_all() ) : ?>
+							<?php echo LNKup_Reputation_Render::score_badge( $profile['vendor_score'], $profile['reputation_label'] ?? '', ! empty( $profile['reputation']['is_new'] ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php endif; ?>
+						<?php if ( ! empty( $indicators['verification']['is_verified'] ) ) : ?>
+							<span class="lnkup-badge lnkup-badge--verified" title="<?php echo esc_attr( (string) $indicators['verification']['explanation'] ); ?>"><?php echo esc_html( (string) $indicators['verification']['label'] ); ?></span>
+						<?php endif; ?>
+						<?php if ( ! empty( $profile['passport_url'] ) ) : ?>
+							<a class="lnkup-badge lnkup-badge--outline" href="<?php echo esc_url( (string) $profile['passport_url'] ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'View Passport', 'lnkup-marketplace' ); ?></a>
+						<?php endif; ?>
+						<?php if ( ! empty( $feedback['display_average'] ) ) : ?>
+							<?php echo LNKup_Reputation_Render::star_rating( (float) $feedback['average'], (int) $feedback['count'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 						<?php endif; ?>
 						<?php echo LNKup_Reputation_Render::badge_grid( $profile['badges'] ?? array() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 						<?php foreach ( $profile['flags'] as $flag ) : ?><span class="lnkup-badge lnkup-badge--destructive"><?php echo esc_html( $flag['label'] ); ?></span><?php endforeach; ?>
@@ -4394,6 +4640,13 @@ class LNKup_Shortcodes {
 			if ( $public ) {
 				$workspace_actions .= '<a class="lnkup-btn lnkup-btn--outline" href="' . esc_url( $public ) . '">' . esc_html__( 'Public page', 'lnkup-marketplace' ) . '</a>';
 			}
+			/**
+			 * Extra event workspace header actions (escaped HTML), e.g. Communications.
+			 *
+			 * @param string $workspace_actions Actions HTML.
+			 * @param int    $event_id          Event ID.
+			 */
+			$workspace_actions = (string) apply_filters( 'lnkup_event_workspace_actions', $workspace_actions, $event_id );
 			echo lnkup_page_header( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 				array(
 					'title'      => $event->post_title,
@@ -4811,7 +5064,7 @@ class LNKup_Shortcodes {
 	 * @param int $event_id Event ID.
 	 */
 	public static function render_event_operations_view( $event_id ) {
-		if ( ! LNKup_Capabilities::organizer_owns_event( $event_id ) && ! LNKup_Capabilities::user_has_manage_all() ) {
+		if ( ! LNKup_Capabilities::staff_can( $event_id, 'view_roster' ) && ! LNKup_Capabilities::user_has_manage_all() ) {
 			return '<p class="lnkup-alert lnkup-alert--error">' . esc_html__( 'You do not have permission to view operations for this event.', 'lnkup-marketplace' ) . '</p>';
 		}
 		$snap = LNKup_Event_Operations::snapshot( $event_id, get_current_user_id() );
@@ -5407,6 +5660,32 @@ class LNKup_Shortcodes {
 						<?php if ( '' !== $app_message ) : ?>
 							<p class="lnkup-request-row__message"><?php echo esc_html( wp_trim_words( wp_strip_all_tags( $app_message ), 24, '…' ) ); ?></p>
 						<?php endif; ?>
+						<?php
+						$app_answers = class_exists( 'LNKup_Application_Questions' ) ? LNKup_Application_Questions::answers_for_application( (int) $app->ID ) : array();
+						if ( $app_answers || '' !== (string) $setup_notes ) :
+							?>
+							<details class="lnkup-request-row__answers" data-testid="lnkup-org-app-answers">
+								<summary><?php esc_html_e( 'Application answers', 'lnkup-marketplace' ); ?></summary>
+								<dl>
+									<?php foreach ( $app_answers as $answer ) : ?>
+										<?php
+										$shown = $answer['value'];
+										if ( 'checkbox' === ( $answer['type'] ?? '' ) ) {
+											$shown = $shown ? __( 'Yes', 'lnkup-marketplace' ) : __( 'No', 'lnkup-marketplace' );
+										} elseif ( 'file' === ( $answer['type'] ?? '' ) ) {
+											$shown = get_the_title( (int) $shown );
+										}
+										?>
+										<dt><?php echo esc_html( (string) ( $answer['label'] ?? '' ) ); ?></dt>
+										<dd><?php echo esc_html( (string) $shown ); ?></dd>
+									<?php endforeach; ?>
+									<?php if ( '' !== (string) $setup_notes ) : ?>
+										<dt><?php esc_html_e( 'Setup notes', 'lnkup-marketplace' ); ?></dt>
+										<dd><?php echo esc_html( (string) $setup_notes ); ?></dd>
+									<?php endif; ?>
+								</dl>
+							</details>
+						<?php endif; ?>
 						<?php if ( $info_last ) : ?>
 							<p class="lnkup-request-row__message lnkup-info-thread" data-testid="lnkup-org-info-thread">
 								<strong><?php echo 'response' === ( $info_last['type'] ?? '' ) ? esc_html__( 'Vendor replied:', 'lnkup-marketplace' ) : esc_html__( 'You asked:', 'lnkup-marketplace' ); ?></strong>
@@ -5426,6 +5705,8 @@ class LNKup_Shortcodes {
 						<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline lnkup-review-btn lnkup-review-btn--decline" data-app-id="<?php echo esc_attr( (string) $app->ID ); ?>" data-action="reject"><?php esc_html_e( 'Decline', 'lnkup-marketplace' ); ?></button>
 						<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost lnkup-review-btn" data-app-id="<?php echo esc_attr( (string) $app->ID ); ?>" data-action="waitlist"><?php esc_html_e( 'Waitlist', 'lnkup-marketplace' ); ?></button>
 						<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--primary lnkup-review-btn" data-app-id="<?php echo esc_attr( (string) $app->ID ); ?>" data-action="approve"><?php esc_html_e( 'Accept', 'lnkup-marketplace' ); ?></button>
+					<?php elseif ( 'rejected' === $status && '' === (string) get_post_meta( $app->ID, LNKup_Applications::REAPPLY_ALLOWED_META, true ) ) : ?>
+						<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost lnkup-review-btn" data-app-id="<?php echo esc_attr( (string) $app->ID ); ?>" data-action="allow_reapply" data-testid="lnkup-org-allow-reapply"><?php esc_html_e( 'Let them re-apply', 'lnkup-marketplace' ); ?></button>
 					<?php endif; ?>
 				</div>
 			</article>
@@ -6618,15 +6899,19 @@ class LNKup_Shortcodes {
 	 * Public vendor profile shortcode.
 	 */
 	public static function render_vendor_public_profile() {
-		$slug = isset( $_GET['vendor'] ) ? sanitize_text_field( wp_unslash( $_GET['vendor'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$slug = class_exists( 'LNKup_Passport_Public' ) ? LNKup_Passport_Public::current_slug() : '';
+		if ( '' === $slug && ! empty( $_GET['vendor'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$slug = sanitize_title( wp_unslash( (string) $_GET['vendor'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
 		if ( ! $slug ) {
 			return self::render_public_directory( 'vendor' );
 		}
-		$profile_id = LNKup_Vendor_Reputation::resolve_profile( $slug );
+		$resolved   = LNKup_Vendor_Reputation::resolve_viewable_profile( $slug, get_current_user_id() );
+		$profile_id = (int) $resolved['profile_id'];
 		if ( ! $profile_id ) {
-			return '<p class="lnkup-empty">' . esc_html__( 'Vendor not found.', 'lnkup-marketplace' ) . '</p>';
+			return '<p class="lnkup-empty">' . esc_html__( 'This vendor profile is private or no longer available.', 'lnkup-marketplace' ) . '</p>';
 		}
-		$data = LNKup_Vendor_CRM_Profile::get_public( $profile_id );
+		$data = LNKup_Vendor_CRM_Profile::get_public( $profile_id, ! empty( $resolved['is_preview'] ) );
 		if ( ! $data ) {
 			return '<p class="lnkup-empty">' . esc_html__( 'Vendor not found.', 'lnkup-marketplace' ) . '</p>';
 		}
@@ -6634,7 +6919,7 @@ class LNKup_Shortcodes {
 		$crm_url      = add_query_arg( 'vendor', $profile_id, lnkup_page_url_helper( 'organizer-dashboard' ) );
 		$is_organizer = is_user_logged_in() && ( LNKup_Roles::is_organizer() || LNKup_Capabilities::user_has_manage_all() );
 		$is_owner     = is_user_logged_in() && (int) lnkup_get_vendor_profile_id( get_current_user_id() ) === (int) $profile_id;
-		$share_url    = ! empty( $data['public_slug'] ) ? add_query_arg( 'vendor', $data['public_slug'], lnkup_page_url_helper( 'vendors' ) ) : '';
+		$share_url    = ! empty( $data['public_slug'] ) && empty( $resolved['is_preview'] ) ? LNKup_Passport_Public::url_for_slug( (string) $data['public_slug'] ) : '';
 		$actions      = $is_organizer ? '<a class="lnkup-btn lnkup-btn--primary" href="' . esc_url( $crm_url ) . '">' . esc_html__( 'Invite to an event', 'lnkup-marketplace' ) . '</a>' : '';
 		if ( $share_url ) {
 			$actions .= '<button type="button" class="lnkup-btn lnkup-btn--outline" data-copy-url="' . esc_url( $share_url ) . '">' . esc_html__( 'Share profile', 'lnkup-marketplace' ) . '</button>';
@@ -6656,7 +6941,15 @@ class LNKup_Shortcodes {
 		<div class="lnkup-mp lnkup-pub-storefront" id="lnkup-public-vendor-profile" data-profile-id="<?php echo esc_attr( (string) $profile_id ); ?>" data-testid="lnkup-public-vendor-profile">
 			<?php if ( $is_owner ) : ?>
 				<p class="lnkup-public-ownerbar">
-					<span class="lnkup-muted"><?php esc_html_e( 'This is how organizers see your profile.', 'lnkup-marketplace' ); ?></span>
+					<span class="lnkup-muted">
+						<?php
+						if ( ! empty( $resolved['is_preview'] ) ) {
+							esc_html_e( 'Your public Passport is private. Only you can see this preview.', 'lnkup-marketplace' );
+						} else {
+							esc_html_e( 'This is how organizers see your profile.', 'lnkup-marketplace' );
+						}
+						?>
+					</span>
 					<a class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" href="<?php echo esc_url( lnkup_page_url_helper( 'vendor-profile' ) ); ?>"><?php esc_html_e( 'Edit profile', 'lnkup-marketplace' ); ?></a>
 				</p>
 			<?php endif; ?>
@@ -6720,11 +7013,25 @@ class LNKup_Shortcodes {
 					</section>
 				</div>
 				<?php
-				$trust_html = LNKup_Reputation_Render::public_trust_strip( $data );
-				if ( $trust_html || $setup_rows ) :
+				$trust_html      = LNKup_Reputation_Render::public_trust_strip( $data );
+				$indicators_html = LNKup_Reputation_Render::indicators_card( $data['indicators'] ?? array() );
+				if ( $trust_html || $setup_rows || $indicators_html ) :
 					?>
 				<aside class="lnkup-pub-aside" aria-label="<?php esc_attr_e( 'Vendor details', 'lnkup-marketplace' ); ?>" data-testid="lnkup-public-vendor-aside">
+					<?php if ( $indicators_html ) : ?>
+						<section class="lnkup-pub-trust lnkup-surface--secondary">
+							<h2 class="lnkup-type-label"><?php esc_html_e( 'Vendor Passport', 'lnkup-marketplace' ); ?></h2>
+							<?php echo $indicators_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						</section>
+					<?php endif; ?>
 					<?php echo $trust_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<?php if ( $share_url ) : ?>
+						<section class="lnkup-pub-share lnkup-surface--secondary" data-testid="lnkup-public-vendor-share">
+							<h2 class="lnkup-type-label"><?php esc_html_e( 'Share this Passport', 'lnkup-marketplace' ); ?></h2>
+							<img class="lnkup-pub-share__qr" loading="lazy" width="160" height="160" src="<?php echo esc_url( 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=' . rawurlencode( $share_url ) ); ?>" alt="<?php esc_attr_e( 'QR code for this vendor profile', 'lnkup-marketplace' ); ?>" />
+							<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" data-copy-url="<?php echo esc_url( $share_url ); ?>"><?php esc_html_e( 'Copy link', 'lnkup-marketplace' ); ?></button>
+						</section>
+					<?php endif; ?>
 					<?php if ( $setup_rows ) : ?>
 						<section class="lnkup-pub-setup lnkup-surface--secondary" data-testid="lnkup-public-vendor-setup">
 							<h2 class="lnkup-type-label"><?php esc_html_e( 'What they bring', 'lnkup-marketplace' ); ?></h2>
@@ -6777,19 +7084,10 @@ class LNKup_Shortcodes {
 		$requested = isset( $_GET['view'] ) ? sanitize_key( wp_unslash( $_GET['view'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$view      = LNKup_Connector::resolve_dashboard_view( $requested, $connector );
 		$base = lnkup_page_url_helper( 'connector-dashboard' );
-		$nav  = array(
-			'home'      => __( 'Overview', 'lnkup-marketplace' ),
-			'start'     => __( 'Get Started', 'lnkup-marketplace' ),
-			'referrals' => __( 'My Referrals', 'lnkup-marketplace' ),
-			'earnings'  => __( 'Earnings', 'lnkup-marketplace' ),
-			'ranks'     => __( 'Ranks', 'lnkup-marketplace' ),
-			'resources' => __( 'Resources', 'lnkup-marketplace' ),
-			'studio'    => __( 'Content Studio', 'lnkup-marketplace' ),
-			'profile'   => __( 'Profile', 'lnkup-marketplace' ),
-		);
+		$nav  = LNKup_Connector::dashboard_views( $connector );
 		ob_start();
 		?>
-		<div id="lnkup-connector-dashboard" class="lnkup-connector-dashboard" data-view="<?php echo esc_attr( $view ); ?>" data-testid="lnkup-connector-dashboard">
+		<div id="lnkup-connector-dashboard" class="lnkup-connector-dashboard" data-view="<?php echo esc_attr( $view ); ?>" data-program="<?php echo esc_attr( LNKup_Connector::program_of( $connector ) ); ?>" data-views="<?php echo esc_attr( implode( ',', array_keys( $nav ) ) ); ?>" data-testid="lnkup-connector-dashboard">
 			<nav class="lnkup-connector-nav lnkup-tabs" aria-label="<?php esc_attr_e( 'Connector views', 'lnkup-marketplace' ); ?>">
 				<?php foreach ( $nav as $slug => $label ) : ?>
 					<a class="lnkup-tabs__item<?php echo $view === $slug ? ' is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'view', $slug, $base ) ); ?>" data-view="<?php echo esc_attr( $slug ); ?>"<?php echo $view === $slug ? ' aria-current="page"' : ''; ?>><?php echo esc_html( $label ); ?></a>

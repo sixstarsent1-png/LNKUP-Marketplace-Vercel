@@ -29,6 +29,7 @@ import { addVendorNote, fetchVendorNotes, type VendorNote } from "@/lib/api/orga
 import { invalidateOrganizerMoney } from "@/lib/api/organizer-financial"
 import { confirmAction, promptText, showToast } from "@/lib/feedback/feedback"
 import { InfoRequestSheet } from "@/components/organizer-vendors/info-request-sheet"
+import { OrganizerPassportPanel } from "@/components/organizer-vendors/passport-panel"
 import { canRequestInfo, canReview } from "@/components/organizer-vendors/vendor-queue"
 import { StatusPill } from "@/components/ui/status-pill"
 import {
@@ -381,6 +382,8 @@ export default function OrganizerVendorProfileScreen() {
                 ) : null}
               </Surface>
             ) : null}
+
+            {Number(id) > 0 ? <OrganizerPassportPanel profileId={Number(id)} /> : null}
 
             {profile.applicationMessage ? (
               <ProfileSection title="Application message" icon="chatbubble-ellipses-outline">
