@@ -219,6 +219,7 @@ class LNKup_Admin {
 		}
 		$output['application_review_v2_enabled'] = ! empty( $input['application_review_v2_enabled'] );
 		$output['waitlist_offers_enabled']       = ! empty( $input['waitlist_offers_enabled'] );
+		$output['organizer_onboarding_v2_enabled'] = ! empty( $input['organizer_onboarding_v2_enabled'] );
 		$output['default_packet_lock'] = ! empty( $input['default_packet_lock'] );
 		$output['support_email']       = isset( $input['support_email'] ) ? sanitize_email( $input['support_email'] ) : $output['support_email'];
 		$output['notify_vendor']       = ! empty( $input['notify_vendor'] );
@@ -636,6 +637,10 @@ class LNKup_Admin {
 							<p><label for="lnkup-portfolio-os-users"><?php esc_html_e( 'Early access organizer IDs (comma-separated, used while the switch above is off):', 'lnkup-marketplace' ); ?></label><br />
 							<input type="text" class="regular-text" id="lnkup-portfolio-os-users" name="lnkup_settings[portfolio_os_user_ids]" value="<?php echo esc_attr( (string) ( $settings['portfolio_os_user_ids'] ?? '' ) ); ?>" /></p>
 						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Organizer guided setup (v2)', 'lnkup-marketplace' ); ?></th>
+						<td><label><input type="checkbox" name="lnkup_settings[organizer_onboarding_v2_enabled]" value="1" <?php checked( ! empty( $settings['organizer_onboarding_v2_enabled'] ) ); ?> /> <?php esc_html_e( 'Organizer sign-up asks for organization name, city and category; new organizers land on Get started, choose what they organize (single, recurring, series, tour, production company) and can resume setup on any device.', 'lnkup-marketplace' ); ?></label></td>
 					</tr>
 					<tr>
 						<th><?php esc_html_e( 'Application review workspace', 'lnkup-marketplace' ); ?></th>
