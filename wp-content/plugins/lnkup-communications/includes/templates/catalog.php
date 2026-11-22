@@ -91,6 +91,35 @@ return array(
 		'required'   => array( 'event_name' ),
 	),
 
+	// ------------------------------------------------------------------ Vendor: unfinished applications.
+	'v_application_draft_reminder'     => array(
+		'subject'    => __( 'Finish your application for {{event_name}}', 'lnkup-communications' ),
+		'heading'    => __( 'Your application is saved', 'lnkup-communications' ),
+		'body'       => array( __( 'Hi {{first_name}}, you started applying to {{event_name}}. Your answers are saved, so you can pick up where you left off on any device.', 'lnkup-communications' ) ),
+		'cta'        => __( 'Continue your application', 'lnkup-communications' ),
+		'push_title' => __( 'Finish your application', 'lnkup-communications' ),
+		'push_body'  => __( 'Your application for {{event_name}} is saved. Pick up where you left off.', 'lnkup-communications' ),
+		'required'   => array( 'event_name' ),
+	),
+	'v_application_draft_reminder:d24' => array(
+		'subject'    => __( 'Finish your application for {{event_name}}', 'lnkup-communications' ),
+		'heading'    => __( 'Your application is saved', 'lnkup-communications' ),
+		'body'       => array( __( 'Hi {{first_name}}, you started applying to {{event_name}} ({{event_date}}). Your answers are saved, so you can pick up where you left off on any device.', 'lnkup-communications' ), __( 'Applications close {{application_deadline}}.', 'lnkup-communications' ) ),
+		'cta'        => __( 'Continue your application', 'lnkup-communications' ),
+		'push_title' => __( 'Finish your application', 'lnkup-communications' ),
+		'push_body'  => __( 'Your application for {{event_name}} is saved. Pick up where you left off.', 'lnkup-communications' ),
+		'required'   => array( 'event_name' ),
+	),
+	'v_application_draft_reminder:d72' => array(
+		'subject'    => __( 'Last reminder: your {{event_name}} application', 'lnkup-communications' ),
+		'heading'    => __( 'Still interested in {{event_name}}?', 'lnkup-communications' ),
+		'body'       => array( __( 'Hi {{first_name}}, your application for {{event_name}} is still unfinished. This is the last reminder we will send about it.', 'lnkup-communications' ), __( 'Applications close {{application_deadline}}.', 'lnkup-communications' ) ),
+		'cta'        => __( 'Continue your application', 'lnkup-communications' ),
+		'push_title' => __( 'Your application is waiting', 'lnkup-communications' ),
+		'push_body'  => __( 'Finish applying to {{event_name}} before applications close.', 'lnkup-communications' ),
+		'required'   => array( 'event_name' ),
+	),
+
 	// ------------------------------------------------------------------ Vendor: payments.
 	'v_payment_reminder'               => array(
 		'subject'    => __( 'Payment due {{window_label}} — {{event_name}}', 'lnkup-communications' ),

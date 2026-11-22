@@ -211,6 +211,12 @@ class LNKup_Comms_Delegation {
 		if ( ! $app_id || ! $user ) {
 			return false;
 		}
+		// One source per deadline: approved applications already get deadline reminders from
+		// LNKup_Comms_Listen_Applications::schedule_payment_reminders(). Claim (so core stays
+		// quiet) without sending a second copy; only the past-due notice comes from invoices.
+		if ( 'past_due' !== $window && '' !== (string) get_post_meta( $app_id, '_lnkup_payment_due_at', true ) ) {
+			return true;
+		}
 		$labels = array(
 			'7_days'   => __( 'in 7 days', 'lnkup-communications' ),
 			'3_days'   => __( 'in 3 days', 'lnkup-communications' ),

@@ -33,6 +33,8 @@ function routeForType(
     case "application_rejected":
     case "application_waitlisted":
       return app("/booking", "/(vendor)/requests")
+    case "application_draft_reminder":
+      return list("/(vendor)/requests")
     case "packet_unlocked":
     case "payment_confirmed":
     case "payment_paid":

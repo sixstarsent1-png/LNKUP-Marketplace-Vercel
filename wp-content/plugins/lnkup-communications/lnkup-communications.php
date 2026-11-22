@@ -53,6 +53,7 @@ function lnkup_comms_files(): array {
 		'includes/class-comms-analytics.php',
 		'includes/class-comms-health.php',
 		'includes/listeners/class-comms-listen-applications.php',
+		'includes/listeners/class-comms-listen-drafts.php',
 		'includes/listeners/class-comms-listen-payments.php',
 		'includes/listeners/class-comms-listen-documents.php',
 		'includes/listeners/class-comms-listen-events.php',
@@ -105,6 +106,7 @@ function lnkup_comms_boot(): void {
 	LNKup_Comms_Suppression::init();
 	LNKup_Comms_Links::init();
 	LNKup_Comms_Listen_Applications::init();
+	LNKup_Comms_Listen_Drafts::init();
 	LNKup_Comms_Listen_Payments::init();
 	LNKup_Comms_Listen_Documents::init();
 	LNKup_Comms_Listen_Events::init();

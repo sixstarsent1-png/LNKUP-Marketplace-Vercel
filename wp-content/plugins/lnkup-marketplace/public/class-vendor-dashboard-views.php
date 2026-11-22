@@ -304,7 +304,7 @@ class LNKup_Vendor_Dashboard_Views {
 				<span class="lnkup-request-row__initials" aria-hidden="true"><?php echo esc_html( $initials ?: 'E' ); ?></span>
 				<div class="lnkup-request-row__copy">
 					<?php if ( 'booked' === $bucket ) : ?>
-						<a class="lnkup-request-row__title" href="<?php echo esc_url( $pass_url ); ?>"><?php echo esc_html( $meta['event_title'] ); ?></a>
+						<a class="lnkup-request-row__title" href="<?php echo esc_url( LNKup_Vendor_Bookings::detail_url( (int) $app->ID ) ); ?>"><?php echo esc_html( $meta['event_title'] ); ?></a>
 					<?php elseif ( $event_url ) : ?>
 						<a class="lnkup-request-row__title" href="<?php echo esc_url( $event_url ); ?>"><?php echo esc_html( $meta['event_title'] ); ?></a>
 					<?php else : ?>
@@ -344,6 +344,9 @@ class LNKup_Vendor_Dashboard_Views {
 				<?php endif; ?>
 				<?php if ( 'booked' === $bucket ) : ?>
 					<a class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" href="<?php echo esc_url( $pass_url ); ?>"><?php esc_html_e( 'Open pass', 'lnkup-marketplace' ); ?></a>
+				<?php endif; ?>
+				<?php if ( ! in_array( $status, LNKup_Vendor_Bookings::IN_REVIEW, true ) ) : ?>
+					<a class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" href="<?php echo esc_url( LNKup_Vendor_Bookings::detail_url( (int) $app->ID ) ); ?>" data-testid="lnkup-request-booking-details"><?php esc_html_e( 'Booking details', 'lnkup-marketplace' ); ?></a>
 				<?php endif; ?>
 				<?php if ( $docs_due ) : ?>
 					<a class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" href="<?php echo esc_url( $docs_url ); ?>"><?php esc_html_e( 'Documents', 'lnkup-marketplace' ); ?></a>
@@ -429,6 +432,424 @@ class LNKup_Vendor_Dashboard_Views {
 				<?php endforeach; ?>
 			</ul>
 		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * My Bookings: bucket tabs, city / tour / date filters, paginated booking cards.
+	 * `?booking=ID` renders one booking instead.
+	 */
+	public static function render_bookings() {
+		$user_id = get_current_user_id();
+		$booking = isset( $_GET['booking'] ) ? absint( $_GET['booking'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( $booking ) {
+			return self::render_booking_detail( $user_id, $booking );
+		}
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$args = LNKup_Vendor_Bookings::normalize_args(
+			array(
+				'bucket'   => isset( $_GET['bucket'] ) ? wp_unslash( $_GET['bucket'] ) : 'upcoming',
+				'tour_id'  => isset( $_GET['tour_id'] ) ? wp_unslash( $_GET['tour_id'] ) : 0,
+				'city'     => isset( $_GET['city'] ) ? wp_unslash( $_GET['city'] ) : '',
+				'from'     => isset( $_GET['from'] ) ? wp_unslash( $_GET['from'] ) : '',
+				'to'       => isset( $_GET['to'] ) ? wp_unslash( $_GET['to'] ) : '',
+				'page'     => isset( $_GET['bpage'] ) ? wp_unslash( $_GET['bpage'] ) : 1,
+				'per_page' => 12,
+			)
+		);
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		$base_url = add_query_arg( 'view', 'bookings', lnkup_page_url_helper( 'vendor-dashboard' ) );
+		$find_url = lnkup_page_url_helper( 'opportunities' );
+		try {
+			$result  = LNKup_Vendor_Bookings::query( $user_id, $args );
+			$options = LNKup_Vendor_Bookings::filter_options( $user_id );
+		} catch ( Throwable $e ) {
+			error_log( 'LNKup bookings view failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			$result = null;
+		}
+		$labels = array(
+			'upcoming'        => __( 'Upcoming', 'lnkup-marketplace' ),
+			'pending_payment' => __( 'Pending payment', 'lnkup-marketplace' ),
+			'confirmed'       => __( 'Confirmed', 'lnkup-marketplace' ),
+			'past'            => __( 'Past', 'lnkup-marketplace' ),
+			'cancelled'       => __( 'Cancelled', 'lnkup-marketplace' ),
+			'refunded'        => __( 'Refunded', 'lnkup-marketplace' ),
+			'all'             => __( 'All', 'lnkup-marketplace' ),
+		);
+		$keep = array_filter(
+			array(
+				'tour_id' => $args['tour_id'] ?: null,
+				'city'    => $args['city'] ?: null,
+				'from'    => $args['from'] ?: null,
+				'to'      => $args['to'] ?: null,
+			)
+		);
+		ob_start();
+		?>
+		<div class="lnkup-mp lnkup-vendor-dash lnkup-bookings" id="bookings" data-testid="lnkup-vendor-bookings">
+			<?php
+			echo lnkup_page_header( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				array(
+					'title'    => __( 'My Bookings', 'lnkup-marketplace' ),
+					'subtitle' => __( 'Approved, paid and past bookings — payments, passes and event details in one place.', 'lnkup-marketplace' ),
+					'actions'  => '<a class="lnkup-btn lnkup-btn--outline" href="' . esc_url( add_query_arg( 'view', 'applications', lnkup_page_url_helper( 'vendor-dashboard' ) ) ) . '">' . esc_html__( 'Requests in review', 'lnkup-marketplace' ) . '</a>',
+				)
+			);
+			if ( null === $result ) :
+				?>
+				<div class="lnkup-alert lnkup-alert--error" role="alert"><?php esc_html_e( 'We couldn\'t load your bookings. Try refreshing or contact support.', 'lnkup-marketplace' ); ?></div>
+			</div>
+				<?php
+				return (string) ob_get_clean();
+			endif;
+			$tabs = array();
+			foreach ( $labels as $key => $label ) {
+				$tabs[] = array(
+					'id'    => $key,
+					'label' => $label,
+					'badge' => (int) $result['counts'][ $key ],
+					'href'  => add_query_arg( array_merge( $keep, array( 'bucket' => $key ) ), $base_url ),
+					'attrs' => array( 'data-testid' => 'lnkup-bookings-tab-' . $key ),
+				);
+			}
+			echo lnkup_dash_tabs( $tabs, $args['bucket'], array( 'variant' => 'pills', 'label' => __( 'Filter bookings', 'lnkup-marketplace' ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			?>
+			<form class="lnkup-bookings__filters" method="get" action="<?php echo esc_url( lnkup_page_url_helper( 'vendor-dashboard' ) ); ?>" data-bookings-filters data-testid="lnkup-bookings-filters">
+				<input type="hidden" name="view" value="bookings" />
+				<input type="hidden" name="bucket" value="<?php echo esc_attr( $args['bucket'] ); ?>" />
+				<?php if ( $options['cities'] ) : ?>
+					<label><span><?php esc_html_e( 'City', 'lnkup-marketplace' ); ?></span>
+						<select name="city">
+							<option value=""><?php esc_html_e( 'All cities', 'lnkup-marketplace' ); ?></option>
+							<?php foreach ( $options['cities'] as $city ) : ?>
+								<option value="<?php echo esc_attr( $city ); ?>" <?php selected( $args['city'], $city ); ?>><?php echo esc_html( $city ); ?></option>
+							<?php endforeach; ?>
+						</select>
+					</label>
+				<?php endif; ?>
+				<?php if ( $options['tours'] ) : ?>
+					<label><span><?php esc_html_e( 'Tour or series', 'lnkup-marketplace' ); ?></span>
+						<select name="tour_id">
+							<option value=""><?php esc_html_e( 'All', 'lnkup-marketplace' ); ?></option>
+							<?php foreach ( $options['tours'] as $tour ) : ?>
+								<option value="<?php echo esc_attr( (string) $tour['id'] ); ?>" <?php selected( $args['tour_id'], $tour['id'] ); ?>><?php echo esc_html( $tour['title'] ); ?></option>
+							<?php endforeach; ?>
+						</select>
+					</label>
+				<?php endif; ?>
+				<label><span><?php esc_html_e( 'From', 'lnkup-marketplace' ); ?></span><input type="date" name="from" value="<?php echo esc_attr( $args['from'] ); ?>" /></label>
+				<label><span><?php esc_html_e( 'To', 'lnkup-marketplace' ); ?></span><input type="date" name="to" value="<?php echo esc_attr( $args['to'] ); ?>" /></label>
+				<button type="submit" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm"><?php esc_html_e( 'Apply filters', 'lnkup-marketplace' ); ?></button>
+				<?php if ( $keep ) : ?>
+					<a class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" href="<?php echo esc_url( add_query_arg( 'bucket', $args['bucket'], $base_url ) ); ?>"><?php esc_html_e( 'Clear', 'lnkup-marketplace' ); ?></a>
+				<?php endif; ?>
+			</form>
+
+			<?php if ( ! $result['items'] ) : ?>
+				<?php
+				$empty_copy = array_sum( $result['counts'] ) > 0 || $keep
+					? __( 'No bookings match this view. Try another tab or clear the filters.', 'lnkup-marketplace' )
+					: __( 'Your bookings will appear here once an organizer approves one of your applications.', 'lnkup-marketplace' );
+				echo lnkup_empty_state( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					array(
+						'title'     => __( 'No bookings here yet', 'lnkup-marketplace' ),
+						'desc'      => $empty_copy,
+						'cta_label' => __( 'Find events', 'lnkup-marketplace' ),
+						'cta_href'  => $find_url,
+						'compact'   => true,
+					)
+				);
+				?>
+			<?php else : ?>
+				<ul class="lnkup-bookings__list" data-testid="lnkup-bookings-list">
+					<?php foreach ( $result['items'] as $item ) : ?>
+						<li><?php echo self::render_booking_card( $item ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></li>
+					<?php endforeach; ?>
+				</ul>
+				<?php if ( $result['pages'] > 1 ) : ?>
+					<nav class="lnkup-bookings__pages" aria-label="<?php esc_attr_e( 'Bookings pages', 'lnkup-marketplace' ); ?>">
+						<?php
+						echo paginate_links( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+							array(
+								'base'      => add_query_arg( array_merge( $keep, array( 'bucket' => $args['bucket'], 'bpage' => '%#%' ) ), $base_url ),
+								'format'    => '',
+								'current'   => $result['page'],
+								'total'     => $result['pages'],
+								'prev_text' => __( 'Previous', 'lnkup-marketplace' ),
+								'next_text' => __( 'Next', 'lnkup-marketplace' ),
+							)
+						);
+						?>
+					</nav>
+				<?php endif; ?>
+			<?php endif; ?>
+		</div>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * One booking card on My Bookings.
+	 *
+	 * @param array $item LNKup_Vendor_Bookings::row().
+	 * @return string
+	 */
+	private static function render_booking_card( array $item ) {
+		$when = $item['event_date'] ? date_i18n( 'D, M j, Y', strtotime( $item['event_date'] ) ) : __( 'Date TBA', 'lnkup-marketplace' );
+		$where = implode( ', ', array_filter( array( $item['venue'], trim( $item['city'] . ( $item['state'] ? ', ' . $item['state'] : '' ), ', ' ) ) ) );
+		$pay_labels = array(
+			'paid'               => __( 'Paid', 'lnkup-marketplace' ),
+			'pending'            => __( 'Payment due', 'lnkup-marketplace' ),
+			'processing'         => __( 'Payment processing', 'lnkup-marketplace' ),
+			'partially_paid'     => __( 'Deposit paid', 'lnkup-marketplace' ),
+			'refunded'           => __( 'Refunded', 'lnkup-marketplace' ),
+			'partially_refunded' => __( 'Partly refunded', 'lnkup-marketplace' ),
+			'disputed'           => __( 'Payment disputed', 'lnkup-marketplace' ),
+			'failed'             => __( 'Payment failed', 'lnkup-marketplace' ),
+		);
+		ob_start();
+		?>
+		<article class="lnkup-booking-card lnkup-card" data-testid="lnkup-booking-card" data-booking-id="<?php echo esc_attr( (string) $item['application_id'] ); ?>">
+			<?php if ( $item['image'] ) : ?>
+				<img class="lnkup-booking-card__img" src="<?php echo esc_url( $item['image'] ); ?>" alt="" loading="lazy" />
+			<?php endif; ?>
+			<div class="lnkup-booking-card__body">
+				<a class="lnkup-booking-card__title" href="<?php echo esc_url( $item['detail_url'] ); ?>" data-testid="lnkup-booking-open"><?php echo esc_html( $item['event_name'] ); ?></a>
+				<p class="lnkup-request-row__meta"><?php echo esc_html( implode( ' · ', array_filter( array( $when, $where ) ) ) ); ?></p>
+				<p class="lnkup-request-row__meta"><?php echo esc_html( implode( ' · ', array_filter( array( $item['booth'], $item['organizer_name'], $item['tour'] ? $item['tour']['title'] : '' ) ) ) ); ?></p>
+				<ul class="lnkup-request-row__badges">
+					<li class="lnkup-status lnkup-status--<?php echo esc_attr( $item['status'] ); ?>"><?php echo esc_html( $item['status_label'] ); ?></li>
+					<?php if ( isset( $pay_labels[ $item['payment_status'] ] ) && ! ( 'paid' === $item['payment_status'] && in_array( $item['status'], array( 'paid', 'completed' ), true ) ) ) : ?>
+						<li class="lnkup-request-badge"><?php echo esc_html( $pay_labels[ $item['payment_status'] ] ); ?></li>
+					<?php endif; ?>
+					<?php if ( in_array( $item['documents_code'], array( 'missing', 'pending' ), true ) ) : ?>
+						<li class="lnkup-request-badge lnkup-request-badge--warn"><?php echo 'missing' === $item['documents_code'] ? esc_html__( 'Documents needed', 'lnkup-marketplace' ) : esc_html__( 'Documents in review', 'lnkup-marketplace' ); ?></li>
+					<?php endif; ?>
+					<?php if ( $item['checked_in'] ) : ?>
+						<li class="lnkup-request-badge lnkup-request-badge--ok"><?php esc_html_e( 'Checked in', 'lnkup-marketplace' ); ?></li>
+					<?php elseif ( $item['pass_available'] ) : ?>
+						<li class="lnkup-request-badge lnkup-request-badge--ok"><?php esc_html_e( 'Pass ready', 'lnkup-marketplace' ); ?></li>
+					<?php endif; ?>
+				</ul>
+			</div>
+			<div class="lnkup-booking-card__actions">
+				<?php if ( 'pay' === $item['next_action'] && $item['payment_id'] ) : ?>
+					<button type="button" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm lnkup-pay-btn" data-payment-id="<?php echo esc_attr( (string) $item['payment_id'] ); ?>">
+						<?php /* translators: %s: amount */ echo esc_html( sprintf( __( 'Pay %s', 'lnkup-marketplace' ), lnkup_currency( $item['amount_due'] ) ) ); ?>
+					</button>
+				<?php elseif ( 'documents' === $item['next_action'] ) : ?>
+					<a class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" href="<?php echo esc_url( add_query_arg( 'view', 'documents', lnkup_page_url_helper( 'vendor-dashboard' ) ) ); ?>"><?php esc_html_e( 'Upload documents', 'lnkup-marketplace' ); ?></a>
+				<?php elseif ( 'open_pass' === $item['next_action'] ) : ?>
+					<a class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" href="<?php echo esc_url( $item['pass_url'] ); ?>"><?php esc_html_e( 'Open pass', 'lnkup-marketplace' ); ?></a>
+				<?php endif; ?>
+				<a class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" href="<?php echo esc_url( $item['detail_url'] ); ?>"><?php esc_html_e( 'Details', 'lnkup-marketplace' ); ?></a>
+			</div>
+		</article>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * One booking: event, booking, payment & receipts, documents, instructions, pass, support, timeline.
+	 *
+	 * @param int $user_id Vendor.
+	 * @param int $app_id  Application.
+	 * @return string
+	 */
+	public static function render_booking_detail( $user_id, $app_id ) {
+		$back   = add_query_arg( 'view', 'bookings', lnkup_page_url_helper( 'vendor-dashboard' ) );
+		$detail = LNKup_Vendor_Bookings::detail( $user_id, $app_id );
+		ob_start();
+		?>
+		<div class="lnkup-mp lnkup-vendor-dash lnkup-booking-detail" data-testid="lnkup-booking-detail">
+		<?php if ( null === $detail ) : ?>
+			<?php
+			echo lnkup_page_header( array( 'title' => __( 'Booking', 'lnkup-marketplace' ), 'back_url' => $back, 'back_label' => __( 'My Bookings', 'lnkup-marketplace' ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			echo lnkup_empty_state( array( 'title' => __( 'Booking not found', 'lnkup-marketplace' ), 'desc' => __( 'This booking does not exist or belongs to another account.', 'lnkup-marketplace' ), 'cta_label' => __( 'Back to My Bookings', 'lnkup-marketplace' ), 'cta_href' => $back ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			?>
+		<?php else : ?>
+			<?php
+			$event   = $detail['event'];
+			$payment = $detail['payment'];
+			echo lnkup_page_header( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				array(
+					'title'      => $detail['event_name'],
+					'subtitle'   => implode( ' · ', array_filter( array( $detail['booth'], $detail['status_label'] ) ) ),
+					'back_url'   => $back,
+					'back_label' => __( 'My Bookings', 'lnkup-marketplace' ),
+				)
+			);
+			?>
+			<div class="lnkup-booking-detail__actions">
+				<?php if ( 'pay' === $detail['next_action'] && $detail['payment_id'] ) : ?>
+					<button type="button" class="lnkup-btn lnkup-btn--primary lnkup-pay-btn" data-payment-id="<?php echo esc_attr( (string) $detail['payment_id'] ); ?>" data-testid="lnkup-booking-pay">
+						<?php /* translators: %s: amount */ echo esc_html( sprintf( __( 'Pay %s', 'lnkup-marketplace' ), lnkup_currency( $detail['amount_due'] ) ) ); ?>
+					</button>
+				<?php endif; ?>
+				<?php if ( $detail['pass_available'] ) : ?>
+					<a class="lnkup-btn lnkup-btn--primary" href="<?php echo esc_url( $detail['pass_url'] ); ?>" data-testid="lnkup-booking-pass"><?php esc_html_e( 'Open event pass', 'lnkup-marketplace' ); ?></a>
+				<?php endif; ?>
+				<?php if ( $detail['booking']['can_withdraw'] ) : ?>
+					<button type="button" class="lnkup-btn lnkup-btn--ghost" data-withdraw-application data-endpoint="<?php echo esc_url( rest_url( 'lnkup/v1/applications/' . (int) $detail['application_id'] . '/withdraw' ) ); ?>"><?php esc_html_e( 'Withdraw', 'lnkup-marketplace' ); ?></button>
+				<?php endif; ?>
+				<p class="lnkup-request-row__meta" role="status" aria-live="polite" data-withdraw-status hidden></p>
+			</div>
+
+			<div class="lnkup-booking-detail__grid">
+				<section class="lnkup-card lnkup-booking-detail__section" aria-labelledby="lnkup-bd-timeline">
+					<h2 id="lnkup-bd-timeline"><?php esc_html_e( 'Timeline', 'lnkup-marketplace' ); ?></h2>
+					<ol class="lnkup-booking-timeline" data-testid="lnkup-booking-timeline">
+						<?php foreach ( $detail['timeline'] as $step ) : ?>
+							<li class="lnkup-booking-timeline__item is-<?php echo esc_attr( $step['state'] ); ?>" data-step="<?php echo esc_attr( $step['key'] ); ?>"<?php echo 'current' === $step['state'] ? ' aria-current="step"' : ''; ?>>
+								<span class="lnkup-booking-timeline__label"><?php echo esc_html( $step['label'] ); ?></span>
+								<?php if ( $step['at'] ) : ?>
+									<time datetime="<?php echo esc_attr( mysql2date( 'c', $step['at'] ) ); ?>"><?php echo esc_html( mysql2date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $step['at'] ) ); ?></time>
+								<?php endif; ?>
+								<?php if ( $step['note'] ) : ?>
+									<span class="lnkup-muted"><?php echo esc_html( $step['note'] ); ?></span>
+								<?php endif; ?>
+								<span class="screen-reader-text"><?php echo esc_html( 'done' === $step['state'] ? __( '(done)', 'lnkup-marketplace' ) : ( 'current' === $step['state'] ? __( '(next)', 'lnkup-marketplace' ) : ( 'stopped' === $step['state'] ? __( '(closed)', 'lnkup-marketplace' ) : '' ) ) ); ?></span>
+							</li>
+						<?php endforeach; ?>
+					</ol>
+				</section>
+
+				<section class="lnkup-card lnkup-booking-detail__section" aria-labelledby="lnkup-bd-event">
+					<h2 id="lnkup-bd-event"><?php esc_html_e( 'Event', 'lnkup-marketplace' ); ?></h2>
+					<dl class="lnkup-booking-detail__dl">
+						<dt><?php esc_html_e( 'Date', 'lnkup-marketplace' ); ?></dt><dd><?php echo esc_html( $event['date'] ? date_i18n( 'l, F j, Y', strtotime( $event['date'] ) ) . ( $event['start_time'] ? ' · ' . $event['start_time'] : '' ) : __( 'Date TBA', 'lnkup-marketplace' ) ); ?></dd>
+						<dt><?php esc_html_e( 'Where', 'lnkup-marketplace' ); ?></dt><dd><?php echo esc_html( implode( ', ', array_filter( array( $event['venue'], $event['venue_address'], trim( $event['city'] . ', ' . $event['state'], ', ' ) ) ) ) ?: __( 'Location TBA', 'lnkup-marketplace' ) ); ?></dd>
+						<dt><?php esc_html_e( 'Organizer', 'lnkup-marketplace' ); ?></dt><dd><?php echo esc_html( $event['organizer'] ?: '—' ); ?></dd>
+					</dl>
+					<?php if ( in_array( $event['status'], array( 'cancelled', 'postponed' ), true ) ) : ?>
+						<p class="lnkup-alert lnkup-alert--warning"><?php echo 'cancelled' === $event['status'] ? esc_html__( 'The organizer cancelled this event.', 'lnkup-marketplace' ) : esc_html__( 'The organizer postponed this event.', 'lnkup-marketplace' ); ?></p>
+					<?php endif; ?>
+					<?php if ( $event['url'] ) : ?>
+						<a href="<?php echo esc_url( $event['url'] ); ?>"><?php esc_html_e( 'View event page', 'lnkup-marketplace' ); ?></a>
+					<?php endif; ?>
+				</section>
+
+				<section class="lnkup-card lnkup-booking-detail__section" aria-labelledby="lnkup-bd-booking">
+					<h2 id="lnkup-bd-booking"><?php esc_html_e( 'Booking', 'lnkup-marketplace' ); ?></h2>
+					<dl class="lnkup-booking-detail__dl">
+						<dt><?php esc_html_e( 'Booth', 'lnkup-marketplace' ); ?></dt><dd><?php echo esc_html( $detail['booth'] ?: '—' ); ?></dd>
+						<?php if ( $detail['booking']['category'] ) : ?>
+							<dt><?php esc_html_e( 'Category', 'lnkup-marketplace' ); ?></dt><dd><?php echo esc_html( $detail['booking']['category'] ); ?></dd>
+						<?php endif; ?>
+						<?php foreach ( $detail['booking']['answers'] as $answer ) : ?>
+							<?php
+							$shown = $answer['value'];
+							if ( 'checkbox' === ( $answer['type'] ?? '' ) ) {
+								$shown = $shown ? __( 'Yes', 'lnkup-marketplace' ) : __( 'No', 'lnkup-marketplace' );
+							} elseif ( 'file' === ( $answer['type'] ?? '' ) ) {
+								$shown = get_the_title( (int) $shown );
+							}
+							?>
+							<dt><?php echo esc_html( (string) $answer['label'] ); ?></dt><dd><?php echo esc_html( (string) $shown ); ?></dd>
+						<?php endforeach; ?>
+						<?php if ( $detail['booking']['rejection_reason'] ) : ?>
+							<dt><?php esc_html_e( 'Organizer note', 'lnkup-marketplace' ); ?></dt><dd><?php echo esc_html( $detail['booking']['rejection_reason'] ); ?></dd>
+						<?php endif; ?>
+					</dl>
+				</section>
+
+				<section class="lnkup-card lnkup-booking-detail__section" aria-labelledby="lnkup-bd-payment" data-testid="lnkup-booking-payment">
+					<h2 id="lnkup-bd-payment"><?php esc_html_e( 'Payment', 'lnkup-marketplace' ); ?></h2>
+					<?php if ( ! $payment ) : ?>
+						<p class="lnkup-muted"><?php esc_html_e( 'No payment yet. You only pay after the organizer approves you.', 'lnkup-marketplace' ); ?></p>
+					<?php else : ?>
+						<dl class="lnkup-booking-detail__dl">
+							<dt><?php esc_html_e( 'Booking total', 'lnkup-marketplace' ); ?></dt><dd><?php echo esc_html( lnkup_currency( $payment['total'] ) ); ?></dd>
+							<?php if ( $payment['credit_applied'] > 0 ) : ?>
+								<dt><?php esc_html_e( 'Wallet credit used', 'lnkup-marketplace' ); ?></dt><dd><?php echo esc_html( lnkup_currency( $payment['credit_applied'] ) ); ?></dd>
+							<?php endif; ?>
+							<?php if ( $payment['card_charged'] > 0 ) : ?>
+								<dt><?php esc_html_e( 'Charged to your card', 'lnkup-marketplace' ); ?></dt><dd><?php echo esc_html( lnkup_currency( $payment['card_charged'] ) ); ?></dd>
+							<?php endif; ?>
+							<?php if ( $payment['amount_due'] > 0 ) : ?>
+								<dt><?php esc_html_e( 'Due now', 'lnkup-marketplace' ); ?></dt><dd><?php echo esc_html( lnkup_currency( $payment['amount_due'] ) ); ?><?php echo $payment['due_at'] ? ' · ' . esc_html( sprintf( /* translators: %s: date */ __( 'by %s', 'lnkup-marketplace' ), mysql2date( get_option( 'date_format' ), get_date_from_gmt( $payment['due_at'] ) ) ) ) : ''; ?></dd>
+							<?php endif; ?>
+							<?php if ( $payment['refunded'] + $payment['credit_refunded'] > 0 ) : ?>
+								<dt><?php esc_html_e( 'Refunded', 'lnkup-marketplace' ); ?></dt><dd><?php echo esc_html( lnkup_currency( $payment['refunded'] + $payment['credit_refunded'] ) ); ?></dd>
+							<?php endif; ?>
+						</dl>
+						<ul class="lnkup-booking-detail__docs">
+							<?php if ( $payment['invoice'] ) : ?>
+								<li><a href="<?php echo esc_url( $payment['invoice']['pdf_url'] ); ?>" target="_blank" rel="noopener"><?php /* translators: %s: invoice number */ echo esc_html( sprintf( __( 'Invoice %s', 'lnkup-marketplace' ), $payment['invoice']['invoice_number'] ) ); ?></a></li>
+							<?php endif; ?>
+							<?php foreach ( $payment['receipts'] as $receipt ) : ?>
+								<li><a href="<?php echo esc_url( $receipt['view_url'] ); ?>" target="_blank" rel="noopener"><?php /* translators: 1: receipt number, 2: amount */ echo esc_html( sprintf( __( 'Receipt %1$s · %2$s', 'lnkup-marketplace' ), $receipt['receipt_number'], lnkup_currency( $receipt['amount'] ) ) ); ?></a></li>
+							<?php endforeach; ?>
+							<?php foreach ( $payment['refunds'] as $refund ) : ?>
+								<li><?php /* translators: 1: amount, 2: status */ echo esc_html( sprintf( __( 'Refund %1$s · %2$s', 'lnkup-marketplace' ), lnkup_currency( $refund['amount'] ), $refund['status'] ) ); ?></li>
+							<?php endforeach; ?>
+						</ul>
+					<?php endif; ?>
+				</section>
+
+				<?php if ( $detail['readiness'] ) : ?>
+					<section class="lnkup-card lnkup-booking-detail__section" aria-labelledby="lnkup-bd-ready">
+						<h2 id="lnkup-bd-ready"><?php esc_html_e( 'Documents & readiness', 'lnkup-marketplace' ); ?></h2>
+						<p><?php /* translators: %d: percent */ echo esc_html( sprintf( __( '%d%% ready', 'lnkup-marketplace' ), (int) ( $detail['readiness']['percent'] ?? 0 ) ) ); ?></p>
+						<ul class="lnkup-booking-detail__checklist">
+							<?php foreach ( (array) ( $detail['readiness']['items'] ?? array() ) as $ready_item ) : ?>
+								<?php if ( is_array( $ready_item ) && isset( $ready_item['label'] ) ) : ?>
+									<li class="<?php echo ! empty( $ready_item['done'] ) ? 'is-done' : 'is-pending'; ?>"><?php echo esc_html( (string) $ready_item['label'] ); ?></li>
+								<?php endif; ?>
+							<?php endforeach; ?>
+						</ul>
+						<a href="<?php echo esc_url( add_query_arg( 'view', 'documents', lnkup_page_url_helper( 'vendor-dashboard' ) ) ); ?>"><?php esc_html_e( 'Manage documents', 'lnkup-marketplace' ); ?></a>
+					</section>
+				<?php endif; ?>
+
+				<section class="lnkup-card lnkup-booking-detail__section" aria-labelledby="lnkup-bd-instructions">
+					<h2 id="lnkup-bd-instructions"><?php esc_html_e( 'Event instructions & pass', 'lnkup-marketplace' ); ?></h2>
+					<?php $pass = $detail['instructions']; ?>
+					<?php if ( ! $pass || empty( $pass['is_unlocked'] ) ) : ?>
+						<p class="lnkup-muted">
+							<?php
+							echo 'payment_required' === ( $pass['locked_reason'] ?? '' )
+								? esc_html__( 'Your event pass and setup instructions unlock after payment.', 'lnkup-marketplace' )
+								: esc_html__( 'Setup instructions and your event pass appear here once the booking is confirmed.', 'lnkup-marketplace' );
+							?>
+						</p>
+					<?php else : ?>
+						<?php
+						$load_in = (array) ( $pass['load_in'] ?? array() );
+						$parking = (array) ( $pass['parking'] ?? array() );
+						$day_of  = $pass['contacts']['organizer'] ?? array();
+						$rows    = array_filter(
+							array(
+								__( 'Booth assignment', 'lnkup-marketplace' ) => (string) ( $pass['booth']['assignment'] ?? '' ),
+								__( 'Load-in', 'lnkup-marketplace' )          => trim( (string) ( $load_in['window'] ?? '' ) . ( ! empty( $load_in['gate'] ) ? ' · ' . sprintf( /* translators: %s: gate */ __( 'Gate %s', 'lnkup-marketplace' ), $load_in['gate'] ) : '' ) ),
+								__( 'Load-in notes', 'lnkup-marketplace' )    => (string) ( $load_in['notes'] ?? '' ),
+								__( 'Parking', 'lnkup-marketplace' )          => trim( (string) ( $parking['lot'] ?? '' ) . ' ' . (string) ( $parking['instructions'] ?? '' ) ),
+								__( 'Organizer contact', 'lnkup-marketplace' ) => trim( (string) ( $day_of['name'] ?? '' ) . ( ! empty( $day_of['email'] ) ? ' · ' . $day_of['email'] : '' ) ),
+							)
+						);
+						?>
+						<?php if ( $rows ) : ?>
+							<dl class="lnkup-booking-detail__dl">
+								<?php foreach ( $rows as $label => $value ) : ?>
+									<dt><?php echo esc_html( $label ); ?></dt><dd><?php echo esc_html( $value ); ?></dd>
+								<?php endforeach; ?>
+							</dl>
+						<?php else : ?>
+							<p class="lnkup-muted"><?php esc_html_e( 'The organizer has not posted setup instructions yet.', 'lnkup-marketplace' ); ?></p>
+						<?php endif; ?>
+						<a class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" href="<?php echo esc_url( $detail['pass_url'] ); ?>"><?php esc_html_e( 'Open event pass', 'lnkup-marketplace' ); ?></a>
+					<?php endif; ?>
+				</section>
+
+				<section class="lnkup-card lnkup-booking-detail__section" aria-labelledby="lnkup-bd-support">
+					<h2 id="lnkup-bd-support"><?php esc_html_e( 'Need help?', 'lnkup-marketplace' ); ?></h2>
+					<p class="lnkup-muted"><?php esc_html_e( 'Questions about setup, changes, cancellations or refunds go to the organizer first. LNKup support can help with payments.', 'lnkup-marketplace' ); ?></p>
+					<a class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" href="<?php echo esc_url( $detail['support_url'] ); ?>"><?php esc_html_e( 'Contact the organizer', 'lnkup-marketplace' ); ?></a>
+				</section>
+			</div>
+		<?php endif; ?>
+		</div>
 		<?php
 		return (string) ob_get_clean();
 	}

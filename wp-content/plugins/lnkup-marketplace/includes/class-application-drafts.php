@@ -128,6 +128,7 @@ class LNKup_Application_Drafts {
 					do_action( 'lnkup_application_draft_started', (int) $draft_id, $opportunity_id, $user_id );
 				}
 				self::write_payload( (int) $draft_id, $data );
+				do_action( 'lnkup_application_draft_saved', (int) $draft_id, $opportunity_id, $user_id, (int) get_post_meta( $draft_id, '_lnkup_draft_revision', true ) );
 				return self::format( (int) $draft_id );
 			}
 		);
@@ -197,7 +198,21 @@ class LNKup_Application_Drafts {
 		update_post_meta( $draft_id, '_lnkup_draft_document_ids', $data['document_ids'] );
 		update_post_meta( $draft_id, '_lnkup_draft_client', $data['client'] );
 		update_post_meta( $draft_id, '_lnkup_draft_updated_at', current_time( 'mysql' ) );
+		// UTC twin of updated_at: reminder scheduling works in UTC.
+		update_post_meta( $draft_id, '_lnkup_draft_updated_at_gmt', current_time( 'mysql', true ) );
 		update_post_meta( $draft_id, '_lnkup_draft_revision', (int) get_post_meta( $draft_id, '_lnkup_draft_revision', true ) + 1 );
+	}
+
+	/**
+	 * Close a draft and announce it (reminders listen for this).
+	 *
+	 * @param int    $draft_id Draft ID.
+	 * @param string $state    expired|discarded.
+	 */
+	private static function close( $draft_id, $state ) {
+		update_post_meta( $draft_id, '_lnkup_draft_state', $state );
+		update_post_meta( $draft_id, '_lnkup_draft_updated_at', current_time( 'mysql' ) );
+		do_action( 'lnkup_application_draft_closed', (int) $draft_id, $state );
 	}
 
 	/**
@@ -298,8 +313,7 @@ class LNKup_Application_Drafts {
 			return new WP_Error( 'lnkup_not_found', __( 'Application draft not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}
 		if ( self::STATE_OPEN === (string) get_post_meta( $draft_id, '_lnkup_draft_state', true ) ) {
-			update_post_meta( $draft_id, '_lnkup_draft_state', 'discarded' );
-			update_post_meta( $draft_id, '_lnkup_draft_updated_at', current_time( 'mysql' ) );
+			self::close( (int) $draft_id, 'discarded' );
 		}
 		return true;
 	}
@@ -421,7 +435,7 @@ class LNKup_Application_Drafts {
 				|| 'open' !== (string) get_post_meta( $opp_id, '_lnkup_opportunity_status', true )
 				|| lnkup_deadline_passed( $card['deadline'] ?? '' );
 			if ( $closed ) {
-				update_post_meta( $draft_id, '_lnkup_draft_state', 'expired' );
+				self::close( (int) $draft_id, 'expired' );
 				++$expired;
 			}
 		}
@@ -448,7 +462,7 @@ class LNKup_Application_Drafts {
 			)
 		);
 		foreach ( $ids as $draft_id ) {
-			update_post_meta( $draft_id, '_lnkup_draft_state', 'expired' );
+			self::close( (int) $draft_id, 'expired' );
 		}
 	}
 

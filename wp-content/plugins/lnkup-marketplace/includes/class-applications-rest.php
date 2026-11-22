@@ -95,6 +95,26 @@ class LNKup_Applications_REST {
 			)
 		);
 
+		register_rest_route(
+			self::NS,
+			'/bookings/vendor',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'vendor_bookings' ),
+				'permission_callback' => array( __CLASS__, 'vendor_permission' ),
+			)
+		);
+		register_rest_route(
+			self::NS,
+			'/bookings/vendor/(?P<id>\d+)',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'vendor_booking' ),
+				'permission_callback' => array( __CLASS__, 'vendor_permission' ),
+				'args'                => array( 'id' => array( 'sanitize_callback' => 'absint' ) ),
+			)
+		);
+
 		// Drafts are keyed by opportunity: a vendor has at most one open draft per vendor slot.
 		register_rest_route(
 			self::NS,
@@ -167,6 +187,31 @@ class LNKup_Applications_REST {
 				),
 			)
 		);
+	}
+
+	/**
+	 * GET paginated bookings. Query: bucket, tour_id, city, from, to, page, per_page.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function vendor_bookings( WP_REST_Request $request ) {
+		$user_id = get_current_user_id();
+		$result  = LNKup_Vendor_Bookings::query( $user_id, $request->get_params() );
+		$result['filter_options'] = LNKup_Vendor_Bookings::filter_options( $user_id );
+		return rest_ensure_response( $result );
+	}
+
+	/**
+	 * GET one booking with payment, documents, instructions and timeline. 404 unless the caller owns it.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function vendor_booking( WP_REST_Request $request ) {
+		$detail = LNKup_Vendor_Bookings::detail( get_current_user_id(), (int) $request['id'] );
+		if ( null === $detail ) {
+			return new WP_Error( 'lnkup_not_found', __( 'Booking not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		return rest_ensure_response( $detail );
 	}
 
 	/**
