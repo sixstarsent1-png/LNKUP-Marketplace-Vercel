@@ -177,6 +177,7 @@ class LNKup_Financial_Reconciliation {
 
 		$webhook_index = self::webhook_index( $range );
 		$settle_runs   = self::audit_counts_by_payment( wp_list_pluck( $payments, 'id' ) );
+		$side_effects  = self::side_effect_counts( wp_list_pluck( $payments, 'id' ) );
 		$rows          = array();
 		$issue_counts  = array();
 		foreach ( $payments as $payment ) {
@@ -187,6 +188,17 @@ class LNKup_Financial_Reconciliation {
 			if ( ( $runs['treasury_settled'] ?? 0 ) > 1 ) {
 				$issues[] = 'settled_repeatedly';
 			}
+			$effects = $side_effects[ $payment['id'] ] ?? array();
+			if ( ( $effects['platform_fees'] ?? 0 ) > 1 ) {
+				$issues[] = 'duplicate_platform_fee_rows';
+			}
+			if ( ( $effects['reserve_holds'] ?? 0 ) > 1 || ( '' !== $payment['destination'] && ( $effects['reserve_holds'] ?? 0 ) > 0 ) ) {
+				$issues[] = 'unbacked_reserve_holds';
+			}
+			if ( ( $effects['escrow_holds'] ?? 0 ) > 1 ) {
+				$issues[] = 'duplicate_escrow_holds';
+			}
+			$runs = array_merge( $runs, array( 'side_effects' => $effects ) );
 			foreach ( $issues as $code ) {
 				$issue_counts[ $code ] = ( $issue_counts[ $code ] ?? 0 ) + 1;
 			}
@@ -309,6 +321,48 @@ class LNKup_Financial_Reconciliation {
 			'unrecorded'       => $unrecorded,
 			'unrecorded_cents' => array_sum( wp_list_pluck( $unrecorded, 'amount_cents' ) ),
 		);
+	}
+
+	/**
+	 * Rows settlement writes outside the ledger (platform fees, reserves, escrow), per payment.
+	 *
+	 * @param int[] $payment_ids Payment IDs.
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function side_effect_counts( $payment_ids ) {
+		global $wpdb;
+		$payment_ids = array_filter( array_map( 'absint', (array) $payment_ids ) );
+		if ( ! $payment_ids ) {
+			return array();
+		}
+		$in     = implode( ',', $payment_ids );
+		$out    = array();
+		$tables = array(
+			'platform_fees' => LNKup_Treasury_Tables::platform_fees_table(),
+			'reserve_holds' => LNKup_Treasury_Tables::reserve_holds_table(),
+			'escrow_holds'  => LNKup_Treasury_Tables::escrow_holds_table(),
+		);
+		foreach ( $tables as $key => $table ) {
+			if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+				continue;
+			}
+			$amount_col = 'platform_fees' === $key ? 'lnkup_platform_fee' : 'amount';
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$rows = (array) $wpdb->get_results(
+				"SELECT payment_post_id, COUNT(*) AS n, SUM({$amount_col}) AS total" . ( 'platform_fees' === $key ? '' : ", GROUP_CONCAT(DISTINCT status) AS statuses" ) . "
+				FROM {$table} WHERE payment_post_id IN ({$in}) GROUP BY payment_post_id",
+				ARRAY_A
+			);
+			foreach ( $rows as $row ) {
+				$pid                         = (int) $row['payment_post_id'];
+				$out[ $pid ][ $key ]         = (int) $row['n'];
+				$out[ $pid ][ $key . '_cents' ] = self::to_cents( $row['total'] );
+				if ( isset( $row['statuses'] ) ) {
+					$out[ $pid ][ $key . '_statuses' ] = (string) $row['statuses'];
+				}
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -439,7 +493,7 @@ class LNKup_Financial_Reconciliation {
 			if ( (string) $pi['destination'] !== $payment['destination'] ) {
 				$issues[] = 'destination_mismatch';
 			}
-			if ( $succeeded && $payment['app_fee_cents'] > 0 && (int) $pi['application_fee_amount'] !== $payment['app_fee_cents'] ) {
+			if ( $succeeded && '' !== (string) $pi['destination'] && $payment['app_fee_cents'] > 0 && (int) $pi['application_fee_amount'] !== $payment['app_fee_cents'] ) {
 				$issues[] = 'application_fee_mismatch';
 			}
 			if ( (int) $pi['amount_refunded'] > 0 && 'refunded' !== $payment['status'] ) {

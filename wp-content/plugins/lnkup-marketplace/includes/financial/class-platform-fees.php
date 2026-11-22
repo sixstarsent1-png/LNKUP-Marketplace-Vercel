@@ -22,6 +22,12 @@ class LNKup_Platform_Fees {
 			return 0;
 		}
 
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$existing = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE payment_post_id = %d LIMIT 1", absint( $payment_id ) ) );
+		if ( $existing ) {
+			return $existing;
+		}
+
 		$txn_id = 0;
 		if ( class_exists( 'LNKup_Transactions' ) ) {
 			$txn = LNKup_Transactions::get_by_payment_post( $payment_id );

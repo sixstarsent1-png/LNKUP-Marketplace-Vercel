@@ -535,6 +535,43 @@ class LNKup_Organizer_Wallet {
 	}
 
 	/**
+	 * Money LNKup holds for a destination-mode organizer and may transfer on Cash Out.
+	 *
+	 * Counts connect_settlement rows for platform-held funds (treasury migrations, platform-charge
+	 * recoveries, cashout restores) minus cashout debits and offsets. Destination-charge mirrors
+	 * are excluded: that money is already on the organizer's Stripe account and Stripe pays it
+	 * out automatically, so counting it would offer LNKup's own balance a second time.
+	 *
+	 * @param int $user_id Organizer user ID.
+	 * @return float Dollars.
+	 */
+	public static function platform_claim( $user_id ) {
+		global $wpdb;
+		$table = LNKup_Treasury_Tables::organizer_wallet_entries_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return 0.0;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$credits = (float) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COALESCE(SUM(amount), 0) FROM {$table}
+				WHERE user_id = %d AND entry_type = 'connect_settlement'
+				AND NOT ( source_type = 'payment' AND COALESCE(metadata, '') LIKE %s )",
+				absint( $user_id ),
+				'%"settlement_mode":"destination"%'
+			)
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$debits = (float) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE user_id = %d AND entry_type = 'debit' AND source_type IN ('payout','reconciliation_offset_connect')",
+				absint( $user_id )
+			)
+		);
+		return max( 0.0, round( $credits - $debits, 2 ) );
+	}
+
+	/**
 	 * Add ledger entry and update balances.
 	 *
 	 * @param int    $user_id Organizer user ID.

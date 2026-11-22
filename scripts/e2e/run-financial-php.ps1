@@ -8,7 +8,8 @@ $tests = @(
   'financial-lists-test',
   'financial-repair-test',
   'financial-cron-test',
-  'financial-security-test'
+  'financial-security-test',
+  'financial-side-effects-test'
 )
 $failed = @()
 foreach ($t in $tests) {

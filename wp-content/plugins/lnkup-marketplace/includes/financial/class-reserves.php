@@ -31,9 +31,18 @@ class LNKup_Reserves {
 		if ( $amount <= 0 ) {
 			return 0;
 		}
+		// Destination charges settle on the organizer's Stripe account; LNKup holds nothing to reserve.
+		if ( self::is_destination_payment( $payment_id ) ) {
+			return 0;
+		}
 
 		global $wpdb;
 		$table = LNKup_Treasury_Tables::reserve_holds_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$existing = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE payment_post_id = %d LIMIT 1", absint( $payment_id ) ) );
+		if ( $existing ) {
+			return $existing;
+		}
 		$now   = current_time( 'mysql' );
 		$days  = absint( $settings['reserve_hold_days'] ?? 30 );
 		$wpdb->insert(
@@ -116,25 +125,49 @@ class LNKup_Reserves {
 			ARRAY_A
 		);
 		foreach ( $rows as $row ) {
-			$remaining = (float) $row['amount'] - (float) $row['used_amount'];
-			$wpdb->update(
-				$table,
-				array( 'status' => 'released', 'released_at' => $now, 'updated_at' => $now ),
-				array( 'id' => (int) $row['id'] )
+			$remaining  = (float) $row['amount'] - (float) $row['used_amount'];
+			$payment_id = (int) $row['payment_post_id'];
+			$claimed    = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table} SET status = 'released', released_at = %s, updated_at = %s WHERE id = %d AND status = 'active'",
+					$now,
+					$now,
+					(int) $row['id']
+				)
 			);
-			if ( $remaining > 0 && class_exists( 'LNKup_Organizer_Wallet' ) ) {
-				LNKup_Organizer_Wallet::add_entry(
-					(int) $row['organizer_user_id'],
-					$remaining,
-					'available',
-					array(
-						'source_type'     => 'reserve_release',
-						'source_id'       => (int) $row['id'],
-						'payment_post_id' => (int) $row['payment_post_id'],
-						'note'            => __( 'Reserve hold released', 'lnkup-marketplace' ),
-					)
-				);
+			if ( 1 !== (int) $claimed || $remaining <= 0 || ! class_exists( 'LNKup_Organizer_Wallet' ) ) {
+				continue;
+			}
+			// Only money LNKup actually held may be credited, and only once per payment: duplicate
+			// holds from repeated settlement and holds on destination charges release without credit.
+			if ( self::is_destination_payment( $payment_id ) ) {
+				LNKup_Financial_Audit::log( 'reserve_release_skipped', 'reserve', (int) $row['id'], array( 'amount' => $remaining, 'reason' => 'destination_charge', 'payment_id' => $payment_id ) );
+				continue;
+			}
+			$entry = LNKup_Organizer_Wallet::add_entry(
+				(int) $row['organizer_user_id'],
+				$remaining,
+				'available',
+				array(
+					'source_type'     => 'reserve_release',
+					'source_id'       => (int) $row['id'],
+					'payment_post_id' => $payment_id,
+					'note'            => __( 'Reserve hold released', 'lnkup-marketplace' ),
+					'idempotency_key' => $payment_id ? 'payment:' . $payment_id . ':reserve_release' : 'reserve:' . (int) $row['id'] . ':release',
+				)
+			);
+			if ( ! $entry ) {
+				LNKup_Financial_Audit::log( 'reserve_release_skipped', 'reserve', (int) $row['id'], array( 'amount' => $remaining, 'reason' => 'already_released_for_payment', 'payment_id' => $payment_id ) );
 			}
 		}
+	}
+
+	/**
+	 * Whether the charge settled on the organizer's connected account.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 */
+	public static function is_destination_payment( $payment_id ) {
+		return $payment_id > 0 && '' !== (string) get_post_meta( $payment_id, '_lnkup_stripe_destination_account', true );
 	}
 }

@@ -964,9 +964,8 @@ class LNKup_Stripe_Connect {
 		if ( ! class_exists( 'LNKup_Organizer_Wallet' ) ) {
 			return 0;
 		}
-		$wallet = LNKup_Organizer_Wallet::get_balances( absint( $organizer_id ) );
-		// Destination get_balances() sets available = connect_settlement − processing.
-		return max( 0, (int) round( (float) ( $wallet['available'] ?? 0 ) * 100 ) );
+		// Platform-held funds only; destination-charge mirrors are already on Connect.
+		return max( 0, (int) round( LNKup_Organizer_Wallet::platform_claim( absint( $organizer_id ) ) * 100 ) );
 	}
 
 	/**

@@ -58,6 +58,11 @@ class LNKup_Escrow {
 
 		global $wpdb;
 		$table = LNKup_Treasury_Tables::escrow_holds_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$existing = (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE payment_post_id = %d LIMIT 1", absint( $payment_id ) ) );
+		if ( $existing ) {
+			return $existing;
+		}
 		$now   = current_time( 'mysql' );
 		$release_days = absint( $settings['escrow_release_days'] ?? 7 );
 		$wpdb->insert(
