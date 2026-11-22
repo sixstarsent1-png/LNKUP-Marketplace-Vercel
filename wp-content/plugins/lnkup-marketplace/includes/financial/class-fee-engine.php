@@ -35,6 +35,12 @@ class LNKup_Fee_Engine {
 			$vendor_checkout_fee = 0.0;
 		}
 		$organizer_commission = self::resolve_organizer_commission( $vendor_fee, $organizer_id, $event_id, $category );
+		// fee_payer_mode "organizer": the vendor is not charged the checkout fee; LNKup takes it
+		// from the organizer's share as extra commission. Total LNKup fee is unchanged.
+		if ( 'organizer' === ( lnkup_get_settings()['fee_payer_mode'] ?? 'vendor' ) && $vendor_checkout_fee > 0 ) {
+			$organizer_commission = round( $organizer_commission + $vendor_checkout_fee, 2 );
+			$vendor_checkout_fee  = 0.0;
+		}
 		$platform_fee         = round( $vendor_checkout_fee + $organizer_commission, 2 );
 		$subtotal             = round( $vendor_fee + $vendor_checkout_fee, 2 );
 		$processing           = self::resolve_processing_fee( $subtotal, $method );
@@ -347,6 +353,41 @@ class LNKup_Fee_Engine {
 			'fee_rule_id'              => 0,
 			'credits_applied'          => round( $credit, 2 ),
 		);
+	}
+
+	/**
+	 * application_fee_amount for a destination charge: everything except the organizer's share.
+	 *
+	 * Organizer share = booth − commission + tax − organizer-funded promo discount, the same net a
+	 * platform-settled booking credits. LNKup therefore keeps the vendor-paid processing fee (it
+	 * pays Stripe's fee on destination charges) and funds platform credits and marketplace promo
+	 * codes. Deposits/installments get a proportional share. Setting processing_fee_payee =
+	 * "organizer" restores the previous rule (application fee = platform fee only).
+	 *
+	 * @param int   $payment_id   Payment post ID.
+	 * @param int   $amount_cents Amount being charged now.
+	 * @param array $breakdown    calculate_for_payment() breakdown.
+	 * @return int Cents.
+	 */
+	public static function destination_application_fee_cents( $payment_id, $amount_cents, $breakdown ) {
+		$amount_cents = (int) $amount_cents;
+		if ( 'organizer' === ( lnkup_get_settings()['processing_fee_payee'] ?? 'platform' ) ) {
+			return (int) round( (float) ( $breakdown['platform_fee'] ?? 0 ) * 100 );
+		}
+		$share = (float) ( $breakdown['organizer_net'] ?? 0 ) + (float) ( $breakdown['tax_amount'] ?? 0 );
+		$promo = (float) get_post_meta( $payment_id, '_lnkup_discount_amount', true );
+		if ( $promo > 0 && 'organizer' === (string) get_post_meta( $payment_id, '_lnkup_promo_funded_by', true ) ) {
+			$share -= $promo;
+		}
+		$share_cents = max( 0, (int) round( $share * 100 ) );
+
+		$total_cents  = (int) round( (float) get_post_meta( $payment_id, '_lnkup_total_amount', true ) * 100 );
+		$credit_cents = (int) round( (float) get_post_meta( $payment_id, '_lnkup_credit_applied', true ) * 100 );
+		$booking_due  = max( 1, $total_cents - $credit_cents - (int) get_post_meta( $payment_id, '_lnkup_amount_paid_cents', true ) );
+		if ( $amount_cents < $booking_due ) {
+			$share_cents = (int) round( $share_cents * ( $amount_cents / $booking_due ) );
+		}
+		return max( 0, min( $amount_cents - 1, $amount_cents - $share_cents ) );
 	}
 
 	/**

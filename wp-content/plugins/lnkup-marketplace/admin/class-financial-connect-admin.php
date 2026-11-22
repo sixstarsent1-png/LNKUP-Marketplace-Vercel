@@ -146,8 +146,13 @@ class LNKup_Financial_Connect_Admin {
 			'payout.created',
 			'payout.paid',
 			'payout.failed',
+			'payout.updated',
+			'payout.canceled',
 			'charge.refunded',
 			'charge.dispute.created',
+			'charge.dispute.funds_withdrawn',
+			'charge.dispute.funds_reinstated',
+			'charge.dispute.closed',
 		);
 		?>
 		<div class="wrap lnkup-fin-connect-admin">

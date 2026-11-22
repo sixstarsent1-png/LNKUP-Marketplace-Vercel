@@ -243,25 +243,67 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 			return ( new LNKup_Manual_Provider() )->get_or_create_customer( $user_id );
 		}
 
-		$existing = get_user_meta( $user_id, '_lnkup_stripe_customer_id', true );
+		$existing = $this->customer_id_for_mode( $user_id );
 		if ( $existing ) {
 			return array( 'id' => $existing );
 		}
 
-		$user = get_userdata( $user_id );
-		$customer = $this->client->create_customer( array(
-			'email'    => $user->user_email,
-			'name'     => $user->display_name,
-			'metadata' => array(
-				'wp_user_id' => (string) $user_id,
-				'platform'   => 'lnkup',
-			),
-		) );
-		if ( is_wp_error( $customer ) ) {
-			return $customer;
+		// One creator per user, and a deterministic key, so concurrent checkouts share one customer.
+		$client = $this->client;
+		return LNKup_Financial_Service::with_lock(
+			'cus_' . $user_id,
+			function () use ( $user_id, $client ) {
+				$existing = $this->customer_id_for_mode( $user_id );
+				if ( $existing ) {
+					return array( 'id' => $existing );
+				}
+				$user     = get_userdata( $user_id );
+				$mode     = $client->key_mode();
+				$customer = $client->create_customer(
+					array(
+						'email'    => $user ? $user->user_email : '',
+						'name'     => $user ? $user->display_name : '',
+						'metadata' => array(
+							'wp_user_id' => (string) $user_id,
+							'platform'   => 'lnkup',
+						),
+					),
+					'lnkup_cus_' . $user_id . '_' . $mode
+				);
+				if ( is_wp_error( $customer ) ) {
+					return $customer;
+				}
+				$id = sanitize_text_field( $customer['id'] ?? '' );
+				update_user_meta( $user_id, '_lnkup_stripe_customer_id_' . $mode, $id );
+				update_user_meta( $user_id, '_lnkup_stripe_customer_id', $id );
+				return array( 'id' => $id );
+			}
+		);
+	}
+
+	/**
+	 * Stripe customer for the configured key's mode. A legacy (mode-less) ID is adopted only
+	 * after Stripe confirms it exists in this mode — test customers do not exist in live.
+	 *
+	 * @param int $user_id User ID.
+	 * @return string Customer ID or ''.
+	 */
+	private function customer_id_for_mode( $user_id ) {
+		$mode = $this->client->key_mode();
+		$id   = (string) get_user_meta( $user_id, '_lnkup_stripe_customer_id_' . $mode, true );
+		if ( '' !== $id ) {
+			return $id;
 		}
-		update_user_meta( $user_id, '_lnkup_stripe_customer_id', sanitize_text_field( $customer['id'] ?? '' ) );
-		return array( 'id' => $customer['id'] ?? '' );
+		$legacy = (string) get_user_meta( $user_id, '_lnkup_stripe_customer_id', true );
+		if ( 0 !== strpos( $legacy, 'cus_' ) ) {
+			return '';
+		}
+		$found = $this->client->read( 'customers/' . $legacy );
+		if ( is_wp_error( $found ) || ! empty( $found['deleted'] ) ) {
+			return '';
+		}
+		update_user_meta( $user_id, '_lnkup_stripe_customer_id_' . $mode, $legacy );
+		return $legacy;
 	}
 
 	public function create_setup_intent( $user_id ) {
@@ -290,7 +332,7 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 		if ( ! $this->is_configured() ) {
 			return ( new LNKup_Manual_Provider() )->list_payment_methods( $user_id );
 		}
-		$customer = get_user_meta( $user_id, '_lnkup_stripe_customer_id', true );
+		$customer = $this->customer_id_for_mode( $user_id );
 		if ( ! $customer ) {
 			return array();
 		}
@@ -341,7 +383,7 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 	 */
 	public function sync_payment_methods( $user_id ) {
 		$remote = $this->list_payment_methods( $user_id );
-		$customer = get_user_meta( $user_id, '_lnkup_stripe_customer_id', true );
+		$customer = $this->is_configured() ? $this->customer_id_for_mode( $user_id ) : get_user_meta( $user_id, '_lnkup_stripe_customer_id', true );
 		foreach ( $remote as $pm ) {
 			LNKup_Payment_Methods::upsert_from_provider( $user_id, array_merge( $pm, array( 'customer_id' => $customer ) ) );
 		}
@@ -539,9 +581,13 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 
 		$organizer_id  = (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true );
 		$breakdown     = LNKup_Fee_Engine::calculate_for_payment( $payment_id );
-		$app_fee_cents = (int) round( (float) ( $breakdown['platform_fee'] ?? 0 ) * 100 );
+		$destination   = class_exists( 'LNKup_Stripe_Connect' ) && LNKup_Stripe_Connect::is_connect_ready( $organizer_id );
+		$app_fee_cents = $destination
+			? LNKup_Fee_Engine::destination_application_fee_cents( $payment_id, $amount_cents, $breakdown )
+			: (int) round( (float) ( $breakdown['platform_fee'] ?? 0 ) * 100 );
+		$breakdown['application_fee_cents'] = $app_fee_cents;
 
-		if ( $app_fee_cents < 0 || $app_fee_cents >= $amount_cents ) {
+		if ( $app_fee_cents < 0 || ( $app_fee_cents >= $amount_cents && ! $destination ) ) {
 			return new WP_Error(
 				'invalid_application_fee',
 				__( 'Marketplace fee must be less than the charge amount. Check booth price and fee settings.', 'lnkup-marketplace' ),
@@ -582,8 +628,10 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 		if ( ! class_exists( 'LNKup_Stripe_Connect' ) || ! LNKup_Stripe_Connect::is_connect_ready( $organizer_id ) ) {
 			return array();
 		}
-		$platform_fee_cents = (int) round( (float) ( $breakdown['platform_fee'] ?? 0 ) * 100 );
-		return LNKup_Stripe_Connect::destination_charge_params( $organizer_id, $platform_fee_cents );
+		$fee_cents = isset( $breakdown['application_fee_cents'] )
+			? (int) $breakdown['application_fee_cents']
+			: (int) round( (float) ( $breakdown['platform_fee'] ?? 0 ) * 100 );
+		return LNKup_Stripe_Connect::destination_charge_params( $organizer_id, $fee_cents );
 	}
 
 	/**

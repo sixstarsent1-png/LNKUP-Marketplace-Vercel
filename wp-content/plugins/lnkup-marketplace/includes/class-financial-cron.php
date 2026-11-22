@@ -54,6 +54,7 @@ class LNKup_Financial_Cron {
 			'fin_hourly',
 			static function () {
 				LNKup_Stripe_Webhooks::retry_failed();
+				LNKup_Refunds::requeue_stuck_processing();
 				$synced = array();
 				$errors = array();
 				foreach ( self::users_needing_sync() as $row ) {

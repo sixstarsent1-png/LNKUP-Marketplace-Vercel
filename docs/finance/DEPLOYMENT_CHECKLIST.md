@@ -1,4 +1,12 @@
-# Deployment checklist: financial reconciliation (plugin 12.22.0 → 12.23.0)
+# Deployment checklist: financial reconciliation (plugin 12.22.0 → 12.23.1)
+
+## 12.23.1 additions (Phase 2 Stripe fixes and fee model)
+
+- Upload `dist/lnkup-marketplace-12.23.1.zip`. It is built from the 12.23.0 release plus the financial fixes only, with no unfinished feature work.
+- No schema change. Stripe customer IDs are stored per mode; existing ones are adopted on first use after Stripe confirms them.
+- Stripe Dashboard, both endpoints: also subscribe `payout.updated`, `payout.canceled` and `charge.dispute.closed`. The Connect admin page lists every required event.
+- Announce before relying on the fee model: on new destination-charge bookings LNKup keeps the vendor-paid processing fee, and organizer promo codes come out of the organizer's share. Set `processing_fee_payee = organizer` to keep the old split.
+- Support notes: a second subscription is refused until the first is cancelled. Instant cashouts on Connect pay the full amount (Stripe's instant fee is charged by Stripe). Refunds above the approval threshold need a LNKup admin.
 
 ## 12.23.0 additions (Phase 1 Stripe fixes)
 

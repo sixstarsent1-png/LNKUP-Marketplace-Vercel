@@ -24,7 +24,7 @@ The block is additive. Legacy fields (`available_balance`, `display_balances`, `
 
 | Key | UI label | Definition | Source |
 | --- | --- | --- | --- |
-| `collected` | Collected | Sum of `_lnkup_total_amount` on the organizer's payments with status `paid`. What vendors paid, before fees and refunds. | `wordpress_payments` |
+| `collected` | Collected | What vendors paid, before fees and refunds: the booking total of `paid`, `refunded`, `partially_refunded` and `disputed` payments, plus the paid part of `partially_paid` deposits. Lost chargebacks are excluded. Refunds are their own line. | `wordpress_payments` |
 | `platform_fees` | Platform fees | LNKup fees on those payments. | `wordpress_payments` |
 | `refunds` | Refunds | Money returned to vendors. | `wordpress_payments` |
 | `net_earnings` | Net earnings | `collected − platform_fees − refunds`, floored at 0. | derived |
@@ -73,5 +73,8 @@ The block is additive. Legacy fields (`available_balance`, `display_balances`, `
 
 - One settlement row per payment, enforced by the unique `idempotency_key` (`payment:{id}:credit` or `payment:{id}:connect_settlement`) and a per-payment MySQL lock around finalize.
 - Settlement uses the fee breakdown frozen at checkout (`_lnkup_fee_breakdown`), overlaid with Stripe's actual application fee for destination charges. Today's fee settings never re-price a past charge.
+- Destination charges (12.23.1+): `application_fee_amount` = charge − organizer share, where the share = booth − commission + tax − any organizer-funded promo (proportional for deposits). LNKup keeps the processing fee and funds marketplace promos and platform credits. `processing_fee_payee = organizer` restores application fee = platform fee.
+- Refunds, credit refunds and lost chargebacks debit the organizer's share proportionally, keyed by the cumulative amount returned (`payment:{id}:refund:{cents}`, `payment:{id}:chargeback`).
+- Escrowed payments: only the held amount sits in pending (`payment:{id}:credit`); the rest is available at once (`payment:{id}:credit_unheld`).
 - Payout debits and restores are keyed `payout:{id}:debit` / `payout:{id}:restore`, so a payout is debited once and restored at most once.
 - Historical corrections are offset rows written by the approval-gated repair tool; nothing is deleted.

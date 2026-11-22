@@ -397,12 +397,32 @@ class LNKup_Organizer_Wallet {
 			return true;
 		}
 
-		$pending = class_exists( 'LNKup_Escrow' ) && LNKup_Escrow::has_active_hold( $payment_id );
-		$entry   = 0;
-		if ( $credit > 0 ) {
+		// Only the escrowed part waits in pending; the rest is available now. Escrow release moves
+		// exactly the held amount, so crediting everything to pending would strand the remainder.
+		$held     = class_exists( 'LNKup_Escrow' ) ? LNKup_Escrow::held_amount( $payment_id ) : 0.0;
+		$pending  = $held > 0;
+		$in_hold  = $pending ? min( $credit, $held ) : $credit;
+		$unheld   = round( $credit - $in_hold, 2 );
+		$entry    = 0;
+		if ( $unheld > 0 ) {
+			self::add_entry(
+				$organizer_id,
+				$unheld,
+				'available',
+				array(
+					'source_type'     => 'payment_unheld',
+					'source_id'       => $payment_id,
+					'payment_post_id' => $payment_id,
+					'note'            => __( 'Vendor payment settlement (not escrowed)', 'lnkup-marketplace' ),
+					'idempotency_key' => self::payment_key( $payment_id, 'credit_unheld' ),
+					'metadata'        => array( 'settlement_mode' => 'platform_treasury' ),
+				)
+			);
+		}
+		if ( $in_hold > 0 ) {
 			$entry = self::add_entry(
 				$organizer_id,
-				$credit,
+				$in_hold,
 				$pending ? 'pending' : 'available',
 				array(
 					'source_type'      => 'payment',
@@ -674,7 +694,14 @@ class LNKup_Organizer_Wallet {
 		if ( ! $settlement ) {
 			return 0;
 		}
-		$credited = (int) round( (float) $settlement['amount'] * 100 );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$credited = (int) round( (float) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE payment_post_id = %d AND entry_type = %s AND source_type IN ('payment','payment_unheld','')",
+				$payment_id,
+				$settlement['entry_type']
+			)
+		) * 100 );
 		$target   = min( $credited, (int) round( $credited * min( 1, $returned_cents / $gross ) ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$already = (int) round( (float) $wpdb->get_var(

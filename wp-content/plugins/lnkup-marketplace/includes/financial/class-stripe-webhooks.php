@@ -416,6 +416,7 @@ class LNKup_Stripe_Webhooks {
 		if ( 'lost' === $status ) {
 			update_post_meta( $payment_id, '_lnkup_payment_status', 'chargeback_lost' );
 			LNKup_Organizer_Wallet::reverse_for_chargeback( $payment_id, $amount );
+			LNKup_Escrow::cancel_for_payment( $payment_id );
 			LNKup_Financial_Disputes::close_chargeback( $payment_id, 'lost' );
 		} elseif ( 'won' === $status ) {
 			if ( in_array( (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ), array( 'disputed', 'chargeback_lost' ), true ) ) {

@@ -26,6 +26,15 @@ class LNKup_Stripe_Client {
 		return ! empty( $this->secret_key );
 	}
 
+	/**
+	 * Which Stripe mode the configured key belongs to (objects never cross modes).
+	 *
+	 * @return string 'live' or 'test'.
+	 */
+	public function key_mode() {
+		return preg_match( '/^(sk|rk)_live_/', (string) $this->secret_key ) ? 'live' : 'test';
+	}
+
 	public function get_publishable_key() {
 		$settings = lnkup_get_settings();
 		return $settings['stripe_public_key'] ?? '';
@@ -35,8 +44,8 @@ class LNKup_Stripe_Client {
 	 * @param array $params Stripe API params.
 	 * @return array|WP_Error
 	 */
-	public function create_customer( $params ) {
-		return $this->request( 'POST', 'customers', $params );
+	public function create_customer( $params, $idempotency_key = '' ) {
+		return $this->request( 'POST', 'customers', $params, $idempotency_key );
 	}
 
 	/**
@@ -260,14 +269,12 @@ class LNKup_Stripe_Client {
 		$currency         = $preferred;
 		$source_types     = array();
 		$instant_sources  = array();
-		$matched          = false;
 
 		foreach ( $available_items as $item ) {
 			$item_currency = strtolower( (string) ( $item['currency'] ?? '' ) );
 			if ( $item_currency === $preferred ) {
 				$available += (int) ( $item['amount'] ?? 0 );
 				$currency   = $item_currency;
-				$matched    = true;
 				$item_sources = is_array( $item['source_types'] ?? null ) ? $item['source_types'] : array();
 				foreach ( $item_sources as $source_key => $source_cents ) {
 					$key = sanitize_key( (string) $source_key );
@@ -297,42 +304,14 @@ class LNKup_Stripe_Client {
 			}
 		}
 
-		if ( ! $matched && ! empty( $available_items[0] ) ) {
-			$fallback         = $available_items[0];
-			$currency         = strtolower( (string) ( $fallback['currency'] ?? $preferred ) );
-			$available        = (int) ( $fallback['amount'] ?? 0 );
-			$source_types     = array();
-			$item_sources     = is_array( $fallback['source_types'] ?? null ) ? $fallback['source_types'] : array();
-			foreach ( $item_sources as $source_key => $source_cents ) {
-				$key = sanitize_key( (string) $source_key );
-				if ( '' === $key ) {
-					continue;
-				}
-				$source_types[ $key ] = (int) $source_cents;
-			}
-			$pending = 0;
-			foreach ( $pending_items as $item ) {
-				if ( strtolower( (string) ( $item['currency'] ?? '' ) ) === $currency ) {
-					$pending += (int) ( $item['amount'] ?? 0 );
-				}
-			}
-			$instant         = 0;
-			$instant_sources = array();
-			foreach ( $instant_items as $item ) {
-				if ( strtolower( (string) ( $item['currency'] ?? '' ) ) === $currency ) {
-					$instant += (int) ( $item['amount'] ?? 0 );
-					$item_sources = is_array( $item['source_types'] ?? null ) ? $item['source_types'] : array();
-					foreach ( $item_sources as $source_key => $source_cents ) {
-						$key = sanitize_key( (string) $source_key );
-						if ( '' === $key ) {
-							continue;
-						}
-						$instant_sources[ $key ] = (int) ( $instant_sources[ $key ] ?? 0 ) + (int) $source_cents;
-					}
-				}
+		// Never present another currency's funds as platform-currency money (cashouts run in $preferred).
+		$other_currencies = array();
+		foreach ( $available_items as $item ) {
+			$item_currency = strtolower( (string) ( $item['currency'] ?? '' ) );
+			if ( '' !== $item_currency && $item_currency !== $preferred && (int) ( $item['amount'] ?? 0 ) !== 0 ) {
+				$other_currencies[ $item_currency ] = (int) ( $other_currencies[ $item_currency ] ?? 0 ) + (int) $item['amount'];
 			}
 		}
-
 		return array(
 			'available'               => round( $available / 100, 2 ),
 			'pending'                 => round( $pending / 100, 2 ),
@@ -343,6 +322,7 @@ class LNKup_Stripe_Client {
 			'currency'                => $currency,
 			'source_types'            => $source_types,
 			'instant_source_types'    => $instant_sources,
+			'other_currency_cents'    => $other_currencies,
 			'synced'                  => true,
 		);
 	}

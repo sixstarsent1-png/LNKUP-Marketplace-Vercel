@@ -37,11 +37,12 @@ class LNKup_Refund_Rules {
 				$type   = 'full';
 				$amount = $paid;
 			}
-			$max_pct = (float) ( $rule['max_percent'] ?? 100 );
-			$amount  = min( $amount, round( $paid * ( $max_pct / 100 ), 2 ) );
-			if ( ! empty( $rule['fee_amount'] ) ) {
-				$amount = max( 0, $amount - (float) $rule['fee_amount'] );
-			}
+			// Cap is on the booking's cumulative refunds, not on what is left: three 50% requests
+			// must not add up to 87.5%. The rule fee is taken once, from the first refund.
+			$max_pct      = (float) ( $rule['max_percent'] ?? 100 );
+			$fee          = ! empty( $rule['fee_amount'] ) ? (float) $rule['fee_amount'] : 0.0;
+			$allowed_left = round( $total * ( $max_pct / 100 ) - ( $refunded > 0 ? 0 : $fee ) - $refunded, 2 );
+			$amount       = max( 0, min( $amount, $allowed_left ) );
 		}
 
 		return array(

@@ -53,10 +53,21 @@ class LNKup_Promo_Codes {
 		if ( ! empty( $row['first_time_only'] ) && self::user_has_paid_before( $user_id ) ) {
 			return new WP_Error( 'first_time', __( 'Promo code is for first-time vendors only.', 'lnkup-marketplace' ) );
 		}
-		if ( 'organizer' === $row['scope'] && ! empty( $context['organizer_user_id'] ) && (int) $row['organizer_user_id'] !== (int) $context['organizer_user_id'] ) {
+		// Organizer codes only apply to that organizer's bookings; without a booking context they never apply.
+		if ( 'organizer' === $row['scope'] && ( empty( $context['organizer_user_id'] ) || (int) $row['organizer_user_id'] !== (int) $context['organizer_user_id'] ) ) {
 			return new WP_Error( 'scope', __( 'Promo code not valid for this organizer.', 'lnkup-marketplace' ) );
 		}
 		return $row;
+	}
+
+	/**
+	 * Who pays for a promo discount: organizer codes reduce the organizer's share; marketplace
+	 * codes are funded by LNKup.
+	 *
+	 * @param array $promo Promo row.
+	 */
+	public static function funded_by( $promo ) {
+		return 'organizer' === ( $promo['scope'] ?? '' ) ? 'organizer' : 'lnkup';
 	}
 
 	public static function calculate_discount( $promo, $subtotal ) {
@@ -67,35 +78,51 @@ class LNKup_Promo_Codes {
 	}
 
 	public static function redeem( $code, $user_id, $payment_id, $discount_amount ) {
-		$promo = self::validate( $code, $user_id );
-		if ( is_wp_error( $promo ) ) {
-			return $promo;
-		}
-		global $wpdb;
-		$already = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$wpdb->prepare(
-				'SELECT COUNT(*) FROM ' . LNKup_Financial_Tables::promo_redemptions_table() . ' WHERE payment_post_id = %d',
-				(int) $payment_id
-			)
+		$context = array( 'organizer_user_id' => (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true ) );
+		return LNKup_Financial_Service::with_lock(
+			'promo_pay_' . absint( $payment_id ),
+			static function () use ( $code, $user_id, $payment_id, $discount_amount, $context ) {
+				$promo = self::validate( $code, $user_id, $context );
+				if ( is_wp_error( $promo ) ) {
+					return $promo;
+				}
+				global $wpdb;
+				$already = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					$wpdb->prepare(
+						'SELECT COUNT(*) FROM ' . LNKup_Financial_Tables::promo_redemptions_table() . ' WHERE payment_post_id = %d',
+						(int) $payment_id
+					)
+				);
+				if ( $already > 0 ) {
+					return new WP_Error( 'promo_already_applied', __( 'A promo code is already applied to this booking.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+				}
+				// Claim a use atomically so concurrent redemptions cannot exceed the limit.
+				$claimed = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					$wpdb->prepare(
+						'UPDATE ' . LNKup_Financial_Tables::promo_codes_table() . ' SET usage_count = usage_count + 1 WHERE id = %d AND ( usage_limit = 0 OR usage_count < usage_limit )',
+						(int) $promo['id']
+					)
+				);
+				if ( 1 !== (int) $claimed ) {
+					return new WP_Error( 'limit', __( 'Promo code usage limit reached.', 'lnkup-marketplace' ) );
+				}
+				$wpdb->insert(
+					LNKup_Financial_Tables::promo_redemptions_table(),
+					array(
+						'promo_code_id'   => (int) $promo['id'],
+						'user_id'         => $user_id,
+						'payment_post_id' => $payment_id,
+						'discount_amount' => $discount_amount,
+						'redeemed_at'     => current_time( 'mysql' ),
+					)
+				);
+				update_post_meta( $payment_id, '_lnkup_promo_code', $promo['code'] );
+				update_post_meta( $payment_id, '_lnkup_promo_discount', $discount_amount );
+				update_post_meta( $payment_id, '_lnkup_promo_funded_by', self::funded_by( $promo ) );
+				LNKup_Financial_Audit::log( 'promo_redeemed', 'promo_code', (int) $promo['id'], array( 'amount' => $discount_amount, 'funded_by' => self::funded_by( $promo ) ) );
+				return true;
+			}
 		);
-		if ( $already > 0 ) {
-			return new WP_Error( 'promo_already_applied', __( 'A promo code is already applied to this booking.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
-		}
-		$wpdb->insert(
-			LNKup_Financial_Tables::promo_redemptions_table(),
-			array(
-				'promo_code_id'   => (int) $promo['id'],
-				'user_id'         => $user_id,
-				'payment_post_id' => $payment_id,
-				'discount_amount' => $discount_amount,
-				'redeemed_at'     => current_time( 'mysql' ),
-			)
-		);
-		$wpdb->query( $wpdb->prepare( 'UPDATE ' . LNKup_Financial_Tables::promo_codes_table() . ' SET usage_count = usage_count + 1 WHERE id = %d', (int) $promo['id'] ) );
-		update_post_meta( $payment_id, '_lnkup_promo_code', $promo['code'] );
-		update_post_meta( $payment_id, '_lnkup_promo_discount', $discount_amount );
-		LNKup_Financial_Audit::log( 'promo_redeemed', 'promo_code', (int) $promo['id'], array( 'amount' => $discount_amount ) );
-		return true;
 	}
 
 	public static function user_has_paid_before( $user_id ) {

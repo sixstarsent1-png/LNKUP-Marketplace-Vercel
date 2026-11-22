@@ -22,7 +22,8 @@ class LNKup_Organizer_Payouts {
 	 */
 	public static function request_cashout( $user_id, $amount, $type = 'standard', $client_token = '' ) {
 		global $wpdb;
-		$client_token = substr( sanitize_text_field( (string) $client_token ), 0, 64 );
+		// Token characters are limited so the JSON-encoded metadata matches it literally.
+		$client_token = substr( (string) preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) $client_token ), 0, 64 );
 		$user_id = absint( $user_id );
 		$amount  = round( (float) $amount, 2 );
 		$type    = sanitize_key( (string) $type );
@@ -44,7 +45,11 @@ class LNKup_Organizer_Payouts {
 			if ( '' !== $client_token ) {
 				$existing = self::payout_for_client_token( $user_id, $client_token );
 				if ( $existing ) {
-					return $existing;
+					// A replay reports what actually happened to the original request.
+					if ( in_array( $existing['status'], array( 'failed', 'cancelled' ), true ) ) {
+						return new WP_Error( 'payout_failed', __( 'This cashout did not go through. Your balance was restored.', 'lnkup-marketplace' ), array( 'status' => 409, 'payout_id' => (int) $existing['id'], 'payout_status' => $existing['status'] ) );
+					}
+					return (int) $existing['id'];
 				}
 			}
 			return self::request_cashout_locked( $user_id, $amount, $type, $client_token );
@@ -65,7 +70,8 @@ class LNKup_Organizer_Payouts {
 		global $wpdb;
 		$table = LNKup_Treasury_Tables::organizer_payouts_table();
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE user_id = %d AND metadata LIKE %s ORDER BY id DESC LIMIT 1", absint( $user_id ), '%' . $wpdb->esc_like( '"client_token":"' . $client_token . '"' ) . '%' ) );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, status FROM {$table} WHERE user_id = %d AND metadata LIKE %s ORDER BY id DESC LIMIT 1", absint( $user_id ), '%' . $wpdb->esc_like( '"client_token":"' . $client_token . '"' ) . '%' ), ARRAY_A );
+		return $row ? $row : null;
 	}
 
 	private static function request_cashout_locked( $user_id, $amount, $type, $client_token = '' ) {
@@ -103,10 +109,6 @@ class LNKup_Organizer_Payouts {
 			}
 		}
 
-		$fee_rate = 'instant' === $type ? self::INSTANT_FEE_RATE : 0;
-		$fee      = round( $amount * $fee_rate, 2 );
-		$net      = round( $amount - $fee, 2 );
-
 		global $wpdb;
 		$table = LNKup_Treasury_Tables::organizer_payouts_table();
 		$now   = current_time( 'mysql' );
@@ -118,6 +120,12 @@ class LNKup_Organizer_Payouts {
 				$provider = 'stripe_connect';
 			}
 		}
+
+		// A Connect payout leaves the organizer's own Stripe balance, so LNKup cannot keep a fee out
+		// of it (Stripe charges its instant fee there directly); the full debited amount is paid out.
+		$fee_rate = 'instant' === $type && 'stripe_connect_payout' !== $provider ? self::INSTANT_FEE_RATE : 0;
+		$fee      = round( $amount * $fee_rate, 2 );
+		$net      = round( $amount - $fee, 2 );
 
 		$inserted = $wpdb->insert(
 			$table,

@@ -39,7 +39,7 @@ class LNKup_Stripe {
 			wp_send_json_error( array( 'message' => __( 'This booking is already paid or no longer payable.', 'lnkup-marketplace' ) ) );
 		}
 		if ( ! empty( $_POST['promo_code'] ) && ! get_post_meta( $payment_id, '_lnkup_promo_code', true ) ) {
-			$promo = LNKup_Promo_Codes::validate( sanitize_text_field( wp_unslash( $_POST['promo_code'] ) ), get_current_user_id() );
+			$promo = LNKup_Promo_Codes::validate( sanitize_text_field( wp_unslash( $_POST['promo_code'] ) ), get_current_user_id(), array( 'organizer_user_id' => (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true ) ) );
 			if ( ! is_wp_error( $promo ) ) {
 				$subtotal = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
 				$discount = LNKup_Promo_Codes::calculate_discount( $promo, $subtotal );

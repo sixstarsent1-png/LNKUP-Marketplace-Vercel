@@ -34,6 +34,41 @@ class LNKup_Escrow {
 	}
 
 	/**
+	 * Amount still held in escrow for a payment.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 */
+	public static function held_amount( $payment_id ) {
+		global $wpdb;
+		$table = LNKup_Treasury_Tables::escrow_holds_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return 0.0;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (float) $wpdb->get_var(
+			$wpdb->prepare( "SELECT COALESCE(amount - released_amount, 0) FROM {$table} WHERE payment_post_id = %d AND status = 'held' ORDER BY id ASC LIMIT 1", absint( $payment_id ) )
+		);
+	}
+
+	/**
+	 * Close escrow on a fully refunded or charged-back payment: nothing is left to release.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 */
+	public static function cancel_for_payment( $payment_id ) {
+		global $wpdb;
+		$table = LNKup_Treasury_Tables::escrow_holds_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$n = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'cancelled', updated_at = %s WHERE payment_post_id = %d AND status = 'held'", current_time( 'mysql' ), absint( $payment_id ) ) );
+		if ( $n ) {
+			LNKup_Financial_Audit::log( 'escrow_cancelled', 'payment', absint( $payment_id ), array( 'holds' => (int) $n ) );
+		}
+	}
+
+	/**
 	 * Create escrow hold after settlement if rules apply.
 	 *
 	 * @param int   $payment_id Payment post ID.
@@ -132,7 +167,7 @@ class LNKup_Escrow {
 			'posts_per_page' => -1,
 			'meta_query'     => array(
 				array( 'key' => '_lnkup_event_id', 'value' => absint( $event_id ) ),
-				array( 'key' => '_lnkup_payment_status', 'value' => 'paid' ),
+				array( 'key' => '_lnkup_payment_status', 'value' => array( 'paid', 'partially_refunded' ), 'compare' => 'IN' ),
 			),
 			'fields'         => 'ids',
 		) );

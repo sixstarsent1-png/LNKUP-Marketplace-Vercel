@@ -90,6 +90,29 @@ wp_set_current_user( $organizer );
 lnkup_t_same( 403, rest_do_request( $req )->get_status(), 'organizer cannot repair their own ledger' );
 wp_set_current_user( 0 );
 
+// Duplicate escrow holds and a refund the organizer never paid back.
+wp_set_current_user( $admin );
+$escrow = LNKup_Treasury_Tables::escrow_holds_table();
+$p_esc  = lnkup_t_payment( array_merge( $base, array( 'stripe_payment_intent' => 'pi_test_esc' ) ) );
+LNKup_Organizer_Wallet::add_entry( $organizer, 230, 'pending', array( 'source_type' => 'payment', 'payment_post_id' => $p_esc, 'idempotency_key' => LNKup_Organizer_Wallet::payment_key( $p_esc, 'credit' ) ) );
+foreach ( array( 1, 2 ) as $n ) {
+	$wpdb->insert( $escrow, array( 'payment_post_id' => $p_esc, 'organizer_user_id' => $organizer, 'amount' => 230, 'status' => 'held', 'created_at' => current_time( 'mysql' ), 'updated_at' => current_time( 'mysql' ) ) );
+}
+$p_ref = lnkup_t_payment( array_merge( $base, array( 'payment_status' => 'refunded', 'refund_amount' => '267.83', 'total_amount' => '267.83' ) ) );
+LNKup_Organizer_Wallet::insert_entry( array( 'wallet_id' => (int) LNKup_Organizer_Wallet::get_or_create( $organizer )['id'], 'user_id' => $organizer, 'entry_type' => 'credit', 'amount' => 230, 'source_type' => 'payment', 'payment_post_id' => $p_ref ) );
+$wpdb->query( $wpdb->prepare( 'UPDATE ' . LNKup_Treasury_Tables::organizer_wallets_table() . ' SET available_balance = available_balance + 230 WHERE user_id = %d', $organizer ) );
+
+$dry2  = LNKup_Financial_Repair::dry_run( $organizer, false );
+$types = wp_list_pluck( $dry2['items'], 'type', 'id' );
+lnkup_t_same( 'void_duplicate_escrow_holds', $types[ 'escrow:' . $p_esc ] ?? null, 'plan voids the duplicate escrow hold' );
+lnkup_t_same( 'reverse_refund_share', $types[ 'refund:' . $p_ref ] ?? null, 'plan reverses the missed refund share' );
+$res2 = LNKup_Financial_Repair::apply( $organizer, $dry2['confirmation_token'] );
+lnkup_t_assert( ! is_wp_error( $res2 ), 'second repair run applies' );
+lnkup_t_same( array( 'held', 'void' ), $wpdb->get_col( $wpdb->prepare( "SELECT status FROM {$escrow} WHERE payment_post_id = %d ORDER BY id", $p_esc ) ), 'first hold kept, duplicate voided (not deleted)' );
+lnkup_t_same( 23000, (int) round( (float) $wpdb->get_var( $wpdb->prepare( "SELECT SUM(amount) FROM {$entries} WHERE payment_post_id = %d AND entry_type = 'debit' AND source_type LIKE 'refund%%'", $p_ref ) ) * 100 ), 'refund share reversed once' );
+$wpdb->delete( $escrow, array( 'payment_post_id' => $p_esc ) );
+wp_set_current_user( 0 );
+
 $wpdb->delete( LNKup_Financial_Tables::audit_table(), array( 'action' => 'reconciliation_repair_run', 'entity_id' => $organizer ) );
 update_option( LNKup_Financial_Repair::RUNS_OPTION, array_slice( (array) get_option( LNKup_Financial_Repair::RUNS_OPTION, array() ), 1 ), false );
 lnkup_t_finish();

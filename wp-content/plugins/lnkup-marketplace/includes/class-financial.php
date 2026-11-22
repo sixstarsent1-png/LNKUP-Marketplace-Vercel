@@ -130,11 +130,28 @@ class LNKup_Financial {
 		$payments = lnkup_get_payments_for_user( $user_id, 'organizer' );
 		$total    = 0.0;
 		foreach ( $payments as $p ) {
-			if ( 'paid' === get_post_meta( $p->ID, '_lnkup_payment_status', true ) ) {
-				$total += self::payment_booth_amount( $p->ID );
-			}
+			$total += self::collected_amount( $p->ID );
 		}
 		return round( $total, 2 );
+	}
+
+	/**
+	 * Money vendors actually paid on a payment, before refunds (refunds are reported separately).
+	 *
+	 * Counts paid, refunded, partially refunded and disputed bookings in full, and the paid part
+	 * of a deposit/installment booking. Lost chargebacks count as not collected.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 */
+	public static function collected_amount( $payment_id ) {
+		$status = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
+		if ( in_array( $status, array( 'paid', 'refunded', 'partially_refunded', 'disputed' ), true ) ) {
+			return self::payment_booth_amount( $payment_id );
+		}
+		if ( 'partially_paid' === $status ) {
+			return round( (int) get_post_meta( $payment_id, '_lnkup_amount_paid_cents', true ) / 100, 2 );
+		}
+		return 0.0;
 	}
 
 	/**
@@ -146,9 +163,12 @@ class LNKup_Financial {
 		$payments = lnkup_get_payments_for_user( $user_id, 'organizer' );
 		$total    = 0.0;
 		foreach ( $payments as $p ) {
-			$status = get_post_meta( $p->ID, '_lnkup_payment_status', true );
-			if ( 'paid' !== $status ) {
+			$status = (string) get_post_meta( $p->ID, '_lnkup_payment_status', true );
+			// Only money still due: refunded, failed, voided and disputed bookings are not pending revenue.
+			if ( in_array( $status, array( 'pending', 'processing' ), true ) && '' === (string) get_post_meta( $p->ID, '_lnkup_voided_at', true ) ) {
 				$total += self::payment_booth_amount( $p->ID );
+			} elseif ( 'partially_paid' === $status ) {
+				$total += max( 0, self::payment_booth_amount( $p->ID ) - self::collected_amount( $p->ID ) );
 			}
 		}
 		return round( $total, 2 );
@@ -167,14 +187,14 @@ class LNKup_Financial {
 				'posts_per_page' => -1,
 				'meta_query'     => array(
 					array( 'key' => '_lnkup_event_id', 'value' => $event_id ),
-					array( 'key' => '_lnkup_payment_status', 'value' => 'paid' ),
+					array( 'key' => '_lnkup_payment_status', 'value' => array( 'paid', 'refunded', 'partially_refunded', 'disputed', 'partially_paid' ), 'compare' => 'IN' ),
 				),
 				'fields'         => 'ids',
 			)
 		);
 		$total = 0.0;
 		foreach ( $payments as $pid ) {
-			$total += self::payment_booth_amount( (int) $pid );
+			$total += self::collected_amount( (int) $pid );
 		}
 		return round( $total, 2 );
 	}

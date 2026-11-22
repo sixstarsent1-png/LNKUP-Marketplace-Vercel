@@ -50,6 +50,11 @@ class LNKup_Activator {
 			if ( class_exists( 'LNKup_Weather_Cron' ) ) {
 				LNKup_Weather_Cron::schedule();
 			}
+			// Fresh installs skip lnkup_maybe_upgrade_db(); without the cutoff, settlement
+			// auto-recovery would never run.
+			if ( '' === (string) get_option( 'lnkup_fin_auto_recovery_since', '' ) ) {
+				add_option( 'lnkup_fin_auto_recovery_since', current_time( 'mysql' ), '', false );
+			}
 			flush_rewrite_rules();
 			update_option( 'lnkup_db_version', LNKUP_VERSION );
 			update_option( 'lnkup_seeded', LNKUP_VERSION );

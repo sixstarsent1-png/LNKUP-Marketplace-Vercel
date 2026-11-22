@@ -233,6 +233,95 @@ class LNKup_Financial_Repair {
 					'reason'              => 'Stripe collected this payment but WordPress still shows it unpaid.',
 				);
 			}
+
+			$effects = (array) ( $payment['audit']['side_effects'] ?? array() );
+			if ( (int) ( $effects['escrow_holds'] ?? 0 ) > 1 ) {
+				$items[] = array(
+					'id'                  => 'escrow:' . $payment['id'],
+					'type'                => 'void_duplicate_escrow_holds',
+					'payment_id'          => $payment['id'],
+					'amount_cents'        => (int) ( $effects['escrow_holds_cents'] ?? 0 ),
+					'ledger_effect_cents' => 0,
+					'applicable'          => true,
+					'reason'              => sprintf( 'Payment #%d has %d escrow holds; only the first is kept so escrow release cannot move the money twice.', $payment['id'], (int) $effects['escrow_holds'] ),
+				);
+			}
+
+			if ( in_array( 'refund_not_debited', $issues, true ) ) {
+				$items[] = array(
+					'id'                  => 'refund:' . $payment['id'],
+					'type'                => 'reverse_refund_share',
+					'payment_id'          => $payment['id'],
+					'amount_cents'        => (int) $payment['refund_cents'],
+					'ledger_effect_cents' => 0,
+					'applicable'          => true,
+					'reason'              => 'The vendor was refunded but the organizer kept their share.',
+				);
+			}
+
+			if ( in_array( 'lost_chargeback', $issues, true ) ) {
+				$items[] = array(
+					'id'                  => 'chargeback:' . $payment['id'],
+					'type'                => 'reverse_chargeback_share',
+					'payment_id'          => $payment['id'],
+					'amount_cents'        => (int) $payment['total_cents'],
+					'ledger_effect_cents' => 0,
+					'applicable'          => true,
+					'reason'              => 'The chargeback was lost but the organizer kept their share.',
+				);
+			}
+
+			foreach ( (array) ( $payment['extra_charges'] ?? array() ) as $extra_intent ) {
+				$extra   = $stripe_on ? self::stripe_intent( (string) $extra_intent ) : null;
+				$charged = $extra && 'succeeded' === ( $extra['status'] ?? '' ) && (int) ( $extra['amount_refunded'] ?? 0 ) < (int) ( $extra['amount_received'] ?? 0 );
+				$items[] = array(
+					'id'                  => 'extra:' . $extra_intent,
+					'type'                => 'refund_extra_charge',
+					'payment_id'          => $payment['id'],
+					'intent_id'           => (string) $extra_intent,
+					'amount_cents'        => $extra ? (int) ( $extra['amount_received'] ?? 0 ) - (int) ( $extra['amount_refunded'] ?? 0 ) : 0,
+					'ledger_effect_cents' => 0,
+					'applicable'          => $charged,
+					'reason'              => $charged
+						? 'The vendor was charged twice for this booking. Applying refunds the extra charge to the vendor in Stripe.'
+						: ( $stripe_on ? 'Stripe shows no unrefunded extra charge.' : 'Needs Stripe verification (run with Stripe access).' ),
+				);
+			}
+
+			foreach ( array( 'credit_undercharged' => 'Vendor was charged less than the booking total because credit was subtracted twice. Report only: LNKup never re-charges a vendor automatically.', 'partial_marked_paid' => 'A deposit or first installment marked the whole booking paid. Report only: bill the balance or adjust the booking manually.' ) as $code => $why ) {
+				if ( in_array( $code, $issues, true ) ) {
+					$items[] = array(
+						'id'                  => $code . ':' . $payment['id'],
+						'type'                => 'report_' . $code,
+						'payment_id'          => $payment['id'],
+						'amount_cents'        => (int) $payment['total_cents'],
+						'ledger_effect_cents' => 0,
+						'applicable'          => false,
+						'reason'              => $why,
+					);
+				}
+			}
+		}
+
+		foreach ( (array) ( $report['stripe']['connect_payouts']['payouts'] ?? array() ) as $stripe_payout ) {
+			$local_id = (int) ( $stripe_payout['lnkup_payout_id'] ?? 0 );
+			if ( ! $local_id || 'paid' !== ( $stripe_payout['status'] ?? '' ) ) {
+				continue;
+			}
+			$local = self::local_payout_status( $local_id );
+			if ( ! in_array( $local, array( 'failed', 'cancelled' ), true ) ) {
+				continue;
+			}
+			$items[] = array(
+				'id'                  => 'payout:' . $local_id,
+				'type'                => 'record_late_payout',
+				'payout_id'           => $local_id,
+				'stripe_payout_id'    => (string) $stripe_payout['id'],
+				'amount_cents'        => (int) $stripe_payout['amount_cents'],
+				'ledger_effect_cents' => -1 * (int) $stripe_payout['amount_cents'],
+				'applicable'          => true,
+				'reason'              => sprintf( 'Cashout #%d was marked %s and its balance restored, but Stripe paid it to the bank.', $local_id, $local ),
+			);
 		}
 
 		foreach ( (array) ( $report['migrations']['unrecorded'] ?? array() ) as $migration ) {
@@ -270,6 +359,16 @@ class LNKup_Financial_Repair {
 				return is_wp_error( $result ) ? $result : true;
 			case 'restore_migration_ledger_row':
 				return self::restore_migration( $organizer_id, $item, $context );
+			case 'void_duplicate_escrow_holds':
+				return self::void_duplicate_escrow( $item['payment_id'], $context );
+			case 'reverse_refund_share':
+				return LNKup_Organizer_Wallet::reverse_for_refund( $item['payment_id'] ) > 0;
+			case 'reverse_chargeback_share':
+				return LNKup_Organizer_Wallet::reverse_for_chargeback( $item['payment_id'], (int) $item['amount_cents'] ) > 0;
+			case 'refund_extra_charge':
+				return self::refund_extra_charge( $item, $context );
+			case 'record_late_payout':
+				return LNKup_Organizer_Payouts::mark_paid( (int) $item['payout_id'], (string) $item['stripe_payout_id'] );
 			default:
 				return new WP_Error( 'lnkup_repair_unknown', 'Unknown repair item.' );
 		}
@@ -351,6 +450,86 @@ class LNKup_Financial_Repair {
 			)
 		);
 		return (bool) $id;
+	}
+
+	/**
+	 * Keep the first escrow hold for a payment; mark the rest void (rows are never deleted).
+	 *
+	 * @param int   $payment_id Payment ID.
+	 * @param array $context    Run context.
+	 */
+	private static function void_duplicate_escrow( $payment_id, $context ) {
+		global $wpdb;
+		$table = LNKup_Treasury_Tables::escrow_holds_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$ids = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$table} WHERE payment_post_id = %d AND status = 'held' ORDER BY id ASC", absint( $payment_id ) ) ) );
+		$voided = 0;
+		foreach ( array_slice( $ids, 1 ) as $hold_id ) {
+			$voided += (int) $wpdb->update( $table, array( 'status' => 'void', 'updated_at' => current_time( 'mysql' ) ), array( 'id' => $hold_id, 'status' => 'held' ) );
+			LNKup_Financial_Audit::log( 'escrow_hold_voided_duplicate', 'escrow', $hold_id, array_merge( $context, array( 'payment_id' => $payment_id ) ) );
+		}
+		return $voided > 0;
+	}
+
+	/**
+	 * Refund an extra charge to the vendor (approved repair only; idempotent per intent).
+	 *
+	 * @param array $item    Plan item.
+	 * @param array $context Run context.
+	 */
+	private static function refund_extra_charge( $item, $context ) {
+		$client = new LNKup_Stripe_Client();
+		$result = $client->create_refund(
+			array(
+				'payment_intent' => (string) $item['intent_id'],
+				'amount'         => (int) $item['amount_cents'],
+				'metadata'       => array( 'payment_post_id' => (string) $item['payment_id'], 'lnkup_reason' => 'extra_charge', 'run_id' => (string) ( $context['run_id'] ?? '' ) ),
+			),
+			'lnkup_extra_refund_' . sanitize_key( (string) $item['intent_id'] )
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$list = get_post_meta( (int) $item['payment_id'], '_lnkup_extra_charges', true );
+		if ( is_array( $list ) && isset( $list[ $item['intent_id'] ] ) ) {
+			$list[ $item['intent_id'] ]['refunded'] = (string) ( $result['id'] ?? '' );
+			update_post_meta( (int) $item['payment_id'], '_lnkup_extra_charges', $list );
+		}
+		LNKup_Financial_Audit::log( 'extra_charge_refunded', 'payment', (int) $item['payment_id'], array_merge( $context, array( 'intent_id' => $item['intent_id'], 'amount' => $item['amount_cents'] / 100 ) ) );
+		return true;
+	}
+
+	/**
+	 * @param string $intent_id PaymentIntent ID.
+	 * @return array|null
+	 */
+	private static function stripe_intent( $intent_id ) {
+		if ( 0 !== strpos( $intent_id, 'pi_' ) ) {
+			return null;
+		}
+		$client = new LNKup_Stripe_Client();
+		if ( ! $client->is_available() ) {
+			return null;
+		}
+		$pi = $client->read( 'payment_intents/' . $intent_id, array( 'expand' => array( 'latest_charge' ) ) );
+		if ( is_wp_error( $pi ) ) {
+			return null;
+		}
+		return array(
+			'status'          => (string) ( $pi['status'] ?? '' ),
+			'amount_received' => (int) ( $pi['amount_received'] ?? 0 ),
+			'amount_refunded' => (int) ( $pi['latest_charge']['amount_refunded'] ?? 0 ),
+		);
+	}
+
+	/**
+	 * @param int $payout_id Local payout ID.
+	 */
+	private static function local_payout_status( $payout_id ) {
+		global $wpdb;
+		$table = LNKup_Treasury_Tables::organizer_payouts_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (string) $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$table} WHERE id = %d", absint( $payout_id ) ) );
 	}
 
 	/**

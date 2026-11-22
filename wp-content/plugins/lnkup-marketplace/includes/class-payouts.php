@@ -77,17 +77,19 @@ class LNKup_Payouts {
 		if ( ! $payout ) {
 			return false;
 		}
-		$wpdb->update(
-			$table,
-			array(
-				'status'       => 'completed',
-				'paid_at'      => current_time( 'mysql' ),
-				'provider_ref' => sanitize_text_field( $provider_ref ),
-			),
-			array( 'id' => $payout_id ),
-			array( '%s', '%s', '%s' ),
-			array( '%d' )
+		// Atomic claim so a payout is completed (and its transaction recorded) only once.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$claimed = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = 'completed', paid_at = %s, provider_ref = %s WHERE id = %d AND status IN ('scheduled','pending','processing')",
+				current_time( 'mysql' ),
+				sanitize_text_field( $provider_ref ),
+				absint( $payout_id )
+			)
 		);
+		if ( 1 !== (int) $claimed ) {
+			return false;
+		}
 		LNKup_Transactions::create( array(
 			'type'              => 'payout',
 			'status'            => 'completed',

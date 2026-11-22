@@ -55,8 +55,12 @@ class LNKup_Financial_Disputes {
 			}
 		}
 
-		if ( self::has_open_for_payment( $payment_id ) ) {
+		// A bank chargeback is recorded even while a vendor mediation dispute is open.
+		if ( ! ( $force && absint( $opened_by ) <= 0 ) && self::has_open_for_payment( $payment_id ) ) {
 			return new WP_Error( 'dispute_exists', __( 'An open dispute already exists for this payment.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+		if ( 'disputed' !== $status ) {
+			update_post_meta( $payment_id, '_lnkup_status_before_dispute', $status ?: 'paid' );
 		}
 
 		$txn   = class_exists( 'LNKup_Transactions' ) ? LNKup_Transactions::get_by_payment_post( $payment_id ) : null;
@@ -74,7 +78,7 @@ class LNKup_Financial_Disputes {
 			array(
 				'transaction_id'    => $txn ? (int) $txn['id'] : 0,
 				'payment_post_id'   => $payment_id,
-				'dispute_type'      => 'payment',
+				'dispute_type'      => ( $force && $opened_by <= 0 ) ? 'chargeback' : 'payment',
 				'opened_by'         => $opened_by,
 				'vendor_user_id'    => (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true ),
 				'organizer_user_id' => (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true ),
@@ -108,7 +112,7 @@ class LNKup_Financial_Disputes {
 	 */
 	public static function open_from_chargeback( $payment_id, $reason = '' ) {
 		$payment_id = absint( $payment_id );
-		if ( $payment_id <= 0 || self::has_open_for_payment( $payment_id ) ) {
+		if ( $payment_id <= 0 || self::has_open_chargeback( $payment_id ) ) {
 			return 0;
 		}
 		$result = self::open(
@@ -127,6 +131,30 @@ class LNKup_Financial_Disputes {
 	 */
 	public static function is_chargeback( $dispute ) {
 		return 0 === (int) ( $dispute['opened_by'] ?? 0 );
+	}
+
+	/**
+	 * @param int $payment_id Payment ID.
+	 */
+	public static function has_open_chargeback( $payment_id ) {
+		global $wpdb;
+		$table = LNKup_Financial_Tables::disputes_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return false;
+		}
+		$in = "'" . implode( "','", array_map( 'esc_sql', self::OPEN_STATUSES ) ) . "'";
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE payment_post_id = %d AND opened_by = 0 AND status IN ({$in})", absint( $payment_id ) ) ) > 0;
+	}
+
+	/**
+	 * Payment status to return to when a dispute ends without a refund.
+	 *
+	 * @param int $payment_id Payment ID.
+	 */
+	private static function status_before_dispute( $payment_id ) {
+		$before = sanitize_key( (string) get_post_meta( $payment_id, '_lnkup_status_before_dispute', true ) );
+		return in_array( $before, array( 'paid', 'partially_refunded', 'refunded' ), true ) ? $before : 'paid';
 	}
 
 	/**
@@ -282,13 +310,27 @@ class LNKup_Financial_Disputes {
 		$amount     = self::payment_amount( $payment_id );
 		$status     = '';
 
+		// Claim the dispute first so a double click or second admin cannot resolve (and pay) twice.
+		global $wpdb;
+		$dispute_table = LNKup_Financial_Tables::disputes_table();
+		$open_in       = "'" . implode( "','", array_map( 'esc_sql', self::OPEN_STATUSES ) ) . "'";
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$claimed = $wpdb->query( $wpdb->prepare( "UPDATE {$dispute_table} SET status = 'resolving', updated_at = %s WHERE id = %d AND status IN ({$open_in})", current_time( 'mysql' ), $dispute_id ) );
+		if ( 1 !== (int) $claimed ) {
+			return new WP_Error( 'closed', __( 'This dispute is already being resolved.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+		$reopen = static function () use ( $wpdb, $dispute_table, $dispute_id, $dispute ) {
+			$wpdb->update( $dispute_table, array( 'status' => $dispute['status'] ), array( 'id' => $dispute_id ) );
+		};
+		$before = self::status_before_dispute( $payment_id );
+
 		if ( self::OUTCOME_DENIED === $outcome ) {
 			$status = self::STATUS_RESOLVED_DENIED;
-			update_post_meta( $payment_id, '_lnkup_payment_status', 'paid' );
+			update_post_meta( $payment_id, '_lnkup_payment_status', $before );
 		} elseif ( self::OUTCOME_APPROVED_REFUND === $outcome ) {
 			$status = self::STATUS_RESOLVED_REFUNDED;
-			// Refund rules require payment status "paid"; dispute flow sets "disputed".
-			update_post_meta( $payment_id, '_lnkup_payment_status', 'paid' );
+			// Refund rules need the pre-dispute status (paid / partially_refunded), not "disputed".
+			update_post_meta( $payment_id, '_lnkup_payment_status', $before );
 			$refund_id = LNKup_Refunds::request(
 				$payment_id,
 				$amount,
@@ -297,23 +339,29 @@ class LNKup_Financial_Disputes {
 			);
 			if ( is_wp_error( $refund_id ) ) {
 				update_post_meta( $payment_id, '_lnkup_payment_status', 'disputed' );
+				$reopen();
 				return $refund_id;
 			}
 			$approved = LNKup_Refunds::approve( (int) $refund_id, $resolver );
 			if ( is_wp_error( $approved ) ) {
 				update_post_meta( $payment_id, '_lnkup_payment_status', 'disputed' );
+				$reopen();
 				return $approved;
 			}
 		} else {
 			$status    = self::STATUS_RESOLVED_CREDIT;
 			$vendor_id = (int) $dispute['vendor_user_id'];
+			// Credit only what has not already been returned to the vendor.
+			$returned  = (float) get_post_meta( $payment_id, '_lnkup_refund_amount', true ) + LNKup_Refunds::credited_amount( $payment_id );
+			$amount    = max( 0, round( $amount - $returned, 2 ) );
 			if ( $vendor_id <= 0 || $amount <= 0 ) {
+				$reopen();
 				return new WP_Error( 'invalid_credit', __( 'Could not grant credit for this payment.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 			}
 			LNKup_Credits::grant( $vendor_id, $amount, 'dispute', 'dispute', $dispute_id );
 			// Recorded as a credit refund so the organizer's share is reversed like any refund.
 			update_post_meta( $payment_id, '_lnkup_credit_refund_amount', round( LNKup_Refunds::credited_amount( $payment_id ) + $amount, 2 ) );
-			update_post_meta( $payment_id, '_lnkup_payment_status', 'paid' );
+			update_post_meta( $payment_id, '_lnkup_payment_status', $before );
 			LNKup_Refunds::sync_payment_refund_status( $payment_id );
 			if ( class_exists( 'LNKup_Transactions' ) ) {
 				LNKup_Transactions::create(
@@ -330,7 +378,6 @@ class LNKup_Financial_Disputes {
 			}
 		}
 
-		global $wpdb;
 		$table = LNKup_Financial_Tables::disputes_table();
 		$wpdb->update(
 			$table,

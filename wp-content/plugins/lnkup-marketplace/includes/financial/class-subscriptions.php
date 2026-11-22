@@ -58,6 +58,23 @@ class LNKup_Subscriptions {
 	 * @return int|WP_Error|array Local subscription id, or array with client_secret when Stripe incomplete.
 	 */
 	public static function subscribe( $user_id, $plan_id ) {
+		// One subscribe at a time per user, and never a second live subscription (double billing).
+		return LNKup_Financial_Service::with_lock(
+			'sub_' . absint( $user_id ),
+			static function () use ( $user_id, $plan_id ) {
+				if ( self::get_active( $user_id ) ) {
+					return new WP_Error( 'already_subscribed', __( 'You already have an active subscription. Cancel it before choosing another plan.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+				}
+				return self::subscribe_locked( $user_id, $plan_id );
+			}
+		);
+	}
+
+	/**
+	 * @param int $user_id User ID.
+	 * @param int $plan_id Plan ID.
+	 */
+	private static function subscribe_locked( $user_id, $plan_id ) {
 		global $wpdb;
 		$plans_table = LNKup_Treasury_Tables::subscription_plans_table();
 		$sub_table   = LNKup_Treasury_Tables::subscriptions_table();
@@ -78,6 +95,10 @@ class LNKup_Subscriptions {
 
 		if ( $use_stripe ) {
 			return self::subscribe_via_stripe( $user_id, $plan );
+		}
+		if ( ! empty( $settings['stripe_billing_enabled'] ) && ( (float) ( $plan['price_monthly'] ?? 0 ) > 0 || (float) ( $plan['price_yearly'] ?? 0 ) > 0 ) ) {
+			// Billing is live but this paid plan has no Stripe price: never activate it for free.
+			return new WP_Error( 'plan_not_billable', __( 'This plan is not available for purchase yet.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 
 		$provider = ! empty( $settings['stripe_billing_enabled'] ) ? 'stripe' : 'simulated';
@@ -300,27 +321,36 @@ class LNKup_Subscriptions {
 		}
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		$updated = $wpdb->update( $table, $data, array( 'provider_ref' => $ref ) );
-		if ( ! $updated ) {
-			$user_id = absint( $subscription['metadata']['wp_user_id'] ?? 0 );
-			$plan_id = absint( $subscription['metadata']['plan_id'] ?? 0 );
-			if ( $user_id && $plan_id ) {
-				$now = current_time( 'mysql' );
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-				$wpdb->insert(
-					$table,
-					array_merge(
-						$data,
-						array(
-							'user_id'      => $user_id,
-							'plan_id'      => $plan_id,
-							'provider'     => 'stripe',
-							'provider_ref' => $ref,
-							'created_at'   => $now,
-						)
-					)
-				);
+		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, status FROM {$table} WHERE provider_ref = %s ORDER BY id ASC LIMIT 1", $ref ), ARRAY_A );
+		if ( $existing ) {
+			// A cancelled Stripe subscription cannot come back; a late "updated" event must not revive it.
+			if ( 'cancelled' === $existing['status'] && 'cancelled' !== $status ) {
+				LNKup_Financial_Audit::log( 'subscription_event_ignored', 'subscription', (int) $existing['id'], array( 'type' => $type, 'status' => $status ) );
+				return;
 			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->update( $table, $data, array( 'id' => (int) $existing['id'] ) );
+			return;
+		}
+
+		$user_id = absint( $subscription['metadata']['wp_user_id'] ?? 0 );
+		$plan_id = absint( $subscription['metadata']['plan_id'] ?? 0 );
+		if ( $user_id && $plan_id ) {
+			$now = current_time( 'mysql' );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$wpdb->insert(
+				$table,
+				array_merge(
+					$data,
+					array(
+						'user_id'      => $user_id,
+						'plan_id'      => $plan_id,
+						'provider'     => 'stripe',
+						'provider_ref' => $ref,
+						'created_at'   => $now,
+					)
+				)
+			);
 		}
 	}
 }

@@ -166,6 +166,14 @@ class LNKup_Refunds {
 			return new WP_Error( 'fully_refunded', __( 'There is nothing left to refund on this booking.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
 		}
 
+		$threshold = class_exists( 'LNKup_Approval_Workflows' ) ? (float) LNKup_Approval_Workflows::get_threshold( 'refund' ) : 500.0;
+		$approver  = $approver_id ?: get_current_user_id();
+		if ( $amount > $threshold && ! LNKup_Capabilities::user_has_manage_all( $approver ) ) {
+			self::set_status( $refund_id, 'pending' );
+			LNKup_Financial_Audit::log( 'refund_needs_admin_approval', 'refund', $refund_id, array( 'amount' => $amount, 'threshold' => $threshold ) );
+			return new WP_Error( 'refund_needs_approval', __( 'Refunds this large need LNKup approval. Support has been notified.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+
 		$provider_ref = '';
 		if ( $is_credit ) {
 			$granted = LNKup_Credits::grant( (int) $refund['vendor_user_id'], $amount, 'refund', 'refund', $refund_id );
@@ -230,6 +238,48 @@ class LNKup_Refunds {
 		if ( class_exists( 'LNKup_Organizer_Wallet' ) ) {
 			LNKup_Organizer_Wallet::reverse_for_refund( $payment_id );
 		}
+		if ( $returned + 0.004 >= $total && class_exists( 'LNKup_Escrow' ) ) {
+			LNKup_Escrow::cancel_for_payment( $payment_id );
+		}
+	}
+
+	/**
+	 * Return refunds stranded in "processing" (request died mid-flight) to "pending" so they can be
+	 * approved again. Only inside Stripe's 24h idempotency window, where a retry reuses the same
+	 * Stripe refund; older rows are flagged for an admin instead of risking a second refund.
+	 *
+	 * @return array{requeued:int, flagged:int}
+	 */
+	public static function requeue_stuck_processing() {
+		global $wpdb;
+		$table = LNKup_Financial_Tables::refunds_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return array( 'requeued' => 0, 'flagged' => 0 );
+		}
+		$now    = current_time( 'timestamp' );
+		$stale  = gmdate( 'Y-m-d H:i:s', $now - 15 * MINUTE_IN_SECONDS );
+		$expiry = gmdate( 'Y-m-d H:i:s', $now - 20 * HOUR_IN_SECONDS );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, updated_at FROM {$table} WHERE status = 'processing' AND updated_at < %s LIMIT 50", $stale ), ARRAY_A );
+		$out  = array( 'requeued' => 0, 'flagged' => 0 );
+		foreach ( (array) $rows as $row ) {
+			$id = (int) $row['id'];
+			if ( $row['updated_at'] < $expiry ) {
+				if ( ! get_transient( 'lnkup_refund_stuck_' . $id ) ) {
+					set_transient( 'lnkup_refund_stuck_' . $id, 1, DAY_IN_SECONDS );
+					LNKup_Financial_Audit::log( 'refund_stuck_needs_review', 'refund', $id, array( 'since' => $row['updated_at'] ) );
+				}
+				++$out['flagged'];
+				continue;
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$moved = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'pending' WHERE id = %d AND status = 'processing' AND updated_at = %s", $id, $row['updated_at'] ) );
+			if ( 1 === (int) $moved ) {
+				LNKup_Financial_Audit::log( 'refund_requeued', 'refund', $id, array( 'since' => $row['updated_at'] ) );
+				++$out['requeued'];
+			}
+		}
+		return $out;
 	}
 
 	public static function deny( $refund_id ) {

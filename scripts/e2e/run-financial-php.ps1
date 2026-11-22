@@ -12,7 +12,8 @@ $tests = @(
   'financial-side-effects-test',
   'financial-checkout-test',
   'financial-refund-dispute-test',
-  'financial-cashout-test'
+  'financial-cashout-test',
+  'financial-phase2-test'
 )
 $failed = @()
 foreach ($t in $tests) {

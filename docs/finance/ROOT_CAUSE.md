@@ -145,3 +145,35 @@ An in-depth audit of checkout, refunds and chargebacks, and Connect cashouts fou
 | 31 | A cashout ran even if its ledger debit failed. | The cashout stops and the payout row is marked failed. |
 
 Also fixed: the admin "treasury platform fees" figure now counts one row per payment. Production had 17–676 duplicate rows per payment from the repeated settlement.
+
+## Phase 2 Stripe audit (12.23.1): P1/P2 fixes and fee model
+
+Covered by `financial-phase2-test.php`; all 13 financial suites pass.
+
+### Fee model (new bookings only; announce before relying on it)
+
+- **Destination charges:** the application fee is now everything except the organizer's share. The share is booth − commission + tax − any organizer-funded promo. LNKup therefore keeps the vendor-paid processing fee, because it pays Stripe's fee on these charges. Before, the application fee was only the platform fee, so the organizer received the processing fee and LNKup paid Stripe out of its own fee. Deposits and installments get a proportional share. Setting `processing_fee_payee = organizer` restores the old rule.
+- **Promos:** organizer promo codes reduce the organizer's share, and marketplace codes are funded by LNKup. `_lnkup_promo_funded_by` is recorded at redemption.
+- **Credit refunds** debit the organizer, like card refunds (#21).
+
+### P1/P2 defects
+
+| # | Defect | Fix |
+| --- | --- | --- |
+| 32 | Organizer promo codes applied to any organizer's booking when no context was passed. Usage limits could be exceeded by concurrent redemptions. | Context required. Redemption is locked per payment and claims a use atomically. |
+| 33 | `fee_payer_mode = organizer` still charged the vendor the checkout fee. | Moved into the organizer commission. LNKup's total fee is unchanged. |
+| 34 | Refund cap was applied to what was left, not cumulatively. | Cap applies to the booking total; the rule fee is taken once. Note: the refund-rules table is keyed by situation and has no scope or cap columns, so rules currently never cap a refund (unchanged behaviour). |
+| 35 | Refunds above the approval threshold could be approved by the organizer. | `refund_needs_approval` (403) unless the approver is a LNKup admin. |
+| 36 | A refund stranded in `processing` (request died mid-call) stayed stuck forever. | The hourly cron requeues it to `pending` after 15 minutes, inside Stripe's 24h idempotency window, so a retry reuses the same Stripe refund. Rows stuck more than 20h are only flagged (`refund_stuck_needs_review`). |
+| 37 | Collected revenue counted only `paid`. Pending revenue counted refunded, failed and voided bookings. | `LNKup_Financial::collected_amount()` (see `MONEY_DEFINITIONS.md`). Pending covers only money still due. |
+| 38 | Escrowed payments put the whole credit in pending, but escrow released only the held amount, stranding the rest. | Only the held part goes to pending; the rest is available (`credit_unheld`). Full refunds and lost chargebacks cancel escrow. |
+| 39 | Dispute resolution could run twice, and always set the payment back to `paid`. | Atomic claim (409 on a second resolve). Restores the pre-dispute status (`paid`, `partially_refunded`). A credit outcome grants only what was not already refunded. |
+| 40 | A user could hold two live subscriptions (double billing). Paid plans without a Stripe price activated for free. Late webhooks revived cancelled subscriptions. A no-change update inserted a duplicate row. | Per-user lock and `already_subscribed`; `plan_not_billable`. Cancelled rows are never revived. Upsert by `provider_ref`. |
+| 41 | Instant Connect payouts debited the gross amount but paid out the net, leaving an uncollected "fee" on the connected account. | Connect payouts pay out the full debited amount; Stripe charges its instant fee there. Platform-transfer payouts keep the LNKup fee. |
+| 42 | Cashout `client_token` replay reported success for a failed cashout. Tokens with JSON-escaped characters never matched. | Token limited to `[A-Za-z0-9_-]`. A replay of a failed or cancelled cashout returns that failure. |
+| 43 | A balance in another currency was shown (and cashed out) as USD. | Only the platform currency counts. Others are reported in `other_currency_cents`. |
+| 44 | Legacy `LNKup_Payouts::mark_completed` could complete a payout twice. | Atomic status claim. |
+| 45 | One Stripe customer ID for test and live mode ("No such customer" after switching). Concurrent checkouts created duplicate customers. | Per-mode `_lnkup_stripe_customer_id_{test,live}`. A legacy ID is adopted only after Stripe confirms it in this mode. Creation is locked, with a deterministic idempotency key. |
+| 46 | Fresh installs never stamped the auto-recovery cutoff, so settlement auto-recovery never ran. | Stamped on activation. |
+
+Repair tool additions (dry run first; applied only with approval): `void_duplicate_escrow_holds`, `reverse_refund_share`, `reverse_chargeback_share`, `refund_extra_charge` (Stripe-verified; applying issues one refund keyed `lnkup_extra_refund_{pi}`) and `record_late_payout`. Report-only items: `report_credit_undercharged`, `report_partial_marked_paid`.

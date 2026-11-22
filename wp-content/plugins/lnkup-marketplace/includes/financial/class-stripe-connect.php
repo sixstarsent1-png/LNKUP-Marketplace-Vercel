@@ -874,7 +874,9 @@ class LNKup_Stripe_Connect {
 			$mode = self::settlement_mode_for_organizer( $organizer_id );
 		}
 
-		$app_fee_cents = (int) round( (float) ( $breakdown['platform_fee'] ?? 0 ) * 100 );
+		$app_fee_cents = isset( $breakdown['application_fee_cents'] )
+			? (int) $breakdown['application_fee_cents']
+			: (int) round( (float) ( $breakdown['platform_fee'] ?? 0 ) * 100 );
 		update_post_meta( $payment_id, '_lnkup_settlement_mode', $mode );
 		// At settle the charge already happened: keep the fee Stripe was sent (or reported) and
 		// the charge-time breakdown instead of re-deriving them from today's fee settings.
@@ -900,9 +902,11 @@ class LNKup_Stripe_Connect {
 					round( max( 0, $amount_cents - $app_fee_cents ) / 100, 2 )
 				);
 			}
-		} elseif ( 'platform_treasury' === $mode && 'destination' === $existing_mode && '' === $existing_dest ) {
-			// Clear a false destination claim that never had a destination account.
+		} elseif ( 'platform_treasury' === $mode && 'create' === $context ) {
+			// A new platform charge: drop any destination stamp left by an earlier attempt, or
+			// settlement would book this charge as if the money were on Connect.
 			delete_post_meta( $payment_id, '_lnkup_stripe_destination_account' );
+			delete_post_meta( $payment_id, '_lnkup_stripe_destination_amount' );
 		}
 	}
 
