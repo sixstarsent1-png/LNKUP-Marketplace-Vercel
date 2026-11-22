@@ -160,6 +160,7 @@ function lnkup_dashboard_organizer_title() {
 		'create'       => __( 'Launch event', 'lnkup-theme' ),
 		'help'         => __( 'Help', 'lnkup-theme' ),
 		'profile'      => __( 'Profile', 'lnkup-theme' ),
+		'team'         => __( 'Team & Trust', 'lnkup-theme' ),
 	);
 	return $titles[ $view ] ?? __( 'Overview', 'lnkup-theme' );
 }
@@ -455,6 +456,8 @@ function lnkup_get_dashboard_nav( $role ) {
 		array( 'label' => __( 'Help', 'lnkup-theme' ), 'href' => $org_view_url( 'help' ), 'slug' => 'organizer-dashboard', 'icon' => 'help', 'view' => 'help', 'tier' => 'more' ),
 
 		array( 'label' => __( 'Profile', 'lnkup-theme' ), 'href' => $org_view_url( 'profile' ), 'slug' => 'organizer-dashboard', 'icon' => 'user', 'view' => 'profile', 'tier' => 'secondary' ),
+
+		array( 'label' => __( 'Team & Trust', 'lnkup-theme' ), 'href' => $org_view_url( 'team' ), 'slug' => 'organizer-dashboard', 'icon' => 'users', 'view' => 'team', 'tier' => 'secondary' ),
 
 		array( 'label' => __( 'Vendor Lists', 'lnkup-theme' ), 'href' => $org_view_url( 'lists' ), 'slug' => 'organizer-dashboard', 'icon' => 'list', 'view' => 'lists', 'tier' => 'secondary' ),
 

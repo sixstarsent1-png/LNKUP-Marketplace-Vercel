@@ -87,6 +87,9 @@ class LNKup_Organizer_Dashboard_Views {
 				case 'profile':
 					echo self::render_profile(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					break;
+				case 'team':
+					echo self::render_team(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					break;
 				case 'home':
 				default:
 					echo self::render_home(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
@@ -1318,6 +1321,30 @@ class LNKup_Organizer_Dashboard_Views {
 		<?php
 		echo LNKup_Shortcodes::organizer_expand_panel_close(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		echo LNKup_Shortcodes::organizer_module_card_close(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Team & Trust: organization verification and team access. org-team.js loads both panels.
+	 *
+	 * @return string
+	 */
+	private static function render_team() {
+		ob_start();
+		echo self::page_header( __( 'Team & Trust', 'lnkup-marketplace' ), __( 'Verify your organization and give your team the access they need — nothing more.', 'lnkup-marketplace' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		?>
+		<div class="lnkup-org-team" data-testid="lnkup-org-team">
+			<section class="lnkup-panel lnkup-org-team__card" aria-labelledby="lnkup-org-verify-title">
+				<h2 id="lnkup-org-verify-title" class="lnkup-panel__title"><?php esc_html_e( 'Organization verification', 'lnkup-marketplace' ); ?></h2>
+				<p class="lnkup-muted"><?php esc_html_e( 'Payouts, website domain, and LNKup review are separate checks. Vendors see which ones you have completed.', 'lnkup-marketplace' ); ?></p>
+				<div id="lnkup-org-verify" aria-live="polite"><?php echo lnkup_loading_state( 'list' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
+			</section>
+			<section class="lnkup-panel lnkup-org-team__card" aria-labelledby="lnkup-org-team-title">
+				<h2 id="lnkup-org-team-title" class="lnkup-panel__title"><?php esc_html_e( 'Team access', 'lnkup-marketplace' ); ?></h2>
+				<div id="lnkup-org-team-list" aria-live="polite"><?php echo lnkup_loading_state( 'list' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
+			</section>
+		</div>
+		<?php
 		return (string) ob_get_clean();
 	}
 

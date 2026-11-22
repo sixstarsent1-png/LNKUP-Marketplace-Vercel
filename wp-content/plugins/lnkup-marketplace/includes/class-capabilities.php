@@ -186,12 +186,28 @@ class LNKup_Capabilities {
 		if ( self::organizer_owns_event( $event_id, $user_id ) ) {
 			return true;
 		}
+		if ( class_exists( 'LNKup_Org_Teams' ) && LNKup_Org_Teams::can( $user_id, $event_id, $capability ) ) {
+			return true;
+		}
 		if ( in_array( $capability, array( 'owner', 'manage_staff' ), true ) || ! class_exists( 'LNKup_Event_Staff' ) ) {
 			return false;
 		}
 		$role   = LNKup_Event_Staff::role_for( $event_id, $user_id );
 		$matrix = LNKup_Event_Staff::capability_matrix();
 		return '' !== $role && in_array( $capability, $matrix[ $role ] ?? array(), true );
+	}
+
+	/**
+	 * Event-scoped check for organizer-side actions: owner, manage-all, organization team
+	 * (LNKup_Org_Teams), then per-event staff. Capabilities beyond the staff vocabulary:
+	 * manage_applications, view_documents, manage_refunds, cancel_event.
+	 *
+	 * @param int    $user_id    User ID.
+	 * @param int    $event_id   Event ID.
+	 * @param string $capability Capability key.
+	 */
+	public static function user_can_act_on_event( $user_id, $event_id, $capability ) {
+		return self::staff_can( absint( $event_id ), sanitize_key( $capability ), absint( $user_id ) );
 	}
 
 	/**

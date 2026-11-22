@@ -205,7 +205,7 @@ function lnkup_organizer_dashboard_view( $view = null ) {
 	if ( isset( $aliases[ $view ] ) ) {
 		$view = $aliases[ $view ];
 	}
-	$allowed = array( 'home', 'events', 'applications', 'financial', 'vendors', 'lists', 'invites', 'referrals', 'operations', 'intelligence', 'create', 'help', 'profile' );
+	$allowed = array( 'home', 'events', 'applications', 'financial', 'vendors', 'lists', 'invites', 'referrals', 'operations', 'intelligence', 'create', 'help', 'profile', 'team' );
 	return in_array( $view, $allowed, true ) ? $view : 'home';
 }
 
@@ -2334,6 +2334,9 @@ function lnkup_format_index_row( $row, $compare = false ) {
 		'view_count'        => (int) ( $row['view_count'] ?? 0 ),
 		'trending_score'    => (float) ( $row['trending_score'] ?? 0 ),
 		'badges'            => lnkup_get_opportunity_badges( $row ),
+		'listing_status'    => class_exists( 'LNKup_Event_Authenticity' ) && ! empty( $row['event_id'] )
+			? LNKup_Event_Authenticity::public_label( (int) $row['event_id'] )
+			: null,
 	);
 
 	if ( $compare ) {
@@ -2564,6 +2567,9 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 					}
 				}
 				?>
+			<?php endif; ?>
+			<?php if ( ! empty( $opp['listing_status'] ) && 'organizer_controlled' !== $opp['listing_status']['status'] ) : ?>
+				<p class="lnkup-event-card__listing-status lnkup-muted" data-testid="lnkup-opp-listing-status" title="<?php echo esc_attr( $opp['listing_status']['description'] ); ?>"><?php echo esc_html( $opp['listing_status']['label'] ); ?></p>
 			<?php endif; ?>
 			<h3><a href="<?php echo esc_url( $view_url ); ?>"><?php echo wp_kses_post( $name ); ?></a></h3>
 			<p class="lnkup-event-card__summary">

@@ -191,6 +191,61 @@ class LNKup_External_Events_Dedup {
 	}
 
 	/**
+	 * Likely duplicates of a LNKup event among other LNKup events (same date window).
+	 *
+	 * @param int $event_id LNKup event ID.
+	 * @return array<int, array{event_id: int, confidence: int}>
+	 */
+	public static function lnk_event_candidates( int $event_id ): array {
+		$base = self::lnk_event_shape( $event_id );
+		if ( '' === $base['start_datetime'] ) {
+			return array();
+		}
+		$ids = get_posts(
+			array(
+				'post_type'      => 'lnkup_event',
+				'post_status'    => 'publish',
+				'posts_per_page' => 50,
+				'fields'         => 'ids',
+				'post__not_in'   => array( $event_id ),
+				'meta_key'       => '_lnkup_event_date', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => $base['start_datetime'], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+		$out = array();
+		foreach ( $ids as $other_id ) {
+			$score = self::confidence( $base, self::lnk_event_shape( (int) $other_id ) );
+			if ( $score >= self::THRESHOLD ) {
+				$out[] = array( 'event_id' => (int) $other_id, 'confidence' => $score );
+			}
+		}
+		usort(
+			$out,
+			static function ( $x, $y ) {
+				return $y['confidence'] <=> $x['confidence'];
+			}
+		);
+		return $out;
+	}
+
+	/**
+	 * LNKup event in the shape confidence() compares.
+	 *
+	 * @param int $event_id Event ID.
+	 * @return array<string, string>
+	 */
+	private static function lnk_event_shape( int $event_id ): array {
+		$source = (string) get_post_meta( $event_id, '_lnkup_external_source_url', true );
+		return array(
+			'title'          => (string) get_the_title( $event_id ),
+			'venue_name'     => (string) get_post_meta( $event_id, '_lnkup_venue_name', true ),
+			'start_datetime' => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
+			'city'           => (string) get_post_meta( $event_id, '_lnkup_city', true ),
+			'source_url'     => $source ? untrailingslashit( strtolower( $source ) ) : '',
+		);
+	}
+
+	/**
 	 * @param string $a String A.
 	 * @param string $b String B.
 	 */

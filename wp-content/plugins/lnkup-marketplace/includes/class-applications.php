@@ -318,6 +318,13 @@ class LNKup_Applications {
 			return $result;
 		}
 
+		$event_id = (int) get_post_meta( $opportunity_id, '_lnkup_event_id', true );
+		if ( $event_id && class_exists( 'LNKup_Event_Authenticity' ) && ! LNKup_Event_Authenticity::is_bookable( $event_id ) ) {
+			$result['block_reason']  = 'closed';
+			$result['closed_reason'] = 'authenticity_pending';
+			return $result;
+		}
+
 		if ( ! $card ) {
 			$card = lnkup_get_opportunity_card_data( $opportunity_id );
 		}
@@ -825,7 +832,8 @@ class LNKup_Applications {
 		if ( 'lnkup_application' !== get_post_type( $app_id ) ) {
 			return new WP_Error( 'not_found', __( 'Application not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}
-		if ( ! LNKup_Capabilities::user_owns_post( $app_id, $organizer_id, '_lnkup_organizer_user_id' ) && ! LNKup_Capabilities::user_has_manage_all( $organizer_id ) ) {
+		if ( ! LNKup_Capabilities::user_owns_post( $app_id, $organizer_id, '_lnkup_organizer_user_id' ) && ! LNKup_Capabilities::user_has_manage_all( $organizer_id )
+			&& ! self::team_can_manage( $app_id, $organizer_id ) ) {
 			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 		}
 		$message = trim( sanitize_textarea_field( (string) $message ) );
@@ -961,8 +969,23 @@ class LNKup_Applications {
 	 * @param int   $user_id Acting organizer user ID.
 	 * @param array $extra   Optional extras (e.g. rejection_reason from REST roster bulk).
 	 */
+	/**
+	 * Organization team member with manage_applications on the application's event.
+	 *
+	 * @param int $app_id  Application ID.
+	 * @param int $user_id User ID.
+	 */
+	private static function team_can_manage( $app_id, $user_id ) {
+		if ( ! class_exists( 'LNKup_Org_Teams' ) ) {
+			return false;
+		}
+		$event_id = (int) get_post_meta( absint( $app_id ), '_lnkup_event_id', true );
+		return $event_id && LNKup_Org_Teams::can( absint( $user_id ), $event_id, 'manage_applications' );
+	}
+
 	public static function handle_organizer_action( $app_id, $action, $user_id, $extra = array() ) {
-		if ( ! LNKup_Capabilities::user_owns_post( $app_id, $user_id, '_lnkup_organizer_user_id' ) && ! LNKup_Capabilities::user_has_manage_all( $user_id ) ) {
+		if ( ! LNKup_Capabilities::user_owns_post( $app_id, $user_id, '_lnkup_organizer_user_id' ) && ! LNKup_Capabilities::user_has_manage_all( $user_id )
+			&& ! self::team_can_manage( $app_id, $user_id ) ) {
 			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ) );
 		}
 

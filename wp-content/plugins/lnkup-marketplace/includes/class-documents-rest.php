@@ -202,6 +202,21 @@ class LNKup_Documents_REST {
 		$mime     = get_post_mime_type( $attachment_id ) ?: 'application/octet-stream';
 		$filename = basename( $file );
 
+		if ( class_exists( 'LNKup_Audit_Log' ) ) {
+			LNKup_Audit_Log::log(
+				'document_downloaded',
+				'document',
+				$doc_id,
+				array(
+					'new' => array(
+						'channel'        => 'rest',
+						'vendor_user_id' => (int) get_post_meta( $doc_id, '_lnkup_vendor_user_id', true ),
+						'document_type'  => (string) get_post_meta( $doc_id, '_lnkup_document_type', true ),
+					),
+				)
+			);
+		}
+
 		nocache_headers();
 		header( 'Content-Type: ' . $mime );
 		header( 'Content-Disposition: attachment; filename="' . $filename . '"' );

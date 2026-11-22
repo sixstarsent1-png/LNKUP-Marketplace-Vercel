@@ -214,6 +214,11 @@ class LNKup_Marketplace_Index {
 			return new WP_Error( 'missing_event', __( 'Linked event is missing or not published.', 'lnkup-marketplace' ) );
 		}
 
+		if ( class_exists( 'LNKup_Event_Authenticity' ) && ! LNKup_Event_Authenticity::is_bookable( $event_id ) ) {
+			self::delete_row( $opportunity_id );
+			return new WP_Error( 'authenticity_pending', __( 'Listing is waiting for organizer verification.', 'lnkup-marketplace' ) );
+		}
+
 		$organizer_id = (int) get_post_meta( $event_id, '_lnkup_organizer_user_id', true );
 		$categories   = wp_get_post_terms( $opportunity_id, 'lnkup_vendor_category', array( 'fields' => 'names' ) );
 		$event_terms  = wp_get_post_terms( $event_id, 'lnkup_event_type' );

@@ -353,6 +353,20 @@ class LNKup_Shortcodes {
 		if ( $invite_banner ) {
 			wp_enqueue_script( 'lnkup-organizer-crm' );
 		}
+		if ( $org['page'] && 'team' === $org['view'] && is_user_logged_in() ) {
+			wp_enqueue_style( 'lnkup-org-team', LNKUP_PLUGIN_URL . 'public/css/org-team.css', array(), LNKUP_VERSION );
+			wp_enqueue_script( 'lnkup-org-team', LNKUP_PLUGIN_URL . 'public/js/org-team.js', array(), LNKUP_VERSION, true );
+			wp_localize_script(
+				'lnkup-org-team',
+				'lnkupOrgTeam',
+				array(
+					'root'        => esc_url_raw( rest_url( 'lnkup/v1' ) ),
+					'nonce'       => wp_create_nonce( 'wp_rest' ),
+					// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+					'inviteToken' => isset( $_GET['lnkup_team_invite'] ) ? sanitize_text_field( wp_unslash( $_GET['lnkup_team_invite'] ) ) : '',
+				)
+			);
+		}
 		if ( $org['page'] && '' === $org['detail'] && 'vendors' === $org['view'] ) {
 			wp_enqueue_style( 'lnkup-vendor-import' );
 			wp_enqueue_script( 'lnkup-vendor-import' );

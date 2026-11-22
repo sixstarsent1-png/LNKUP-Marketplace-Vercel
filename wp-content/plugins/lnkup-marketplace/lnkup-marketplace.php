@@ -277,6 +277,16 @@ $lnkup_core_files = array(
 	'admin/class-financial-admin.php',
 	'admin/class-financial-connect-admin.php',
 	'admin/class-financial-reconciliation-admin.php',
+	'includes/trust/class-trust-tables.php',
+	'includes/trust/class-trust.php',
+	'includes/trust/class-audit-log.php',
+	'includes/trust/class-trust-cases.php',
+	'includes/trust/class-event-authenticity.php',
+	'includes/trust/class-event-claims.php',
+	'includes/trust/class-organizer-verification.php',
+	'includes/trust/class-org-teams.php',
+	'includes/trust/class-trust-rest.php',
+	'admin/class-trust-safety-admin.php',
 	'includes/class-growth-tables.php',
 	'includes/class-growth-kpis.php',
 	'includes/class-growth-snapshots.php',
@@ -372,6 +382,8 @@ function lnkup_marketplace_init() {
 	LNKup_Financial_Admin::init();
 	LNKup_Financial_Connect_Admin::init();
 	LNKup_Financial_Reconciliation_Admin::init();
+	LNKup_Trust::init();
+	LNKup_Trust_Safety_Admin::init();
 	LNKup_Financial_Service::init();
 	LNKup_Invoices::init();
 	LNKup_Growth_REST::init();
@@ -434,6 +446,7 @@ function lnkup_maybe_upgrade_db() {
 		array( 'LNKup_Connector_Tables', 'create_tables' ),
 		array( 'LNKup_Push_Tables', 'create_tables' ),
 		array( 'LNKup_Inbox_Tables', 'create_tables' ),
+		array( 'LNKup_Trust_Tables', 'create_tables' ),
 	);
 
 	foreach ( $creators as $creator ) {
@@ -556,6 +569,9 @@ function lnkup_maybe_deferred_upgrade() {
 	}
 	if ( class_exists( 'LNKup_Payments' ) ) {
 		LNKup_Payments::backfill_pending_payment_fees();
+	}
+	if ( class_exists( 'LNKup_Financial_Audit' ) && method_exists( 'LNKup_Financial_Audit', 'migrate_hash_ip_addresses' ) ) {
+		LNKup_Financial_Audit::migrate_hash_ip_addresses();
 	}
 }
 add_action( 'admin_init', 'lnkup_maybe_deferred_upgrade', 5 );
@@ -727,6 +743,10 @@ function lnkup_get_settings() {
 		'google_search_templates'                 => '',
 		'google_search_daily_budget'              => 100,
 		'google_search_queries_per_run'           => 10,
+		'trust_claim_review_mode'                 => 'log',
+		'trust_publish_gate'                      => false,
+		'trust_auto_promote_claims'               => false,
+		'trust_org_teams'                         => false,
 	);
 	return wp_parse_args( get_option( 'lnkup_settings', array() ), $defaults );
 }

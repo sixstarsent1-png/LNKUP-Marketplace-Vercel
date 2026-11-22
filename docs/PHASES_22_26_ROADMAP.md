@@ -106,6 +106,12 @@ flowchart LR
 
 ---
 
+## Trust, Safety & Compliance OS
+
+Stages 1–3 shipped (audit, critical fixes, case queue, audit log, organizer verification, event authenticity, organization teams). Stages 4–13 are queued in [TRUST_SAFETY_ROADMAP.md](TRUST_SAFETY_ROADMAP.md); findings are in [TRUST_SAFETY_AUDIT.md](TRUST_SAFETY_AUDIT.md).
+
+---
+
 ## Intentional non-phases
 
 Unless product direction changes:

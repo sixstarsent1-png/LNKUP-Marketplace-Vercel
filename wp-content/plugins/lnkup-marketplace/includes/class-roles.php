@@ -110,6 +110,7 @@ class LNKup_Roles {
 		return array(
 			'read'                    => true,
 			'lnkup_manage_all'        => true,
+			'lnkup_manage_trust'      => true,
 			'lnkup_verify_documents'  => true,
 			'lnkup_manage_settings'   => true,
 			'lnkup_manage_own_profile' => true,

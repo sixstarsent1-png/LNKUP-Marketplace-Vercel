@@ -9,6 +9,16 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 **Plugin version:** 12.22.0  
 **Theme version:** 1.6.0
 
+### Trust, Safety & Compliance OS — Stages 1–3 (Trust schema v1)
+
+Audit: [TRUST_SAFETY_AUDIT.md](TRUST_SAFETY_AUDIT.md) · Roadmap, flags and rollback: [TRUST_SAFETY_ROADMAP.md](TRUST_SAFETY_ROADMAP.md).
+
+- **Claims:** external event claim links are bound to the invited email/domain; second claimants get `claim_disputed` + a case, never the listing; rate limits; admin approve/reject.
+- **Foundation:** hash-chained `wp_lnkup_audit_log` (daily integrity check, document downloads logged, financial audit IPs hashed); `wp_lnkup_trust_cases` queue fed by fraud flags, chargebacks and rejected payment confirmations; wp-admin **LNKup → Trust & Safety**.
+- **Organizers:** verification status machine + domain control (email code / DNS TXT); separate payout / domain / LNKup-review indicators; organizer **Team & Trust** view with organization teams (flag `trust_org_teams`).
+- **Listings:** `_lnkup_authenticity_status`; flag `trust_publish_gate` enforced in discovery, apply and checkout; payout-account swaps and organizer changes open cases; duplicate scan opens cases only.
+- **Tests:** `scripts/e2e/run-trust-php.ps1` (`trust-safety-test.php`, `trust-admin-render-check.php`), `tests/e2e/trust-safety.spec.ts`, cross-tenant additions in `organizer-security.spec.ts`.
+
 ### v12.22.0 (Financial reconciliation — ledger integrity, money contract, repair)
 
 Deliverables, file list and test results: [finance/README.md](finance/README.md). Root causes: [finance/ROOT_CAUSE.md](finance/ROOT_CAUSE.md). Definitions: [finance/MONEY_DEFINITIONS.md](finance/MONEY_DEFINITIONS.md).

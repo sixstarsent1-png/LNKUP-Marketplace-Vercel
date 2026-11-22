@@ -57,6 +57,11 @@ class LNKup_Financial_Service {
 		if ( 'paid' !== (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ) && ! LNKup_Payments::is_payable( $payment_id ) ) {
 			return new WP_Error( 'payment_not_payable', __( 'This booking is no longer open for payment.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
 		}
+		$checkout_event = (int) get_post_meta( $payment_id, '_lnkup_event_id', true );
+		if ( $checkout_event && 'paid' !== (string) get_post_meta( $payment_id, '_lnkup_payment_status', true )
+			&& class_exists( 'LNKup_Event_Authenticity' ) && ! LNKup_Event_Authenticity::is_bookable( $checkout_event ) ) {
+			return new WP_Error( 'lnkup_listing_under_review', __( 'Payments for this event are paused while LNKup confirms who manages it. You have not been charged.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
 		LNKup_Payments::reopen_if_declined( $payment_id );
 		LNKup_Payments::refresh_pending_fees( $payment_id );
 		$mode = $args['mode'] ?? 'embedded';
@@ -1527,6 +1532,30 @@ class LNKup_Financial_Service {
 						'intent_id' => (string) $intent_id,
 						'user_id'   => get_current_user_id(),
 					)
+				)
+			);
+		}
+		if ( class_exists( 'LNKup_Trust_Cases' ) ) {
+			LNKup_Trust_Cases::open(
+				array(
+					'case_type'    => 'payment_mismatch',
+					'severity'     => 'amount_mismatch' === $reason ? 'elevated' : 'review',
+					'subject_type' => 'payment',
+					'subject_id'   => absint( $payment_id ),
+					'payment_id'   => absint( $payment_id ),
+					'event_id'     => (int) get_post_meta( $payment_id, '_lnkup_event_id', true ),
+					'signal_key'   => sanitize_key( $reason ),
+					'summary'      => sprintf( 'Payment confirmation rejected (%s).', sanitize_key( $reason ) ),
+					'evidence'     => array(
+						array(
+							'source'    => 'financial_service',
+							'reason'    => sanitize_key( $reason ),
+							'intent_id' => sanitize_text_field( (string) $intent_id ),
+							'user_id'   => get_current_user_id(),
+							'at'        => current_time( 'mysql', true ),
+						),
+					),
+					'next_step'    => __( 'Compare the PaymentIntent in Stripe with this booking. The booking was not marked paid.', 'lnkup-marketplace' ),
 				)
 			);
 		}

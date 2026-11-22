@@ -387,6 +387,21 @@ class LNKup_Documents {
 			wp_die( esc_html__( 'File not found.', 'lnkup-marketplace' ), 404 );
 		}
 
+		if ( class_exists( 'LNKup_Audit_Log' ) ) {
+			LNKup_Audit_Log::log(
+				'document_downloaded',
+				'document',
+				$doc_id,
+				array(
+					'new' => array(
+						'channel'        => 'ajax',
+						'vendor_user_id' => $vendor_id,
+						'document_type'  => (string) get_post_meta( $doc_id, '_lnkup_document_type', true ),
+					),
+				)
+			);
+		}
+
 		$mime = get_post_mime_type( $attachment_id );
 		header( 'Content-Type: ' . $mime );
 		header( 'Content-Disposition: attachment; filename="' . basename( $file ) . '"' );
