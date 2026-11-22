@@ -106,6 +106,15 @@ class LNKup_Activator {
 		if ( class_exists( 'LNKup_Org_Growth_Tables' ) ) {
 			LNKup_Org_Growth_Tables::create_tables();
 		}
+		if ( class_exists( 'LNKup_Match_Tables' ) ) {
+			LNKup_Match_Tables::create_tables();
+		}
+		if ( class_exists( 'LNKup_Trust_Tables' ) ) {
+			LNKup_Trust_Tables::create_tables();
+		}
+		if ( class_exists( 'LNKup_Passport_Tables' ) ) {
+			LNKup_Passport_Tables::create_tables();
+		}
 	}
 
 	/**

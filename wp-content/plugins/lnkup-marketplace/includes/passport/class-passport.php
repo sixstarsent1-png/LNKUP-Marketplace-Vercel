@@ -31,6 +31,7 @@ class LNKup_Passport {
 				$class::init();
 			}
 		}
+		add_action( 'init', array( 'LNKup_Passport_Tables', 'maybe_upgrade' ), 4 );
 		add_action( self::DAILY_HOOK, array( __CLASS__, 'run_daily' ) );
 		add_action( 'init', array( __CLASS__, 'schedule' ), 20 );
 		add_action( 'admin_init', array( __CLASS__, 'maybe_migrate' ), 6 );
