@@ -44,6 +44,12 @@ const SECTIONS: LinkSection[] = [
     title: "Your business",
     links: [
       {
+        label: "Vendor Passport",
+        hint: "Portfolio, history, reviews, privacy",
+        href: "/(vendor)/passport",
+        icon: "id-card-outline",
+      },
+      {
         label: "Business profile",
         hint: "Name, categories, contact, logo",
         href: "/(vendor)/profile",
@@ -294,7 +300,7 @@ export default function VendorMoreScreen() {
         </ListGroup>
       ))}
 
-      <PushPreferencesCard />
+      <PushPreferencesCard settingsHref="/(vendor)/notification-settings" />
 
       <Button
         label="Sign out"

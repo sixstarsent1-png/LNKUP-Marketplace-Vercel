@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Switch, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
+import { router } from "expo-router"
 
 import {
   DEFAULT_PUSH_CATEGORIES,
@@ -16,7 +17,7 @@ import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 const CATEGORY_KEYS = Object.keys(DEFAULT_PUSH_CATEGORIES) as PushCategoryKey[]
 
-export function PushPreferencesCard() {
+export function PushPreferencesCard({ settingsHref }: { settingsHref?: string } = {}) {
   const { auth } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -125,6 +126,12 @@ export function PushPreferencesCard() {
           <Text style={styles.error}>{error} Tap to retry.</Text>
         </Pressable>
       ) : null}
+
+      {settingsHref ? (
+        <Pressable onPress={() => router.push(settingsHref as never)} accessibilityRole="link" style={styles.link}>
+          <Text style={styles.linkText}>All notification settings — email, digests, quiet hours →</Text>
+        </Pressable>
+      ) : null}
     </View>
   )
 }
@@ -181,5 +188,15 @@ const styles = StyleSheet.create({
     fontSize: typeScale.footnote,
     color: colors.gray500,
     marginTop: spacing.xs,
+  },
+  link: {
+    marginTop: spacing.sm,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  linkText: {
+    fontSize: typeScale.footnote,
+    fontWeight: "700",
+    color: colors.black,
   },
 })

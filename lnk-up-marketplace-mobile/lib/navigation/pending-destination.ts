@@ -17,6 +17,8 @@ const ROUTE_RULES: Array<{ pattern: RegExp; scope: Scope }> = [
   { pattern: /^\/\(organizer\)(\/[\w-]+){0,2}(\?[\w=&%.-]*)?$/, scope: "organizer" },
   { pattern: /^\/(pass|apply|booking)\/\d+(\?[\w=&%.-]*)?$/, scope: "vendor" },
   { pattern: /^\/opportunity\/\d+(\?[\w=&%.-]*)?$/, scope: "any" },
+  { pattern: /^\/tour\/\d+$/, scope: "any" },
+  { pattern: /^\/tour\/apply\/\d+$/, scope: "vendor" },
   { pattern: /^\/storefront\/(vendor|organizer)(\?[\w=&%.-]*)?$/, scope: "any" },
 ]
 

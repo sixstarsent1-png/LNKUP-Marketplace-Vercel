@@ -42,6 +42,8 @@ export type MarketplaceOpportunity = {
   loadInTime?: string
   /** Vendor's application status when logged in (WP marketplace search). */
   applicationStatus?: string
+  /** Server says the vendor may apply again (withdrawn, or declined and re-opened). */
+  canApplyAgain?: boolean
   /** Event cover (or the theme's category image when the organizer has not uploaded one). */
   imageUrl?: string
   gallery?: Array<{
@@ -137,6 +139,7 @@ export function mapWpToOpportunity(item: WpOpportunityItem): MarketplaceOpportun
     powerAvailable: item.power_available,
     loadInTime: item.load_in_time || undefined,
     applicationStatus: item.application_status?.trim() || undefined,
+    canApplyAgain: item.can_apply_again === true,
     imageUrl: item.featured_image?.trim() || undefined,
     gallery: Array.isArray(item.gallery)
       ? item.gallery

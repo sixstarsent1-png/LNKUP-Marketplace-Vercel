@@ -3,7 +3,9 @@ import { StyleSheet, View } from "react-native"
 import { router, type Href, useFocusEffect } from "expo-router"
 
 import { GuidedTutorialChecklist } from "@/components/guided-tutorial-checklist"
+import { NextStepsCard } from "@/components/next-steps-card"
 import { NotificationBell } from "@/components/notification-bell"
+import { PushPermissionPrompt } from "@/components/push-permission-prompt"
 import { OpportunityCard } from "@/components/opportunity-card"
 import { EmptyPanel, ErrorPanel } from "@/components/panel-states"
 import { Screen } from "@/components/screen"
@@ -24,6 +26,7 @@ import {
   fetchRecommendedOpportunities,
   type MarketplaceOpportunity,
 } from "@/lib/api/marketplace"
+import { fetchInboxCount } from "@/lib/api/comms"
 import { fetchNotifications } from "@/lib/api/notifications"
 import { fetchVendorRequests, upcomingBookedRequests, type VendorRequest } from "@/lib/api/vendor-requests"
 import { fetchVendorReadiness, type VendorReadiness } from "@/lib/api/vendor-readiness"
@@ -83,17 +86,21 @@ export default function VendorHomeScreen() {
         setLoading(false)
         if (mode === "initial") setRailsLoading(true)
 
-        const [recommended, closing, notifications, readinessResult, favoritesResult] = await Promise.allSettled([
+        const [recommended, closing, notifications, readinessResult, favoritesResult, serverCount] = await Promise.allSettled([
           fetchRecommendedOpportunities(auth, { limit: 3 }),
           fetchClosingSoonOpportunities(auth, { limit: 3 }),
           fetchNotifications("vendor", { auth, userId: session?.user.id }),
           fetchVendorReadiness(auth),
           fetchVendorFavorites(auth),
+          fetchInboxCount("vendor", auth),
         ])
         setRailFailed(recommended.status === "rejected")
         if (recommended.status === "fulfilled") setRail(recommended.value)
         if (closing.status === "fulfilled") setClosingSoon(closing.value)
-        if (notifications.status === "fulfilled") {
+        if (serverCount.status === "fulfilled" && serverCount.value) {
+          setUnreadCount(serverCount.value.unread)
+          void syncAppBadge(serverCount.value.unread)
+        } else if (notifications.status === "fulfilled") {
           setUnreadCount(getUnreadCount(notifications.value))
           void syncAppBadge(getUnreadCount(notifications.value))
         }
@@ -191,6 +198,10 @@ export default function VendorHomeScreen() {
           {eventDay ? <EventDayCard booking={eventDay} /> : null}
 
           <NextStepCard step={next.step} />
+
+          <PushPermissionPrompt role="vendor" />
+
+          <NextStepsCard role="vendor" />
 
           <StatGrid>
             <StatTile

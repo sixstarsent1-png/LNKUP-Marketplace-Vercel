@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Pressable, StyleSheet, View } from "react-native"
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 import { router, useFocusEffect } from "expo-router"
 
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { ScreenList } from "@/components/screen"
 import { FilterChipRow } from "@/components/ui/chip"
+import { isLiveApiEnabled } from "@/lib/api/config"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
+import {
+  fetchInboxCount,
+  fetchInboxPage,
+  isCommsUnavailable,
+  markTabRead,
+  trackNotificationOpened,
+} from "@/lib/api/comms"
 import {
   fetchNotifications,
   markInboxRead,
@@ -20,23 +28,20 @@ import { inAppHrefForNotification } from "@/lib/push/notification-routing"
 import { getUnreadCount, markAllRead, markRead } from "@/lib/notifications/read-state"
 import { clearAppBadge, syncAppBadge } from "@/lib/push/notifications"
 import {
-  isActionRequiredNotification,
+  inboxTabsFor,
   notificationTypeLabel,
+  type InboxTab,
   type LnkupNotification,
-  type NotificationFilter,
 } from "@/lib/notifications/types"
 import { colors, radii, spacing, typeScale } from "@/lib/theme"
-
-const FILTERS: Array<{ id: NotificationFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "unread", label: "Unread" },
-  { id: "action", label: "Action" },
-]
 
 type NotificationsScreenProps = {
   role: NotificationRole
   prefsHref: string
 }
+
+/** "server" = paginated lnkup-communications inbox; "legacy" = composed feed (plugin not installed). */
+type Source = "server" | "legacy"
 
 function severityColor(severity?: LnkupNotification["severity"]): string {
   if (severity === "urgent") return colors.red600
@@ -45,42 +50,88 @@ function severityColor(severity?: LnkupNotification["severity"]): string {
   return colors.gray500
 }
 
+function relativeTime(iso?: string): string {
+  if (!iso) return ""
+  const then = Date.parse(iso)
+  if (Number.isNaN(then)) return ""
+  const minutes = Math.round((Date.now() - then) / 60000)
+  if (minutes < 1) return "Just now"
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.round(hours / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(then).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+}
+
 export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProps) {
   const { auth, session } = useAuth()
   const userId = session?.user.id
+  const tabs = useMemo(() => inboxTabsFor(role), [role])
+  const [source, setSource] = useState<Source>(isLiveApiEnabled() ? "server" : "legacy")
+  const [tab, setTab] = useState<InboxTab>("all")
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<AppErrorShape | null>(null)
   const [items, setItems] = useState<LnkupNotification[]>([])
-  const [filter, setFilter] = useState<NotificationFilter>("all")
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(false)
+  const [tabCounts, setTabCounts] = useState<Partial<Record<InboxTab, number>>>({})
   const didFocusLoad = useRef(false)
   const markingAll = useRef(false)
+  const requestId = useRef(0)
+
+  const refreshCounts = useCallback(async () => {
+    const counts = await fetchInboxCount(role, auth)
+    if (!counts) return
+    setTabCounts(counts.byTab)
+    void syncAppBadge(counts.unread)
+  }, [auth, role])
 
   const load = useCallback(
-    async (mode: "initial" | "refresh" = "initial") => {
-      if (mode === "refresh") {
-        setRefreshing(true)
-      } else {
-        setLoading(true)
-      }
+    async (mode: "initial" | "refresh" = "initial", nextTab: InboxTab = tab) => {
+      const current = ++requestId.current
+      if (mode === "refresh") setRefreshing(true)
+      else setLoading(true)
       setError(null)
       try {
+        if (source === "server") {
+          try {
+            const result = await fetchInboxPage(role, { tab: nextTab, page: 1, auth })
+            if (current !== requestId.current) return
+            setItems(result.items)
+            setPage(1)
+            setHasMore(result.hasMore)
+            void refreshCounts()
+            return
+          } catch (err) {
+            if (!isCommsUnavailable(err)) throw err
+            setSource("legacy")
+          }
+        }
         const next = await fetchNotifications(role, { auth, userId })
+        if (current !== requestId.current) return
         setItems(next)
+        setHasMore(false)
         void syncAppBadge(getUnreadCount(next))
       } catch (err) {
-        setError(appErrorFromWp(err))
+        if (current === requestId.current) setError(appErrorFromWp(err))
       } finally {
-        setLoading(false)
-        setRefreshing(false)
+        if (current === requestId.current) {
+          setLoading(false)
+          setRefreshing(false)
+        }
       }
     },
-    [auth, role, userId],
+    [auth, refreshCounts, role, source, tab, userId],
   )
 
   useEffect(() => {
     void load("initial")
-  }, [load])
+    // Initial load only; tab changes call load directly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source])
 
   useFocusEffect(
     useCallback(() => {
@@ -92,26 +143,47 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
     }, [load]),
   )
 
-  const unreadCount = useMemo(() => getUnreadCount(items), [items])
+  const handleTabChange = useCallback(
+    (next: InboxTab) => {
+      setTab(next)
+      setItems([])
+      void load("initial", next)
+    },
+    [load],
+  )
 
-  const visible = useMemo(() => {
-    if (filter === "unread") return items.filter((n) => !n.readAt)
-    if (filter === "action") {
-      return items.filter((n) => isActionRequiredNotification(n) && !n.readAt)
+  const handleLoadMore = useCallback(async () => {
+    if (source !== "server" || !hasMore || loadingMore || loading) return
+    setLoadingMore(true)
+    try {
+      const result = await fetchInboxPage(role, { tab, page: page + 1, auth })
+      setItems((prev) => {
+        const seen = new Set(prev.map((n) => n.id))
+        return [...prev, ...result.items.filter((n) => !seen.has(n.id))]
+      })
+      setPage(result.page)
+      setHasMore(result.hasMore)
+    } catch {
+      showToast("Couldn't load more notifications.", "error")
+    } finally {
+      setLoadingMore(false)
     }
-    return items
-  }, [filter, items])
+  }, [auth, hasMore, loading, loadingMore, page, role, source, tab])
+
+  const unreadCount = useMemo(() => {
+    if (source === "server" && tabCounts[tab] != null) return tabCounts[tab] ?? 0
+    return getUnreadCount(items)
+  }, [items, source, tab, tabCounts])
 
   async function handleOpen(item: LnkupNotification) {
-    if (userId != null && !item.readAt) {
-      setItems((prev) => {
-        const next = prev.map((n) => (n.id === item.id ? { ...n, readAt: new Date().toISOString() } : n))
-        void syncAppBadge(getUnreadCount(next))
-        return next
-      })
-      void markRead(userId, item.id).catch(() => undefined)
-      void markInboxRead(item.id, auth).catch(() => undefined)
+    if (!item.readAt) {
+      setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, readAt: new Date().toISOString() } : n)))
+      if (userId != null) void markRead(userId, item.id).catch(() => undefined)
+      void markInboxRead(item.id, auth)
+        .then(() => refreshCounts())
+        .catch(() => undefined)
     }
+    if (item.notificationId) void trackNotificationOpened(item.notificationId, auth)
     const href = inAppHrefForNotification(item, session?.user.roles)
     if (href) {
       router.push(href as never)
@@ -121,17 +193,22 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
   }
 
   async function handleMarkAll() {
-    if (userId == null || markingAll.current) return
+    if (markingAll.current) return
     const ids = items.filter((n) => !n.readAt).map((n) => n.id)
-    if (ids.length === 0) return
+    if (ids.length === 0 && unreadCount === 0) return
     markingAll.current = true
     const previous = items
     const now = new Date().toISOString()
     setItems((prev) => prev.map((n) => (n.readAt ? n : { ...n, readAt: now })))
     try {
-      await markAllRead(userId, ids)
-      await markInboxReadAll(ids, auth)
-      void clearAppBadge()
+      if (source === "server") {
+        await markTabRead(role, tab, auth)
+        await refreshCounts()
+      } else {
+        if (userId != null) await markAllRead(userId, ids)
+        await markInboxReadAll(ids, auth)
+        void clearAppBadge()
+      }
     } catch {
       setItems(previous)
       showToast("Couldn't mark notifications as read. Try again.", "error")
@@ -140,7 +217,13 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
     }
   }
 
-  const rows = !loading && !error ? visible : EMPTY_NOTIFICATIONS
+  const rows = !loading && !error ? items : EMPTY_NOTIFICATIONS
+  const emptyCopy =
+    tab === "opportunities"
+      ? "New events that match your business will show here."
+      : tab === "operations"
+        ? "Event operations and recruiting updates will show here."
+        : "Updates from applications, payments, and events will show here."
 
   return (
     <ScreenList
@@ -155,7 +238,7 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
             onPress={() => void handleMarkAll()}
             style={styles.markAll}
             accessibilityRole="button"
-            accessibilityLabel="Mark all notifications as read"
+            accessibilityLabel={tab === "all" ? "Mark all notifications as read" : "Mark this category as read"}
           >
             <Text style={styles.markAllText}>Mark all</Text>
           </Pressable>
@@ -163,20 +246,25 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
       }
       data={rows}
       keyExtractor={(item) => item.id}
+      onEndReached={() => void handleLoadMore()}
       renderItem={(item) => {
         const unread = !item.readAt
+        const when = relativeTime(item.createdAt)
         return (
           <Pressable
             style={[styles.card, unread && styles.cardUnread]}
             onPress={() => void handleOpen(item)}
             accessibilityRole="button"
-            accessibilityLabel={`${unread ? "Unread. " : ""}${item.title}`}
+            accessibilityLabel={`${unread ? "Unread. " : ""}${item.title}${when ? `, ${when}` : ""}`}
           >
             <View style={styles.cardTop}>
               <Text style={[styles.type, { color: severityColor(item.severity) }]}>
                 {notificationTypeLabel(item.type)}
               </Text>
-              {unread ? <View style={styles.dot} /> : null}
+              <View style={styles.cardMeta}>
+                {when ? <Text style={styles.time}>{when}</Text> : null}
+                {unread ? <View style={styles.dot} /> : null}
+              </View>
             </View>
             <Text style={styles.cardTitle}>{item.title}</Text>
             {item.message ? <Text style={styles.cardBody}>{item.message}</Text> : null}
@@ -185,25 +273,27 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
         )
       }}
       listFooter={
-        <Pressable
-          style={styles.prefs}
-          onPress={() => router.push(prefsHref as never)}
-          accessibilityRole="button"
-        >
-          <Text style={styles.prefsText}>Notification preferences</Text>
-          <Text style={styles.prefsHint}>Push toggle on Profile / More</Text>
-        </Pressable>
+        <>
+          {loadingMore ? <ActivityIndicator color={colors.black} style={styles.more} /> : null}
+          <Pressable
+            style={styles.prefs}
+            onPress={() => router.push(prefsHref as never)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.prefsText}>Notification settings</Text>
+            <Text style={styles.prefsHint}>Choose email, push, digests and quiet hours</Text>
+          </Pressable>
+        </>
       }
       listHeader={
         <>
-          <FilterChipRow
-            options={FILTERS.map((chip) => ({
-              value: chip.id,
-              label: chip.label,
-            }))}
-            value={filter}
-            onChange={setFilter}
-          />
+          {source === "server" ? (
+            <FilterChipRow
+              options={tabs.map((t) => ({ value: t.value, label: t.label, count: tabCounts[t.value] }))}
+              value={tab}
+              onChange={handleTabChange}
+            />
+          ) : null}
 
           {loading ? <LoadingPanel label="Loading notifications…" variant="skeleton" count={4} /> : null}
 
@@ -211,17 +301,8 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
             <ErrorPanel title={error.title} message={error.message} onAction={() => void load()} />
           ) : null}
 
-          {!loading && !error && visible.length === 0 ? (
-            <EmptyPanel
-              title={filter === "all" ? "No notifications" : "Nothing here"}
-              message={
-                filter === "action"
-                  ? "No action items right now."
-                  : filter === "unread"
-                    ? "You're all caught up."
-                    : "Updates from applications, payments, and events will show here."
-              }
-            />
+          {!loading && !error && items.length === 0 ? (
+            <EmptyPanel title={tab === "all" ? "No notifications" : "Nothing here yet"} message={emptyCopy} />
           ) : null}
         </>
       }
@@ -258,11 +339,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
+  cardMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
   type: {
     fontSize: typeScale.micro,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.6,
+  },
+  time: {
+    fontSize: typeScale.micro,
+    color: colors.gray500,
   },
   dot: {
     width: 8,
@@ -285,6 +375,9 @@ const styles = StyleSheet.create({
     fontSize: typeScale.footnote,
     fontWeight: "700",
     color: colors.black,
+  },
+  more: {
+    marginVertical: spacing.md,
   },
   prefs: {
     borderWidth: 1,

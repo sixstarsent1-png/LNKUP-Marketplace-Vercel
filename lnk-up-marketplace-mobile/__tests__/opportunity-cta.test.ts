@@ -38,4 +38,21 @@ describe("opportunity apply state", () => {
   it("marks sold-out listings as full", () => {
     expect(opportunityApplyCta(opp({ spotsRemaining: 0 }), TODAY).reason).toBe("full")
   })
+
+  it("offers Apply again after a withdrawal", () => {
+    expect(opportunityApplyCta(opp({ applicationStatus: "cancelled" }), TODAY)).toEqual({ label: "Apply again", canApply: true })
+  })
+
+  it("keeps a declined listing closed unless the server re-opened it", () => {
+    expect(opportunityApplyCta(opp({ applicationStatus: "rejected" }), TODAY)).toMatchObject({ canApply: false, reason: "declined" })
+    expect(opportunityApplyCta(opp({ applicationStatus: "rejected", canApplyAgain: true }), TODAY)).toEqual({
+      label: "Apply again",
+      canApply: true,
+    })
+  })
+
+  it("still respects deadlines and inventory when applying again", () => {
+    expect(opportunityApplyCta(opp({ applicationStatus: "cancelled", deadlineIso: "2026-11-10" }), TODAY).reason).toBe("deadline")
+    expect(opportunityApplyCta(opp({ applicationStatus: "cancelled", spotsRemaining: 0 }), TODAY).reason).toBe("full")
+  })
 })

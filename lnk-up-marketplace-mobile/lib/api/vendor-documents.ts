@@ -157,6 +157,38 @@ export type UploadDocumentInput = {
   fileName: string
   mimeType?: string
   expirationDate?: string
+  /** Current document this upload replaces (keeps version history). */
+  replacesId?: string
+}
+
+export type DocumentShare = {
+  id: number
+  documentLabel: string
+  version: number
+  organizerName: string
+  eventTitle: string
+  accessUntil: string
+  active: boolean
+}
+
+/** Organizers this vendor has shared documents with (metadata only; never file URLs). */
+export async function fetchDocumentShares(auth?: WpAuth): Promise<DocumentShare[]> {
+  if (!isLiveApiEnabled()) return []
+  const data = await wpFetchJson<{ items?: Array<Record<string, unknown>> }>("/documents/shares", { auth })
+  return (data.items ?? []).map((s) => ({
+    id: Number(s.id ?? 0),
+    documentLabel: String(s.document_label ?? "Document"),
+    version: Number(s.version ?? 1),
+    organizerName: String(s.organizer_name ?? ""),
+    eventTitle: String(s.event_title ?? ""),
+    accessUntil: String(s.access_until ?? ""),
+    active: s.active === true,
+  }))
+}
+
+export async function revokeDocumentShare(shareId: number, auth?: WpAuth): Promise<void> {
+  if (!isLiveApiEnabled()) return
+  await wpFetchJson(`/documents/shares/${shareId}`, { method: "DELETE", auth })
 }
 
 export async function uploadVendorDocument(
@@ -171,6 +203,9 @@ export async function uploadVendorDocument(
   formData.append("document_type", input.documentType)
   if (input.expirationDate) {
     formData.append("expiration_date", input.expirationDate)
+  }
+  if (input.replacesId && /^\d+$/.test(input.replacesId)) {
+    formData.append("replaces", input.replacesId)
   }
 
   // React Native FormData file shape
