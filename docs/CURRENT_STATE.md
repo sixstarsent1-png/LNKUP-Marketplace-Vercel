@@ -18,6 +18,46 @@ Architecture: [PHASE_27_VENDOR_PASSPORT.md](PHASE_27_VENDOR_PASSPORT.md) · Rele
 - **New tables:** `lnkup_vendor_verification`, `lnkup_document_share`, `lnkup_review_index`. Admin: LNKup → Vendor Passport & Trust.
 - **Clients:** Expo `/(vendor)/passport` + organizer Passport panel + Documents shares; Next.js review responses and indicator-based public mapper.
 
+### Organizer Portfolio OS — tours, recurring series, templates (portfolio schema 1; no plugin version bump)
+
+Architecture: SYSTEM_OVERVIEW §9.24. Off by default: `portfolio_os_enabled` (everyone) or `portfolio_os_user_ids` (early-access organizer IDs) under LNKup → Settings → Vendor applications.
+
+- **Built on the existing tour model:** `lnkup_tour` (types `tour`, `series`, new `recurring`) groups ordinary `lnkup_event` stops through `_lnkup_tour_id`. No parallel series CPT. Every stop keeps its own opportunities, applications, inventory, payments, packets and check-ins.
+- **Stops:**
+  - Created in bulk through `create_event_from_request()` with client token `tour{ID}_{stop key}`, so a resubmitted table never duplicates a stop.
+  - Draft stops are unpublished events, so the marketplace index, public pages and `show_closed` never show them.
+  - Publishing checks readiness first: date, confirmed venue and address, city/state, time zone, at least one booth type, deadline. A stop without a venue stays a draft.
+- **Defaults and overrides:**
+  - Tour defaults (`_lnkup_tour_defaults`) define booth types, prices, capacities, documents, questions (`LNKup_Application_Questions`) and the deadline offset once.
+  - Stop overrides (`_lnkup_stop_overrides`) always win.
+  - Publishing creates one opportunity per booth type and stores `_lnkup_booth_type_key` on it.
+  - Bulk price and capacity edits are previewed first. Live stops change only with `confirm_published`, through `update_opportunity_pricing()`, which refuses a capacity below the booths already held. Existing payments keep their amounts.
+- **Recurring series:**
+  - Generation is capped at 52 dates per run and needs an end date or a count.
+  - Dates use the series' IANA time zone, so 10:00 local stays 10:00 across a daylight-saving change.
+  - Each date has the key `o{Ymd}`, so generating twice never duplicates a date.
+  - Single dates can be skipped, restored, moved or cancelled. "Change remaining" removes only untouched future drafts.
+- **Templates:** `lnkup_event_template` stores immutable versions in `wp_lnkup_template_versions`. Tours and stops record the version they were built from. Templates contain configuration only.
+- **Brands:** `lnkup_brand` (optional) groups tours under one event identity.
+- **Background jobs:** batches of more than 10 stops run in `wp_lnkup_portfolio_jobs` in chunks of 10 through WP-Cron. Polling the job status resumes a stalled job.
+- **Reporting:** tour totals come only from each stop's `lnkup_payment` posts, each payment counted once, with refunds from the ledger. Gross, platform fees, pending and refunds are reported separately, along with a `reconciled` check against the per-stop totals. Historical or imported payments are never included.
+- **Deletion safety:**
+  - Stops with applications can only be cancelled, through `LNKup_Event_Status`, which notifies vendors.
+  - A tour with applications can only be archived.
+  - Deleting a tour that never had applications detaches its stops and keeps them as standalone events.
+  - Every change is written to `wp_lnkup_portfolio_audit`.
+- **Multi-stop applications and tour interest:** the multi-stop apply flow reuses the existing `LNKup_Application_Groups` (`/tours/{id}/apply`). The new `wp_lnkup_tour_interest` table records "interested in the whole tour". It is never an application. Organizers invite interested vendors or past applicants to specific live stops through `LNKup_Vendor_Invites`.
+- **Organizer UI:** dashboard view `?view=tours` (`public/js/portfolio.js`, `public/css/portfolio.css`).
+  - Portfolio list with filters, templates and brands.
+  - Setup flow: identity, dates (table, spreadsheet paste or schedule builder), booths and questions, pricing, then review and publish.
+  - Tour dashboard tabs: Overview, Stops, Booths & questions, Pricing, Applications (cross-stop bulk actions), Vendors (interest and invites), Settings (audit log).
+  - The Events page links to it when the flag is on.
+- **Public pages:** `/tours/{slug}/` and `/series/{slug}/` (theme `page-templates/tour-public.php`, plugin fallback in `public/templates/`). They show published, upcoming stops only, a city filter, per-stop apply links, the existing multi-stop apply link and the interest toggle. Discovery cards show a "Part of {tour}" link.
+- **REST:** `lnkup/v1/portfolio/*` (about 45 routes; organizer + flag + tour ownership; stop routes also verify the stop belongs to the tour and organizer). `GET /applications/organizer` accepts optional `tour_id` / `event_ids[]`.
+- **Tests:**
+  - `scripts/e2e/php/portfolio-os-test.php`: 117 assertions pass on wp-env. It covers the 7-stop tour with an Atlanta override, multi-stop apply (approve 2, reject 1, pay 2), reconciliation, the monthly series with a skip and a move, DST, templates, the 14-date background job and cross-organizer denial.
+  - `tests/e2e/portfolio-os.spec.ts`: 3 pass on Chromium after `scripts/e2e/seed-portfolio.php`.
+
 ### Partnership OS Stages 4–5 — Affiliate and Strategic Partner programs (12.30.0+, partner schema 1.1.1)
 
 Details: [PARTNERSHIP_OS.md](PARTNERSHIP_OS.md#stages-45-affiliate-and-strategic-partner-programs-plugin-12300-schema-111).

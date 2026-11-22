@@ -161,6 +161,7 @@ function lnkup_dashboard_organizer_title() {
 		'home'         => __( 'Overview', 'lnkup-theme' ),
 		'start'        => __( 'Get started', 'lnkup-theme' ),
 		'events'       => __( 'Events', 'lnkup-theme' ),
+		'tours'        => __( 'Tours & Series', 'lnkup-theme' ),
 		'applications' => __( 'Requests', 'lnkup-theme' ),
 		'financial'    => __( 'Money', 'lnkup-theme' ),
 		'vendors'      => __( 'Vendors', 'lnkup-theme' ),
@@ -470,12 +471,16 @@ function lnkup_get_dashboard_nav( $role ) {
 		return add_query_arg( 'view', $view, $organizer_dash );
 	};
 	$org_badges = class_exists( 'LNKup_Organizer_Dashboard_Views' ) ? LNKup_Organizer_Dashboard_Views::nav_badges() : array();
+	$tours_item = class_exists( 'LNKup_Feature_Flags' ) && LNKup_Feature_Flags::portfolio()
+		? array( array( 'label' => __( 'Tours & Series', 'lnkup-theme' ), 'href' => $org_view_url( 'tours' ), 'slug' => 'organizer-dashboard', 'icon' => 'calendar', 'view' => 'tours', 'tier' => 'secondary' ) )
+		: array();
 
-	return lnkup_dashboard_nav_with_app_item( array(
+	return lnkup_dashboard_nav_with_app_item( array_merge( array(
 
 		array( 'label' => __( 'Overview', 'lnkup-theme' ), 'href' => $org_view_url( 'home' ), 'slug' => 'organizer-dashboard', 'icon' => 'home', 'view' => 'home', 'tier' => 'primary' ),
 
 		array( 'label' => __( 'Events', 'lnkup-theme' ), 'href' => $org_view_url( 'events' ), 'slug' => 'organizer-dashboard', 'icon' => 'calendar', 'view' => 'events', 'tier' => 'primary' ),
+	), $tours_item, array(
 
 		array( 'label' => __( 'Requests', 'lnkup-theme' ), 'href' => $org_view_url( 'applications' ), 'slug' => 'organizer-dashboard', 'icon' => 'users', 'view' => 'applications', 'badge' => $org_badges['applications'] ?? 0, 'tier' => 'primary' ),
 
@@ -503,7 +508,7 @@ function lnkup_get_dashboard_nav( $role ) {
 
 		array( 'label' => __( 'Intelligence', 'lnkup-theme' ), 'href' => $org_view_url( 'intelligence' ), 'slug' => 'organizer-dashboard', 'icon' => 'chart', 'view' => 'intelligence', 'tier' => 'more' ),
 
-	), 'organizer' );
+	) ), 'organizer' );
 
 }
 

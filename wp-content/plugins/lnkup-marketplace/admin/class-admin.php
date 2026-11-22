@@ -213,6 +213,10 @@ class LNKup_Admin {
 		$output['test_mode']           = ! empty( $input['test_mode'] );
 		$output['apply_wizard_enabled']     = ! empty( $input['apply_wizard_enabled'] );
 		$output['tour_multi_apply_enabled'] = ! empty( $input['tour_multi_apply_enabled'] );
+		$output['portfolio_os_enabled']     = ! empty( $input['portfolio_os_enabled'] );
+		if ( isset( $input['portfolio_os_user_ids'] ) ) {
+			$output['portfolio_os_user_ids'] = implode( ',', array_filter( array_map( 'absint', explode( ',', (string) $input['portfolio_os_user_ids'] ) ) ) );
+		}
 		$output['application_review_v2_enabled'] = ! empty( $input['application_review_v2_enabled'] );
 		$output['waitlist_offers_enabled']       = ! empty( $input['waitlist_offers_enabled'] );
 		$output['default_packet_lock'] = ! empty( $input['default_packet_lock'] );
@@ -624,6 +628,14 @@ class LNKup_Admin {
 					<tr>
 						<th><?php esc_html_e( 'Multi-stop tour applications', 'lnkup-marketplace' ); ?></th>
 						<td><label><input type="checkbox" name="lnkup_settings[tour_multi_apply_enabled]" value="1" <?php checked( ! empty( $settings['tour_multi_apply_enabled'] ) ); ?> /> <?php esc_html_e( 'Let vendors apply to several tour stops or series dates at once (one application per stop). Requires Tours & series.', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Organizer Portfolio OS', 'lnkup-marketplace' ); ?></th>
+						<td>
+							<label><input type="checkbox" name="lnkup_settings[portfolio_os_enabled]" value="1" <?php checked( ! empty( $settings['portfolio_os_enabled'] ) ); ?> /> <?php esc_html_e( 'Tours & Series workspace for every organizer: tour and recurring-series setup, bulk stops, templates, stop-level pricing overrides, tour dashboard and public tour pages. Each stop keeps its own applications, booths and payments.', 'lnkup-marketplace' ); ?></label>
+							<p><label for="lnkup-portfolio-os-users"><?php esc_html_e( 'Early access organizer IDs (comma-separated, used while the switch above is off):', 'lnkup-marketplace' ); ?></label><br />
+							<input type="text" class="regular-text" id="lnkup-portfolio-os-users" name="lnkup_settings[portfolio_os_user_ids]" value="<?php echo esc_attr( (string) ( $settings['portfolio_os_user_ids'] ?? '' ) ); ?>" /></p>
+						</td>
 					</tr>
 					<tr>
 						<th><?php esc_html_e( 'Application review workspace', 'lnkup-marketplace' ); ?></th>

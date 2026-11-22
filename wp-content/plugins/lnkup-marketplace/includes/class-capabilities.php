@@ -229,6 +229,39 @@ class LNKup_Capabilities {
 	}
 
 	/**
+	 * Organizer owns a tour / series (lnkup_tour).
+	 *
+	 * @param int $tour_id      Tour ID.
+	 * @param int $organizer_id Organizer user ID.
+	 */
+	public static function organizer_owns_tour( $tour_id, $organizer_id = 0 ) {
+		$organizer_id = $organizer_id ?: get_current_user_id();
+		$tour_id      = absint( $tour_id );
+		if ( ! $organizer_id || ! $tour_id || 'lnkup_tour' !== get_post_type( $tour_id ) ) {
+			return false;
+		}
+		if ( self::user_has_manage_all( $organizer_id ) ) {
+			return true;
+		}
+		return (int) get_post_meta( $tour_id, '_lnkup_organizer_user_id', true ) === (int) $organizer_id;
+	}
+
+	/**
+	 * A stop belongs to the tour and to the tour's organizer (no forged or cross-organizer stops).
+	 *
+	 * @param int $tour_id  Tour ID.
+	 * @param int $event_id Event ID.
+	 */
+	public static function event_is_tour_stop( $tour_id, $event_id ) {
+		$tour_id  = absint( $tour_id );
+		$event_id = absint( $event_id );
+		return $tour_id && $event_id
+			&& 'lnkup_event' === get_post_type( $event_id )
+			&& (int) get_post_meta( $event_id, '_lnkup_tour_id', true ) === $tour_id
+			&& (int) get_post_meta( $event_id, '_lnkup_organizer_user_id', true ) === (int) get_post_meta( $tour_id, '_lnkup_organizer_user_id', true );
+	}
+
+	/**
 	 * Event-scoped capability for the owner, admins, or staff per LNKup_Event_Staff::capability_matrix().
 	 *
 	 * Capabilities: view_roster, check_in, edit_ops, edit_packets, edit_map, broadcast,

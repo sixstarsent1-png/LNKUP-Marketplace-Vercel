@@ -1611,6 +1611,62 @@ At most one daily nudge goes to an organizer per run. A shared cooldown (`activa
 
 ---
 
+### 9.24 Organizer Portfolio OS (tours, recurring series, templates)
+
+Flag: `LNKup_Feature_Flags::portfolio( $user_id )`. It is true when `portfolio_os_enabled` is on or the user is in `portfolio_os_user_ids`. Public pages check the tour owner.
+
+```
+Organizer user (organization owner)
+  ├─ lnkup_brand (optional)
+  └─ lnkup_tour  _lnkup_tour_type: tour | series | recurring
+       │  _lnkup_tour_defaults (booth types, docs, questions, deadline offset)
+       │  _lnkup_recurrence_rule, _lnkup_template_version_id, _lnkup_brand_id
+       └─ lnkup_event (stop)  _lnkup_tour_id, _lnkup_occurrence_key, _lnkup_occurrence_state,
+            │                 _lnkup_timezone, _lnkup_stop_overrides
+            └─ lnkup_opportunity (one per booth type)  _lnkup_booth_type_key
+                 └─ lnkup_application ─ lnkup_payment (one per application, per stop)
+lnkup_event_template ─ wp_lnkup_template_versions (immutable)
+```
+
+| Class | Role |
+|---|---|
+| `LNKup_Portfolio_Tours` | Tour CRUD on top of `LNKup_Tours::save()`. Idempotent draft stops, readiness, publish (creates opportunities), cancel, archive, delete with stops detached, portfolio event list |
+| `LNKup_Portfolio_Config` | Defaults and overrides resolution, bulk preview/apply (`update_opportunity_pricing()` for live stops) |
+| `LNKup_Portfolio_Recurrence` | Bounded rules (weekly, biweekly, monthly weekday, monthly date, custom). Local-time-zone dates; skip, move, change remaining |
+| `LNKup_Portfolio_Templates` / `_Brands` | Versioned templates; event brands |
+| `LNKup_Portfolio_Jobs` | Chunked background stop creation (`lnkup_portfolio_run_job`). Status polling resumes stalled jobs |
+| `LNKup_Portfolio_Reporting` | Tour summary from event-level payments (deduplicated, `reconciled` flag), cross-stop applications and bulk decisions |
+| `LNKup_Portfolio_Interest` | Tour-wide interest and invites to stops (`LNKup_Vendor_Invites`) |
+| `LNKup_Portfolio_Public` | `/tours/{slug}`, `/series/{slug}`, public data, "Part of tour" card link |
+| `LNKup_Portfolio_REST` | `lnkup/v1/portfolio/*` |
+| `LNKup_Portfolio_Tables` | Own schema version (`lnkup_portfolio_db_version`): `template_versions`, `portfolio_jobs`, `portfolio_audit`, `tour_interest` |
+
+Rules:
+- Stops are ordinary events created through `LNKup_Organizer_Onboarding::create_event_from_request()`. Drafts use `post_status = draft`, which the marketplace index already excludes.
+- A tour never merges booking or payment records: approval, inventory locks, payments, packets and check-ins stay per stop. Multi-stop applications use `LNKup_Application_Groups`.
+- Tour defaults apply only to draft stops. Live stops change only through the confirmed bulk editor.
+- Team members reach tour stops through `LNKup_Org_Teams` `tour` scope. Portfolio write routes are owner-only, because stop creation assigns the current user as organizer.
+
+Main routes (all have a `permission_callback`):
+
+| Route | Purpose |
+|---|---|
+| `GET /portfolio/overview` | Tours, brands, templates, time zones |
+| `GET\|POST /portfolio/tours`, `GET\|PATCH\|DELETE /portfolio/tours/{id}` | Tour CRUD |
+| `POST /portfolio/tours/{id}/archive` | Archive or restore |
+| `POST /portfolio/tours/{id}/cancel` | Cancel selected stops |
+| `POST /portfolio/tours/{id}/stops` (`Idempotency-Key`) | Add stops (inline or background job) |
+| `PATCH\|DELETE /portfolio/tours/{id}/stops/{event_id}`, `/detach`, `/duplicate`, `/stops/reorder` | Stop management |
+| `POST /portfolio/tours/{id}/publish` | `event_ids[]` or `all`; returns a result per stop |
+| `POST /portfolio/tours/{id}/recurrence/preview\|generate\|change-remaining` | Recurring schedule |
+| `POST /portfolio/tours/{id}/occurrences/{event_id}/skip\|move` | One occurrence |
+| `GET\|PUT /portfolio/tours/{id}/defaults`, `POST /bulk/preview`, `POST /bulk/apply` | Defaults and bulk pricing |
+| `GET /portfolio/tours/{id}/summary\|applications\|interest\|audit` | Reporting |
+| `POST /applications/bulk`, `/invite`, `/save-as-template` | Bulk decisions, invites, templates |
+| `GET\|POST /portfolio/brands`, `GET\|POST\|PATCH\|DELETE /portfolio/templates[/{id}]`, `/templates/{id}/duplicate\|apply` | Brands and templates |
+| `GET /portfolio/events`, `GET /portfolio/jobs/{id}` | Portfolio event list, job status |
+| `GET /portfolio/public/tours/{slug}` (public), `GET\|POST\|DELETE /portfolio/tours/{id}/interest/me` (vendor) | Public data, tour interest |
+
 ## 10. Data Layer
 
 ### Dual-Storage Pattern

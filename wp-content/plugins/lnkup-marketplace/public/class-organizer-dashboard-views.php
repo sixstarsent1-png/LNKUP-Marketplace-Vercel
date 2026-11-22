@@ -93,6 +93,9 @@ class LNKup_Organizer_Dashboard_Views {
 				case 'team':
 					echo self::render_team(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					break;
+				case 'tours':
+					echo self::render_portfolio(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					break;
 				case 'home':
 				default:
 					echo self::render_home(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
@@ -781,6 +784,17 @@ class LNKup_Organizer_Dashboard_Views {
 	 * @return string
 	 */
 	private static function render_tours() {
+		if ( class_exists( 'LNKup_Feature_Flags' ) && LNKup_Feature_Flags::portfolio() ) {
+			ob_start();
+			?>
+			<section class="lnkup-card lnkup-tours-manager" data-testid="lnkup-tours-cta">
+				<h2><?php esc_html_e( 'Tours & series', 'lnkup-marketplace' ); ?></h2>
+				<p class="lnkup-muted"><?php esc_html_e( 'Run a multi-city tour or a recurring market from one place: set booths, prices and questions once, then add every date.', 'lnkup-marketplace' ); ?></p>
+				<a class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" href="<?php echo esc_url( lnkup_organizer_view_url( 'tours' ) ); ?>"><?php esc_html_e( 'Open Tours & Series', 'lnkup-marketplace' ); ?></a>
+			</section>
+			<?php
+			return (string) ob_get_clean();
+		}
 		if ( ! class_exists( 'LNKup_Match_Settings' ) || ! LNKup_Match_Settings::enabled( 'matching_tours_enabled' ) ) {
 			return '';
 		}
@@ -853,6 +867,32 @@ class LNKup_Organizer_Dashboard_Views {
 				</form>
 			<?php endif; ?>
 		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Tours & Series workspace shell. portfolio.js renders the portfolio list, the setup wizard and
+	 * the tour dashboard from lnkup/v1/portfolio; the server only checks access and provides the
+	 * mount point with a no-JS fallback.
+	 *
+	 * @return string
+	 */
+	private static function render_portfolio() {
+		if ( ! class_exists( 'LNKup_Feature_Flags' ) || ! LNKup_Feature_Flags::portfolio() ) {
+			return '<p class="lnkup-empty-state">' . esc_html__( 'Tours & Series is not available on your account yet.', 'lnkup-marketplace' ) . '</p>';
+		}
+		ob_start();
+		echo self::page_header( __( 'Tours & Series', 'lnkup-marketplace' ), __( 'Multi-city tours, recurring markets and event series. Each date keeps its own applications, booths and payments.', 'lnkup-marketplace' ), '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		?>
+		<div id="lnkup-portfolio" class="lnkup-portfolio" data-testid="lnkup-portfolio" aria-live="polite">
+			<div class="lnkup-portfolio__loading" role="status">
+				<span class="lnkup-skeleton lnkup-skeleton--line"></span>
+				<span class="lnkup-skeleton lnkup-skeleton--line"></span>
+				<span class="screen-reader-text"><?php esc_html_e( 'Loading your tours…', 'lnkup-marketplace' ); ?></span>
+			</div>
+			<noscript><p class="lnkup-alert lnkup-alert--error"><?php esc_html_e( 'Tours & Series needs JavaScript. Turn it on and reload the page.', 'lnkup-marketplace' ); ?></p></noscript>
+		</div>
 		<?php
 		return (string) ob_get_clean();
 	}

@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
 
 class LNKup_Tours {
 
-	const TYPES     = array( 'tour', 'series' );
+	const TYPES     = array( 'tour', 'series', 'recurring' );
 	const MAX_STOPS = 60;
 
 	/**
@@ -374,10 +374,10 @@ class LNKup_Tours {
 		$results = LNKup_Match_Tables::results_table();
 		$index   = LNKup_Marketplace_Index::table_name();
 		$today   = current_time( 'Y-m-d' );
-		$type    = 'series' === $section ? 'series' : 'tour';
+		$types   = 'series' === $section ? array( 'series', 'recurring' ) : array( 'tour' );
 		$where   = "r.profile_id = %d AND r.eligible = 1 AND m.tour_id > 0 AND (m.spots_remaining > 0 OR m.spots_total <= 0) AND (m.deadline IS NULL OR m.deadline >= %s) AND (m.event_date IS NULL OR m.event_date >= %s)
-			AND m.tour_id IN (SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_lnkup_tour_type' AND meta_value = %s)";
-		$params  = array( (int) $vendor['profile_id'], $today, $today, $type );
+			AND m.tour_id IN (SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_lnkup_tour_type' AND meta_value IN (" . implode( ',', array_fill( 0, count( $types ), '%s' ) ) . '))';
+		$params  = array_merge( array( (int) $vendor['profile_id'], $today, $today ), $types );
 		$from    = "FROM {$results} r INNER JOIN {$index} m ON m.opportunity_id = r.opportunity_id WHERE {$where}";
 		$total   = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(DISTINCT m.tour_id) {$from}", $params ) ); // phpcs:ignore WordPress.DB
 		$rows    = (array) $wpdb->get_results( // phpcs:ignore WordPress.DB

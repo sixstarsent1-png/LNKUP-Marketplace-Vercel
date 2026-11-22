@@ -660,10 +660,28 @@ class LNKup_Applications_REST {
 	 * @param WP_REST_Request $request Request.
 	 */
 	public static function organizer_applications( WP_REST_Request $request ) {
-		unset( $request );
 		$user_id = get_current_user_id();
 		$apps    = lnkup_get_applications_for_user( $user_id, 'organizer' );
 		$items   = array();
+
+		// Optional narrowing to one tour's stops and/or explicit events (unknown filters are ignored).
+		$only_events = array_filter( array_map( 'absint', (array) $request->get_param( 'event_ids' ) ) );
+		$tour_filter = absint( $request->get_param( 'tour_id' ) );
+		if ( $tour_filter ) {
+			$stops       = class_exists( 'LNKup_Tours' ) && LNKup_Capabilities::organizer_owns_tour( $tour_filter, $user_id ) ? LNKup_Tours::stop_event_ids( $tour_filter ) : array();
+			$only_events = $only_events ? array_values( array_intersect( $only_events, $stops ) ) : $stops;
+			$only_events = $only_events ? $only_events : array( -1 );
+		}
+		if ( $only_events ) {
+			$apps = array_values(
+				array_filter(
+					$apps,
+					static function ( $app ) use ( $only_events ) {
+						return in_array( (int) get_post_meta( $app->ID, '_lnkup_event_id', true ), $only_events, true );
+					}
+				)
+			);
+		}
 
 		foreach ( $apps as $app ) {
 			$meta       = LNKup_Vendor_Dashboard_Data::application_event_meta( $app );

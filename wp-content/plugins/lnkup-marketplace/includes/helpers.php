@@ -223,7 +223,7 @@ function lnkup_organizer_dashboard_view( $view = null ) {
 	if ( isset( $aliases[ $view ] ) ) {
 		$view = $aliases[ $view ];
 	}
-	$allowed = array( 'home', 'start', 'events', 'applications', 'financial', 'vendors', 'lists', 'invites', 'referrals', 'operations', 'intelligence', 'create', 'help', 'profile', 'team' );
+	$allowed = array( 'home', 'start', 'events', 'applications', 'financial', 'vendors', 'lists', 'invites', 'referrals', 'operations', 'intelligence', 'create', 'help', 'profile', 'team', 'tours' );
 	return in_array( $view, $allowed, true ) ? $view : 'home';
 }
 
@@ -2592,6 +2592,10 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 			<button type="button" class="lnkup-event-card__favorite<?php echo $favorited ? ' is-active' : ''; ?>" data-favorite-type="opportunities" data-favorite-id="<?php echo esc_attr( (string) $opp['opportunity_id'] ); ?>" aria-label="<?php esc_attr_e( 'Favorite', 'lnkup-marketplace' ); ?>">♥</button>
 		</div>
 		<div class="lnkup-event-card__body">
+			<?php $tour_link = class_exists( 'LNKup_Portfolio_Public' ) ? LNKup_Portfolio_Public::card_tour_link( $event_id ) : null; ?>
+			<?php if ( $tour_link ) : ?>
+				<a class="lnkup-event-card__tour" href="<?php echo esc_url( $tour_link['url'] ); ?>" data-testid="lnkup-card-tour-link"><?php echo esc_html( $tour_link['label'] ); ?></a>
+			<?php endif; ?>
 			<?php if ( ! empty( $opp['organizer_name'] ) ) : ?>
 				<div class="lnkup-event-card__organizer">
 					<span class="lnkup-event-card__avatar"><?php echo esc_html( substr( $opp['organizer_name'], 0, 1 ) ); ?></span>

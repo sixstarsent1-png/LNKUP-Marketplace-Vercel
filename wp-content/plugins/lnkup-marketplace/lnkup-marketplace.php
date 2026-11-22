@@ -340,6 +340,18 @@ $lnkup_core_files = array(
 	'includes/matching/class-recruitment-rest.php',
 	'includes/matching/class-tours.php',
 	'includes/matching/class-tours-rest.php',
+	'includes/portfolio/class-portfolio-tables.php',
+	'includes/portfolio/class-portfolio-audit.php',
+	'includes/portfolio/class-portfolio-config.php',
+	'includes/portfolio/class-portfolio-brands.php',
+	'includes/portfolio/class-portfolio-templates.php',
+	'includes/portfolio/class-portfolio-tours.php',
+	'includes/portfolio/class-portfolio-recurrence.php',
+	'includes/portfolio/class-portfolio-jobs.php',
+	'includes/portfolio/class-portfolio-reporting.php',
+	'includes/portfolio/class-portfolio-interest.php',
+	'includes/portfolio/class-portfolio-public.php',
+	'includes/portfolio/class-portfolio-rest.php',
 	'admin/class-match-admin.php',
 	'includes/passport/class-passport-settings.php',
 	'includes/passport/class-passport-tables.php',
@@ -481,6 +493,10 @@ function lnkup_marketplace_init() {
 	LNKup_Recruitment_REST::init();
 	LNKup_Tours::init();
 	LNKup_Tours_REST::init();
+	LNKup_Portfolio_Tables::maybe_upgrade();
+	LNKup_Portfolio_Jobs::init();
+	LNKup_Portfolio_Public::init();
+	LNKup_Portfolio_REST::init();
 	LNKup_Match_Admin::init();
 	LNKup_Passport::init();
 	LNKup_Shortcodes::init();
@@ -855,6 +871,8 @@ function lnkup_get_settings() {
 		'matching_tours_enabled'                  => false,
 		'apply_wizard_enabled'                    => false,
 		'tour_multi_apply_enabled'                => false,
+		'portfolio_os_enabled'                    => false,
+		'portfolio_os_user_ids'                   => '',
 		'application_review_v2_enabled'           => false,
 		'waitlist_offers_enabled'                 => false,
 		'match_weight_category'                   => 30,

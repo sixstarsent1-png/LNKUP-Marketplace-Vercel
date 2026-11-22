@@ -432,6 +432,21 @@ class LNKup_Shortcodes {
 		if ( $org['page'] && is_user_logged_in() && LNKup_Capabilities::is_team_only_member() ) {
 			wp_enqueue_style( 'lnkup-org-team', LNKUP_PLUGIN_URL . 'public/css/org-team.css', array(), LNKUP_VERSION );
 		}
+		if ( $org['page'] && 'tours' === $org['view'] && is_user_logged_in() && LNKup_Feature_Flags::portfolio() ) {
+			wp_enqueue_style( 'lnkup-portfolio', LNKUP_PLUGIN_URL . 'public/css/portfolio.css', array(), lnkup_asset_version( 'public/css/portfolio.css' ) );
+			wp_enqueue_script( 'lnkup-portfolio', LNKUP_PLUGIN_URL . 'public/js/portfolio.js', array(), lnkup_asset_version( 'public/js/portfolio.js' ), true );
+			wp_localize_script(
+				'lnkup-portfolio',
+				'lnkupPortfolio',
+				array(
+					'root'      => esc_url_raw( rest_url( 'lnkup/v1' ) ),
+					'nonce'     => wp_create_nonce( 'wp_rest' ),
+					'viewUrl'   => esc_url_raw( lnkup_organizer_view_url( 'tours' ) ),
+					'dashboard' => esc_url_raw( lnkup_page_url_helper( 'organizer-dashboard' ) ),
+					'documents' => class_exists( 'LNKup_Documents' ) ? LNKup_Documents::document_types() : array(),
+				)
+			);
+		}
 		if ( $org['page'] && 'team' === $org['view'] && is_user_logged_in() ) {
 			wp_enqueue_style( 'lnkup-org-team', LNKUP_PLUGIN_URL . 'public/css/org-team.css', array(), LNKUP_VERSION );
 			wp_enqueue_script( 'lnkup-org-team', LNKUP_PLUGIN_URL . 'public/js/org-team.js', array(), LNKUP_VERSION, true );
