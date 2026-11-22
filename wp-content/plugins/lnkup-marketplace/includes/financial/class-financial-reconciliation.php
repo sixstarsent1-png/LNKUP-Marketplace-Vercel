@@ -195,7 +195,7 @@ class LNKup_Financial_Reconciliation {
 			if ( ( $effects['reserve_holds'] ?? 0 ) > 1 || ( '' !== $payment['destination'] && ( $effects['reserve_holds'] ?? 0 ) > 0 ) ) {
 				$issues[] = 'unbacked_reserve_holds';
 			}
-			if ( ( $effects['escrow_holds'] ?? 0 ) > 1 ) {
+			if ( ( $effects['escrow_holds_live'] ?? $effects['escrow_holds'] ?? 0 ) > 1 ) {
 				$issues[] = 'duplicate_escrow_holds';
 			}
 			$runs = array_merge( $runs, array( 'side_effects' => $effects ) );
@@ -349,7 +349,7 @@ class LNKup_Financial_Reconciliation {
 			$amount_col = 'platform_fees' === $key ? 'lnkup_platform_fee' : 'amount';
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$rows = (array) $wpdb->get_results(
-				"SELECT payment_post_id, COUNT(*) AS n, SUM({$amount_col}) AS total" . ( 'platform_fees' === $key ? '' : ", GROUP_CONCAT(DISTINCT status) AS statuses" ) . "
+				"SELECT payment_post_id, COUNT(*) AS n, SUM({$amount_col}) AS total" . ( 'platform_fees' === $key ? '' : ", GROUP_CONCAT(DISTINCT status) AS statuses, SUM(status NOT IN ('void','cancelled')) AS live" ) . "
 				FROM {$table} WHERE payment_post_id IN ({$in}) GROUP BY payment_post_id",
 				ARRAY_A
 			);
@@ -359,6 +359,7 @@ class LNKup_Financial_Reconciliation {
 				$out[ $pid ][ $key . '_cents' ] = self::to_cents( $row['total'] );
 				if ( isset( $row['statuses'] ) ) {
 					$out[ $pid ][ $key . '_statuses' ] = (string) $row['statuses'];
+					$out[ $pid ][ $key . '_live' ]     = (int) $row['live'];
 				}
 			}
 		}

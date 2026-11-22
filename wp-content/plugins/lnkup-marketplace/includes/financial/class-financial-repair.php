@@ -235,7 +235,7 @@ class LNKup_Financial_Repair {
 			}
 
 			$effects = (array) ( $payment['audit']['side_effects'] ?? array() );
-			if ( (int) ( $effects['escrow_holds'] ?? 0 ) > 1 ) {
+			if ( in_array( 'duplicate_escrow_holds', $issues, true ) ) {
 				$items[] = array(
 					'id'                  => 'escrow:' . $payment['id'],
 					'type'                => 'void_duplicate_escrow_holds',

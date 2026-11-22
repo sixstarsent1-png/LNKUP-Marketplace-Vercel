@@ -110,6 +110,8 @@ $res2 = LNKup_Financial_Repair::apply( $organizer, $dry2['confirmation_token'] )
 lnkup_t_assert( ! is_wp_error( $res2 ), 'second repair run applies' );
 lnkup_t_same( array( 'held', 'void' ), $wpdb->get_col( $wpdb->prepare( "SELECT status FROM {$escrow} WHERE payment_post_id = %d ORDER BY id", $p_esc ) ), 'first hold kept, duplicate voided (not deleted)' );
 lnkup_t_same( 23000, (int) round( (float) $wpdb->get_var( $wpdb->prepare( "SELECT SUM(amount) FROM {$entries} WHERE payment_post_id = %d AND entry_type = 'debit' AND source_type LIKE 'refund%%'", $p_ref ) ) * 100 ), 'refund share reversed once' );
+$dry3 = LNKup_Financial_Repair::dry_run( $organizer, false );
+lnkup_t_assert( ! isset( wp_list_pluck( $dry3['items'], 'type', 'id' )[ 'escrow:' . $p_esc ] ), 'voided duplicate hold is no longer flagged' );
 $wpdb->delete( $escrow, array( 'payment_post_id' => $p_esc ) );
 wp_set_current_user( 0 );
 
