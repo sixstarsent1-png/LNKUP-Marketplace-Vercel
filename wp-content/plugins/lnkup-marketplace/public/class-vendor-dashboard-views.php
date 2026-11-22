@@ -1240,7 +1240,7 @@ class LNKup_Vendor_Dashboard_Views {
 		?>
 		<section class="lnkup-vendor-section" data-testid="lnkup-vendor-recent-activity">
 			<div class="lnkup-home-block__head">
-				<h2 class="lnkup-panel__title"><?php echo esc_html( $items ? __( 'Recent activity', 'lnkup-marketplace' ) : __( 'Recent requests', 'lnkup-marketplace' ) ); ?></h2>
+				<h2 class="lnkup-panel__title"><?php echo esc_html( $items ? __( 'Recent activity', 'lnkup-marketplace' ) : __( 'Recent bookings', 'lnkup-marketplace' ) ); ?></h2>
 				<a href="<?php echo esc_url( $apps_url ); ?>" class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm"><?php esc_html_e( 'View all', 'lnkup-marketplace' ); ?></a>
 			</div>
 			<?php if ( $items ) : ?>
@@ -1480,9 +1480,9 @@ class LNKup_Vendor_Dashboard_Views {
 			<?php
 			echo lnkup_page_header( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 				array(
-					'title'    => __( 'Requests', 'lnkup-marketplace' ),
-					'subtitle' => __( 'Every event you applied to, from review to booked.', 'lnkup-marketplace' ),
-					'actions'  => '<a class="lnkup-btn lnkup-btn--outline" href="' . esc_url( $find_url ) . '">' . esc_html__( 'Find events', 'lnkup-marketplace' ) . '</a>',
+					'title'    => __( 'Bookings', 'lnkup-marketplace' ),
+					'subtitle' => __( 'Drafts, applications waiting on an organizer, fees due, and confirmed events.', 'lnkup-marketplace' ),
+					'actions'  => '<a class="lnkup-btn lnkup-btn--outline" href="' . esc_url( $find_url ) . '">' . esc_html__( 'Explore', 'lnkup-marketplace' ) . '</a>',
 				)
 			);
 			$request_tabs = array();

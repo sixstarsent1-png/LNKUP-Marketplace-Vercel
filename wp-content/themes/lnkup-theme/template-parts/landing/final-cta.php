@@ -14,9 +14,17 @@ $title             = (string) lnkup_landing_get( 'cta_title', '' );
 $body              = trim( (string) lnkup_landing_get( 'cta_body', '' ) );
 $button            = (string) lnkup_landing_get( 'cta_button', __( 'Create your account', 'lnkup-theme' ) );
 
-if ( '' === $body ) {
+$open_body = __( 'Create your vendor profile, browse opportunities, and apply for free. Pay only when an organizer accepts you.', 'lnkup-theme' );
+$stale     = array(
+	'Join the prelaunch today and be ready for launch day.',
+	'Join the prelaunch today. Build your profile now and apply when we launch.',
+);
+if ( $launch_label ) {
+	$stale[] = sprintf( 'Join the prelaunch today. Build your profile now and apply when we launch %s.', $launch_label );
+}
+if ( '' === $body || ( $marketplace_open && in_array( $body, $stale, true ) ) ) {
 	$body = $marketplace_open
-		? __( 'Create your vendor profile, browse opportunities, and apply for free. Pay only when an organizer accepts you.', 'lnkup-theme' )
+		? $open_body
 		: ( $launch_label
 			? sprintf( __( 'Join the prelaunch today. Build your profile now and apply when we launch %s.', 'lnkup-theme' ), $launch_label )
 			: __( 'Join the prelaunch today and be ready for launch day.', 'lnkup-theme' ) );

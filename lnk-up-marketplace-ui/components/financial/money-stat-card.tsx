@@ -4,8 +4,9 @@ import type { LucideIcon } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
-function formatMoney(amount?: number, currency = "USD") {
-  if (amount == null) return "—"
+function formatMoney(amount?: number | null, currency = "USD", status?: "ready" | "loading" | "unavailable") {
+  if (status === "loading") return "Loading"
+  if (status === "unavailable" || amount == null) return "Unavailable"
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount)
 }
 
@@ -16,14 +17,16 @@ export function MoneyStatCard({
   sublabel,
   icon: Icon,
   tone = "default",
+  status = "ready",
   testId,
 }: {
   label: string
-  amount?: number
+  amount?: number | null
   currency?: string
   sublabel?: string
   icon?: LucideIcon
   tone?: "default" | "primary" | "success" | "warning"
+  status?: "ready" | "loading" | "unavailable"
   testId?: string
 }) {
   return (
@@ -41,7 +44,7 @@ export function MoneyStatCard({
           <span className="text-xs font-medium text-muted-foreground">{label}</span>
           {Icon && <Icon className="size-4 text-muted-foreground" />}
         </div>
-        <span className="font-heading text-2xl font-bold">{formatMoney(amount, currency)}</span>
+        <span className="font-heading text-2xl font-bold">{formatMoney(amount, currency, status)}</span>
         {sublabel && <span className="text-xs text-muted-foreground">{sublabel}</span>}
       </CardContent>
     </Card>

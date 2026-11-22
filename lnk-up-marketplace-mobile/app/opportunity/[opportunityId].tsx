@@ -142,11 +142,11 @@ export default function OpportunityDetailScreen() {
     !expanded && showExpand ? `${about.slice(0, PREVIEW_CHARS).trim()}…` : about
 
   const fee =
-    detail && detail.vendorFee > 0
-      ? `$${detail.vendorFee}`
-      : applyCtx?.vendorFee && applyCtx.vendorFee > 0
-        ? `$${applyCtx.vendorFee}`
-        : "Fee TBD"
+    detail?.vendorFee == null && applyCtx?.vendorFee == null
+      ? "Fee unavailable"
+      : (detail?.vendorFee ?? applyCtx?.vendorFee ?? 0) > 0
+        ? `$${detail?.vendorFee ?? applyCtx?.vendorFee}`
+        : "Free"
 
   const canApply = applyCtx ? applyCtx.canApply && !applyCtx.buttonDisabled : false
   const location = detail ? [detail.city, detail.state].filter(Boolean).join(", ") : ""

@@ -13,7 +13,7 @@ export type MarketplaceMapPin = {
   lat: number
   lng: number
   eventDate?: string
-  vendorFee?: number
+  vendorFee?: number | null
   category?: string
   spotsRemaining?: number
 }

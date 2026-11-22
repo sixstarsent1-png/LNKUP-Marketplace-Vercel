@@ -50,6 +50,7 @@ export function EventImage({
           source={{ uri: uri as string }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
+          contentPosition="top center"
           cachePolicy="memory-disk"
           transition={reduceMotion ? 0 : 180}
           recyclingKey={uri ?? undefined}

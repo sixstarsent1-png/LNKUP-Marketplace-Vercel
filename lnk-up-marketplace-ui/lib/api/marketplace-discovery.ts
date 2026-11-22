@@ -47,7 +47,7 @@ export type MarketplaceOpportunity = {
   venue?: string
   eventType?: string
   categories?: string[]
-  vendorFee?: number
+  vendorFee?: number | null
   currency?: string
   expectedAttendance?: number
   applicationDeadline?: string
@@ -82,7 +82,7 @@ export type MarketplaceMapPin = {
   lat: number
   lng: number
   eventDate?: string
-  vendorFee?: number
+  vendorFee?: number | null
   category?: string
   applicationStatus?: string
   saved?: boolean
@@ -145,7 +145,7 @@ export function mapWpToOpportunity(item: WpOpportunityItem): MarketplaceOpportun
     venue: item.venue_name ?? "",
     eventType: eventTypes[0],
     categories,
-    vendorFee: item.vendor_fee ?? 0,
+    vendorFee: typeof item.vendor_fee === "number" ? item.vendor_fee : null,
     expectedAttendance: item.attendance ?? 0,
     applicationDeadline: formatDeadline(item.deadline, item.deadline_label),
     spotsRemaining,
@@ -155,7 +155,7 @@ export function mapWpToOpportunity(item: WpOpportunityItem): MarketplaceOpportun
     indoor: Boolean((item as { indoor?: boolean }).indoor),
     outdoor: Boolean((item as { outdoor?: boolean }).outdoor),
     documentsRequired: Boolean((item as { doc_required?: boolean }).doc_required),
-    imageUrl: item.featured_image || "/placeholder.svg",
+    imageUrl: item.featured_image || "",
     gallery: Array.isArray((item as { gallery?: unknown }).gallery)
       ? ((item as { gallery: Array<Record<string, unknown>> }).gallery
           .map((g) => {
@@ -197,7 +197,7 @@ export function opportunityToEventItem(opp: MarketplaceOpportunity): EventItem {
     organizer: opp.organizerName ?? "",
     organizerVerified: opp.organizerVerified ?? false,
     expectedAttendance: opp.expectedAttendance ?? 0,
-    vendorFee: opp.vendorFee ?? 0,
+    vendorFee: typeof opp.vendorFee === "number" ? opp.vendorFee : null,
     spotsRemaining: opp.spotsRemaining ?? 0,
     totalSpots: opp.spotsTotal ?? opp.spotsRemaining ?? 0,
     categoriesNeeded: opp.categories ?? [],

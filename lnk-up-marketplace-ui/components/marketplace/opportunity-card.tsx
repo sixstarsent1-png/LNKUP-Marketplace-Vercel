@@ -194,13 +194,19 @@ export function OpportunityCard({
         )}
         data-testid={highlighted ? "opportunity-card-highlighted" : "opportunity-card"}
       >
-        <div className="relative h-40 w-full">
-          <Image
-            src={event.image || "/placeholder.svg"}
-            alt={event.name}
-            fill
-            className="object-cover"
-          />
+        <div className="relative aspect-[4/5] w-full bg-muted">
+          {event.image && event.image !== "/placeholder.svg" ? (
+            <Image
+              src={event.image}
+              alt={event.name}
+              fill
+              className="object-cover object-top"
+            />
+          ) : (
+            <div className="flex h-full items-end p-3 text-sm font-semibold" role="img" aria-label={event.name}>
+              LNKup
+            </div>
+          )}
           <div className="absolute top-3 left-3 flex gap-2">
             {event.trending && (
               <Badge className="bg-accent text-accent-foreground">Trending</Badge>
@@ -258,7 +264,9 @@ export function OpportunityCard({
               <Users className="size-4" />
               {event.expectedAttendance.toLocaleString()} expected
             </span>
-            <span className="font-heading font-bold">${event.vendorFee} fee</span>
+            <span className="font-heading font-bold">
+              {event.vendorFee == null ? "Fee unavailable" : event.vendorFee > 0 ? `From $${event.vendorFee}` : "Free"}
+            </span>
           </div>
 
           <div className="flex flex-wrap gap-1.5">

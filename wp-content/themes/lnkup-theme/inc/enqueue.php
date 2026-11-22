@@ -27,9 +27,9 @@ add_filter(
 add_action(
 	'wp_enqueue_scripts',
 	function () {
-		$font = 'https://fonts.googleapis.com/css2?family=Geist:wght@400;600&display=swap';
+		$font = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700&display=swap';
 		if ( lnkup_theme_is_dashboard_page() ) {
-			$font = 'https://fonts.googleapis.com/css2?family=Geist:wght@400;600&family=Geist+Mono:wght@400&display=swap';
+			$font = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700&display=swap';
 		}
 		wp_enqueue_style(
 			'lnkup-fonts',
