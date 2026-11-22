@@ -94,6 +94,7 @@ class LNKup_Marketplace_Cron {
 			$event_date = $event_id ? get_post_meta( $event_id, '_lnkup_event_date', true ) : '';
 			if ( $event_date && $event_date < $today ) {
 				update_post_meta( $app->ID, '_lnkup_event_completed_at', current_time( 'mysql' ) );
+				do_action( 'lnkup_application_event_completed', (int) $app->ID, $event_id );
 				$organizer_id = (int) get_post_meta( $app->ID, '_lnkup_organizer_user_id', true );
 				if ( $organizer_id && ! get_post_meta( $app->ID, '_lnkup_review_id', true ) ) {
 					LNKup_Notifications::send_post_event_review_prompt( $organizer_id, $app->ID );

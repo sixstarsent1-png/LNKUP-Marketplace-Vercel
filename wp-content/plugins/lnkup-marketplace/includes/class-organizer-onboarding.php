@@ -790,6 +790,7 @@ class LNKup_Organizer_Onboarding {
 		if ( ! $changed ) {
 			return 0;
 		}
+		do_action( 'lnkup_event_logistics_changed', $event_id, $changed );
 		$apps = get_posts(
 			array(
 				'post_type'      => 'lnkup_application',

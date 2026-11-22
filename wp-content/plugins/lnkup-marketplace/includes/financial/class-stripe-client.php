@@ -510,7 +510,46 @@ class LNKup_Stripe_Client {
 		if ( class_exists( '\Stripe\Stripe' ) ) {
 			return $this->sdk_request( $method, $path, $params, $idempotency_key, $extra_headers );
 		}
+		return $this->http_request( $method, $path, $params, $idempotency_key, $extra_headers );
+	}
 
+	/**
+	 * Cancel an unpaid PaymentIntent (no money moves). Already-final intents return an error.
+	 *
+	 * @param string $intent_id PaymentIntent ID.
+	 * @return array|WP_Error
+	 */
+	public function cancel_payment_intent( $intent_id ) {
+		if ( ! $this->secret_key ) {
+			return new WP_Error( 'not_configured', __( 'Stripe is not configured.', 'lnkup-marketplace' ) );
+		}
+		return $this->http_request( 'POST', 'payment_intents/' . rawurlencode( $intent_id ) . '/cancel', array( 'cancellation_reason' => 'abandoned' ) );
+	}
+
+	/**
+	 * Expire an open Checkout Session so it can no longer be paid (no money moves).
+	 *
+	 * @param string $session_id Checkout Session ID.
+	 * @return array|WP_Error
+	 */
+	public function expire_checkout_session( $session_id ) {
+		if ( ! $this->secret_key ) {
+			return new WP_Error( 'not_configured', __( 'Stripe is not configured.', 'lnkup-marketplace' ) );
+		}
+		return $this->http_request( 'POST', 'checkout/sessions/' . rawurlencode( $session_id ) . '/expire' );
+	}
+
+	/**
+	 * Raw HTTP transport (used directly for endpoints the SDK switch does not route).
+	 *
+	 * @param string $method          HTTP method.
+	 * @param string $path            Path.
+	 * @param array  $params          Params.
+	 * @param string $idempotency_key Idempotency key.
+	 * @param array  $extra_headers   Extra headers.
+	 * @return array|WP_Error
+	 */
+	private function http_request( $method, $path, $params = array(), $idempotency_key = '', $extra_headers = array() ) {
 		$url = 'https://api.stripe.com/v1/' . ltrim( $path, '/' );
 		$headers = array_merge(
 			array( 'Authorization' => 'Bearer ' . $this->secret_key ),

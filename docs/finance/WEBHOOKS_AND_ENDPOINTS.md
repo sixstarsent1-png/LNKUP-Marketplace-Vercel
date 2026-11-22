@@ -27,7 +27,8 @@ Create **two** endpoints with the same URL. Each has its own signing secret.
 - `payment_intent.payment_failed` (ignored once a payment is paid, or when it belongs to a superseded PaymentIntent)
 - `charge.refunded`
 - `charge.dispute.created`
-- `charge.dispute.closed`
+- `charge.dispute.funds_withdrawn`, `charge.dispute.funds_reinstated`
+- `charge.dispute.closed` (lost: organizer share reversed, status `chargeback_lost`; won: reinstated)
 - `transfer.created`, `transfer.reversed`
 - `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
 
@@ -37,7 +38,7 @@ Create **two** endpoints with the same URL. Each has its own signing secret.
 - `account.application.deauthorized`
 - `payout.created`, `payout.updated`, `payout.paid`, `payout.failed`, `payout.canceled`
 
-LNKup only acts on payouts it created (`metadata.payout_id`). Stripe's automatic payouts are reported in the money contract's `paid_out` via the Payouts API (read-only), not through webhooks.
+LNKup only acts on payouts it created (`metadata.payout_id`), and only when the event's connected account (`event.account`) is the payout owner's account and the local payout is a Connect payout. Stripe's automatic payouts are reported in the money contract's `paid_out` via the Payouts API (read-only), not through webhooks.
 
 ## WAF / CDN / security plugin rules
 

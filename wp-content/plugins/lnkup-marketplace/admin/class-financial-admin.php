@@ -389,24 +389,22 @@ class LNKup_Financial_Admin {
 			exit;
 		}
 
-		$cents = LNKup_Stripe_Connect::organizer_recoverable_platform_cents( $organizer_id );
-		if ( $cents < 1 ) {
-			wp_safe_redirect(
-				add_query_arg(
-					array(
-						'lnkup_notice' => 'error',
-						'lnkup_msg'    => rawurlencode( __( 'Nothing recoverable for this organizer right now.', 'lnkup-marketplace' ) ),
-					),
-					$redirect
-				)
-			);
-			exit;
-		}
-
-		$result = LNKup_Stripe_Connect::transfer_platform_to_connect(
-			$organizer_id,
-			$cents / 100,
-			array( 'admin_recover' => '1' )
+		$cents  = 0;
+		// One recovery per organizer at a time: a second tab waits, then finds nothing left to move.
+		$result = LNKup_Financial_Service::with_lock(
+			'recover_' . $organizer_id,
+			static function () use ( $organizer_id, &$cents ) {
+				$cents = LNKup_Stripe_Connect::organizer_recoverable_platform_cents( $organizer_id );
+				if ( $cents < 1 ) {
+					return new WP_Error( 'nothing_recoverable', __( 'Nothing recoverable for this organizer right now.', 'lnkup-marketplace' ) );
+				}
+				return LNKup_Stripe_Connect::transfer_platform_to_connect(
+					$organizer_id,
+					$cents / 100,
+					array( 'admin_recover' => '1' )
+				);
+			},
+			20
 		);
 
 		if ( is_wp_error( $result ) ) {

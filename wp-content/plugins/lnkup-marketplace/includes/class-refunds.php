@@ -226,6 +226,10 @@ class LNKup_Refunds {
 			return;
 		}
 		update_post_meta( $payment_id, '_lnkup_payment_status', $returned + 0.004 >= $total ? 'refunded' : 'partially_refunded' );
+		// The organizer gives back their share of whatever the vendor got back (card or credit).
+		if ( class_exists( 'LNKup_Organizer_Wallet' ) ) {
+			LNKup_Organizer_Wallet::reverse_for_refund( $payment_id );
+		}
 	}
 
 	public static function deny( $refund_id ) {

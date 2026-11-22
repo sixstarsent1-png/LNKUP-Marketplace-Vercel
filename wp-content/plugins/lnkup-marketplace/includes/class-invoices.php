@@ -265,6 +265,9 @@ class LNKup_Invoices {
 	}
 
 	public static function email_invoice( $invoice ) {
+		if ( is_array( $invoice ) && LNKup_Notifications::delegated( 'invoice_email', array( $invoice ) ) ) {
+			return true;
+		}
 		$vendor = get_userdata( (int) $invoice['vendor_user_id'] );
 		if ( ! $vendor ) {
 			return false;

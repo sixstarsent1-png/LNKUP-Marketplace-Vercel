@@ -90,19 +90,12 @@ class LNKup_Stripe_Webhooks {
 				case 'payout.updated':
 				case 'payout.failed':
 				case 'payout.canceled':
-					LNKup_Stripe_Connect::handle_payout_event( $obj, $type );
+					LNKup_Stripe_Connect::handle_payout_event( $obj, $type, (string) ( $event['account'] ?? '' ) );
 					break;
+				case 'charge.dispute.funds_withdrawn':
+				case 'charge.dispute.funds_reinstated':
 				case 'charge.dispute.closed':
-					LNKup_Financial_Audit::log(
-						'dispute_closed',
-						'payment',
-						self::payment_from_intent( (string) ( $obj['payment_intent'] ?? '' ) ),
-						array(
-							'dispute_id' => sanitize_text_field( (string) ( $obj['id'] ?? '' ) ),
-							'status'     => sanitize_key( (string) ( $obj['status'] ?? '' ) ),
-							'amount'     => (int) ( $obj['amount'] ?? 0 ),
-						)
-					);
+					self::handle_dispute_money( $obj, $type );
 					break;
 				default:
 					break;
@@ -243,7 +236,30 @@ class LNKup_Stripe_Webhooks {
 			);
 		}
 
+		if ( self::is_short_charge( $payment_id, (string) ( $session['id'] ?? '' ), (int) ( $session['amount_total'] ?? 0 ), (string) ( $session['currency'] ?? 'usd' ) ) ) {
+			return null;
+		}
 		return LNKup_Financial_Service::finalize_payment( $payment_id, $intent_id, array( 'source' => 'checkout_session' ) );
+	}
+
+	/**
+	 * A succeeded charge that does not cover what this booking expected is flagged, not finalized.
+	 * Paid or closed payments skip the check: finalize records those as extra charges.
+	 *
+	 * @param int    $payment_id Payment ID.
+	 * @param string $ref        PaymentIntent or Checkout Session ID.
+	 * @param int    $received   Cents collected.
+	 * @param string $currency   Currency.
+	 */
+	private static function is_short_charge( $payment_id, $ref, $received, $currency ) {
+		if ( 'paid' === (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ) || ! LNKup_Payments::is_collectible( $payment_id ) ) {
+			return false;
+		}
+		if ( LNKup_Financial_Service::charge_amount_ok( $payment_id, $ref, $received, $currency ) ) {
+			return false;
+		}
+		LNKup_Financial_Service::flag_amount_mismatch( $payment_id, $ref, $received );
+		return true;
 	}
 
 	/**
@@ -289,8 +305,12 @@ class LNKup_Stripe_Webhooks {
 	private static function handle_payment_intent_succeeded( $intent ) {
 		$payment_id = self::resolve_payment_id( $intent );
 		if ( $payment_id ) {
-			LNKup_Financial_Service::backfill_stripe_payment_meta( $payment_id, $intent['id'] ?? '' );
-			return LNKup_Financial_Service::finalize_payment( $payment_id, $intent['id'] ?? '', array( 'source' => 'payment_intent' ) );
+			$intent_id = (string) ( $intent['id'] ?? '' );
+			$received  = (int) ( $intent['amount_received'] ?? $intent['amount'] ?? 0 );
+			if ( self::is_short_charge( $payment_id, $intent_id, $received, (string) ( $intent['currency'] ?? 'usd' ) ) ) {
+				return null;
+			}
+			return LNKup_Financial_Service::finalize_payment( $payment_id, $intent_id, array( 'source' => 'payment_intent' ) );
 		}
 		return null;
 	}
@@ -327,7 +347,7 @@ class LNKup_Stripe_Webhooks {
 			// order, and a retry may succeed on a newer PaymentIntent).
 			$status = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
 			$stored = (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
-			if ( in_array( $status, array( 'paid', 'refunded', 'disputed' ), true ) || ( '' !== $stored && $stored !== (string) ( $intent['id'] ?? '' ) ) ) {
+			if ( in_array( $status, array( 'paid', 'refunded', 'partially_refunded', 'partially_paid', 'disputed', 'chargeback_lost' ), true ) || ( '' !== $stored && $stored !== (string) ( $intent['id'] ?? '' ) ) ) {
 				LNKup_Financial_Audit::log( 'payment_failed_ignored', 'payment', $payment_id, array( 'status' => $status, 'intent_id' => (string) ( $intent['id'] ?? '' ) ) );
 				return;
 			}
@@ -357,6 +377,53 @@ class LNKup_Stripe_Webhooks {
 			LNKup_Stripe_Connect::handle_destination_refund( $payment_id, $refunded );
 		}
 		LNKup_Transactions::sync_extended_fields( $payment_id );
+		do_action( 'lnkup_refund_synced', $payment_id, $refunded );
+	}
+
+	/**
+	 * Chargeback money movements. Stripe pulls the disputed amount from LNKup when funds are
+	 * withdrawn; the organizer's share is reversed only once the dispute is lost, and reinstated
+	 * if it is won.
+	 *
+	 * @param array  $dispute Dispute object.
+	 * @param string $type    Event type.
+	 */
+	private static function handle_dispute_money( $dispute, $type ) {
+		$payment_id = self::payment_from_intent( (string) ( $dispute['payment_intent'] ?? '' ) );
+		$status     = sanitize_key( (string) ( $dispute['status'] ?? '' ) );
+		$amount     = (int) ( $dispute['amount'] ?? 0 );
+		LNKup_Financial_Audit::log(
+			'dispute_' . str_replace( 'charge.dispute.', '', $type ),
+			'payment',
+			$payment_id,
+			array(
+				'dispute_id' => sanitize_text_field( (string) ( $dispute['id'] ?? '' ) ),
+				'status'     => $status,
+				'amount'     => $amount / 100,
+			)
+		);
+		if ( ! $payment_id ) {
+			return;
+		}
+		if ( 'charge.dispute.funds_withdrawn' === $type ) {
+			update_post_meta( $payment_id, '_lnkup_dispute_funds_withdrawn_cents', $amount );
+			return;
+		}
+		if ( 'charge.dispute.funds_reinstated' === $type ) {
+			delete_post_meta( $payment_id, '_lnkup_dispute_funds_withdrawn_cents' );
+			return;
+		}
+		if ( 'lost' === $status ) {
+			update_post_meta( $payment_id, '_lnkup_payment_status', 'chargeback_lost' );
+			LNKup_Organizer_Wallet::reverse_for_chargeback( $payment_id, $amount );
+			LNKup_Financial_Disputes::close_chargeback( $payment_id, 'lost' );
+		} elseif ( 'won' === $status ) {
+			if ( in_array( (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ), array( 'disputed', 'chargeback_lost' ), true ) ) {
+				update_post_meta( $payment_id, '_lnkup_payment_status', 'paid' );
+			}
+			LNKup_Organizer_Wallet::reinstate_chargeback( $payment_id );
+			LNKup_Financial_Disputes::close_chargeback( $payment_id, 'won' );
+		}
 	}
 
 	/**

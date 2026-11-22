@@ -143,12 +143,17 @@ class LNKup_Organizer_Payouts {
 		}
 		$payout_id = (int) $wpdb->insert_id;
 
-		LNKup_Organizer_Wallet::debit( $user_id, $amount, array(
+		$debited = LNKup_Organizer_Wallet::debit( $user_id, $amount, array(
 			'source_type' => 'payout',
 			'source_id'   => $payout_id,
 			'payout_id'   => $payout_id,
 			'note'        => __( 'Cashout requested', 'lnkup-marketplace' ),
 		) );
+		if ( ! $debited ) {
+			// Never send money the ledger did not take out of the balance.
+			$wpdb->update( $table, array( 'status' => 'failed', 'failure_reason' => 'ledger_debit_failed', 'updated_at' => current_time( 'mysql' ) ), array( 'id' => $payout_id ) );
+			return new WP_Error( 'payout_failed', __( 'Cashout could not be recorded. Your balance was not changed.', 'lnkup-marketplace' ), array( 'status' => 400, 'payout_id' => $payout_id ) );
+		}
 
 		$ok = self::process_payout( $payout_id );
 		LNKup_Financial_Audit::log( 'organizer_cashout_requested', 'payout', $payout_id, array( 'amount' => $amount ) );
@@ -331,8 +336,9 @@ class LNKup_Organizer_Payouts {
 		$note   = $cancelled
 			? __( 'Cashout cancelled — balance restored', 'lnkup-marketplace' )
 			: __( 'Cashout failed — balance restored', 'lnkup-marketplace' );
-		// Only destination cashouts move money into processing_balance (record_connect_debit).
-		$is_destination = class_exists( 'LNKup_Stripe_Connect' ) && 'destination' === LNKup_Stripe_Connect::settlement_mode_for_organizer( $user_id );
+		// The bucket follows how this payout was debited (its provider), not today's Connect state:
+		// only Connect payouts were booked as connect debits + processing_balance.
+		$is_destination = self::is_connect_payout( $payout_id, $user_id );
 		$release_processing = $release_processing && $is_destination;
 		if ( $is_destination ) {
 			$restored = LNKup_Organizer_Wallet::insert_entry(
@@ -393,34 +399,83 @@ class LNKup_Organizer_Payouts {
 		}
 		$now          = current_time( 'mysql' );
 		$provider_ref = '' !== (string) $provider_ref ? sanitize_text_field( $provider_ref ) : (string) ( $payout['provider_ref'] ?? '' );
+		$prior        = (string) $payout['status'];
+		$after_fail   = in_array( $prior, array( 'failed', 'cancelled' ), true );
+		if ( ! $after_fail && ! in_array( $prior, array( 'requested', 'approved', 'processing' ), true ) ) {
+			return false;
+		}
 		// Only the request that flips the row to paid may touch wallet totals (webhook + sync path race).
 		$updated = $wpdb->query(
 			$wpdb->prepare(
-				"UPDATE {$table} SET status = 'paid', provider_ref = %s, paid_at = %s, updated_at = %s WHERE id = %d AND status <> 'paid'",
+				"UPDATE {$table} SET status = 'paid', provider_ref = %s, paid_at = %s, updated_at = %s WHERE id = %d AND status = %s",
 				$provider_ref,
 				$now,
 				$now,
-				absint( $payout_id )
+				absint( $payout_id ),
+				$prior
 			)
 		);
 		if ( 1 !== (int) $updated ) {
 			return true;
 		}
-		$wallet = LNKup_Organizer_Wallet::get_or_create( (int) $payout['user_id'] );
+		$user_id    = (int) $payout['user_id'];
+		$is_connect = self::is_connect_payout( $payout_id, $user_id );
+		$wallets    = LNKup_Treasury_Tables::organizer_wallets_table();
+		$wallet     = LNKup_Organizer_Wallet::get_or_create( $user_id );
+
+		if ( $after_fail ) {
+			// The payout reached the bank after all, but its balance was already restored: take it back.
+			$amount = (float) $payout['amount'];
+			if ( $is_connect ) {
+				LNKup_Organizer_Wallet::insert_entry(
+					array(
+						'wallet_id'       => (int) $wallet['id'],
+						'user_id'         => $user_id,
+						'entry_type'      => 'debit',
+						'amount'          => $amount,
+						'source_type'     => 'payout',
+						'payout_id'       => absint( $payout_id ),
+						'note'            => __( 'Cashout completed after it was marked failed — balance corrected', 'lnkup-marketplace' ),
+						'idempotency_key' => 'payout:' . absint( $payout_id ) . ':redebit',
+					)
+				);
+			} else {
+				LNKup_Organizer_Wallet::add_entry( $user_id, $amount, 'available', array( 'entry_type' => 'debit', 'source_type' => 'payout', 'payout_id' => absint( $payout_id ), 'note' => __( 'Cashout completed after it was marked failed — balance corrected', 'lnkup-marketplace' ), 'idempotency_key' => 'payout:' . absint( $payout_id ) . ':redebit' ) );
+			}
+			LNKup_Financial_Audit::log( 'payout_paid_after_failure', 'payout', $payout_id, array( 'amount' => $amount, 'prior_status' => $prior ) );
+		}
+
 		if ( $wallet ) {
-			$processing = max( 0, (float) $wallet['processing_balance'] - (float) $payout['amount'] );
-			$wpdb->update(
-				LNKup_Treasury_Tables::organizer_wallets_table(),
-				array(
-					'lifetime_paid_out'    => (float) $wallet['lifetime_paid_out'] + (float) $payout['net_amount'],
-					'processing_balance'   => $processing,
-					'updated_at'           => $now,
-				),
-				array( 'id' => (int) $wallet['id'] )
+			$release = ( $is_connect && ! $after_fail ) ? (float) $payout['amount'] : 0.0;
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$wallets} SET lifetime_paid_out = lifetime_paid_out + %f, processing_balance = GREATEST(0, processing_balance - %f), updated_at = %s WHERE id = %d",
+					(float) $payout['net_amount'],
+					$release,
+					$now,
+					(int) $wallet['id']
+				)
 			);
 		}
 		LNKup_Financial_Audit::log( 'organizer_payout_paid', 'payout', $payout_id, array( 'amount' => (float) $payout['net_amount'] ) );
+		do_action( 'lnkup_organizer_payout_status_changed', absint( $payout_id ), $prior, 'paid', $user_id );
 		return true;
+	}
+
+	/**
+	 * Whether a payout was booked against the Connect ledger (connect debit + processing).
+	 *
+	 * @param int $payout_id Payout ID.
+	 * @param int $user_id   Organizer (fallback when the row is missing).
+	 */
+	private static function is_connect_payout( $payout_id, $user_id ) {
+		global $wpdb;
+		$table    = LNKup_Treasury_Tables::organizer_payouts_table();
+		$provider = (string) $wpdb->get_var( $wpdb->prepare( "SELECT provider FROM {$table} WHERE id = %d", absint( $payout_id ) ) );
+		if ( '' !== $provider ) {
+			return 'stripe_connect_payout' === $provider;
+		}
+		return class_exists( 'LNKup_Stripe_Connect' ) && 'destination' === LNKup_Stripe_Connect::settlement_mode_for_organizer( $user_id );
 	}
 
 	/**
@@ -458,13 +513,13 @@ class LNKup_Organizer_Payouts {
 		if ( 'paid' === $prior_status ) {
 			$wallet = LNKup_Organizer_Wallet::get_or_create( $user_id );
 			if ( $wallet ) {
-				$wpdb->update(
-					LNKup_Treasury_Tables::organizer_wallets_table(),
-					array(
-						'lifetime_paid_out' => max( 0, (float) $wallet['lifetime_paid_out'] - (float) $payout['net_amount'] ),
-						'updated_at'        => current_time( 'mysql' ),
-					),
-					array( 'id' => (int) $wallet['id'] )
+				$wpdb->query(
+					$wpdb->prepare(
+						'UPDATE ' . LNKup_Treasury_Tables::organizer_wallets_table() . ' SET lifetime_paid_out = GREATEST(0, lifetime_paid_out - %f), updated_at = %s WHERE id = %d',
+						(float) $payout['net_amount'],
+						current_time( 'mysql' ),
+						(int) $wallet['id']
+					)
 				);
 			}
 		}
@@ -478,6 +533,7 @@ class LNKup_Organizer_Payouts {
 				'reason'       => $reason,
 			)
 		);
+		do_action( 'lnkup_organizer_payout_status_changed', $payout_id, $prior_status, 'failed', $user_id );
 		return true;
 	}
 

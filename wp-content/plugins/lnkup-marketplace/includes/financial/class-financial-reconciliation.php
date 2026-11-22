@@ -471,6 +471,39 @@ class LNKup_Financial_Reconciliation {
 		if ( $is_paid && $payment['total_cents'] > 0 && '' === $payment['intent_id'] && '' === $payment['session_id'] ) {
 			$issues[] = 'paid_missing_stripe_reference';
 		}
+		$installment = (int) ( $payment['installment_cents'] ?? 0 );
+		if ( $is_paid && $installment > 0 && $installment < $payment['total_cents'] ) {
+			$issues[] = 'partial_marked_paid';
+		}
+		$refunded = (int) ( $payment['refund_cents'] ?? 0 );
+		if ( $is_paid && $refunded > 0 ) {
+			$issues[] = 'repaid_after_refund';
+		}
+		if ( $refunded > 0 && $settlements ) {
+			$debited = false;
+			foreach ( $entries as $row ) {
+				if ( 'debit' === $row['entry_type'] && 0 === strpos( (string) $row['source_type'], 'refund' ) ) {
+					$debited = true;
+				}
+			}
+			if ( ! $debited ) {
+				$issues[] = 'refund_not_debited';
+			}
+		}
+		if ( $is_paid && ! empty( $payment['voided'] ) ) {
+			$issues[] = 'voided_but_paid';
+		}
+		if ( ! empty( $payment['extra_charges'] ) ) {
+			$issues[] = 'extra_succeeded_charge';
+		}
+		if ( ! empty( $payment['needs_review'] ) ) {
+			$issues[] = 'charge_' . sanitize_key( $payment['needs_review'] );
+		}
+		$credit = (int) ( $payment['credit_cents'] ?? 0 );
+		if ( $is_paid && $credit > 0 && '' === $payment['intent_id'] && $payment['total_cents'] > 0 ) {
+			$issues[] = 'credit_undercharged';
+		}
+
 		foreach ( $settlements as $row ) {
 			$type = (string) $row['entry_type'];
 			if ( '' !== $payment['destination'] && 'credit' === $type && 'payment' === $row['source_type'] ) {
@@ -496,8 +529,20 @@ class LNKup_Financial_Reconciliation {
 			if ( $succeeded && '' !== (string) $pi['destination'] && $payment['app_fee_cents'] > 0 && (int) $pi['application_fee_amount'] !== $payment['app_fee_cents'] ) {
 				$issues[] = 'application_fee_mismatch';
 			}
-			if ( (int) $pi['amount_refunded'] > 0 && 'refunded' !== $payment['status'] ) {
+			if ( (int) $pi['amount_refunded'] > 0 && ! in_array( $payment['status'], array( 'refunded', 'partially_refunded' ), true ) ) {
 				$issues[] = 'refunded_in_stripe_not_wp';
+			}
+			if ( $succeeded && $credit > 0 && (int) $pi['amount_received'] < $payment['total_cents'] ) {
+				$issues[] = 'credit_undercharged';
+			}
+			if ( (int) ( $pi['succeeded_for_payment'] ?? 1 ) > 1 ) {
+				$issues[] = 'extra_succeeded_charge';
+			}
+			if ( $succeeded && ! empty( $payment['voided'] ) ) {
+				$issues[] = 'charge_on_voided_payment';
+			}
+			if ( in_array( (string) ( $pi['dispute_status'] ?? '' ), array( 'lost' ), true ) || ! empty( $pi['funds_withdrawn'] ) ) {
+				$issues[] = 'lost_chargeback';
 			}
 		}
 
@@ -599,6 +644,12 @@ class LNKup_Financial_Reconciliation {
 				'settlement_mode' => (string) get_post_meta( $id, '_lnkup_settlement_mode', true ),
 				'destination'     => (string) get_post_meta( $id, '_lnkup_stripe_destination_account', true ),
 				'destination_cents' => self::to_cents( get_post_meta( $id, '_lnkup_stripe_destination_amount', true ) ),
+				'credit_cents'      => self::to_cents( get_post_meta( $id, '_lnkup_credit_applied', true ) ),
+				'refund_cents'      => self::to_cents( get_post_meta( $id, '_lnkup_refund_amount', true ) ),
+				'installment_cents' => self::to_cents( get_post_meta( $id, '_lnkup_installment_amount', true ) ),
+				'voided'            => '' !== (string) get_post_meta( $id, '_lnkup_voided_at', true ),
+				'extra_charges'     => array_keys( is_array( get_post_meta( $id, '_lnkup_extra_charges', true ) ) ? get_post_meta( $id, '_lnkup_extra_charges', true ) : array() ),
+				'needs_review'      => (string) get_post_meta( $id, '_lnkup_needs_review', true ),
 			);
 		}
 
@@ -791,6 +842,25 @@ class LNKup_Financial_Reconciliation {
 			$intents[ $pi_id ] = is_wp_error( $result )
 				? array( 'id' => $pi_id, 'error' => $result->get_error_message() )
 				: self::normalize_intent( $result );
+		}
+
+		$succeeded_per_payment = array();
+		foreach ( $intents as $pi_id => $pi ) {
+			if ( 'succeeded' === ( $pi['status'] ?? '' ) && ! empty( $pi['payment_post_id'] ) ) {
+				$succeeded_per_payment[ (int) $pi['payment_post_id'] ] = ( $succeeded_per_payment[ (int) $pi['payment_post_id'] ] ?? 0 ) + 1;
+			}
+			if ( ! empty( $pi['disputed'] ) && '' !== (string) ( $pi['charge_id'] ?? '' ) ) {
+				$disputes = $client->read( 'disputes', array( 'charge' => $pi['charge_id'], 'limit' => 10 ) );
+				if ( ! is_wp_error( $disputes ) ) {
+					foreach ( (array) ( $disputes['data'] ?? array() ) as $dispute ) {
+						$intents[ $pi_id ]['dispute_status'] = (string) ( $dispute['status'] ?? '' );
+						$intents[ $pi_id ]['funds_withdrawn'] = ! empty( $dispute['balance_transactions'] ) && 'won' !== ( $dispute['status'] ?? '' );
+					}
+				}
+			}
+		}
+		foreach ( $intents as $pi_id => $pi ) {
+			$intents[ $pi_id ]['succeeded_for_payment'] = $succeeded_per_payment[ (int) ( $pi['payment_post_id'] ?? 0 ) ] ?? 0;
 		}
 
 		$by_payment     = array();

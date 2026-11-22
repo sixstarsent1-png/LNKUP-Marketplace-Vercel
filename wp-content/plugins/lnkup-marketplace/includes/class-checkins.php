@@ -628,6 +628,10 @@ class LNKup_Checkins {
 		if ( ! $saved && (string) get_post_meta( $app_id, '_lnkup_ops_status', true ) !== $ops ) {
 			return false;
 		}
+		do_action( 'lnkup_checkin_recorded', (int) get_post_meta( $app_id, '_lnkup_event_id', true ), (int) $app_id, (string) $action );
+		if ( 'checked_out' === $action ) {
+			do_action( 'lnkup_application_event_completed', (int) $app_id, (int) get_post_meta( $app_id, '_lnkup_event_id', true ) );
+		}
 		return true;
 	}
 

@@ -69,9 +69,11 @@ class LNKup_Platform_Fees {
 		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
 			return 0.0;
 		}
-		$sql = "SELECT COALESCE(SUM(lnkup_platform_fee), 0) FROM {$table}";
+		// One row per payment: repeated settlement (fixed in 12.22) left duplicate rows behind.
+		$sql = "SELECT COALESCE(SUM(f.lnkup_platform_fee), 0) FROM {$table} f
+			INNER JOIN ( SELECT MIN(id) AS id FROM {$table} GROUP BY payment_post_id ) firsts ON firsts.id = f.id";
 		if ( $since ) {
-			$sql .= $wpdb->prepare( ' WHERE created_at >= %s', $since );
+			$sql .= $wpdb->prepare( ' WHERE f.created_at >= %s', $since );
 		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
 		return (float) $wpdb->get_var( $sql );

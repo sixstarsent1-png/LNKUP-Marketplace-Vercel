@@ -104,3 +104,44 @@ Severity: **P0** loses or hides money, **P1** wrong or duplicated figures, **P2*
 ## Production confirmation (pending)
 
 Run `GET /wp-json/lnkup/v1/admin/financial/reconcile?organizer_id={id}` (and `…&stripe=1`) on thelnkup.com after deploy. It is read-only and never writes or calls Stripe write endpoints. The numbers go into `RECONCILIATION_<date>.md`. Until then, which of #1–#11 caused each production symptom is **unverified**.
+
+
+## Phase 1 Stripe audit (12.23.0): P0 fixes
+
+An in-depth audit of checkout, refunds and chargebacks, and Connect cashouts found further P0 defects. Each is fixed and covered by a wp-env test (`financial-checkout-test.php`, `financial-refund-dispute-test.php`, `financial-cashout-test.php`). Production impact is measured by the new read-only issue codes, and reported in the next reconciliation report.
+
+### Checkout and confirmation
+
+| # | Defect | Fix |
+| --- | --- | --- |
+| 13 | Wallet credit subtracted twice: the fee engine took it out of `_lnkup_total_amount`, and `stored_amount_due()` took it out again, so vendors were undercharged by the credit (or got the booth for credit alone). | `refresh_pending_fees` keeps the total gross; credit is subtracted once. Issue code `credit_undercharged`. |
+| 14 | Deposit or first installment marked the whole booking paid (packet unlocked, balance never billed, organizer credited in full). | New `partially_paid` status. Cumulative `_lnkup_amount_paid_cents`; next amount due set to the balance. Settlement only when fully paid. Replayed partial charges are ignored. |
+| 15 | Refunded, disputed or voided bookings could be confirmed back to `paid` (packet re-unlocked, organizer re-credited). | `LNKup_Payments::is_collectible()` gate in finalize, `mark_paid` and `mark_processing`. Charges on closed or voided payments are recorded for review, never applied. |
+| 16 | A second successful charge for one booking was silently absorbed and overwrote the first charge's references. | One live charge per booking: open PaymentIntents are reused or cancelled, and open sessions expired, before a new one is created. A succeeded or processing charge blocks a new one. Extra charges are recorded in `_lnkup_extra_charges` for an admin-approved refund. |
+| 17 | The hosted-checkout route charged processing, refunded or voided bookings again. | `create_checkout` requires a payable status for every mode. |
+| 18 | Webhooks finalized without checking the amount. | The amount stamped when the PaymentIntent or session was created must be covered, in USD. A mismatch sets `_lnkup_needs_review = amount_mismatch` and the booking is not finalized. |
+| 19 | Voided payments kept a live payment link. | Voiding cancels the open PaymentIntent and expires the session. |
+| 20 | One card decline made the booking unpayable. | A declined (non-voided) payment reopens on retry. |
+
+### Refunds and chargebacks
+
+| # | Defect | Fix |
+| --- | --- | --- |
+| 21 | Refunds and credit refunds never reversed the organizer's share. | `LNKup_Organizer_Wallet::reverse_for_refund()`, called from `sync_payment_refund_status()` for both the approval and the `charge.refunded` paths. Proportional and keyed by the cumulative amount returned. |
+| 22 | Lost chargebacks left the organizer with the money. | `charge.dispute.closed` lost reverses the share and sets `chargeback_lost`; won reinstates it. Destination organizers who still hold the money are flagged `needs_recovery`. |
+| 23 | Organizers could resolve bank chargebacks, including granting credit on top of the chargeback. | Chargebacks are admin-only and can never be resolved with credit. Credit outcomes on ordinary disputes are recorded as credit refunds. |
+| 24 | Reserves on refunded or disputed payments were paid out. | They are marked `used` instead. |
+
+### Connect cashouts and payouts
+
+| # | Defect | Fix |
+| --- | --- | --- |
+| 25 | Recovery formula wrong both ways. It subtracted the Connect balance, and the claim counted the current cashout's own debit, so platform-held money could be stranded or transferred twice. | Claim = platform-held credits minus `recovery_transfer` debits (one per transfer ID), refunds and offsets. Cashout debits and payout restores are not counted. |
+| 26 | Admin "recover stranded" could double-transfer. | Per-organizer lock plus a deterministic idempotency key. |
+| 27 | "Pay out fees" could sweep organizer money: the owed total skipped many organizers, pending balances and in-flight payouts. | `organizer_owed_breakdown()` sums every wallet: available, pending, platform claim and in-flight treasury cashouts. |
+| 28 | A payout already failed or cancelled (balance restored) could still be marked paid. | `mark_paid` accepts only `requested`/`approved`/`processing`. A failed or cancelled payout that later reports paid re-debits once (`payout:{id}:redebit`). Totals update atomically. |
+| 29 | Restores used the current Connect state, not how the payout was booked. | The bucket follows `provider`. |
+| 30 | Payout webhooks trusted `metadata.payout_id` from any account. | The event must come from the owner's connected account, for a Connect payout. |
+| 31 | A cashout ran even if its ledger debit failed. | The cashout stops and the payout row is marked failed. |
+
+Also fixed: the admin "treasury platform fees" figure now counts one row per payment. Production had 17–676 duplicate rows per payment from the repeated settlement.

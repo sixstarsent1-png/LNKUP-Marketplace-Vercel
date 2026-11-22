@@ -144,6 +144,13 @@ class LNKup_Reserves {
 				LNKup_Financial_Audit::log( 'reserve_release_skipped', 'reserve', (int) $row['id'], array( 'amount' => $remaining, 'reason' => 'destination_charge', 'payment_id' => $payment_id ) );
 				continue;
 			}
+			$pay_status = $payment_id ? (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ) : '';
+			if ( in_array( $pay_status, array( 'refunded', 'partially_refunded', 'disputed', 'chargeback_lost' ), true ) ) {
+				// The reserve covers exactly this: it is used, not paid out to the organizer.
+				$wpdb->update( $table, array( 'status' => 'used', 'used_amount' => (float) $row['amount'], 'updated_at' => $now ), array( 'id' => (int) $row['id'] ) );
+				LNKup_Financial_Audit::log( 'reserve_release_skipped', 'reserve', (int) $row['id'], array( 'amount' => $remaining, 'reason' => 'payment_' . $pay_status, 'payment_id' => $payment_id ) );
+				continue;
+			}
 			$entry = LNKup_Organizer_Wallet::add_entry(
 				(int) $row['organizer_user_id'],
 				$remaining,

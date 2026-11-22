@@ -1,4 +1,18 @@
-# Deployment checklist: financial reconciliation (plugin 12.22.0)
+# Deployment checklist: financial reconciliation (plugin 12.22.0 → 12.23.0)
+
+## 12.23.0 additions (Phase 1 Stripe fixes)
+
+- No schema change. New payment statuses `partially_paid` and `chargeback_lost` are allowed by the sanitizer.
+- Stripe Dashboard, platform endpoint: add `charge.dispute.funds_withdrawn` and `charge.dispute.funds_reinstated` (see `WEBHOOKS_AND_ENDPOINTS.md`).
+- After upload: re-run the reconciliation report with `stripe=1`. The new issue codes are:
+  - `credit_undercharged`, `partial_marked_paid`, `extra_succeeded_charge`
+  - `refund_not_debited`, `repaid_after_refund`, `lost_chargeback`
+  - `charge_on_voided_payment`, `charge_amount_mismatch`
+  - `duplicate_platform_fee_rows`, `duplicate_escrow_holds`
+- Behaviour changes to tell support about:
+  - A booking with a deposit stays "partially paid" (packet locked) until the balance is paid.
+  - Refunds now reduce the organizer's balance.
+  - Bank chargebacks can only be resolved by LNKup admins.
 
 No step here moves money. Do not run test charges, payouts, transfers or refunds in production.
 

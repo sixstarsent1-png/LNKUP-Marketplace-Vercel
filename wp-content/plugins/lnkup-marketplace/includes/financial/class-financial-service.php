@@ -54,6 +54,10 @@ class LNKup_Financial_Service {
 	 * @param array $args       mode: embedded|redirect.
 	 */
 	public static function create_checkout( $payment_id, $args = array() ) {
+		if ( 'paid' !== (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ) && ! LNKup_Payments::is_payable( $payment_id ) ) {
+			return new WP_Error( 'payment_not_payable', __( 'This booking is no longer open for payment.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+		LNKup_Payments::reopen_if_declined( $payment_id );
 		LNKup_Payments::refresh_pending_fees( $payment_id );
 		$mode = $args['mode'] ?? 'embedded';
 		if ( 'redirect' === $mode ) {
@@ -241,6 +245,189 @@ class LNKup_Financial_Service {
 	}
 
 	/**
+	 * Whether a PaymentIntent is a different charge from the one recorded on the payment.
+	 *
+	 * @param int    $payment_id Payment ID.
+	 * @param string $intent_id  PaymentIntent ID.
+	 */
+	private static function is_other_intent( $payment_id, $intent_id ) {
+		$intent_id = (string) $intent_id;
+		if ( 0 !== strpos( $intent_id, 'pi_' ) ) {
+			return false;
+		}
+		$stored = (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
+		if ( '' === $stored || $stored === $intent_id ) {
+			return false;
+		}
+		$partials = (array) get_post_meta( $payment_id, '_lnkup_partial_charges', true );
+		return ! isset( $partials[ $intent_id ] );
+	}
+
+	/**
+	 * Record a succeeded charge that must not be applied (duplicate or on a closed payment).
+	 * Surfaces in reconciliation and the repair tool for an admin-approved refund.
+	 *
+	 * @param int    $payment_id Payment ID.
+	 * @param string $intent_id  PaymentIntent ID.
+	 * @param string $reason     Reason code.
+	 * @param array  $context    Context.
+	 */
+	private static function record_extra_charge( $payment_id, $intent_id, $reason, $context = array() ) {
+		$list = get_post_meta( $payment_id, '_lnkup_extra_charges', true );
+		$list = is_array( $list ) ? $list : array();
+		if ( isset( $list[ $intent_id ] ) ) {
+			return;
+		}
+		$list[ $intent_id ] = array(
+			'reason'      => sanitize_key( $reason ),
+			'recorded_at' => current_time( 'mysql' ),
+			'source'      => sanitize_key( (string) ( $context['source'] ?? '' ) ),
+		);
+		update_post_meta( $payment_id, '_lnkup_extra_charges', $list );
+		LNKup_Financial_Audit::log( 'extra_succeeded_charge', 'payment', $payment_id, array( 'intent_id' => $intent_id, 'reason' => $reason ) );
+	}
+
+	/**
+	 * Cents covered by this charge when it is a deposit/installment that leaves a balance; else 0.
+	 *
+	 * @param int $payment_id Payment ID.
+	 */
+	private static function partial_charge_cents( $payment_id ) {
+		$installment = (int) round( (float) get_post_meta( $payment_id, '_lnkup_installment_amount', true ) * 100 );
+		if ( $installment <= 0 ) {
+			return 0;
+		}
+		$total     = (int) round( (float) get_post_meta( $payment_id, '_lnkup_total_amount', true ) * 100 );
+		$paid      = (int) get_post_meta( $payment_id, '_lnkup_amount_paid_cents', true );
+		$remaining = $total - $paid;
+		return ( $installment < $remaining - 1 ) ? $installment : 0;
+	}
+
+	/**
+	 * Apply a deposit/installment charge: the booking stays unpaid (packet locked, no
+	 * settlement) until the final charge covers the remaining balance.
+	 *
+	 * @param int    $payment_id Payment ID.
+	 * @param string $intent_id  PaymentIntent ID.
+	 * @param int    $cents      Amount this charge covers (charge plus credit applied).
+	 * @param array  $context    Context.
+	 */
+	private static function record_partial_charge( $payment_id, $intent_id, $cents, $context ) {
+		$partials = get_post_meta( $payment_id, '_lnkup_partial_charges', true );
+		$partials = is_array( $partials ) ? $partials : array();
+		$ref      = '' !== (string) $intent_id ? (string) $intent_id : 'charge_' . count( $partials );
+		if ( isset( $partials[ $ref ] ) ) {
+			return array( 'success' => true, 'partial' => true, 'already_recorded' => true, 'payment_id' => $payment_id );
+		}
+		$partials[ $ref ] = array(
+			'cents'       => (int) $cents,
+			'recorded_at' => current_time( 'mysql' ),
+		);
+		update_post_meta( $payment_id, '_lnkup_partial_charges', $partials );
+		$paid = (int) get_post_meta( $payment_id, '_lnkup_amount_paid_cents', true ) + (int) $cents;
+		update_post_meta( $payment_id, '_lnkup_amount_paid_cents', $paid );
+
+		$app_id = (int) get_post_meta( $payment_id, '_lnkup_application_id', true );
+		if ( $app_id ) {
+			$deposit = LNKup_Deposits::get_for_application( $app_id );
+			if ( $deposit && 'paid' !== $deposit['status'] ) {
+				LNKup_Deposits::mark_paid( (int) $deposit['id'], round( $cents / 100, 2 ) );
+			}
+		}
+		$installment_id = (int) get_post_meta( $payment_id, '_lnkup_installment_id', true );
+		if ( $installment_id ) {
+			LNKup_Installments::mark_paid( $installment_id, $payment_id );
+			delete_post_meta( $payment_id, '_lnkup_installment_id' );
+		}
+
+		// Credit applied to this charge is used up; the next charge starts without it.
+		$credit = (float) get_post_meta( $payment_id, '_lnkup_credit_applied', true );
+		if ( $credit > 0 ) {
+			update_post_meta( $payment_id, '_lnkup_credit_used_cents', (int) get_post_meta( $payment_id, '_lnkup_credit_used_cents', true ) + (int) round( $credit * 100 ) );
+			update_post_meta( $payment_id, '_lnkup_credit_applied', 0 );
+		}
+
+		$total     = (int) round( (float) get_post_meta( $payment_id, '_lnkup_total_amount', true ) * 100 );
+		$remaining = max( 0, $total - $paid );
+		$next      = $app_id ? LNKup_Installments::apply_to_payment( $payment_id, $app_id ) : 0;
+		if ( $next <= 0 || (int) round( $next * 100 ) > $remaining ) {
+			update_post_meta( $payment_id, '_lnkup_installment_amount', round( $remaining / 100, 2 ) );
+		}
+
+		update_post_meta( $payment_id, '_lnkup_payment_status', 'partially_paid' );
+		update_post_meta( $payment_id, '_lnkup_charge_seq', (int) get_post_meta( $payment_id, '_lnkup_charge_seq', true ) + 1 );
+		// The next charge needs a fresh PaymentIntent / Checkout Session.
+		delete_post_meta( $payment_id, '_lnkup_stripe_payment_intent' );
+		delete_post_meta( $payment_id, '_lnkup_stripe_checkout_session' );
+
+		LNKup_Financial_Audit::log( 'partial_payment_recorded', 'payment', $payment_id, array_merge( $context, array( 'amount' => $cents / 100, 'intent_id' => (string) $intent_id, 'remaining_cents' => $remaining ) ) );
+		return array(
+			'success'         => true,
+			'partial'         => true,
+			'payment_id'      => $payment_id,
+			'remaining_cents' => $remaining,
+		);
+	}
+
+	/**
+	 * Whether a succeeded charge covers what this payment expected for it.
+	 *
+	 * Uses the amount stamped when the PaymentIntent / Checkout Session was created, so a
+	 * later fee change neither rejects a valid payment nor accepts a stale lower one.
+	 *
+	 * @param int    $payment_id     Payment ID.
+	 * @param string $ref            PaymentIntent or Checkout Session ID.
+	 * @param int    $received_cents Amount Stripe collected.
+	 * @param string $currency       Currency.
+	 */
+	public static function charge_amount_ok( $payment_id, $ref, $received_cents, $currency = 'usd' ) {
+		if ( 'usd' !== strtolower( (string) $currency ) ) {
+			return false;
+		}
+		$expected_map = get_post_meta( $payment_id, '_lnkup_stripe_expected_cents', true );
+		$expected_map = is_array( $expected_map ) ? $expected_map : array();
+		$session_id   = (string) get_post_meta( $payment_id, '_lnkup_stripe_checkout_session', true );
+		if ( isset( $expected_map[ $ref ] ) ) {
+			$expected = (int) $expected_map[ $ref ];
+		} elseif ( '' !== $session_id && isset( $expected_map[ $session_id ] ) ) {
+			// PaymentIntent created by a hosted Checkout Session.
+			$expected = (int) $expected_map[ $session_id ];
+		} else {
+			$expected = (int) round( self::stored_amount_due( $payment_id ) * 100 );
+		}
+		return (int) $received_cents >= $expected && $received_cents > 0;
+	}
+
+	/**
+	 * Remember the amount a PaymentIntent / Checkout Session was created for.
+	 *
+	 * @param int    $payment_id Payment ID.
+	 * @param string $ref        PaymentIntent or Checkout Session ID.
+	 * @param int    $cents      Amount in cents.
+	 */
+	public static function remember_expected_amount( $payment_id, $ref, $cents ) {
+		if ( '' === (string) $ref ) {
+			return;
+		}
+		$map         = get_post_meta( $payment_id, '_lnkup_stripe_expected_cents', true );
+		$map         = is_array( $map ) ? $map : array();
+		$map[ $ref ] = (int) $cents;
+		update_post_meta( $payment_id, '_lnkup_stripe_expected_cents', array_slice( $map, -20, null, true ) );
+	}
+
+	/**
+	 * Flag a charge whose amount did not match what was expected (not finalized).
+	 *
+	 * @param int    $payment_id Payment ID.
+	 * @param string $ref        Stripe reference.
+	 * @param int    $received   Received cents.
+	 */
+	public static function flag_amount_mismatch( $payment_id, $ref, $received ) {
+		update_post_meta( $payment_id, '_lnkup_needs_review', 'amount_mismatch' );
+		LNKup_Financial_Audit::log( 'charge_amount_mismatch', 'payment', $payment_id, array( 'ref' => (string) $ref, 'received_cents' => (int) $received ) );
+	}
+
+	/**
 	 * Mark paid and settle exactly once, serialized per payment.
 	 *
 	 * @param int    $payment_id Payment ID.
@@ -266,6 +453,9 @@ class LNKup_Financial_Service {
 	private static function finalize_payment_locked( $payment_id, $intent_id, $context ) {
 		$status = get_post_meta( $payment_id, '_lnkup_payment_status', true );
 		if ( 'paid' === $status ) {
+			if ( self::is_other_intent( $payment_id, $intent_id ) ) {
+				self::record_extra_charge( $payment_id, $intent_id, 'second_charge_on_paid_payment', $context );
+			}
 			$recovered = self::ensure_settled( $payment_id );
 			if ( class_exists( 'LNKup_Financial_Audit' ) ) {
 				LNKup_Financial_Audit::log( 'finalize_skipped', 'payment', $payment_id, array_merge( $context, array( 'reason' => 'already_paid', 'settlement_recovered' => $recovered ) ) );
@@ -273,12 +463,37 @@ class LNKup_Financial_Service {
 			return array( 'already_paid' => true, 'settlement_recovered' => $recovered );
 		}
 
+		if ( ! LNKup_Payments::is_collectible( $payment_id ) ) {
+			// Refunded, disputed or voided: money Stripe collected here must be reviewed, never re-applied.
+			$voided = '' !== (string) get_post_meta( $payment_id, '_lnkup_voided_at', true );
+			if ( 0 === strpos( (string) $intent_id, 'pi_' ) && ( $voided || self::is_other_intent( $payment_id, $intent_id ) ) ) {
+				self::record_extra_charge( $payment_id, $intent_id, $voided ? 'charge_on_voided_payment' : 'charge_on_closed_payment', $context );
+			}
+			return array(
+				'refused'    => true,
+				'reason'     => 'payment_not_collectible',
+				'payment_id' => $payment_id,
+			);
+		}
+
+		$partials = get_post_meta( $payment_id, '_lnkup_partial_charges', true );
+		if ( '' !== (string) $intent_id && is_array( $partials ) && isset( $partials[ $intent_id ] ) ) {
+			// Replay of a deposit/installment charge already counted; never let it complete the balance.
+			return array( 'success' => true, 'partial' => true, 'already_recorded' => true, 'payment_id' => $payment_id );
+		}
+
 		if ( $intent_id ) {
 			self::backfill_stripe_payment_meta( $payment_id, $intent_id );
 		}
 
+		$partial = self::partial_charge_cents( $payment_id );
+		if ( $partial > 0 ) {
+			return self::record_partial_charge( $payment_id, $intent_id, $partial, $context );
+		}
+
 		LNKup_Payments::mark_paid( $payment_id, $intent_id );
 		LNKup_Transactions::sync_extended_fields( $payment_id );
+		update_post_meta( $payment_id, '_lnkup_amount_paid_cents', (int) round( (float) get_post_meta( $payment_id, '_lnkup_total_amount', true ) * 100 ) );
 
 		if ( ! self::is_settled( $payment_id ) ) {
 			self::settle_treasury( $payment_id );
@@ -305,6 +520,10 @@ class LNKup_Financial_Service {
 		$payment_id = absint( $payment_id );
 		if ( ! $payment_id || 'lnkup_payment' !== get_post_type( $payment_id ) ) {
 			return new WP_Error( 'invalid_payment', __( 'Invalid payment.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$current = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
+		if ( 'paid' !== $current && ! LNKup_Payments::is_collectible( $payment_id ) ) {
+			return array( 'success' => true, 'action' => 'not_collectible', 'payment_id' => $payment_id );
 		}
 
 		$intent_id = $intent_id ?: (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
@@ -510,6 +729,11 @@ class LNKup_Financial_Service {
 		$meta_payment = absint( $intent['metadata']['payment_post_id'] ?? 0 );
 		$stored       = (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
 		if ( $meta_payment ? $meta_payment !== (int) $payment_id : $stored !== $intent_id ) {
+			return false;
+		}
+		// A second charge on a paid or closed payment must not overwrite the recorded charge's references.
+		$status = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
+		if ( '' !== $stored && $stored !== $intent_id && ( 'paid' === $status || ! LNKup_Payments::is_collectible( $payment_id ) ) ) {
 			return false;
 		}
 
@@ -1147,7 +1371,7 @@ class LNKup_Financial_Service {
 				self::log_rejected_confirm( $payment_id, $intent_id, 'simulation_disabled' );
 				return new WP_Error( 'payment_incomplete', __( 'Payment not completed yet.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 			}
-			return self::finalize_payment( $payment_id, $intent_id, array( 'source' => 'client_confirm_simulation' ) );
+			return self::refused_as_error( self::finalize_payment( $payment_id, $intent_id, array( 'source' => 'client_confirm_simulation' ) ) );
 		}
 
 		$verified = self::verify_intent_for_payment( $payment_id, $intent_id );
@@ -1162,7 +1386,24 @@ class LNKup_Financial_Service {
 				array( 'status' => 409 )
 			);
 		}
-		return self::finalize_payment( $payment_id, $intent_id, array( 'source' => 'client_confirm' ) );
+		return self::refused_as_error( self::finalize_payment( $payment_id, $intent_id, array( 'source' => 'client_confirm' ) ) );
+	}
+
+	/**
+	 * Client-facing error for a finalize that was refused (closed or voided payment).
+	 *
+	 * @param mixed $result finalize_payment() result.
+	 * @return mixed
+	 */
+	private static function refused_as_error( $result ) {
+		if ( is_array( $result ) && ! empty( $result['refused'] ) ) {
+			return new WP_Error(
+				'payment_not_collectible',
+				__( 'This booking is no longer open for payment. LNKup support has been notified about this charge.', 'lnkup-marketplace' ),
+				array( 'status' => 409 )
+			);
+		}
+		return $result;
 	}
 
 	/**
@@ -1221,9 +1462,12 @@ class LNKup_Financial_Service {
 			return $incomplete;
 		}
 
-		$expected_cents = (int) round( self::stored_amount_due( $payment_id ) * 100 );
+		$expected_map   = get_post_meta( $payment_id, '_lnkup_stripe_expected_cents', true );
+		$expected_cents = is_array( $expected_map ) && isset( $expected_map[ $intent_id ] )
+			? (int) $expected_map[ $intent_id ]
+			: (int) round( self::stored_amount_due( $payment_id ) * 100 );
 		$received_cents = (int) ( $intent['amount_received'] ?? $intent['amount'] ?? 0 );
-		if ( 'usd' !== strtolower( (string) ( $intent['currency'] ?? 'usd' ) ) || $received_cents <= 0 || $received_cents < $expected_cents ) {
+		if ( ! self::charge_amount_ok( $payment_id, $intent_id, $received_cents, (string) ( $intent['currency'] ?? 'usd' ) ) ) {
 			self::log_rejected_confirm(
 				$payment_id,
 				$intent_id,

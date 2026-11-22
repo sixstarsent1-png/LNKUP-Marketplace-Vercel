@@ -527,7 +527,8 @@ class LNKup_Organizer_Wallet {
 		);
 		$debits = (float) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE user_id = %d AND entry_type = 'debit' AND source_type IN ('payout','reconciliation_offset_connect')",
+				"SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE user_id = %d AND entry_type = 'debit'
+				AND source_type IN ('payout','reconciliation_offset_connect','refund_platform','refund_destination','chargeback_platform','chargeback_destination')",
 				absint( $user_id )
 			)
 		);
@@ -538,7 +539,7 @@ class LNKup_Organizer_Wallet {
 	 * Money LNKup holds for a destination-mode organizer and may transfer on Cash Out.
 	 *
 	 * Counts connect_settlement rows for platform-held funds (treasury migrations, platform-charge
-	 * recoveries, cashout restores) minus cashout debits and offsets. Destination-charge mirrors
+	 * recoveries) minus recovery transfers already sent, refunds and offsets. Destination-charge mirrors
 	 * are excluded: that money is already on the organizer's Stripe account and Stripe pays it
 	 * out automatically, so counting it would offer LNKup's own balance a second time.
 	 *
@@ -556,7 +557,8 @@ class LNKup_Organizer_Wallet {
 			$wpdb->prepare(
 				"SELECT COALESCE(SUM(amount), 0) FROM {$table}
 				WHERE user_id = %d AND entry_type = 'connect_settlement'
-				AND NOT ( source_type = 'payment' AND COALESCE(metadata, '') LIKE %s )",
+				AND source_type NOT IN ('payout_failed','payout_cancel')
+				AND COALESCE(metadata, '') NOT LIKE %s",
 				absint( $user_id ),
 				'%"settlement_mode":"destination"%'
 			)
@@ -564,11 +566,176 @@ class LNKup_Organizer_Wallet {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$debits = (float) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE user_id = %d AND entry_type = 'debit' AND source_type IN ('payout','reconciliation_offset_connect')",
+				"SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE user_id = %d AND entry_type = 'debit'
+				AND source_type IN ('reconciliation_offset_connect','refund_platform','chargeback_platform','recovery_transfer')",
 				absint( $user_id )
 			)
 		);
 		return max( 0.0, round( $credits - $debits, 2 ) );
+	}
+
+	/**
+	 * Debit the organizer's share of money returned to the vendor (card refunds plus credit refunds).
+	 *
+	 * Idempotent: the target is recomputed from the cumulative amount returned and only the
+	 * difference from earlier refund debits is posted, keyed by that cumulative amount.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 * @return int Cents debited now.
+	 */
+	public static function reverse_for_refund( $payment_id ) {
+		$card     = (int) round( (float) get_post_meta( $payment_id, '_lnkup_refund_amount', true ) * 100 );
+		$credit   = (int) round( (float) get_post_meta( $payment_id, '_lnkup_credit_refund_amount', true ) * 100 );
+		$returned = $card + $credit;
+		return self::reverse_share( $payment_id, $returned, 'refund', 'payment:' . absint( $payment_id ) . ':refund:' . $returned, $credit > 0 );
+	}
+
+	/**
+	 * Debit the organizer's share of a lost chargeback (Stripe already took the money from LNKup).
+	 *
+	 * @param int $payment_id   Payment post ID.
+	 * @param int $amount_cents Disputed amount.
+	 * @return int Cents debited.
+	 */
+	public static function reverse_for_chargeback( $payment_id, $amount_cents ) {
+		return self::reverse_share( $payment_id, (int) $amount_cents, 'chargeback', 'payment:' . absint( $payment_id ) . ':chargeback', true );
+	}
+
+	/**
+	 * Credit back a chargeback debit after the dispute is won and funds are reinstated.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 * @return int Cents credited.
+	 */
+	public static function reinstate_chargeback( $payment_id ) {
+		global $wpdb;
+		$table = LNKup_Treasury_Tables::organizer_wallet_entries_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$debit = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE idempotency_key = %s", 'payment:' . absint( $payment_id ) . ':chargeback' ), ARRAY_A );
+		if ( ! $debit ) {
+			return 0;
+		}
+		$amount = (float) $debit['amount'];
+		$key    = 'payment:' . absint( $payment_id ) . ':chargeback_reinstated';
+		$user   = (int) $debit['user_id'];
+		if ( 'chargeback' === $debit['source_type'] ) {
+			$id = self::add_entry( $user, $amount, 'available', array( 'source_type' => 'chargeback_reinstated', 'payment_post_id' => $payment_id, 'note' => __( 'Chargeback won — funds reinstated', 'lnkup-marketplace' ), 'idempotency_key' => $key ) );
+		} else {
+			$wallet = self::get_or_create( $user );
+			$id     = self::insert_entry(
+				array(
+					'wallet_id'       => (int) $wallet['id'],
+					'user_id'         => $user,
+					'entry_type'      => 'connect_settlement',
+					'amount'          => $amount,
+					'source_type'     => 'chargeback_reinstated',
+					'payment_post_id' => $payment_id,
+					'note'            => __( 'Chargeback won — funds reinstated', 'lnkup-marketplace' ),
+					'metadata'        => (string) $debit['metadata'],
+					'idempotency_key' => $key,
+				)
+			);
+		}
+		return $id ? (int) round( $amount * 100 ) : 0;
+	}
+
+	/**
+	 * Post a proportional organizer debit for money returned to the vendor.
+	 *
+	 * Where the debit lands follows where the organizer's money sits:
+	 * - platform-settled credit → wallet available, else pending, else the platform claim;
+	 * - destination charge mirror → ledger mirror debit (flagged for recovery when Stripe did not
+	 *   reverse the transfer itself, i.e. credit refunds and chargebacks);
+	 * - recovered / migrated platform claim → platform claim debit (reduces Cash Out).
+	 *
+	 * @param int    $payment_id     Payment post ID.
+	 * @param int    $returned_cents Cumulative cents returned to the vendor (or disputed).
+	 * @param string $kind           refund|chargeback.
+	 * @param string $key            Idempotency key.
+	 * @param bool   $needs_recovery Whether a destination organizer still holds the money.
+	 * @return int Cents debited.
+	 */
+	private static function reverse_share( $payment_id, $returned_cents, $kind, $key, $needs_recovery ) {
+		global $wpdb;
+		$payment_id = absint( $payment_id );
+		$gross      = (int) round( (float) get_post_meta( $payment_id, '_lnkup_total_amount', true ) * 100 );
+		if ( $returned_cents <= 0 || $gross <= 0 ) {
+			return 0;
+		}
+		$table = LNKup_Treasury_Tables::organizer_wallet_entries_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$settlement = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE payment_post_id = %d AND entry_type IN ('credit','connect_settlement') AND source_type IN ('payment','') ORDER BY id ASC LIMIT 1",
+				$payment_id
+			),
+			ARRAY_A
+		);
+		if ( ! $settlement ) {
+			return 0;
+		}
+		$credited = (int) round( (float) $settlement['amount'] * 100 );
+		$target   = min( $credited, (int) round( $credited * min( 1, $returned_cents / $gross ) ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$already = (int) round( (float) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COALESCE(SUM(amount), 0) FROM {$table} WHERE payment_post_id = %d AND entry_type = 'debit' AND source_type LIKE %s",
+				$payment_id,
+				$wpdb->esc_like( $kind ) . '%'
+			)
+		) * 100 );
+		$delta = $target - $already;
+		if ( $delta <= 0 ) {
+			return 0;
+		}
+		$user    = (int) $settlement['user_id'];
+		$amount  = round( $delta / 100, 2 );
+		$meta    = json_decode( (string) $settlement['metadata'], true );
+		$is_dest = is_array( $meta ) && 'destination' === ( $meta['settlement_mode'] ?? '' );
+		$note    = 'chargeback' === $kind
+			? __( 'Chargeback lost — organizer share reversed', 'lnkup-marketplace' )
+			: __( 'Vendor refund — organizer share reversed', 'lnkup-marketplace' );
+		$details = array(
+			'returned_cents' => $returned_cents,
+			'gross_cents'    => $gross,
+			'credited_cents' => $credited,
+		);
+
+		if ( 'credit' === $settlement['entry_type'] ) {
+			$row = self::get_row( $user );
+			foreach ( array( 'available' => 'available_balance', 'pending' => 'pending_balance' ) as $bucket => $field ) {
+				if ( (float) ( $row[ $field ] ?? 0 ) + 0.004 >= $amount ) {
+					$id = self::add_entry( $user, $amount, $bucket, array( 'entry_type' => 'debit', 'source_type' => $kind, 'payment_post_id' => $payment_id, 'note' => $note, 'metadata' => $details, 'idempotency_key' => $key ) );
+					return $id ? $delta : 0;
+				}
+			}
+			// The credit was migrated to the platform claim (or partly cashed out): reduce the claim.
+			$source = $kind . '_platform';
+		} else {
+			$source = $is_dest ? $kind . '_destination' : $kind . '_platform';
+		}
+
+		$wallet = self::get_or_create( $user );
+		$id     = self::insert_entry(
+			array(
+				'wallet_id'       => (int) $wallet['id'],
+				'user_id'         => $user,
+				'entry_type'      => 'debit',
+				'amount'          => $amount,
+				'source_type'     => $source,
+				'payment_post_id' => $payment_id,
+				'note'            => $note,
+				'metadata'        => wp_json_encode( array_merge( $details, array(
+					'settlement_mode' => $is_dest ? 'destination' : 'platform_treasury',
+					'needs_recovery'  => $is_dest && $needs_recovery,
+				) ) ),
+				'idempotency_key' => $key,
+			)
+		);
+		if ( $id && $is_dest && $needs_recovery ) {
+			LNKup_Financial_Audit::log( 'organizer_recovery_needed', 'payment', $payment_id, array( 'amount' => $amount, 'kind' => $kind ) );
+		}
+		return $id ? $delta : 0;
 	}
 
 	/**

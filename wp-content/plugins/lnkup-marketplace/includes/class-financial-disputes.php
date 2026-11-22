@@ -121,6 +121,44 @@ class LNKup_Financial_Disputes {
 	}
 
 	/**
+	 * Whether a dispute row was opened by the card network (Stripe chargeback), not a vendor.
+	 *
+	 * @param array $dispute Dispute row.
+	 */
+	public static function is_chargeback( $dispute ) {
+		return 0 === (int) ( $dispute['opened_by'] ?? 0 );
+	}
+
+	/**
+	 * Close open chargeback rows for a payment after Stripe decides the dispute.
+	 *
+	 * @param int    $payment_id Payment ID.
+	 * @param string $outcome    won|lost.
+	 */
+	public static function close_chargeback( $payment_id, $outcome ) {
+		global $wpdb;
+		$table = LNKup_Financial_Tables::disputes_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return;
+		}
+		$in     = "'" . implode( "','", array_map( 'esc_sql', self::OPEN_STATUSES ) ) . "'";
+		$status = 'won' === $outcome ? self::STATUS_RESOLVED_DENIED : self::STATUS_RESOLVED_REFUNDED;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = %s, resolution_note = %s, updated_at = %s WHERE payment_post_id = %d AND opened_by = 0 AND status IN ({$in})",
+				$status,
+				'won' === $outcome ? 'Chargeback won at the card network.' : 'Chargeback lost at the card network.',
+				current_time( 'mysql' ),
+				absint( $payment_id )
+			)
+		);
+		if ( (int) $wpdb->rows_affected > 0 ) {
+			do_action( 'lnkup_chargeback_closed', absint( $payment_id ), 'won' === $outcome ? 'won' : 'lost' );
+		}
+	}
+
+	/**
 	 * @param int $payment_id Payment ID.
 	 */
 	public static function has_open_for_payment( $payment_id ) {
@@ -229,6 +267,17 @@ class LNKup_Financial_Disputes {
 			return new WP_Error( 'note_required', __( 'Please add a short note when denying a dispute.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 
+		// Bank chargebacks (opened by the card network) are decided by Stripe and LNKup admins only,
+		// and never settled with platform credit: the vendor already got the money back.
+		if ( self::is_chargeback( $dispute ) ) {
+			if ( ! LNKup_Capabilities::user_has_manage_all( $resolver ) ) {
+				return new WP_Error( 'chargeback_admin_only', __( 'Card chargebacks are handled by LNKup support.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+			}
+			if ( self::OUTCOME_APPROVED_CREDIT === $outcome ) {
+				return new WP_Error( 'chargeback_no_credit', __( 'A chargeback cannot be resolved with credit.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+			}
+		}
+
 		$payment_id = (int) $dispute['payment_post_id'];
 		$amount     = self::payment_amount( $payment_id );
 		$status     = '';
@@ -262,7 +311,10 @@ class LNKup_Financial_Disputes {
 				return new WP_Error( 'invalid_credit', __( 'Could not grant credit for this payment.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 			}
 			LNKup_Credits::grant( $vendor_id, $amount, 'dispute', 'dispute', $dispute_id );
-			update_post_meta( $payment_id, '_lnkup_payment_status', 'refunded' );
+			// Recorded as a credit refund so the organizer's share is reversed like any refund.
+			update_post_meta( $payment_id, '_lnkup_credit_refund_amount', round( LNKup_Refunds::credited_amount( $payment_id ) + $amount, 2 ) );
+			update_post_meta( $payment_id, '_lnkup_payment_status', 'paid' );
+			LNKup_Refunds::sync_payment_refund_status( $payment_id );
 			if ( class_exists( 'LNKup_Transactions' ) ) {
 				LNKup_Transactions::create(
 					array(

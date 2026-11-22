@@ -325,6 +325,9 @@ class LNKup_Financial_Cron {
 			LNKup_Notifications::send_invoice_reminder( $row, substr( (string) $type, strlen( 'payment_reminder_' ) ) );
 			return;
 		}
+		if ( LNKup_Notifications::delegated( 'financial_reminder', array( $type, $row ) ) ) {
+			return;
+		}
 		$vendor_id = (int) ( $row['vendor_user_id'] ?? 0 );
 		$user      = get_userdata( $vendor_id );
 		if ( ! $user ) {

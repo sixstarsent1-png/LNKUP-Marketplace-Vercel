@@ -46,6 +46,10 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 
 		$amount_cents = $prepared['amount_cents'];
 		$meta         = $this->payment_metadata( $payment_id );
+		$open         = $this->settle_open_charges( $payment_id, $amount_cents, ! empty( $prepared['connect_params'] ) ? 'destination' : 'platform_treasury', true );
+		if ( is_wp_error( $open ) ) {
+			return $open;
+		}
 		$customer     = $this->get_or_create_customer( (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true ) );
 		if ( is_wp_error( $customer ) ) {
 			return $customer;
@@ -99,6 +103,7 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 		}
 		if ( ! empty( $session['id'] ) ) {
 			update_post_meta( $payment_id, '_lnkup_stripe_checkout_session', sanitize_text_field( $session['id'] ) );
+			LNKup_Financial_Service::remember_expected_amount( $payment_id, (string) $session['id'], $amount_cents );
 		}
 
 		return array( 'mode' => 'stripe', 'url' => $session['url'] ?? '' );
@@ -128,7 +133,23 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 		$meta         = $this->payment_metadata( $payment_id );
 		// Settlement mode changes the request params, and Stripe rejects a reused key with different params.
 		$mode         = ! empty( $prepared['connect_params'] ) ? 'destination' : 'platform_treasury';
-		$idempotency  = 'lnkup_pi_' . $payment_id . '_' . $amount_cents . '_' . $mode;
+
+		$open = $this->settle_open_charges( $payment_id, $amount_cents, $mode );
+		if ( is_wp_error( $open ) ) {
+			return $open;
+		}
+		if ( is_array( $open ) && ! empty( $open['reuse'] ) && empty( $args['payment_method_id'] ) ) {
+			return array(
+				'mode'            => 'embedded',
+				'client_secret'   => $open['reuse']['client_secret'] ?? '',
+				'intent_id'       => $open['reuse']['id'] ?? '',
+				'publishable_key' => $this->client->get_publishable_key(),
+			);
+		}
+
+		$seq          = (int) get_post_meta( $payment_id, '_lnkup_charge_seq', true );
+		$param_hash   = substr( md5( (string) wp_json_encode( array( $args['payment_method_id'] ?? '', $this->excluded_payment_method_types(), ! empty( lnkup_get_settings()['ach_enabled'] ) ) ) ), 0, 8 );
+		$idempotency  = 'lnkup_pi_' . $payment_id . '_' . $seq . '_' . $amount_cents . '_' . $mode . '_' . $param_hash;
 
 		$params = array(
 			'amount'                    => $amount_cents,
@@ -168,6 +189,7 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 		}
 
 		update_post_meta( $payment_id, '_lnkup_stripe_payment_intent', sanitize_text_field( $intent['id'] ?? '' ) );
+		LNKup_Financial_Service::remember_expected_amount( $payment_id, (string) ( $intent['id'] ?? '' ), $amount_cents );
 
 		return array(
 			'mode'            => 'embedded',
@@ -338,6 +360,85 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 			$excluded[] = 'us_bank_account';
 		}
 		return $excluded;
+	}
+
+	/**
+	 * Keep at most one payable Stripe charge per booking before creating a new one.
+	 *
+	 * - An open PaymentIntent for the same amount and mode is reused (embedded checkout).
+	 * - Any other open PaymentIntent is cancelled and an open Checkout Session expired, so an
+	 *   abandoned tab or app session can no longer be paid. Cancelling moves no money.
+	 * - A charge that already succeeded or is processing blocks a new one; the payment is
+	 *   reconciled instead so the vendor is never charged twice.
+	 *
+	 * @param int    $payment_id    Payment ID.
+	 * @param int    $amount_cents  Amount about to be charged.
+	 * @param string $mode          Settlement mode about to be used.
+	 * @param bool   $for_session   True when a hosted session will be created (never reuse an intent).
+	 * @return array|WP_Error array( 'reuse' => intent ) or empty array; WP_Error when blocked.
+	 */
+	private function settle_open_charges( $payment_id, $amount_cents, $mode, $for_session = false ) {
+		$intent_id  = (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
+		$session_id = (string) get_post_meta( $payment_id, '_lnkup_stripe_checkout_session', true );
+		$blocked    = new WP_Error(
+			'payment_in_progress',
+			__( 'A payment for this booking is already in progress. Refresh in a moment.', 'lnkup-marketplace' ),
+			array( 'status' => 409 )
+		);
+
+		if ( 0 === strpos( $session_id, 'cs_' ) ) {
+			$session = $this->client->read( 'checkout/sessions/' . $session_id );
+			if ( ! is_wp_error( $session ) ) {
+				if ( 'complete' === ( $session['status'] ?? '' ) ) {
+					LNKup_Financial_Service::reconcile_payment( $payment_id );
+					return $blocked;
+				}
+				if ( 'open' === ( $session['status'] ?? '' ) ) {
+					$this->client->expire_checkout_session( $session_id );
+				}
+			}
+		}
+
+		if ( 0 === strpos( $intent_id, 'pi_' ) ) {
+			$intent = $this->client->read( 'payment_intents/' . $intent_id );
+			if ( ! is_wp_error( $intent ) ) {
+				$status = (string) ( $intent['status'] ?? '' );
+				if ( in_array( $status, array( 'succeeded', 'processing' ), true ) ) {
+					LNKup_Financial_Service::reconcile_payment( $payment_id, $intent_id );
+					return $blocked;
+				}
+				if ( in_array( $status, array( 'requires_payment_method', 'requires_confirmation', 'requires_action' ), true ) ) {
+					$same_mode = ( 'destination' === $mode ) === ( '' !== (string) ( $intent['transfer_data']['destination'] ?? '' ) );
+					if ( ! $for_session && $same_mode && (int) ( $intent['amount'] ?? 0 ) === (int) $amount_cents ) {
+						return array( 'reuse' => $intent );
+					}
+					$this->client->cancel_payment_intent( $intent_id );
+				}
+			}
+		}
+		return array();
+	}
+
+	/**
+	 * Cancel/expire the booking's open Stripe charges (used when a payment is voided).
+	 *
+	 * @param int $payment_id Payment ID.
+	 */
+	public function cancel_open_charges( $payment_id ) {
+		if ( ! $this->is_configured() ) {
+			return;
+		}
+		$intent_id  = (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
+		$session_id = (string) get_post_meta( $payment_id, '_lnkup_stripe_checkout_session', true );
+		if ( 0 === strpos( $session_id, 'cs_' ) ) {
+			$this->client->expire_checkout_session( $session_id );
+		}
+		if ( 0 === strpos( $intent_id, 'pi_' ) ) {
+			$intent = $this->client->read( 'payment_intents/' . $intent_id );
+			if ( ! is_wp_error( $intent ) && in_array( (string) ( $intent['status'] ?? '' ), array( 'requires_payment_method', 'requires_confirmation', 'requires_action' ), true ) ) {
+				$this->client->cancel_payment_intent( $intent_id );
+			}
+		}
 	}
 
 	/**

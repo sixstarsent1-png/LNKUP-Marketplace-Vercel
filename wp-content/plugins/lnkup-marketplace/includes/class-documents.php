@@ -259,6 +259,7 @@ class LNKup_Documents {
 		update_post_meta( $doc_id, '_lnkup_verification_status', 'pending' );
 
 		LNKup_Notifications::send_document_pending_admin( $doc_id );
+		do_action( 'lnkup_document_uploaded', (int) $doc_id, (int) $user_id );
 
 		return $doc_id;
 	}

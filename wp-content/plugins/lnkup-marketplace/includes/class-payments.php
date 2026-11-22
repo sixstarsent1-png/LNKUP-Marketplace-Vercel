@@ -155,10 +155,13 @@ class LNKup_Payments {
 	public static function mark_processing( $payment_id, $intent_id = '' ) {
 		$status = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
 		if ( in_array( $status, array( 'paid', 'processing' ), true ) ) {
-			if ( $intent_id ) {
+			if ( $intent_id && 'processing' === $status ) {
 				update_post_meta( $payment_id, '_lnkup_stripe_payment_intent', sanitize_text_field( $intent_id ) );
 			}
 			return true;
+		}
+		if ( ! self::is_collectible( $payment_id ) ) {
+			return false;
 		}
 
 		update_post_meta( $payment_id, '_lnkup_payment_status', 'processing' );
@@ -172,6 +175,50 @@ class LNKup_Payments {
 	}
 
 	/**
+	 * Whether the vendor may start a new charge (checkout, Payment Element, hosted session).
+	 *
+	 * Processing (ACH in flight), paid, refunded, disputed and voided payments are not payable.
+	 *
+	 * @param int $payment_id Payment ID.
+	 */
+	public static function is_payable( $payment_id ) {
+		$status = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
+		if ( '' !== (string) get_post_meta( $payment_id, '_lnkup_voided_at', true ) ) {
+			return false;
+		}
+		return in_array( $status, array( 'pending', 'partially_paid', 'failed', '' ), true );
+	}
+
+	/**
+	 * Whether a charge Stripe reports as succeeded may still be applied to this payment.
+	 *
+	 * Refunded, disputed, chargeback-lost and voided payments can never become paid again.
+	 *
+	 * @param int $payment_id Payment ID.
+	 */
+	public static function is_collectible( $payment_id ) {
+		$status = (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
+		if ( '' !== (string) get_post_meta( $payment_id, '_lnkup_voided_at', true ) ) {
+			return false;
+		}
+		return in_array( $status, array( 'pending', 'processing', 'partially_paid', 'failed', '' ), true );
+	}
+
+	/**
+	 * A declined (failed, not voided) payment becomes pending again when the vendor retries.
+	 *
+	 * @param int $payment_id Payment ID.
+	 */
+	public static function reopen_if_declined( $payment_id ) {
+		if ( 'failed' !== (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ) || '' !== (string) get_post_meta( $payment_id, '_lnkup_voided_at', true ) ) {
+			return false;
+		}
+		update_post_meta( $payment_id, '_lnkup_payment_status', 'pending' );
+		LNKup_Financial_Audit::log( 'payment_reopened_after_decline', 'payment', $payment_id, array() );
+		return true;
+	}
+
+	/**
 	 * Mark payment as paid.
 	 *
 	 * @param int    $payment_id Payment ID.
@@ -180,6 +227,10 @@ class LNKup_Payments {
 	public static function mark_paid( $payment_id, $intent_id = '' ) {
 		if ( 'paid' === get_post_meta( $payment_id, '_lnkup_payment_status', true ) ) {
 			return true;
+		}
+		if ( ! self::is_collectible( $payment_id ) ) {
+			LNKup_Financial_Audit::log( 'mark_paid_refused', 'payment', $payment_id, array( 'status' => (string) get_post_meta( $payment_id, '_lnkup_payment_status', true ), 'intent_id' => (string) $intent_id ) );
+			return false;
 		}
 
 		update_post_meta( $payment_id, '_lnkup_payment_status', 'paid' );
@@ -211,8 +262,9 @@ class LNKup_Payments {
 				LNKup_Installments::mark_paid( $installment_id, $payment_id );
 			}
 			$deposit = LNKup_Deposits::get_for_application( $app_id_paid );
-			if ( $deposit ) {
-				LNKup_Deposits::mark_paid( (int) $deposit['id'], (float) get_post_meta( $payment_id, '_lnkup_total_amount', true ) );
+			if ( $deposit && 'paid' !== $deposit['status'] ) {
+				// The booking is now fully paid: record only what the deposit row is still missing.
+				LNKup_Deposits::mark_paid( (int) $deposit['id'], max( 0, (float) $deposit['total_amount'] - (float) $deposit['paid_amount'] ) );
 			}
 		}
 		delete_transient( 'lnkup_fin_market_summary' );
@@ -271,7 +323,6 @@ class LNKup_Payments {
 		$organizer_id = (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true );
 		$event_id     = (int) get_post_meta( $payment_id, '_lnkup_event_id', true );
 		$discount     = (float) get_post_meta( $payment_id, '_lnkup_discount_amount', true );
-		$credit       = (float) get_post_meta( $payment_id, '_lnkup_credit_applied', true );
 		$category     = '';
 		$vendor_user  = (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true );
 		$profile_id   = (int) lnkup_get_vendor_profile_id( $vendor_user );
@@ -287,7 +338,8 @@ class LNKup_Payments {
 				'event_id'     => $event_id,
 				'category'     => $category,
 				'discount'     => $discount,
-				'credit'       => $credit,
+				// _lnkup_total_amount stays gross of credit; stored_amount_due() subtracts credit once.
+				'credit'       => 0,
 			)
 		);
 		self::apply_fee_breakdown_to_payment( $payment_id, $fees );

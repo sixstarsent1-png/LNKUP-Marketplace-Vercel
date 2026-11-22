@@ -94,9 +94,10 @@ class LNKup_Checkout {
 				'payment_id'   => (int) $payment_id,
 			);
 		}
-		if ( 'pending' !== $pay_status ) {
+		if ( ! LNKup_Payments::is_payable( $payment_id ) ) {
 			return new WP_Error( 'payment_not_payable', __( 'This booking is no longer open for payment.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
 		}
+		LNKup_Payments::reopen_if_declined( $payment_id );
 		LNKup_Payments::refresh_pending_fees( $payment_id );
 		$zero = LNKup_Financial_Service::maybe_finalize_zero_amount( $payment_id, 'free_booth' );
 		if ( is_wp_error( $zero ) ) {

@@ -774,12 +774,17 @@ class LNKup_Applications {
 	 */
 	private static function void_pending_payment( $app_id, $reason ) {
 		$payment = LNKup_Payments::get_for_application( $app_id );
-		if ( ! $payment || 'pending' !== (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true ) ) {
+		if ( ! $payment || ! in_array( (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true ), array( 'pending', 'failed' ), true ) ) {
 			return;
 		}
 		update_post_meta( $payment->ID, '_lnkup_payment_status', 'failed' );
 		update_post_meta( $payment->ID, '_lnkup_voided_at', current_time( 'mysql' ) );
 		update_post_meta( $payment->ID, '_lnkup_voided_reason', sanitize_key( $reason ) );
+		// Close the payment link too, so an already-open checkout cannot still be paid.
+		$provider = LNKup_Payment_Provider::get_instance();
+		if ( $provider instanceof LNKup_Stripe_Provider ) {
+			$provider->cancel_open_charges( $payment->ID );
+		}
 		if ( class_exists( 'LNKup_Financial_Audit' ) ) {
 			LNKup_Financial_Audit::log( 'payment_voided', 'payment', $payment->ID, array( 'reason' => sanitize_key( $reason ), 'application_id' => (int) $app_id ) );
 		}

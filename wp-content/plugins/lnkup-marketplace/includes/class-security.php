@@ -110,7 +110,7 @@ class LNKup_Security {
 	 * @param string $status Status.
 	 */
 	public static function sanitize_payment_status( $status ) {
-		$allowed = array( 'pending', 'processing', 'paid', 'partially_refunded', 'failed', 'refunded', 'disputed' );
+		$allowed = array( 'pending', 'processing', 'partially_paid', 'paid', 'partially_refunded', 'failed', 'refunded', 'disputed', 'chargeback_lost' );
 		return in_array( $status, $allowed, true ) ? $status : 'pending';
 	}
 

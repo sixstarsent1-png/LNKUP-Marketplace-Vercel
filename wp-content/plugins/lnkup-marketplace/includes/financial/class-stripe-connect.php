@@ -566,6 +566,14 @@ class LNKup_Stripe_Connect {
 				),
 			)
 		);
+
+		$was_ready = $existing && ! empty( $existing['payouts_enabled'] ) && ! empty( $existing['charges_enabled'] ) && '' === (string) ( $existing['disabled_reason'] ?? '' );
+		$is_ready  = ! $is_deauthorized && ! empty( $account['payouts_enabled'] ) && ! empty( $account['charges_enabled'] ) && '' === $disabled_reason;
+		$old_state = $existing ? (string) ( $existing['verification_status'] ?? '' ) . ( $was_ready ? ':ready' : '' ) : '';
+		$new_state = $verification_status . ( $is_ready ? ':ready' : '' );
+		if ( $old_state !== $new_state ) {
+			do_action( 'lnkup_connect_account_status_changed', absint( $user_id ), $old_state, $new_state );
+		}
 	}
 
 	/**
@@ -1009,7 +1017,9 @@ class LNKup_Stripe_Connect {
 		}
 		$connect_available_cents = max( 0, (int) $connect_available_cents );
 
-		$stranded_claim = max( 0, $ledger_claim_cents - $connect_available_cents );
+		// The claim already counts only platform-held money, net of earlier recovery transfers; the
+		// Connect balance is destination money and must not be subtracted from it.
+		$stranded_claim = $ledger_claim_cents;
 		if ( $stranded_claim < 1 ) {
 			return 0;
 		}
@@ -1116,13 +1126,15 @@ class LNKup_Stripe_Connect {
 		$transfer     = null;
 		$chosen       = '';
 		$local_payout = absint( $metadata['payout_id'] ?? 0 );
+		// Deterministic key: a double click, a second tab or a retry returns the same transfer.
+		$claim_cents = (int) round( LNKup_Organizer_Wallet::platform_claim( $organizer_id ) * 100 );
+		$key_base    = $local_payout
+			? 'lnkup_recovery_' . $local_payout
+			: 'lnkup_recovery_org_' . $organizer_id . '_' . $claim_cents . '_' . $amount_cents;
 		foreach ( $candidates as $source_type ) {
 			$params                = $base_params;
 			$params['source_type'] = $source_type;
-			$transfer              = $client->create_transfer(
-				$params,
-				$local_payout ? 'lnkup_recovery_' . $local_payout . '_' . $source_type : ''
-			);
+			$transfer              = $client->create_transfer( $params, $key_base . '_' . $source_type );
 			if ( ! is_wp_error( $transfer ) ) {
 				$chosen = $source_type;
 				break;
@@ -1145,6 +1157,21 @@ class LNKup_Stripe_Connect {
 			return $error;
 		}
 
+		// Ledger the transfer so the platform claim shrinks by exactly what was moved (once).
+		$wallet = LNKup_Organizer_Wallet::get_or_create( $organizer_id );
+		LNKup_Organizer_Wallet::insert_entry(
+			array(
+				'wallet_id'       => (int) $wallet['id'],
+				'user_id'         => $organizer_id,
+				'entry_type'      => 'debit',
+				'amount'          => round( $amount_cents / 100, 2 ),
+				'source_type'     => 'recovery_transfer',
+				'payout_id'       => $local_payout,
+				'note'            => __( 'Moved LNKup-held funds to your payout account', 'lnkup-marketplace' ),
+				'metadata'        => wp_json_encode( array( 'transfer_id' => (string) ( $transfer['id'] ?? '' ), 'source_type' => $chosen ) ),
+				'idempotency_key' => 'recovery:' . (string) ( $transfer['id'] ?? $key_base ),
+			)
+		);
 		LNKup_Financial_Audit::log(
 			'connect_recovery_transfer',
 			'payout',
@@ -1219,84 +1246,22 @@ class LNKup_Stripe_Connect {
 		$organizers     = array();
 		$total_stranded = 0;
 
-		global $wpdb;
-		$table = LNKup_Financial_Tables::connected_accounts_table();
-		$rows  = array();
-		if ( LNKup_Financial_Tables::table_exists( $table ) ) {
-			$rows = $wpdb->get_results(
-				"SELECT user_id, stripe_account_id, charges_enabled, payouts_enabled FROM {$table}
-				WHERE role_type = 'organizer' AND stripe_account_id <> '' AND charges_enabled = 1 AND payouts_enabled = 1
-				ORDER BY user_id ASC LIMIT 50",
-				ARRAY_A
+		foreach ( self::organizer_owed_breakdown() as $row ) {
+			$user_id = (int) $row['user_id'];
+			$user    = get_userdata( $user_id );
+			$owed    = (int) $row['owed_cents'];
+			$can     = $row['claim_cents'] > 0 && self::is_connect_ready( $user_id );
+			$organizers[] = array(
+				'user_id'            => $user_id,
+				'name'               => $user ? $user->display_name : ( '#' . $user_id ),
+				'settlement_mode'    => self::settlement_mode_for_organizer( $user_id ),
+				'recoverable_cents'  => $can ? (int) $row['claim_cents'] : 0,
+				'recoverable'        => $can ? round( $row['claim_cents'] / 100, 2 ) : 0.0,
+				'owed_cents'         => $owed,
+				'ledger_claim_cents' => (int) $row['claim_cents'],
+				'can_recover'        => $can,
 			);
-			if ( ! is_array( $rows ) ) {
-				$rows = array();
-			}
-		}
-
-		foreach ( $rows as $row ) {
-			$user_id = absint( $row['user_id'] ?? 0 );
-			if ( ! $user_id ) {
-				continue;
-			}
-
-			$mode = self::settlement_mode_for_organizer( $user_id );
-			$user = get_userdata( $user_id );
-			$name = $user ? $user->display_name : ( '#' . $user_id );
-
-			if ( 'destination' === $mode ) {
-				if ( ! self::is_connect_ready( $user_id ) ) {
-					continue;
-				}
-				$claim_cents = self::organizer_ledger_claim_cents( $user_id );
-				if ( $claim_cents < 1 ) {
-					continue;
-				}
-				$acct_id = (string) ( $row['stripe_account_id'] ?? '' );
-				$connect_cents = 0;
-				if ( $acct_id ) {
-					$live = $client->retrieve_connect_balance( $acct_id );
-					if ( ! is_wp_error( $live ) ) {
-						$connect_cents = isset( $live['available_cents'] )
-							? (int) $live['available_cents']
-							: (int) round( ( (float) ( $live['available'] ?? 0 ) ) * 100 );
-					}
-				}
-				$stranded = max( 0, $claim_cents - max( 0, $connect_cents ) );
-				if ( $stranded < 1 ) {
-					continue;
-				}
-				$organizers[] = array(
-					'user_id'            => $user_id,
-					'name'               => $name,
-					'settlement_mode'    => 'destination',
-					'recoverable_cents'  => $stranded,
-					'recoverable'        => round( $stranded / 100, 2 ),
-					'ledger_claim_cents' => $claim_cents,
-					'can_recover'        => true,
-				);
-				$total_stranded += $stranded;
-				continue;
-			}
-
-			// Platform treasury: ledger available is also organizer-owed on the main balance.
-			if ( class_exists( 'LNKup_Organizer_Wallet' ) ) {
-				$wallet = LNKup_Organizer_Wallet::get_balances( $user_id );
-				$owed   = max( 0, (int) round( (float) ( $wallet['available'] ?? 0 ) * 100 ) );
-				if ( $owed < 1 ) {
-					continue;
-				}
-				$organizers[] = array(
-					'user_id'            => $user_id,
-					'name'               => $name,
-					'settlement_mode'    => 'platform_treasury',
-					'recoverable_cents'  => $owed,
-					'recoverable'        => round( $owed / 100, 2 ),
-					'ledger_claim_cents' => $owed,
-					'can_recover'        => false,
-				);
-				$total_stranded += $owed;
-			}
+			$total_stranded += $owed;
 		}
 
 		// Cap aggregate organizer-owed at platform available (fees cannot go negative).
@@ -1315,6 +1280,43 @@ class LNKup_Stripe_Connect {
 			'fee_remainder'            => round( $fee_cents / 100, 2 ),
 			'organizers'               => $organizers,
 		);
+	}
+
+	/**
+	 * Money on the LNKup platform balance that belongs to organizers, per organizer, from the ledger.
+	 *
+	 * Owed = treasury available + treasury pending (escrow) + platform claim (migrated / recovered,
+	 * not yet transferred) + treasury cashouts requested but not yet paid. Every organizer wallet is
+	 * counted regardless of Connect state, so the fee remainder can never include organizer money.
+	 *
+	 * @return array<int, array{user_id:int, owed_cents:int, claim_cents:int}>
+	 */
+	public static function organizer_owed_breakdown() {
+		global $wpdb;
+		$wallets = LNKup_Treasury_Tables::organizer_wallets_table();
+		$payouts = LNKup_Treasury_Tables::organizer_payouts_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $wallets ) ) {
+			return array();
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = (array) $wpdb->get_results( "SELECT user_id, available_balance, pending_balance FROM {$wallets}", ARRAY_A );
+		$in_flight = array();
+		if ( LNKup_Financial_Tables::table_exists( $payouts ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			foreach ( (array) $wpdb->get_results( "SELECT user_id, SUM(amount) AS total FROM {$payouts} WHERE status IN ('requested','approved','processing') AND provider <> 'stripe_connect_payout' GROUP BY user_id", ARRAY_A ) as $p ) {
+				$in_flight[ (int) $p['user_id'] ] = (int) round( (float) $p['total'] * 100 );
+			}
+		}
+		$out = array();
+		foreach ( $rows as $row ) {
+			$user_id = (int) $row['user_id'];
+			$claim   = (int) round( LNKup_Organizer_Wallet::platform_claim( $user_id ) * 100 );
+			$owed    = (int) round( ( (float) $row['available_balance'] + (float) $row['pending_balance'] ) * 100 ) + $claim + ( $in_flight[ $user_id ] ?? 0 );
+			if ( $owed > 0 ) {
+				$out[] = array( 'user_id' => $user_id, 'owed_cents' => $owed, 'claim_cents' => $claim );
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -2034,17 +2036,29 @@ class LNKup_Stripe_Connect {
 	/**
 	 * Handle payout webhook events on connected account.
 	 *
-	 * @param array  $payout Stripe payout object.
-	 * @param string $type   Event type.
+	 * @param array  $payout     Stripe payout object.
+	 * @param string $type       Event type.
+	 * @param string $account_id Connected account that sent the event (event.account).
 	 */
-	public static function handle_payout_event( $payout, $type ) {
+	public static function handle_payout_event( $payout, $type, $account_id = '' ) {
 		$local_id = absint( $payout['metadata']['payout_id'] ?? 0 );
 		if ( ! $local_id || ! class_exists( 'LNKup_Organizer_Payouts' ) ) {
 			return;
 		}
 		global $wpdb;
-		$table        = LNKup_Treasury_Tables::organizer_payouts_table();
-		$provider_ref = (string) $wpdb->get_var( $wpdb->prepare( "SELECT provider_ref FROM {$table} WHERE id = %d", $local_id ) );
+		$table = LNKup_Treasury_Tables::organizer_payouts_table();
+		$row   = $wpdb->get_row( $wpdb->prepare( "SELECT user_id, provider, provider_ref FROM {$table} WHERE id = %d", $local_id ), ARRAY_A );
+		if ( ! $row ) {
+			return;
+		}
+		// metadata.payout_id is set by whoever creates the payout: only trust it when the event came
+		// from the owner's own connected account and the row is an LNKup Connect payout.
+		$owner = self::get_account( (int) $row['user_id'], 'organizer' );
+		if ( 'stripe_connect_payout' !== (string) $row['provider'] || '' === (string) $account_id || (string) ( $owner['stripe_account_id'] ?? '' ) !== (string) $account_id ) {
+			LNKup_Financial_Audit::log( 'payout_event_rejected', 'payout', $local_id, array( 'type' => $type, 'account' => (string) $account_id ) );
+			return;
+		}
+		$provider_ref = (string) $row['provider_ref'];
 		$stripe_id    = (string) ( $payout['id'] ?? '' );
 		if ( '' !== $provider_ref && '' !== $stripe_id && $provider_ref !== $stripe_id ) {
 			return;

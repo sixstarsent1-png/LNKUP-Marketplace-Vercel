@@ -35,8 +35,7 @@ class LNKup_Stripe {
 		if ( ! LNKup_Capabilities::user_has_manage_all() && get_current_user_id() !== $vendor_id ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'lnkup-marketplace' ) ) );
 		}
-		$is_pending = 'pending' === (string) get_post_meta( $payment_id, '_lnkup_payment_status', true );
-		if ( ! $is_pending ) {
+		if ( ! LNKup_Payments::is_payable( $payment_id ) ) {
 			wp_send_json_error( array( 'message' => __( 'This booking is already paid or no longer payable.', 'lnkup-marketplace' ) ) );
 		}
 		if ( ! empty( $_POST['promo_code'] ) && ! get_post_meta( $payment_id, '_lnkup_promo_code', true ) ) {

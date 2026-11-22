@@ -51,6 +51,23 @@ class LNKup_Notifications {
 	}
 
 	/**
+	 * Whether another plugin (lnkup-communications) has taken over this message.
+	 *
+	 * Filter `lnkup_pre_send_notification` returns null to keep the core send,
+	 * or any non-null value to skip it.
+	 *
+	 * @param string $event_key Message key, e.g. application_submitted.
+	 * @param array  $args      Original method arguments.
+	 * @return bool
+	 */
+	public static function delegated( $event_key, $args = array() ) {
+		if ( ! has_filter( 'lnkup_pre_send_notification' ) ) {
+			return false;
+		}
+		return null !== apply_filters( 'lnkup_pre_send_notification', null, sanitize_key( $event_key ), is_array( $args ) ? $args : array() );
+	}
+
+	/**
 	 * Website link that returns to the screen after login.
 	 *
 	 * @param string $url Destination.
@@ -706,6 +723,9 @@ class LNKup_Notifications {
 	 * @param int $app_id Application ID.
 	 */
 	public static function send_application_submitted( $app_id ) {
+		if ( self::delegated( 'application_submitted', func_get_args() ) ) {
+			return true;
+		}
 		try {
 			$ctx = self::application_context( $app_id );
 			if ( $ctx['vendor_user_id'] ) {
@@ -778,6 +798,9 @@ class LNKup_Notifications {
 	 * @param int $app_id Application ID.
 	 */
 	public static function send_application_approved( $app_id ) {
+		if ( self::delegated( 'application_approved', func_get_args() ) ) {
+			return true;
+		}
 		try {
 			if ( self::payment_is_due( $app_id ) ) {
 				self::send_payment_required( $app_id, 0 );
@@ -847,6 +870,9 @@ class LNKup_Notifications {
 	 * @param int $payment_id Payment ID.
 	 */
 	public static function send_payment_required( $app_id, $payment_id ) {
+		if ( self::delegated( 'payment_required', func_get_args() ) ) {
+			return true;
+		}
 		unset( $payment_id );
 		try {
 			if ( ! self::payment_is_due( $app_id ) ) {
@@ -890,6 +916,9 @@ class LNKup_Notifications {
 	 * @param int $app_id Application ID.
 	 */
 	public static function send_payment_confirmed( $app_id ) {
+		if ( self::delegated( 'payment_confirmed', func_get_args() ) ) {
+			return true;
+		}
 		self::send_booking_confirmed( $app_id );
 	}
 
@@ -899,6 +928,9 @@ class LNKup_Notifications {
 	 * @param int $app_id Application ID.
 	 */
 	public static function send_packet_unlocked( $app_id ) {
+		if ( self::delegated( 'packet_unlocked', func_get_args() ) ) {
+			return true;
+		}
 		self::send_booking_confirmed( $app_id );
 	}
 
@@ -955,6 +987,9 @@ class LNKup_Notifications {
 	 * @return bool Whether a reminder was handed to delivery.
 	 */
 	public static function send_documents_needed( $app_id, $window = 'once' ) {
+		if ( self::delegated( 'documents_needed', func_get_args() ) ) {
+			return true;
+		}
 		try {
 			$app_id = absint( $app_id );
 			$status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
@@ -1004,6 +1039,9 @@ class LNKup_Notifications {
 	 * @param int $app_id Application ID.
 	 */
 	public static function send_arrival_reminder( $app_id ) {
+		if ( self::delegated( 'arrival_reminder', func_get_args() ) ) {
+			return true;
+		}
 		try {
 			$app_id = absint( $app_id );
 			if ( ! self::arrival_is_due( $app_id ) ) {
@@ -1049,6 +1087,9 @@ class LNKup_Notifications {
 	 * @param string $window 7_days, 3_days, 24_hours, or past_due.
 	 */
 	public static function send_invoice_reminder( $row, $window ) {
+		if ( self::delegated( 'invoice_reminder', func_get_args() ) ) {
+			return true;
+		}
 		try {
 			if ( ! is_array( $row ) || ! self::invoice_can_remind( $row ) ) {
 				return;
@@ -1107,6 +1148,9 @@ class LNKup_Notifications {
 	 * @param string $window     Window key.
 	 */
 	public static function resend_invoice_reminder( $invoice_id, $window ) {
+		if ( self::delegated( 'invoice_reminder', func_get_args() ) ) {
+			return true;
+		}
 		global $wpdb;
 		if ( ! class_exists( 'LNKup_Financial_Tables' ) ) {
 			return;
@@ -1125,6 +1169,9 @@ class LNKup_Notifications {
 	 * @param int $app_id Application ID.
 	 */
 	public static function send_pass_details_updated( $app_id ) {
+		if ( self::delegated( 'pass_details_updated', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
@@ -1166,6 +1213,9 @@ class LNKup_Notifications {
 	 * @param string[] $changed Human-readable labels of changed fields.
 	 */
 	public static function send_event_logistics_changed( $app_id, $changed ) {
+		if ( self::delegated( 'event_logistics_changed', func_get_args() ) ) {
+			return true;
+		}
 		$ctx  = self::application_context( $app_id );
 		$user = $ctx['vendor'];
 		if ( ! $user || ! $changed ) {
@@ -1209,6 +1259,9 @@ class LNKup_Notifications {
 	 * @param array $entry  History entry (message, documents, at).
 	 */
 	public static function send_info_requested( $app_id, $entry ) {
+		if ( self::delegated( 'info_requested', func_get_args() ) ) {
+			return true;
+		}
 		try {
 			$ctx = self::application_context( $app_id );
 			if ( ! $ctx['vendor_user_id'] ) {
@@ -1256,6 +1309,9 @@ class LNKup_Notifications {
 	 * @param array $entry  History entry (message, at).
 	 */
 	public static function send_info_response( $app_id, $entry ) {
+		if ( self::delegated( 'info_response', func_get_args() ) ) {
+			return true;
+		}
 		try {
 			$ctx = self::application_context( $app_id );
 			if ( ! $ctx['organizer_user_id'] ) {
@@ -1299,6 +1355,9 @@ class LNKup_Notifications {
 	 * @param int $app_id Application ID.
 	 */
 	public static function send_application_rejected( $app_id ) {
+		if ( self::delegated( 'application_rejected', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
@@ -1345,6 +1404,9 @@ class LNKup_Notifications {
 	 * @param int $app_id Application ID.
 	 */
 	public static function send_application_waitlisted( $app_id ) {
+		if ( self::delegated( 'application_waitlisted', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
@@ -1385,6 +1447,9 @@ class LNKup_Notifications {
 	 * @param int $payment_id Payment ID.
 	 */
 	public static function send_organizer_vendor_paid( $payment_id ) {
+		if ( self::delegated( 'organizer_vendor_paid', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_organizer'] ) ) {
 			return;
@@ -1443,6 +1508,9 @@ class LNKup_Notifications {
 	 * @param int $doc_id Document ID.
 	 */
 	public static function send_document_pending_admin( $doc_id ) {
+		if ( self::delegated( 'document_pending_admin', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_admin'] ) ) {
 			return;
@@ -1464,6 +1532,9 @@ class LNKup_Notifications {
 	 * @return bool
 	 */
 	public static function send_external_event_missing_email_admin( $event, $interest_id, $vendor_id ) {
+		if ( self::delegated( 'external_event_missing_email_admin', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_admin'] ) ) {
 			return false;
@@ -1537,6 +1608,9 @@ class LNKup_Notifications {
 	 * @param string $search_id Search UUID.
 	 */
 	public static function send_saved_search_match( $user_id, $name, $count, $items = array(), $filters = array(), $search_id = '' ) {
+		if ( self::delegated( 'saved_search_match', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) || ! LNKup_Saved_Searches::alerts_enabled() ) {
 			return;
@@ -1631,6 +1705,9 @@ class LNKup_Notifications {
 	 * @param string $window   Reminder window label.
 	 */
 	public static function send_favorite_deadline_reminder( $user_id, $title, $deadline, $window = '48h' ) {
+		if ( self::delegated( 'favorite_deadline_reminder', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) || empty( $settings['deadline_reminder_favorites'] ) ) {
 			return;
@@ -1683,6 +1760,9 @@ class LNKup_Notifications {
 	 * @param int $opp_id       Opportunity ID.
 	 */
 	public static function send_favorite_organizer_new_event( $organizer_id, $opp_id ) {
+		if ( self::delegated( 'favorite_organizer_new_event', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
@@ -1734,6 +1814,9 @@ class LNKup_Notifications {
 	 * @param string $deadline Deadline.
 	 */
 	public static function send_deadline_approaching( $user_id, $title, $deadline ) {
+		if ( self::delegated( 'deadline_approaching', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
@@ -1779,6 +1862,9 @@ class LNKup_Notifications {
 	 * @param int    $spots   Spots remaining.
 	 */
 	public static function send_almost_full( $user_id, $title, $spots ) {
+		if ( self::delegated( 'almost_full', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
@@ -1823,6 +1909,9 @@ class LNKup_Notifications {
 	 * @param string $title   Event title.
 	 */
 	public static function send_profile_match( $user_id, $title ) {
+		if ( self::delegated( 'profile_match', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
@@ -1865,6 +1954,9 @@ class LNKup_Notifications {
 	 * @param string $link      Invite URL.
 	 */
 	public static function send_vendor_invite( $invite_id, $link ) {
+		if ( self::delegated( 'vendor_invite', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
@@ -1903,6 +1995,9 @@ class LNKup_Notifications {
 	 * @param int $application_id Application ID.
 	 */
 	public static function send_post_event_review_prompt( $organizer_id, $application_id ) {
+		if ( self::delegated( 'post_event_review_prompt', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_organizer'] ) ) {
 			return;
@@ -1953,6 +2048,9 @@ class LNKup_Notifications {
 	 * @return bool
 	 */
 	public static function send_platform_outreach( $recipient_row, $signup_url, $context = array() ) {
+		if ( self::delegated( 'platform_outreach', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['outreach_emails_enabled'] ) ) {
 			return false;
@@ -2014,6 +2112,9 @@ class LNKup_Notifications {
 	 * @return bool
 	 */
 	public static function send_external_event_vendor_interest( $event, $vendor_id, $payload, $claim_url, $pending_count = 1 ) {
+		if ( self::delegated( 'external_event_vendor_interest', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_organizer'] ) && empty( $settings['notify_admin'] ) ) {
 			return false;
@@ -2087,6 +2188,9 @@ class LNKup_Notifications {
 	 * @return bool
 	 */
 	public static function send_external_event_followup( $event, $stage, $claim_url, $metrics ) {
+		if ( self::delegated( 'external_event_followup', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_organizer'] ) && empty( $settings['notify_admin'] ) ) {
 			return false;
@@ -2138,6 +2242,9 @@ class LNKup_Notifications {
 	 * @return bool
 	 */
 	public static function send_vendor_welcome( $user_id ) {
+		if ( self::delegated( 'vendor_welcome', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) || empty( $settings['activation_emails_enabled'] ) ) {
 			return false;
@@ -2178,6 +2285,9 @@ class LNKup_Notifications {
 	 * @return bool
 	 */
 	public static function send_vendor_complete_profile( $user_id ) {
+		if ( self::delegated( 'vendor_complete_profile', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) || empty( $settings['activation_emails_enabled'] ) ) {
 			return false;
@@ -2216,6 +2326,9 @@ class LNKup_Notifications {
 	 * @return bool
 	 */
 	public static function send_vendor_find_events( $user_id ) {
+		if ( self::delegated( 'vendor_find_events', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) || empty( $settings['activation_emails_enabled'] ) ) {
 			return false;
@@ -2254,6 +2367,9 @@ class LNKup_Notifications {
 	 * @return bool
 	 */
 	public static function send_vendor_apply_nudge( $user_id ) {
+		if ( self::delegated( 'vendor_apply_nudge', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) || empty( $settings['activation_emails_enabled'] ) ) {
 			return false;
@@ -2292,6 +2408,9 @@ class LNKup_Notifications {
 	 * @return bool
 	 */
 	public static function send_organizer_welcome( $user_id ) {
+		if ( self::delegated( 'organizer_welcome', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_organizer'] ) || empty( $settings['activation_emails_enabled'] ) ) {
 			return false;
@@ -2331,6 +2450,9 @@ class LNKup_Notifications {
 	 * @return bool
 	 */
 	public static function send_organizer_create_event( $user_id ) {
+		if ( self::delegated( 'organizer_create_event', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_organizer'] ) || empty( $settings['activation_emails_enabled'] ) ) {
 			return false;
@@ -2369,6 +2491,9 @@ class LNKup_Notifications {
 	 * @return bool
 	 */
 	public static function send_organizer_review_vendors( $user_id ) {
+		if ( self::delegated( 'organizer_review_vendors', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_organizer'] ) || empty( $settings['activation_emails_enabled'] ) ) {
 			return false;
@@ -2408,6 +2533,9 @@ class LNKup_Notifications {
 	 * @param string $message    Message body.
 	 */
 	public static function send_ops_broadcast( $event_id, $vendor_ids, $message ) {
+		if ( self::delegated( 'ops_broadcast', func_get_args() ) ) {
+			return true;
+		}
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['notify_vendor'] ) ) {
 			return;
