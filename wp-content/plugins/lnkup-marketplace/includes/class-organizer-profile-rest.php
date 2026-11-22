@@ -51,6 +51,16 @@ class LNKup_Organizer_Profile_REST {
 
 		register_rest_route(
 			self::NS,
+			'/organizer/profile/cover',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( __CLASS__, 'upload_cover' ),
+				'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/organizers/(?P<slug>[^/]+)/public',
 			array(
 				'methods'             => 'GET',
@@ -84,7 +94,17 @@ class LNKup_Organizer_Profile_REST {
 			'service_cities' => '_lnkup_organizer_service_cities',
 			'website'        => '_lnkup_organizer_website',
 			'instagram'      => '_lnkup_organizer_instagram',
+			'tiktok'         => '_lnkup_organizer_tiktok',
 		);
+
+		if ( array_key_exists( 'category', $body ) ) {
+			$category = sanitize_title( (string) $body['category'] );
+			$options  = class_exists( 'LNKup_Organizer_Onboarding_Flow' ) ? LNKup_Organizer_Onboarding_Flow::category_options() : array();
+			if ( '' !== $category && ! isset( $options[ $category ] ) ) {
+				return new WP_Error( 'invalid_category', __( 'Choose one of the listed event categories.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+			}
+			update_user_meta( $user_id, '_lnkup_organizer_category', $category );
+		}
 
 		foreach ( $map as $key => $meta_key ) {
 			if ( ! array_key_exists( $key, $body ) ) {
@@ -139,6 +159,31 @@ class LNKup_Organizer_Profile_REST {
 	}
 
 	/**
+	 * POST multipart cover image (shown on the public organizer page).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function upload_cover( WP_REST_Request $request ) {
+		$user_id = get_current_user_id();
+		$file    = LNKup_Profile_Media::file_from_request( $request );
+		if ( ! $file ) {
+			return new WP_Error( 'no_file', __( 'Choose an image to upload.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$attachment_id = LNKup_Profile_Media::store_image( $file, 0 );
+		if ( is_wp_error( $attachment_id ) ) {
+			return $attachment_id;
+		}
+		update_user_meta( $user_id, '_lnkup_organizer_cover_id', (int) $attachment_id );
+		return rest_ensure_response(
+			array(
+				'success'   => true,
+				'cover_id'  => (int) $attachment_id,
+				'cover_url' => (string) wp_get_attachment_image_url( $attachment_id, 'large' ),
+			)
+		);
+	}
+
+	/**
 	 * Public organizer storefront JSON.
 	 *
 	 * @param WP_REST_Request $request Request.
@@ -185,10 +230,14 @@ class LNKup_Organizer_Profile_REST {
 			'service_cities' => (string) get_user_meta( $user_id, '_lnkup_organizer_service_cities', true ),
 			'website'        => (string) get_user_meta( $user_id, '_lnkup_organizer_website', true ),
 			'instagram'      => (string) get_user_meta( $user_id, '_lnkup_organizer_instagram', true ),
+			'tiktok'         => (string) get_user_meta( $user_id, '_lnkup_organizer_tiktok', true ),
+			'category'       => (string) get_user_meta( $user_id, '_lnkup_organizer_category', true ),
 			'public_slug'    => $slug,
 			'public_url'     => $url,
 			'logo_id'        => $logo_id,
 			'logo_url'       => $logo_id ? (string) wp_get_attachment_image_url( $logo_id, 'medium' ) : '',
+			'cover_id'       => (int) get_user_meta( $user_id, '_lnkup_organizer_cover_id', true ),
+			'cover_url'      => (int) get_user_meta( $user_id, '_lnkup_organizer_cover_id', true ) ? (string) wp_get_attachment_image_url( (int) get_user_meta( $user_id, '_lnkup_organizer_cover_id', true ), 'large' ) : '',
 		);
 	}
 

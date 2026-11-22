@@ -177,6 +177,11 @@ class LNKup_Auth_REST {
 				'role'             => $role_param,
 				'full_name'        => sanitize_text_field( (string) $request->get_param( 'full_name' ) ),
 				'terms'            => $terms,
+				// Organizer basics (optional here so older app builds keep working).
+				'organization_name' => sanitize_text_field( (string) $request->get_param( 'organization_name' ) ),
+				'city'             => sanitize_text_field( (string) $request->get_param( 'city' ) ),
+				'state'            => sanitize_text_field( (string) $request->get_param( 'state' ) ),
+				'category'         => sanitize_title( (string) $request->get_param( 'category' ) ),
 			)
 		);
 
