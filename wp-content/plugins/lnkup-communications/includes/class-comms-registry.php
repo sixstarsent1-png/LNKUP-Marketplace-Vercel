@@ -183,6 +183,7 @@ class LNKup_Comms_Registry {
 
 			// ---------------------------------------------------------------- Vendor: payments.
 			'v_payment_reminder'      => array( 'role' => 'vendor', 'category' => 'payments', 'priority' => 'high', 'channels' => $all, 'flag' => 'flow_payments', 'link' => 'wallet', 'type' => 'payment_due_soon', 'validity' => 'payment_is_due', 'expires' => 2 * $day ),
+			'v_application_draft_reminder' => array( 'role' => 'vendor', 'category' => 'applications', 'priority' => 'normal', 'channels' => $all, 'flag' => 'flow_application_drafts', 'link' => 'draft_resume', 'type' => 'application_draft_reminder', 'validity' => 'draft_still_open', 'expires' => $day ),
 			'v_payment_failed'        => array( 'role' => 'vendor', 'category' => 'payments', 'priority' => 'high', 'channels' => $all, 'flag' => 'flow_payments', 'link' => 'wallet', 'type' => 'payment_failed', 'validity' => 'payment_failed', 'expires' => 3 * $day ),
 			'v_booking_confirmed'     => array( 'role' => 'vendor', 'category' => 'payments', 'priority' => 'high', 'channels' => $all, 'flag' => 'flow_payments', 'link' => 'pass', 'type' => 'payment_paid', 'validity' => 'payment_confirmed', 'expires' => 30 * $day ),
 			'v_receipt_available'     => array( 'role' => 'vendor', 'category' => 'payments', 'priority' => 'normal', 'channels' => array( 'inbox' ), 'flag' => 'flow_payments', 'link' => 'wallet', 'type' => 'receipt_available', 'expires' => 30 * $day ),

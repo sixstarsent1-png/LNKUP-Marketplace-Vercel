@@ -2,6 +2,7 @@
 # Usage: powershell -File scripts/e2e/run-applications-php.ps1
 $tests = @(
   'booking-application-os-test',
+  'booking-center-test',
   'financial-refund-dispute-test',
   'financial-checkout-test',
   'financial-security-test'

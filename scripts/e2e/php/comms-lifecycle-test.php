@@ -61,7 +61,7 @@ $approved = lnkup_ct_messages_for( $vendor, 'v_application_approved' );
 lnkup_t_same( 1, count( $approved ), 'approval message queued' );
 lnkup_t_same( 'v_application_approved:payment', $approved[0]['template_key'] ?? '', 'approval CTA is the payment step when payment is due' );
 $reminders = lnkup_ct_messages_for( $vendor, 'v_payment_reminder' );
-lnkup_t_same( 2, count( $reminders ), '72h and 24h payment reminders scheduled from the real deadline' );
+lnkup_t_same( 3, count( $reminders ), '72h, 24h and final 6h payment reminders scheduled from the real 7-day deadline' );
 update_post_meta( $payment, '_lnkup_payment_status', 'paid' );
 update_post_meta( $app, '_lnkup_application_status', 'paid' );
 // Only the comms listener: firing the real hook would run financial ledger listeners on a fixture payment.

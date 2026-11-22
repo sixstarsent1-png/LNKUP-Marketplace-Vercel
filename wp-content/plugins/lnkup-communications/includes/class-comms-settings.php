@@ -23,6 +23,7 @@ class LNKup_Comms_Settings {
 		return array(
 			'flow_applications'        => __( 'Application lifecycle (submitted, approved, declined, waitlisted, info requests, withdrawn)', 'lnkup-communications' ),
 			'flow_payments'            => __( 'Payments & bookings (payment due, reminders, failed, confirmed, refunds, disputes)', 'lnkup-communications' ),
+			'flow_application_drafts'  => __( 'Unfinished application reminders (24h and 72h after the last save, stop on submit, deadline or event change)', 'lnkup-communications' ),
 			'flow_documents'           => __( 'Documents & compliance', 'lnkup-communications' ),
 			'flow_operations'          => __( 'Event operations (logistics changes, pass/booth updates, check-in, cancellations, ops broadcasts)', 'lnkup-communications' ),
 			'flow_onboarding'          => __( 'Onboarding sequences for new vendors and organizers', 'lnkup-communications' ),

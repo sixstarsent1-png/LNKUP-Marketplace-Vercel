@@ -79,14 +79,16 @@ No new tables; `LNKUP_VERSION` 12.25.0 → 12.26.0.
 
 ## E. Testing
 
-Done in this workspace (no PHP runtime or Docker available here):
-- All changed PHP files parse (php-parser, PHP 8 grammar); all changed JS passes `node --check`; new specs type-check with `tsc --strict`.
-- `node scripts/money-path-verify.mjs` passed; `node scripts/phase26-verify.mjs` passed after updating its webhook-guard snippet to the new stricter guard; `node scripts/gap-close-verify.mjs` passed.
+Validated on wp-env (2026-11-22, freshly seeded):
+- `npm run test:apps:php`: `booking-application-os-test` (B-1…B-18, drafts, questions, multi-stop, last-spot approval) plus the refund/dispute, checkout and security financial suites: all passed.
+- `npm run test:fin:php`: all 14 financial suites passed.
+- Playwright (chromium): `apply-draft-resume.spec.ts`, `tour-multi-apply.spec.ts`, `apply-with-profile.spec.ts`: 17/17 passed. Both new specs reset vendor B's earlier e2e applications so they can be re-run.
+- Static: changed PHP parses (php-parser, PHP 8 grammar), changed JS passes `node --check`, specs type-check with `tsc --strict`; `money-path-verify`, `phase26-verify` (webhook-guard snippet updated to the stricter rule), `gap-close-verify` pass.
 
-**Not run yet** (needs wp-env):
-- `npm run test:apps:php`: `scripts/e2e/php/booking-application-os-test.php` (B-1…B-18, drafts, questions, multi-stop, last-spot approval) plus the refund/dispute, checkout and security financial suites.
-- `npm run test:fin:php` (full financial regression).
-- Playwright: `tests/e2e/apply-draft-resume.spec.ts` (two devices, conflict, idempotent replay), `tests/e2e/tour-multi-apply.spec.ts` (per-stop results, retry without duplicates, forged slot), additions to `apply-with-profile.spec.ts`. Re-seed first: `npm run e2e:seed` (enables both flags locally; adds `PLAYWRIGHT_DRAFT_OPPORTUNITY_ID`, `PLAYWRIGHT_TOUR_ID`).
+Fixed during validation:
+- `GET /financial/checkout/{id}/summary` still refreshed fees through `get_checkout_amount()`; it now reads `stored_amount_due()`.
+- `LNKup_Applications::transition()` with a missing or draft application ID created a stray payment; it now returns 404.
+- Multi-stop submit: slots with no category list fall back to `General`, like the single-apply form.
 
 Concurrency on the last slot is covered sequentially under the inventory lock; true parallel requests are not exercised by `wp eval-file`.
 

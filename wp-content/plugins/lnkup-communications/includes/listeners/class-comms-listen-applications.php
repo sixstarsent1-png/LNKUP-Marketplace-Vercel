@@ -127,7 +127,9 @@ class LNKup_Comms_Listen_Applications {
 	}
 
 	/**
-	 * Reminders 72h and 24h before the stored payment deadline (if still in the future).
+	 * Reminders before the stored payment deadline (each only if still at least an hour away):
+	 * 7 days (long deadlines only), 3 days, 24 hours, and a final 6-hour notice. Every message
+	 * shows the actual deadline; send-time validity re-checks that payment is still due.
 	 */
 	public static function schedule_payment_reminders( int $app_id, int $vendor ): void {
 		$due_raw = (string) get_post_meta( $app_id, '_lnkup_payment_due_at', true );
@@ -136,19 +138,29 @@ class LNKup_Comms_Listen_Applications {
 			return;
 		}
 		$windows = array(
+			'd7'  => array( 7 * DAY_IN_SECONDS, __( 'in 7 days', 'lnkup-communications' ) ),
 			'd3'  => array( 3 * DAY_IN_SECONDS, __( 'in 3 days', 'lnkup-communications' ) ),
 			'h24' => array( DAY_IN_SECONDS, __( 'tomorrow', 'lnkup-communications' ) ),
+			'h6'  => array( 6 * HOUR_IN_SECONDS, __( 'in 6 hours', 'lnkup-communications' ) ),
 		);
 		foreach ( $windows as $key => $window ) {
 			$at = $due - $window[0];
-			if ( $at <= time() + HOUR_IN_SECONDS ) {
+			// The 7-day reminder only makes sense when the deadline is more than 8 days out.
+			if ( $at <= time() + HOUR_IN_SECONDS || ( 'd7' === $key && $due - time() <= 8 * DAY_IN_SECONDS ) ) {
 				continue;
 			}
 			LNKup_Comms_Engine::dispatch(
 				'v_payment_reminder',
 				$vendor,
 				array( 'application_id' => $app_id, 'window_label' => $window[1] ),
-				array( 'window' => 'due_' . $key, 'at' => $at, 'cancel_key' => 'app:' . $app_id . '|payment', 'source' => 'payment_deadline' )
+				array(
+					'window'     => 'due_' . $key,
+					'at'         => $at,
+					'cancel_key' => 'app:' . $app_id . '|payment',
+					'source'     => 'payment_deadline',
+					// Final notice: high priority still sends during quiet hours.
+					'priority'   => 'high',
+				)
 			);
 		}
 	}
