@@ -1,0 +1,78 @@
+"use client"
+
+import { useCallback, useEffect, useRef, useState } from "react"
+import type { CommsInboxResponse, InboxTab } from "@/lib/api/comms"
+import { isLiveApiEnabled } from "@/lib/api/config"
+import type { LnkupNotification } from "@/lib/api/notifications"
+import { parseApiResponse } from "@/lib/api/parse-api-error"
+
+/**
+ * Categorized inbox from lnkup-communications. `available` becomes false when the plugin
+ * is not installed, so the page can keep its composed feed.
+ */
+export function useCommsInbox(role: "vendor" | "organizer") {
+  const live = isLiveApiEnabled()
+  const [available, setAvailable] = useState<boolean | null>(live ? null : false)
+  const [tab, setTab] = useState<InboxTab>("all")
+  const [tabs, setTabs] = useState<InboxTab[]>([])
+  const [items, setItems] = useState<LnkupNotification[]>([])
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(false)
+  const [loading, setLoading] = useState(live)
+  const [error, setError] = useState<string | null>(null)
+  const request = useRef(0)
+
+  const load = useCallback(
+    async (nextTab: InboxTab, nextPage = 1) => {
+      if (!live) return
+      const current = ++request.current
+      if (nextPage === 1) setLoading(true)
+      setError(null)
+      try {
+        const response = await fetch(`/api/notifications/inbox?role=${role}&tab=${nextTab}&page=${nextPage}`)
+        const { data, error: apiError } = await parseApiResponse<CommsInboxResponse>(response)
+        if (apiError) throw new Error(apiError.message)
+        if (current !== request.current || !data) return
+        setAvailable(data.available)
+        if (!data.available) return
+        setTabs(data.tabs)
+        setItems((prev) => {
+          if (nextPage === 1) return data.items
+          const seen = new Set(prev.map((n) => n.id))
+          return [...prev, ...data.items.filter((n) => !seen.has(n.id))]
+        })
+        setPage(data.page)
+        setHasMore(data.hasMore)
+      } catch (err) {
+        console.error("[useCommsInbox]", err)
+        if (current === request.current) setError(err instanceof Error ? err.message : "We couldn't load notifications.")
+      } finally {
+        if (current === request.current) setLoading(false)
+      }
+    },
+    [live, role],
+  )
+
+  useEffect(() => {
+    void load(tab, 1)
+  }, [load, tab])
+
+  const markRead = useCallback((id: string) => {
+    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, readAt: n.readAt ?? new Date().toISOString() } : n)))
+    void fetch(`/api/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }).catch(() => undefined)
+  }, [])
+
+  return {
+    available,
+    tab,
+    setTab,
+    tabs,
+    items,
+    loading,
+    error,
+    hasMore,
+    loadMore: () => void load(tab, page + 1),
+    retry: () => void load(tab, 1),
+    markRead,
+  }
+}

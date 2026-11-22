@@ -8,6 +8,7 @@ import { useNotificationPreferences } from "@/lib/hooks/use-notification-prefere
 import { useSavedSearches } from "@/lib/hooks/use-saved-searches"
 import { trackLnkupEvent } from "@/lib/analytics/track-event"
 import { PageHeader } from "@/components/marketplace/page-header"
+import { CommsPreferencesForm } from "@/components/notifications/comms-preferences-form"
 import { NotificationPreferencesForm } from "@/components/notifications/notification-preferences-form"
 import { SavedSearchAlertCard } from "@/components/notifications/saved-search-alert-card"
 import { PanelContent, SkeletonList, EmptyState } from "@/components/marketplace/states"
@@ -15,7 +16,7 @@ import { Button } from "@/components/ui/button"
 
 function PreferencesContent() {
   const live = isLiveApiEnabled()
-  const { preferences, loading, error, unauthenticated, saving, retry, updatePreference } =
+  const { preferences, loading, error, unauthenticated, saving, retry, updatePreference, updateComms } =
     useNotificationPreferences()
   const {
     searches,
@@ -55,7 +56,17 @@ function PreferencesContent() {
       <PageHeader title="Notification preferences" subtitle="Manage alerts and saved search digests." />
 
       <PanelContent state={panelState} retry={retry}>
-        {preferences && (
+        {preferences?.comms ? (
+          <CommsPreferencesForm
+            comms={preferences.comms}
+            saving={saving}
+            onSave={(update, optimistic) => {
+              trackLnkupEvent({ event: "notification_preference_changed", source: "preferences_page" })
+              return updateComms(update, optimistic)
+            }}
+          />
+        ) : null}
+        {preferences && !preferences.comms && (
           <NotificationPreferencesForm
             preferences={preferences}
             saving={saving}
