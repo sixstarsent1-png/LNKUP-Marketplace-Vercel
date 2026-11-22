@@ -14,6 +14,22 @@ class LNKup_Passport_Tables {
 	const SCHEMA_OPTION  = 'lnkup_passport_schema_version';
 	const SCHEMA_VERSION = '1';
 
+	/**
+	 * Fresh installs go through LNKup_Activator, whose creator list does not include these tables,
+	 * and lnkup_maybe_upgrade_db() is skipped when lnkup_db_version already matches.
+	 */
+	public static function maybe_upgrade(): void {
+		if ( get_option( self::SCHEMA_OPTION ) === self::SCHEMA_VERSION ) {
+			return;
+		}
+		try {
+			self::create_tables();
+		} catch ( Throwable $e ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( 'LNKup passport table migration failed: ' . $e->getMessage() );
+		}
+	}
+
 	public static function create_tables(): void {
 		global $wpdb;
 		$charset = $wpdb->get_charset_collate();
