@@ -159,7 +159,7 @@ class LNKup_Match_REST {
 			return $result;
 		}
 		if ( ! empty( $result['items'] ) ) {
-			LNKup_Marketplace_Analytics::track( 'match_impression', array( 'section' => $section, 'count' => count( $result['items'] ) ), get_current_user_id() );
+			LNKup_Match_Funnel::impression( get_current_user_id(), $section, $result['items'] );
 			if ( ! in_array( $section, array( 'tours', 'series' ), true ) && rest_sanitize_boolean( $request->get_param( 'html' ) ) ) {
 				$result['html'] = lnkup_render_opportunity_cards_batch( $result['items'] );
 			}

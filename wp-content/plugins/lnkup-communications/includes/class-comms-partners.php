@@ -31,7 +31,7 @@ class LNKup_Comms_Partners {
 		'referrer_credit_live',
 	);
 
-	const LINKS = array( 'partner_dashboard', 'partner_earnings', 'partner_referrals', 'partner_leads', 'referral_invites' );
+	const LINKS = array( 'partner_dashboard', 'partner_earnings', 'partner_referrals', 'partner_leads', 'referral_invites', 'partner_admin' );
 
 	public static function available(): bool {
 		return class_exists( 'LNKup_Connector' ) && class_exists( 'LNKup_Treasury_Tables' );
@@ -155,6 +155,9 @@ class LNKup_Comms_Partners {
 	public static function web_url( string $link, array $ctx, string $role ): string {
 		$dashboard = function_exists( 'lnkup_page_url_helper' ) ? (string) lnkup_page_url_helper( 'connector-dashboard' ) : home_url( '/connector-dashboard/' );
 		switch ( $link ) {
+			case 'partner_admin':
+				$tab = in_array( (string) ( $ctx['admin_tab'] ?? '' ), array( 'applications', 'reviews' ), true ) ? (string) $ctx['admin_tab'] : 'overview';
+				return admin_url( 'admin.php?page=lnkup-partnerships&tab=' . $tab );
 			case 'partner_earnings':
 				return add_query_arg( 'view', 'earnings', $dashboard );
 			case 'partner_referrals':
@@ -173,11 +176,22 @@ class LNKup_Comms_Partners {
 		}
 	}
 
+	/** Partner home routes in the mobile app's `(partner)` tab group. */
+	const PARTNER_ROUTES = array(
+		'partner_dashboard' => '/(partner)',
+		'partner_referrals' => '/(partner)/referrals',
+		'partner_leads'     => '/(partner)/leads',
+		'partner_earnings'  => '/(partner)/earnings',
+	);
+
 	/**
-	 * App routes. Partner accounts have no app screens yet, so their messages are email only and
-	 * only referral invites (vendor/organizer screens) resolve to an in-app route.
+	 * App routes. Partner messages open the Partner home; referral invites open the vendor or
+	 * organizer Referral Invites screen. Admin notices are email only.
 	 */
 	public static function deep_link( string $link, array $ctx, string $role ): string {
+		if ( isset( self::PARTNER_ROUTES[ $link ] ) ) {
+			return self::PARTNER_ROUTES[ $link ];
+		}
 		if ( 'referral_invites' === $link ) {
 			return 'organizer' === $role ? '/(organizer)/referrals' : '/(vendor)/referrals';
 		}
@@ -200,6 +214,11 @@ class LNKup_Comms_Partners {
 				'orderby'  => 'ID',
 			)
 		);
-		return array_values( array_map( 'intval', (array) $ids ) );
+		/**
+		 * Filter who receives partner operations alerts.
+		 *
+		 * @param int[] $ids Admin user IDs.
+		 */
+		return array_values( array_map( 'intval', (array) apply_filters( 'lnkup_comms_partner_admin_recipients', (array) $ids ) ) );
 	}
 }

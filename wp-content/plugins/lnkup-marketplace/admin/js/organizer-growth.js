@@ -18,6 +18,8 @@
 		selected: new Set(),
 		views: [],
 		currentImport: null,
+		leadSupply: {},
+		supplyFilters: { state: '', term_id: '', signal: '', min_active: '', sort: 'vendors_active' },
 	};
 
 	// ------------------------------------------------------------------ Helpers.
@@ -190,6 +192,7 @@
 		outreach: renderOutreach,
 		analytics: renderAnalytics,
 		spend: renderSpend,
+		supply: renderSupply,
 		import: renderImport,
 		settings: renderSettings,
 	};
@@ -581,6 +584,7 @@
 			errorCard(body, res.error, () => openLead(id));
 			return;
 		}
+		state.leadSupply[res.data.lead.id] = res.data.supply || null;
 		renderDetail(res.data.lead);
 	}
 
@@ -629,6 +633,10 @@
 			lead.contact_is_stale ? h('span', { class: 'lnkup-og-badge is-warn', text: 'Re-verify contact before outreach' }) : null
 		);
 		body.appendChild(badges);
+		const supplyCard = leadSupplyCard(state.leadSupply[lead.id]);
+		if (supplyCard) {
+			body.appendChild(supplyCard);
+		}
 
 		// Stage + outcome.
 		const stageSel = select('stage', stageOptions(false), lead.stage, { 'aria-label': 'Pipeline stage' });
@@ -1211,6 +1219,175 @@
 		]), { 'data-testid': 'og-spend-list' }) : empty('No spend recorded yet. Cost per acquired organizer stays "unavailable" until spend or commissions exist.')));
 	}
 
+	// ------------------------------------------------------------------ Vendor supply.
+
+	const SIGNAL_LABELS = {
+		recruit_organizers: 'Recruit organizers',
+		recruit_vendors: 'Recruit vendors',
+		balanced: 'Balanced',
+		insufficient_data: 'Not enough data',
+	};
+
+	function signalBadge(signal) {
+		return h('span', { class: 'lnkup-og-badge lnkup-og-signal signal-' + signal, text: SIGNAL_LABELS[signal] || label(signal) });
+	}
+
+	function deltaLabel(n) {
+		if (n === null || n === undefined) {
+			return '—';
+		}
+		return n > 0 ? '+' + n : String(n);
+	}
+
+	function showCityLeads(row) {
+		Object.assign(state.leadFilters, { search: row.city, state: row.state, page: 1 });
+		closeDrawer();
+		if (location.hash === '#leads') {
+			activate('leads');
+		} else {
+			location.hash = 'leads';
+		}
+	}
+
+	async function renderSupply(el) {
+		clear(el);
+		const f = state.supplyFilters;
+		const filters = h('form', { class: 'lnkup-og-filters', 'data-testid': 'og-supply-filters', onsubmit: (e) => {
+			e.preventDefault();
+			const v = formValues(filters);
+			Object.assign(state.supplyFilters, { state: v.state || '', term_id: v.term_id || '', signal: v.signal || '', min_active: v.min_active || '', sort: v.sort || 'vendors_active' });
+			loadSupply(body, filters);
+		} },
+			field('State', h('input', { type: 'text', name: 'state', size: 4, value: f.state })),
+			field('Category', select('term_id', [{ value: '', label: 'All categories' }], f.term_id)),
+			field('Signal', select('signal', [{ value: '', label: 'Any' }].concat(Object.keys(SIGNAL_LABELS).map((k) => ({ value: k, label: SIGNAL_LABELS[k] }))), f.signal)),
+			field('Min. active vendors', h('input', { type: 'number', min: 0, name: 'min_active', value: f.min_active })),
+			field('Sort by', select('sort', [
+				{ value: 'vendors_active', label: 'Active vendors' },
+				{ value: 'spots_remaining', label: 'Open booths' },
+				{ value: 'saved_search_vendors', label: 'Vendors searching here' },
+				{ value: 'open_leads', label: 'Open leads' },
+				{ value: 'delta_active', label: '7-day change' },
+			], f.sort)),
+			h('button', { class: 'button', type: 'submit', text: 'Apply' })
+		);
+		const body = h('div', { 'data-testid': 'og-supply-body' });
+		el.append(
+			h('p', { class: 'description', text: 'Where LNKup has vendors but too few organizers, and the reverse. Active = discoverable vendor accounts in good standing. Reach = vendors based in the city or who list it, its state, or a radius covering it. Counts come from the daily snapshot; nothing is estimated.' }),
+			filters,
+			body
+		);
+		loadSupply(body, filters);
+	}
+
+	async function loadSupply(body, filters) {
+		loading(body);
+		const res = await api('/supply' + qs({ ...state.supplyFilters }));
+		if (!res.ok) {
+			errorCard(body, res.error, () => loadSupply(body, filters));
+			return;
+		}
+		const d = res.data;
+		clear(body);
+		const catSelect = filters.querySelector('select[name="term_id"]');
+		if (catSelect && catSelect.options.length <= 1) {
+			Object.entries(d.categories || {}).sort((a, b) => a[1].localeCompare(b[1])).forEach(([id, name]) => {
+				const o = h('option', { value: id, text: name });
+				o.selected = String(id) === String(state.supplyFilters.term_id);
+				catSelect.appendChild(o);
+			});
+		}
+		const rebuild = h('button', { class: 'button', type: 'button', text: 'Rebuild now', onclick: async () => {
+			rebuild.disabled = true;
+			const r = await api('/supply/rebuild', { method: 'POST' });
+			rebuild.disabled = false;
+			toast(r.ok ? 'Snapshot rebuilt for ' + r.data.cities + ' cities.' : r.error, !r.ok);
+			if (r.ok) {
+				loadSupply(body, filters);
+			}
+		} });
+		if (!d.snapshot_date) {
+			body.appendChild(empty('No vendor supply data yet — the first snapshot runs overnight.', rebuild));
+			return;
+		}
+		const t = d.thresholds || {};
+		body.appendChild(h('div', { class: 'lnkup-og-toolbar' },
+			h('span', { class: 'description', text: 'Snapshot ' + d.snapshot_date + (d.compared_to ? ' · 7-day change vs ' + d.compared_to : '') + ' · "Recruit organizers" = at least ' + t.min_active + ' active vendors and ' + t.ratio + '+ per open booth.' }),
+			rebuild,
+			h('button', { class: 'button', type: 'button', text: 'Export CSV', onclick: async () => {
+				const r = await api('/supply/export' + qs({ ...state.supplyFilters }));
+				if (r.ok) {
+					downloadCsv(r.data.filename, r.data.csv);
+				} else {
+					toast(r.error, true);
+				}
+			} })
+		));
+		if (d.national) {
+			body.appendChild(h('p', { class: 'description', text: d.national.vendors_active + ' active vendors are willing to travel nationally (not counted per city).' }));
+		}
+		const items = d.items || [];
+		if (!items.length) {
+			body.appendChild(empty('No cities match these filters.'));
+			return;
+		}
+		body.appendChild(table(['City', 'Active vendors', 'Reach', 'Searching here', 'Open booths', 'Live organizers', 'Open leads', 'Signal', '7-day change'], items.map((r) => [
+			h('button', { class: 'button-link', type: 'button', text: r.label, onclick: () => openSupplyCity(r.city_key) }),
+			r.vendors_active, r.vendors_reach, r.saved_search_vendors, r.spots_remaining, r.live_organizers, r.open_leads,
+			signalBadge(r.signal),
+			deltaLabel(r.delta_active),
+		]), { 'data-testid': 'og-supply-table' }));
+		if (d.total > items.length) {
+			body.appendChild(h('p', { class: 'description', text: 'Showing ' + items.length + ' of ' + d.total + ' cities. Narrow the filters or export the CSV for the rest.' }));
+		}
+	}
+
+	async function openSupplyCity(key) {
+		const body = drawerShell('Vendor supply');
+		body.dataset.testid = 'og-supply-city';
+		loading(body);
+		const res = await api('/supply/city' + qs({ key }));
+		if (!res.ok) {
+			errorCard(body, res.error, () => openSupplyCity(key));
+			return;
+		}
+		const d = res.data;
+		const s = d.summary;
+		clear(body);
+		body.appendChild(h('h3', { text: s.label }));
+		body.appendChild(h('p', { class: 'lnkup-og-badges' }, signalBadge(s.signal), h('span', { class: 'lnkup-og-badge is-muted', text: 'Snapshot ' + d.snapshot_date })));
+		body.appendChild(h('div', { class: 'lnkup-og-kpis' },
+			[['Active vendors', s.vendors_active], ['Based here', s.vendors_based], ['Applied (90 days)', s.vendors_applied_90d], ['Paid booking (12 months)', s.vendors_paid_12m], ['Open booths', s.spots_remaining], ['Live organizers', s.live_organizers]]
+				.map(([text, n]) => h('div', { class: 'lnkup-og-kpi' }, h('strong', { text: String(n) }), h('span', { text })))
+		));
+		body.appendChild(section('By category', d.categories.length ? table(['Category', 'Active vendors', 'Open booths', 'Searching here', 'Signal'], d.categories.map((c) => [c.category, c.vendors_active, c.spots_remaining, c.saved_search_vendors, signalBadge(c.signal)])) : empty('No category data for this city.')));
+		body.appendChild(section('Categories with vendors but no open booths', d.gaps.length ? h('ul', {}, d.gaps.map((g) => h('li', { text: g.category + ' — ' + g.vendors_active + ' active vendors' }))) : empty('None — every category with vendors has open booths.')));
+		if (d.trend.length > 1) {
+			body.appendChild(section('Last 90 days', table(['Date', 'Active vendors', 'Open booths', 'Open opportunities'], d.trend.slice(-12).map((t) => [t.date, t.vendors_active, t.spots_remaining, t.open_opportunities]))));
+		}
+		body.appendChild(section('Open leads in this city',
+			d.leads.length ? table(['Lead', 'Stage', 'Tier'], d.leads.map((l) => [h('button', { class: 'button-link', type: 'button', text: l.name, onclick: () => openLead(l.id) }), label(l.stage), l.tier || '—'])) : empty('No open organizer leads here yet.'),
+			h('button', { class: 'button', type: 'button', text: 'View leads in this city', onclick: () => showCityLeads(s) })
+		));
+	}
+
+	function leadSupplyCard(supply) {
+		if (!supply) {
+			return null;
+		}
+		if (!supply.available) {
+			return section('Vendor supply', h('p', { class: 'description', text: supply.vendors_active + ' active vendors based in this city. A full breakdown appears after the next supply snapshot.' }));
+		}
+		return h('section', { class: 'lnkup-og-section', 'data-testid': 'og-lead-supply' },
+			h('h3', { text: 'Vendor supply' }),
+			h('p', {}, signalBadge(supply.signal), ' ' + supply.vendors_active + ' active vendors serve this city · ' + supply.open_slots + ' open booths'),
+			supply.matching.length
+				? h('p', { text: 'Matches their categories: ' + supply.matching.map((c) => c.category + ' (' + c.vendors_active + ')').join(', ') })
+				: (supply.top_categories.length ? h('p', { class: 'description', text: 'Top categories here: ' + supply.top_categories.map((c) => c.category + ' (' + c.vendors_active + ')').join(', ') }) : null),
+			h('button', { class: 'button-link', type: 'button', text: 'Open city supply', onclick: () => openSupplyCity(supply.city_key) })
+		);
+	}
+
 	// ------------------------------------------------------------------ Import.
 
 	async function renderImport(el) {
@@ -1370,7 +1547,7 @@
 			const data = new FormData(form);
 			const payload = {};
 			['organizer_growth_enabled', 'organizer_growth_outreach_enabled'].forEach((k) => { payload[k] = data.get(k) ? true : false; });
-			['org_growth_house_organizer_ids', 'org_growth_outreach_dedupe_days', 'org_growth_campaign_daily_cap', 'org_growth_approval_threshold', 'org_growth_contact_stale_days', 'org_growth_sender_name', 'org_growth_sender_postal_address', 'org_growth_import_max_rows', 'org_growth_activation_paid_bookings'].forEach((k) => { payload[k] = data.get(k) || ''; });
+			['org_growth_house_organizer_ids', 'org_growth_outreach_dedupe_days', 'org_growth_campaign_daily_cap', 'org_growth_approval_threshold', 'org_growth_contact_stale_days', 'org_growth_sender_name', 'org_growth_sender_postal_address', 'org_growth_import_max_rows', 'org_growth_activation_paid_bookings', 'org_growth_supply_min_active_vendors', 'org_growth_supply_surplus_ratio'].forEach((k) => { payload[k] = data.get(k) || ''; });
 			const res = await api('/settings', { method: 'POST', body: payload });
 			if (!res.ok) {
 				toast(res.error, true);
@@ -1387,6 +1564,8 @@
 			check('organizer_growth_outreach_enabled', 'Organizer outreach emails enabled'),
 			field('House-affiliated organizer user IDs', h('input', { type: 'text', name: 'org_growth_house_organizer_ids', value: s.org_growth_house_organizer_ids || '' }), 'Six Stars and other house organizers, comma separated. Reported separately from independent organizers.'),
 			num('org_growth_activation_paid_bookings', 'Paid bookings to count as Activated'),
+			num('org_growth_supply_min_active_vendors', 'Active vendors before a city says "Recruit organizers"', 'Vendor Supply tab. Default 10.'),
+			num('org_growth_supply_surplus_ratio', 'Active vendors per open booth for "Recruit organizers"', 'Vendor Supply tab. Default 3.'),
 			num('org_growth_outreach_dedupe_days', 'Do not re-email a lead within (days)'),
 			num('org_growth_campaign_daily_cap', 'Default per-campaign daily cap'),
 			num('org_growth_approval_threshold', 'Campaigns larger than this need a second approver'),

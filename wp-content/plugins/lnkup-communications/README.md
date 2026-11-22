@@ -114,6 +114,20 @@ The existing `/notifications/inbox*` and `/push/*` routes keep working. Changes 
 12. `flow_retention`
 13. `campaigns_enabled`
 14. `fin_payout_notifications` (after reconciliation sign-off)
+15. `flow_partners` (after the Partnership OS attribution arbiter has been reviewed in shadow mode). Follow stage 5 of `docs/PARTNERSHIP_ROLLOUT.md`; Partnerships & Referrals → Go-live readiness shows when it is unblocked.
+
+### Partner and referral notifications (`flow_partners`)
+
+Listener: `includes/listeners/class-comms-listen-partners.php`; rules and links: `includes/class-comms-partners.php`.
+
+- **Recipients.** A new `partner` role: users with `lnkup_connector` / `lnkup_partner` and an **active** partner account. A partner message carries `connector_id` and is only ever delivered to that account's user. Suspended or closed accounts get nothing (re-checked at send time).
+- **Channels.** Partner messages go to email, the inbox and push. Inbox rows are stored with role `partner`, so they appear only in the app's Partner home (`role=partner` on `/comms/inbox*`), never in a dual-role user's vendor or organizer inbox. Deep links open `/(partner)`, `/(partner)/referrals`, `/(partner)/leads` and `/(partner)/earnings`. Referral-invite messages (vendors and organizers who invite others) use inbox and email, plus push for "invite joined".
+- **No amounts in push.** Commission push text never contains a money amount. Templates may set an optional `inbox_body` (editable in Templates), which the inbox uses instead of `push_body`, so the inbox and email state the amount and the lock screen does not. `comms-partners-test` enforces this for every commission and payout template.
+- **Triggers.** `p_application_approved`, `p_referral_registered`, `p_referral_milestone` (first event, first paid booking), `p_commission_recorded`, `p_commission_approved`, `p_payout_recorded`, `p_lead_update` (registered, activated, closed), `r_invite_joined`, `r_credit_earned`, and the admin alerts `a_partner_application` and `a_partner_review`.
+- **Financial safety.** Commission notices wait 15 minutes and re-read the reward ledger at send time. Reversed, held, fully refunded or conflicted/superseded commissions are suppressed, and `lnkup_referral_rewards_reversed` cancels the scheduled notice. Payout and referral-credit messages are grouped per day and never state a bank transfer; manual payouts are "recorded".
+- **Applicants** have no account yet, so "application received", "more information needed" and "declined" go through `LNKup_Notifications::send()` in lnkup-marketplace. They are skipped when the address is suppressed, and every outcome is audited (`partner_applicant_email_sent` / `_skipped`).
+- **Core hooks used:** `lnkup_partner_application_submitted|transitioned`, `lnkup_partner_referral_attributed`, `lnkup_organizer_recruit_attributed`, `lnkup_partner_referral_milestone`, `lnkup_partner_commission_recorded|approved|paid`, `lnkup_referral_rewards_reversed`, `lnkup_org_lead_stage_changed`, `lnkup_org_lead_outcome_changed`, `lnkup_partner_review_opened`.
+- Admin alert recipients can be overridden with the `lnkup_comms_partner_admin_recipients` filter.
 
 ### Rollback
 
@@ -123,7 +137,7 @@ The existing `/notifications/inbox*` and `/push/*` routes keep working. Changes 
 
 ## Tests
 
-- PHP integration (wp-env): `npm run test:comms:php`. Seven suites: schema, engine, lifecycle, preferences, push, organizer, security.
+- PHP integration (wp-env): `npm run test:comms:php`. Suites: schema, engine, lifecycle, preferences, push, organizer, activation, security, partners.
 - Financial regression: `npm run test:fin:php`
 - Playwright: `powershell -File scripts/e2e/run-specs.ps1 tests/e2e/communications.spec.ts --project=chromium`
 - Mobile: `npm test` and `npm run typecheck` in `lnk-up-marketplace-mobile`

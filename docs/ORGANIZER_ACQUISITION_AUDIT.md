@@ -137,7 +137,8 @@ Run locally: `powershell -File scripts/e2e/run-org-growth-php.ps1` and `PLAYWRIG
 - Reply detection / opens — only manual logging and the existing signup-link token; no tracking pixel.
 - Connector-facing lead views, organizer referral dashboard, anti-fraud, configurable organizer-acquisition rewards (Phase 5).
 - Onboarding center, application-question builder, migration tools (Phase 4).
-- Vendor supply intelligence (Phase 6), Expo screens (Phase 8).
+- Expo screens (Phase 8).
+- Vendor supply intelligence (Phase 6) shipped — see section 11.
 - Phase 4 (onboarding/activation) shipped in v12.29 — see SYSTEM_OVERVIEW §9.21.
 
 ## 10. Phase 7 — analytics, spend and activation automations
@@ -145,3 +146,16 @@ Run locally: `powershell -File scripts/e2e/run-org-growth-php.ps1` and `PLAYWRIG
 Closes gap 5. Cost per acquisition now exists, but only from real records: spend entered in the Spend tab plus approved/paid organizer-referral commissions net of reversals. A channel with neither shows **Unavailable**; commissions without spend is labelled **Commissions only**. LTV is still not shown, because there isn't enough paid history to compute it honestly. Cohorts, time-to-milestone, conversion by dimension, productivity and the at-risk list come from recorded milestones, payments and platform-fee rows, with the house/independent split throughout. The activation automations in `lnkup-communications` (flag `flow_activation`, off by default) are re-checked against the activation model before each send. Architecture: SYSTEM_OVERVIEW §9.23.
 
 Still not done: LTV, spend attribution by city or connector beyond the per-channel split, automated import of ad-platform spend (manual entry/CSV only).
+
+## 11. Phase 6 — vendor supply intelligence
+
+A daily snapshot counts, per city and vendor category, the vendors who serve each city (home city, cities served, states served, service radius) and how many are active. It also counts the demand: open booths, live organizers, recent applications, vendors' saved searches and open organizer leads.
+
+Signals tell the growth team where to recruit organizers (many vendors, few booths) or vendors (many booths, few vendors), using thresholds set in Settings. "Not enough data" is shown rather than guessed.
+
+The scoring factor "existing vendor market" was too generous because it counted every published profile, including inactive and hidden ones. It now uses active vendors in reach. Connectors see aggregate counts for their own territories only, with counts of 1–2 masked as "<3". Architecture: SYSTEM_OVERVIEW §9.24.
+
+Limits:
+- City matching is by name and state, with no metro or region grouping, so connector "metro"/"region" territories don't map to cities yet.
+- The radius check needs geocoded coordinates (city centroid).
+- Snapshots are capped at the top 500 cities.

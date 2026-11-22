@@ -305,8 +305,9 @@ class LNKup_Match_Service {
 
 	/**
 	 * Opportunities worth evaluating for a vendor (open, future, category-compatible).
+	 * Public for the rules simulator, which scores the same candidates without writing.
 	 */
-	private static function candidate_opportunity_rows( array $vendor, $limit ) {
+	public static function candidate_opportunity_rows( array $vendor, $limit ) {
 		global $wpdb;
 		$index  = LNKup_Marketplace_Index::table_name();
 		$cats   = LNKup_Match_Tables::opportunity_categories_table();
@@ -366,8 +367,9 @@ class LNKup_Match_Service {
 	private static function write_results( array $results, $scope, $id ) {
 		global $wpdb;
 		$table = LNKup_Match_Tables::results_table();
-		$now   = current_time( 'mysql' );
-		$keep  = array();
+		$now     = current_time( 'mysql' );
+		$keep    = array();
+		$version = LNKup_Match_Settings::rules_version();
 		foreach ( array_chunk( $results, 200 ) as $chunk ) {
 			$values = array();
 			$params = array();
@@ -377,7 +379,7 @@ class LNKup_Match_Service {
 					continue;
 				}
 				$keep[]   = 'profile_id' === $scope ? (int) $r['opportunity_id'] : (int) $r['profile_id'];
-				$values[] = "(%d,%d,%d,%d,%d,%d,%d,%s,%s,%s,%s,NULLIF(%s,''))";
+				$values[] = "(%d,%d,%d,%d,%d,%d,%d,%s,%s,%s,%s,NULLIF(%s,''),%d)";
 				array_push(
 					$params,
 					(int) $r['profile_id'],
@@ -391,16 +393,17 @@ class LNKup_Match_Service {
 					wp_json_encode( self::compact_factors( $r['factors'] ) ),
 					wp_json_encode( $r['reasons'] ),
 					$now,
-					$r['recommended'] ? $now : ''
+					$r['recommended'] ? $now : '',
+					$version
 				);
 			}
 			if ( ! $values ) {
 				continue;
 			}
 			// first_matched_at keeps the first time a pair became recommended ("new matches" for organizers).
-			$sql = "INSERT INTO {$table} (profile_id, opportunity_id, event_id, tour_id, score, confidence, eligible, block_reasons, factors, reasons, computed_at, first_matched_at) VALUES "
+			$sql = "INSERT INTO {$table} (profile_id, opportunity_id, event_id, tour_id, score, confidence, eligible, block_reasons, factors, reasons, computed_at, first_matched_at, rules_version) VALUES "
 				. implode( ',', $values )
-				. ' ON DUPLICATE KEY UPDATE event_id = VALUES(event_id), tour_id = VALUES(tour_id), score = VALUES(score), confidence = VALUES(confidence), eligible = VALUES(eligible), block_reasons = VALUES(block_reasons), factors = VALUES(factors), reasons = VALUES(reasons), computed_at = VALUES(computed_at), first_matched_at = COALESCE(first_matched_at, VALUES(first_matched_at))';
+				. ' ON DUPLICATE KEY UPDATE event_id = VALUES(event_id), tour_id = VALUES(tour_id), score = VALUES(score), confidence = VALUES(confidence), eligible = VALUES(eligible), block_reasons = VALUES(block_reasons), factors = VALUES(factors), reasons = VALUES(reasons), computed_at = VALUES(computed_at), first_matched_at = COALESCE(first_matched_at, VALUES(first_matched_at)), rules_version = VALUES(rules_version)';
 			$wpdb->query( $wpdb->prepare( $sql, $params ) ); // phpcs:ignore WordPress.DB
 		}
 

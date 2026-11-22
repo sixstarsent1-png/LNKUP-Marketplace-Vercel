@@ -79,6 +79,29 @@ $a = LNKup_Organizer_Activation::for_user( $org, true );
 lnkup_t_same( 'not_started', $status_of( $a )['payouts'], 'with Connect on, payouts not set up yet' );
 lnkup_t_same( 'not_connected', $a['stages'][1]['payout_state'], 'payout state uses friendly Financial-tab states' );
 lnkup_t_same( 'Set up payouts', $a['stages'][1]['items'][0]['label'], 'friendly payout label (no Stripe jargon)' );
+
+// Account submitted but Stripe is still verifying: started, never complete.
+global $wpdb;
+$ca_table = LNKup_Financial_Tables::connected_accounts_table();
+$wpdb->insert(
+	$ca_table,
+	array(
+		'user_id'           => $org,
+		'role_type'         => 'organizer',
+		'stripe_account_id' => 'acct_testverifying01',
+		'details_submitted' => 1,
+		'charges_enabled'   => 0,
+		'payouts_enabled'   => 0,
+		'disabled_reason'   => 'requirements.pending_verification',
+		'created_at'        => current_time( 'mysql' ),
+		'updated_at'        => current_time( 'mysql' ),
+	)
+);
+$a = LNKup_Organizer_Activation::for_user( $org, true );
+lnkup_t_same( 'in_progress', $status_of( $a )['payouts'], 'verifying payout account is in progress, not complete' );
+lnkup_t_same( 'verifying', $a['stages'][1]['payout_state'], 'payout state reads verifying' );
+lnkup_t_assert( ! $a['stages'][1]['items'][0]['done'], 'payout item is not done while verifying' );
+$wpdb->delete( $ca_table, array( 'user_id' => $org, 'role_type' => 'organizer' ) );
 remove_filter( 'option_lnkup_settings', $connect_on );
 
 update_user_meta( $org, '_lnkup_organizer_public_name', 'Activation Test Markets' );

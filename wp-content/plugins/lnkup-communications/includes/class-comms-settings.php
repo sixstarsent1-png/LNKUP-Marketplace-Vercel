@@ -95,6 +95,20 @@ class LNKup_Comms_Settings {
 		return '' !== $flag && ! empty( self::get( $flag ) );
 	}
 
+	/**
+	 * Flow on AND the recipient is inside its staged rollout audience (lnkup-marketplace LNKup_Rollout).
+	 * Flows without a staged audience behave like enabled().
+	 *
+	 * @param string $flag      Flow flag.
+	 * @param int    $recipient Recipient user ID.
+	 */
+	public static function enabled_for( string $flag, int $recipient ): bool {
+		if ( ! self::enabled( $flag ) ) {
+			return false;
+		}
+		return ! class_exists( 'LNKup_Rollout' ) || LNKup_Rollout::in_audience( $flag, $recipient );
+	}
+
 	public static function int( string $key ): int {
 		return (int) self::get( $key );
 	}

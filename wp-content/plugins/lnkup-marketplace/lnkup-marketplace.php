@@ -70,6 +70,7 @@ $lnkup_core_files = array(
 	'includes/class-meta.php',
 	'includes/class-capabilities.php',
 	'includes/class-feature-flags.php',
+	'includes/class-rollout.php',
 	'includes/class-activator.php',
 	'includes/class-applications.php',
 	'includes/class-opportunity-inventory.php',
@@ -109,6 +110,7 @@ $lnkup_core_files = array(
 	'includes/class-organizer-launch-rest.php',
 	'includes/class-organizer-launch-checklist.php',
 	'includes/class-organizer-activation.php',
+	'includes/class-organizer-onboarding-flow.php',
 	'includes/class-public-embed.php',
 	'includes/class-organizer-setups.php',
 	'includes/class-vendor-getting-started.php',
@@ -216,6 +218,12 @@ $lnkup_core_files = array(
 	'includes/class-application-review.php',
 	'includes/class-waitlist-offers.php',
 	'includes/class-application-review-rest.php',
+	'includes/class-event-tasks.php',
+	'includes/class-event-tasks-rest.php',
+	'includes/class-event-readiness.php',
+	'includes/class-organizer-documents.php',
+	'includes/class-organizer-overview.php',
+	'includes/class-organizer-ops-rest.php',
 	'includes/class-operations-log.php',
 	'includes/class-event-lifecycle.php',
 	'includes/class-event-operations.php',
@@ -335,6 +343,9 @@ $lnkup_core_files = array(
 	'includes/matching/class-match-categories.php',
 	'includes/matching/class-match-vendor-index.php',
 	'includes/matching/class-match-service.php',
+	'includes/matching/class-match-funnel.php',
+	'includes/matching/class-match-quality.php',
+	'includes/matching/class-match-simulator.php',
 	'includes/matching/class-match-cron.php',
 	'includes/matching/class-match-rest.php',
 	'includes/matching/class-recruitment.php',
@@ -380,6 +391,7 @@ $lnkup_core_files = array(
 	'includes/organizer-growth/class-org-growth-metrics.php',
 	'includes/organizer-growth/class-org-growth-spend.php',
 	'includes/organizer-growth/class-org-growth-analytics.php',
+	'includes/organizer-growth/class-org-supply-intel.php',
 	'includes/organizer-growth/class-org-outreach.php',
 	'includes/organizer-growth/class-org-growth-rest.php',
 	'admin/class-organizer-growth-admin.php',
@@ -392,6 +404,7 @@ $lnkup_core_files = array(
 	'includes/partnerships/class-partner-organizations.php',
 	'includes/partnerships/class-partner-applications.php',
 	'includes/partnerships/class-partner-public.php',
+	'includes/partnerships/class-partnership-readiness.php',
 	'includes/partnerships/class-partnerships-rest.php',
 	'admin/class-partnerships-admin.php',
 );
@@ -431,6 +444,7 @@ function lnkup_marketplace_init() {
 	LNKup_Application_Drafts::init();
 	LNKup_Application_Groups::init();
 	LNKup_Applications::init();
+	LNKup_Rollout::init();
 	LNKup_Documents_REST::init();
 	LNKup_Vendor_Profile_REST::init();
 	LNKup_Organizer_Profile_REST::init();
@@ -449,6 +463,7 @@ function lnkup_marketplace_init() {
 	LNKup_Organizer_CRM_REST::init();
 	LNKup_Organizer_Launch_REST::init();
 	LNKup_Organizer_Activation::init();
+	LNKup_Organizer_Onboarding_Flow::init();
 	LNKup_Public_Embed::init();
 	LNKup_Organizer_Setups::init();
 	LNKup_Organizer_CRM_Admin::init();
@@ -465,6 +480,11 @@ function lnkup_marketplace_init() {
 	LNKup_Application_Review::init();
 	LNKup_Application_Review_REST::init();
 	LNKup_Waitlist_Offers::init();
+	LNKup_Event_Tasks::init();
+	LNKup_Event_Tasks_REST::init();
+	LNKup_Event_Readiness::init();
+	LNKup_Organizer_Documents::init();
+	LNKup_Organizer_Ops_REST::init();
 	LNKup_Operations_Admin::init();
 	LNKup_Intelligence_Cron::init();
 	LNKup_Intelligence_REST::init();
@@ -489,6 +509,7 @@ function lnkup_marketplace_init() {
 	LNKup_Match_Categories::init();
 	LNKup_Match_Vendor_Index::init();
 	LNKup_Match_Cron::init();
+	LNKup_Match_Funnel::init();
 	LNKup_Match_REST::init();
 	LNKup_Recruitment::init();
 	LNKup_Recruitment_REST::init();
@@ -873,9 +894,13 @@ function lnkup_get_settings() {
 		'apply_wizard_enabled'                    => false,
 		'tour_multi_apply_enabled'                => false,
 		'portfolio_os_enabled'                    => false,
+		'organizer_onboarding_v2_enabled'         => false,
 		'portfolio_os_user_ids'                   => '',
 		'application_review_v2_enabled'           => false,
 		'waitlist_offers_enabled'                 => false,
+		'organizer_ops_v2_enabled'                => false,
+		'organizer_document_review_enabled'       => false,
+		'organizer_os_pilot_user_ids'             => '',
 		'match_weight_category'                   => 30,
 		'match_weight_geo'                        => 25,
 		'match_weight_requirements'               => 20,

@@ -40,9 +40,9 @@ class LNKup_Comms_Channel_Inbox {
 				'client_id'       => self::client_id( (int) $message['id'] ),
 				'type'            => (string) $def['type'],
 				'title'           => (string) $rendered['push_title'],
-				'message'         => (string) $rendered['push_body'],
+				'message'         => (string) ( $rendered['inbox_body'] ?: $rendered['push_body'] ),
 				'href'            => (string) $links['web_url'],
-				'role'            => in_array( $role, array( 'vendor', 'organizer' ), true ) ? $role : '',
+				'role'            => in_array( $role, array( 'vendor', 'organizer', 'partner' ), true ) ? $role : '',
 				'severity'        => $severity[ (string) $message['priority'] ] ?? 'info',
 				'action_required' => in_array( (string) $message['priority'], array( 'critical', 'high' ), true ) && in_array( $category, array( 'applications', 'payments', 'documents', 'event_ops' ), true ),
 				'payload'         => array(

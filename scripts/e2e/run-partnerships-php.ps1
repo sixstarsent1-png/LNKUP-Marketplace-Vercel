@@ -3,6 +3,7 @@
 $tests = @(
   'partnerships-test',
   'partnerships-programs-test',
+  'partnerships-readiness-test',
   'org-growth-integrity-test'
 )
 $failed = @()

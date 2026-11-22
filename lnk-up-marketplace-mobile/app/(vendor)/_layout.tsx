@@ -12,7 +12,7 @@ import { shellReturnTo } from "@/lib/navigation/current-href"
 const BADGE_REFRESH_MS = 60_000
 
 export default function VendorLayout() {
-  const { isAuthenticated, isVendor, isOrganizer, auth } = useAuth()
+  const { isAuthenticated, isVendor, isOrganizer, isPartner, auth } = useAuth()
   const { screenOptions, tabIconSize } = useTabBarScreenOptions()
   const [actionCount, setActionCount] = useState(0)
   const segments = useSegments()
@@ -68,7 +68,7 @@ export default function VendorLayout() {
   }
 
   if (!isVendor) {
-    return <Redirect href={isOrganizer ? "/(organizer)" : "/no-access"} />
+    return <Redirect href={isOrganizer ? "/(organizer)" : isPartner ? "/(partner)" : "/no-access"} />
   }
 
   return (

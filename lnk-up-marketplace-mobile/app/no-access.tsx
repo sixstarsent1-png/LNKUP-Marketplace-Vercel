@@ -11,14 +11,15 @@ import { useAuth } from "@/lib/auth/auth-context"
 import { openExternalUrl } from "@/lib/navigation/open-external-url"
 import { colors, layout, spacing } from "@/lib/theme"
 
-/** Signed-in account with neither a vendor nor an organizer role. */
+/** Signed-in account with no vendor, organizer or partner role. */
 export default function NoAccessScreen() {
-  const { isAuthenticated, isVendor, isOrganizer, session, logout } = useAuth()
+  const { isAuthenticated, isVendor, isOrganizer, isPartner, session, logout } = useAuth()
   const [signingOut, setSigningOut] = useState(false)
 
   if (!isAuthenticated) return <Redirect href="/login" />
   if (isOrganizer) return <Redirect href="/(organizer)" />
   if (isVendor) return <Redirect href="/(vendor)" />
+  if (isPartner) return <Redirect href="/(partner)" />
 
   async function handleSignOut() {
     if (signingOut) return

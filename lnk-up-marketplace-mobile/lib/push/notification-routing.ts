@@ -83,6 +83,15 @@ function routeForType(
     case "organizer_vendor_paid":
     case "organizer_payment_received":
       return list("/(organizer)/money")
+    case "partner_application":
+      return list("/(partner)")
+    case "partner_referral":
+      return list("/(partner)/referrals")
+    case "partner_lead":
+      return list("/(partner)/leads")
+    case "partner_commission":
+    case "partner_payout":
+      return list("/(partner)/earnings")
     default:
       return null
   }

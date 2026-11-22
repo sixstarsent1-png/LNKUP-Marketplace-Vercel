@@ -1503,6 +1503,8 @@ Helpers: `lnkup_is_marketplace_open()`, `lnkup_get_launch_goals()`, `lnkup_get_m
 
 **Saved setups:** `LNKup_Organizer_Setups` (user meta `_lnkup_organizer_event_setups`, max 20) — `GET/POST organizer/setups`, `GET/DELETE organizer/setups/{id}`; create/publish with `setup_id` (web `?view=create&setup=`) swaps in the saved booth rows and application questions. `duplicate_event()` now copies application questions and the documents gate.
 
+**Guided setup (Onboarding v2, flag `organizer_onboarding_v2_enabled`, off by default):** `LNKup_Organizer_Onboarding_Flow` (`includes/class-organizer-onboarding-flow.php`) adds the organizer's choices on top of the activation model and never duplicates its status. User meta `_lnkup_onboarding_state` = `formats` (`single|recurring|series|tour|company`), `current_step`, `skipped` (`format`, `payouts` only), `dismissed`, `started_at`, `completed_at`. Steps `account → organization → format → first_event → payouts → share`. `for_user()` returns steps (status, missing, cta_url, skipped), percent, `next_step`, `resume_url`, draft events/tours, format routing (Tours & Series when `LNKup_Feature_Flags::portfolio()` allows it, else Create Event) and payout state. `GET/PATCH lnkup/v1/organizer/onboarding` (404 when off; read = activation permission, write = self + organizer). Hooks: `lnkup_organizer_onboarding_updated`, `lnkup_organizer_onboarding_completed` (once). Signup (`LNKup_Registration`, `/auth/register`, Expo) captures organization name, city/state, category through `save_signup()` (never overwrites). Login sends unfinished organizers to `?view=start`. `POST organizer/profile/cover` and profile `tiktok`/`category` support the organization step. Consumers: Get started v2, Overview setup banner (replaces the checklist when on), `LNKup_Org_Lead_Lifecycle` activity, `LNKup_Comms_Context::guided_setup_open()`, Next.js BFF `/api/organizer/onboarding`, Expo `ContinueSetupCard`. The legacy welcome modal was removed. The organizer drip/welcome in `LNKup_Activation_Emails` defer to Comms `flow_onboarding`/`flow_activation`.
+
 **Import consent:** vendor CSV import refuses `send_invites` without `consent_basis` (`existing_relationship` | `public_business_contact` | `opted_in`), stored on `lnkup_crm_import_job.consent_basis`; preset `past_applicants` tags rows `past-applicant` (still prospects, never accounts).
 
 ### 9.22 Organizer Management OS — Wave 1 (review workspace, team roles, waitlist offers)
@@ -1562,6 +1564,66 @@ Plus `GET org/team/audit` (owner or `manage_team`) and `GET operations/events/{i
 
 **Tables** (`LNKup_Organizer_OS_Tables`, schema option `lnkup_organizer_os_schema`): `lnkup_pass_tokens` (sha256 of the upper-cased QR token → application; `LNKup_Pass_Tokens`), `lnkup_app_review_assignments`, `lnkup_review_rubrics`, `lnkup_app_reviews`, `lnkup_waitlist_offers`. All additive; turning the flags off hides the features without touching data.
 
+### 9.25 Organizer Management OS — Wave 2 (event tasks, readiness, document review, Overview)
+
+Flags (off by default, `LNKup_Feature_Flags`): `organizer_ops_v2_enabled` covers tasks, readiness and the new Overview. `organizer_document_review_enabled` covers per-event document review, and only takes effect while Passport `document_vault_sharing` is on. Tables live in `LNKup_Organizer_OS_Tables` schema version 2. `ready( $min )` takes a minimum version, so Wave 1 keeps working mid-upgrade.
+
+**Event tasks** (`LNKup_Event_Tasks`, `LNKup_Event_Tasks_REST`; tables `lnkup_event_tasks`, `lnkup_event_task_comments`, `lnkup_task_templates`):
+- Tasks have an assignee, due date, priority, status (open, done or cancelled), source (manual, template or system) and comments.
+- `view_roster` sees tasks. `edit_ops` creates, assigns, edits and cancels. The assignee may also mark their own task done or open.
+- The assignee must already have `view_roster` on the event, so a task never grants access, including to financials.
+- Templates belong to the organizer account. `apply_template()` sets due dates N days before `_lnkup_event_date` at 17:00 and skips items already applied (`template_item_key` = `t{id}_{key}`).
+- Assignment sends an email and fires `lnkup_event_task_assigned`. The daily cron `lnkup_event_tasks_due` sends each assignee one digest of overdue tasks and tasks due within 48 hours.
+- Status changes, assignments and template applies go to the team audit log.
+- Routes: `GET|POST events/{id}/tasks`, `POST events/{id}/tasks/apply-template`, `GET events/{id}/task-assignees`, `GET|PATCH|DELETE tasks/{id}`, `POST tasks/{id}/comments`, `GET tasks?view=mine|due_soon|overdue|all|completed`, `GET|POST task-templates`, `PATCH|DELETE task-templates/{id}`.
+
+**Event readiness** (`LNKup_Event_Readiness`):
+- There are 11 items: event details, application settings, booth inventory, applications reviewed, payments collected, booth assignments, documents collected, packet prepared, setup instructions sent, check-in ready and team assigned.
+- Each item's system result is pass, fail, unknown or n/a, and its state is derived from that:
+
+| System result | State |
+|---|---|
+| pass | `verified` |
+| fail | `incomplete`, even if someone confirmed it by hand |
+| unknown | `confirmed` once a person confirms it (only setup instructions, check-in and team; otherwise `incomplete`) |
+| n/a | `not_applicable` |
+
+- `not_applicable` is a manual mark on items that may not apply. Marks are stored in `_lnkup_readiness_marks`, need `edit_ops`, and are audited.
+- The checklist also returns days until the event, a percent that excludes not-applicable items, and `next_actions`.
+- Results are cached for 60 seconds and flushed by application, booth, task, document and event-meta hooks.
+- Routes: `GET events/{id}/readiness` (`view_roster`) and `POST events/{id}/readiness/{key}` (`edit_ops`, body `{state: confirmed|not_applicable|clear, note}`).
+
+**Organizer document review** (`LNKup_Organizer_Documents`; table `lnkup_app_document_reviews`, unique on application + type):
+- There is one row per approved, payment-required or paid application for each type `lnkup_get_opportunity_required_documents()` requires.
+- Status priority:
+  1. `waived`
+  2. `expired` (overrides an earlier acceptance)
+  3. the organizer's decision: `accepted`, `rejected` or `replacement_requested`
+  4. `submitted`: an active Passport share, or the document is in the application snapshot
+  5. `requested`
+  6. `missing`
+- Decisions never change the platform `_lnkup_verification_status`.
+- Only the event owner gets a file link, and only through `LNKup_Document_Vault::shares_for_application()` signed URLs. `document_file_permission` is unchanged.
+- A new Passport share resets a rejection or replacement request back to review.
+- The new `review_documents` capability is held by Organization Admin, Event Manager and Vendor Manager. Waiving needs the owner or `manage_team`.
+- Requests are throttled per application and type per day, fire `lnkup_organizer_document_requested`, and email the vendor.
+- Routes: `GET events/{id}/documents` (`view_documents`), `GET applications/{id}/documents`, and `POST applications/{id}/documents/request|{type}/review|{type}/waive` (`review_documents`).
+- When the flag is on:
+  - the roster's "Documents needed" group uses these statuses;
+  - the Wave 1 review drawer shows them with actions;
+  - the classic "remind vendor" button sends a per-type request.
+
+**Overview** (`LNKup_Organizer_Overview`, `GET organizer/overview`; `render_home_v2()` when the ops flag is on):
+- "Needs attention" shows only non-zero counts from canonical records: pending reviews, approved but unpaid, documents (events within 60 days), overdue tasks, and events within 14 days that are under 100% ready.
+- Upcoming event cards show countdown, readiness %, confirmed vs capacity, and the next step.
+- The page also keeps recent activity and quick actions.
+
+**UI:**
+- Event workspace tabs Readiness, Tasks and Documents (`LNKup_Shortcodes::ops_tabs()` and `render_ops_panel()`), also reachable by team-only members at `?event={id}&tab=`.
+- A **Tasks** view (`?view=tasks`) with My tasks and task templates.
+- Scripts `public/js/organizer-ops-core.js` (shared helpers), `organizer-readiness.js`, `organizer-tasks.js` and `organizer-documents.js`, plus `public/css/organizer-ops.css`.
+- The lifecycle bar on the operations page shows open and overdue task counts.
+
 ### 9.x Communications OS (separate plugin: `lnkup-communications`)
 
 **lnkup-communications** depends on lnkup-marketplace and owns push, email, the in-app inbox, automations, campaigns and delivery health. lnkup-marketplace stays the system of record. The communications plugin stores only communication state, in the `wp_lnkup_comms_*` tables.
@@ -1608,6 +1670,39 @@ Every report filters by house (Six Stars) vs independent organizers. Spend is no
 At most one daily nudge goes to an organizer per run. A shared cooldown (`activation_cooldown_days`, 3) applies across the three nudges and `o_onboarding`; the first-booking celebration is exempt. Each message stores `activation_stage`. `LNKup_Organizer_Activation::build()` records `_lnkup_activation_done_{stage}` (UTC, write-once) the first time it sees a stage complete. Comms analytics attributes a nudge when that time falls between `sent_at` and `sent_at + attribution_days`. The `o_no_applications` delay is now `no_applications_days` (5), and `o_publish_next` links to saved setups when the organizer has any.
 
 **Tests:** `scripts/e2e/php/org-growth-analytics-test.php`, `scripts/e2e/php/comms-activation-test.php`; Playwright Analytics/Spend cases in `tests/e2e/organizer-growth.spec.ts`.
+
+### 9.24 Vendor Supply Intelligence (Phase 6)
+
+**Purpose:** show where LNKup has vendors but too few organizers (recruit organizers there) and where open booths outnumber vendors (recruit vendors there), per city and per vendor category.
+
+**Snapshot:** `LNKup_Org_Supply_Intel` (`includes/organizer-growth/class-org-supply-intel.php`) builds `wp_lnkup_org_supply_snapshots` daily on `lnkup_marketplace_daily` (priority 45, before lead rescoring at 50). The organizer-growth schema is `1.2.0`. Each build is guarded by `GET_LOCK` and is idempotent per day (today's rows are replaced). Snapshots are kept 120 days. The city set is every city with indexed vendors, open opportunities or open leads, capped at 500. Each city has an all-categories row (`term_id` 0) plus one row per category with supply or demand. A separate `_national` row holds vendors willing to travel nationally.
+
+| Column group | Source |
+|---|---|
+| `vendors_based` / `vendors_reach` / `vendors_active` / `vendors_verified` | Vendor match index. Reach = home city, or `cities_served` ("City, ST", or a bare city assumed to be in the vendor's state), `states_served`, or `radius_miles` from the city centroid (average of known vendor/opportunity coordinates). Active = index `status = active` and discoverable. |
+| `vendors_applied_90d`, `vendors_paid_12m` | Applications and paid/partially refunded payments by vendor user |
+| `saved_search_vendors` | Active saved searches naming the city; a saved search without a state counts toward every city of that name; categories are matched by name, slug or ID |
+| `open_opportunities`, `spots_total`, `spots_remaining`, `live_organizers` | Marketplace index (future or undated events) + match opportunity categories |
+| `applications_90d` | Applications submitted in 90 days to those opportunities |
+| `open_leads`, `registered_orgs` | Organizer Growth leads in the city (all-categories row only) |
+
+**Signals** (thresholds in Organizer Growth settings):
+- `insufficient_data` when there are fewer than 3 active vendors and no open booths.
+- `recruit_organizers` when active vendors are at least `org_growth_supply_min_active_vendors` (default 10) and active vendors per open booth are at least `org_growth_supply_surplus_ratio` (default 3).
+- `recruit_vendors` when open booths are at least twice the active vendors.
+- Otherwise `balanced`.
+
+**Consumers:**
+- Lead scoring's "existing vendor market" factor now counts active vendors who serve the city (`vendor_market_count()`), with a live home-city fallback before the first snapshot.
+- wp-admin **Organizer Growth → Vendor Supply** has filters, a city table with 7-day change, a city drawer (categories, gaps with vendors but no booths, 90-day trend, open leads, "View leads in this city"), CSV export and Rebuild now.
+- The lead drawer shows a supply card (`GET growth/leads/{id}` returns `supply`).
+- The connector **My Cities** view adds a "Vendor supply in your cities" panel.
+
+**REST:**
+- `GET growth/supply` (`state`, `term_id`, `signal`, `min_active`, `sort`, `limit`), `GET growth/supply/city?key=`, `GET growth/supply/export` (audited), `POST growth/supply/rebuild` (audited, 429 within 10 minutes). All use the growth capability and require the flag.
+- `GET connector/supply` uses the connector permission and returns the connector's city/state territories, or their home city when none are assigned. It is aggregates only, and counts of 1–2 are returned as `"<3"`.
+
+**Tests:** `scripts/e2e/php/org-supply-intel-test.php`; Playwright Vendor Supply cases in `tests/e2e/organizer-growth.spec.ts`.
 
 ---
 

@@ -26,6 +26,8 @@ class LNKup_Org_Lead_Lifecycle {
 		add_action( 'lnkup_application_submitted', array( __CLASS__, 'on_application_submitted' ), 40, 1 );
 		add_action( 'lnkup_payment_completed', array( __CLASS__, 'on_payment_completed' ), 40, 1 );
 		add_action( 'lnkup_referral_rewards_reversed', array( __CLASS__, 'on_payment_reversed' ), 40, 1 );
+		add_action( 'lnkup_organizer_onboarding_updated', array( __CLASS__, 'on_onboarding_updated' ), 20, 3 );
+		add_action( 'lnkup_organizer_onboarding_completed', array( __CLASS__, 'on_onboarding_completed' ), 20, 1 );
 	}
 
 	// ------------------------------------------------------------------ Account linking.
@@ -293,6 +295,52 @@ class LNKup_Org_Lead_Lifecycle {
 		}
 		self::record( $lead_id, 'first_event_published', (int) $organizer_id, (int) $event_id );
 		self::evaluate_repeat( $lead_id );
+	}
+
+	/**
+	 * Guided setup: note what the organizer runs on their lead. Activity only — lead stages and
+	 * milestones still come from real events and payments (a 12-stop tour is one organizer).
+	 *
+	 * @param int   $user_id Organizer.
+	 * @param array $state   New onboarding state.
+	 * @param array $before  Previous state.
+	 */
+	public static function on_onboarding_updated( $user_id, $state, $before ): void {
+		$formats = (array) ( $state['formats'] ?? array() );
+		if ( ! $formats || $formats === (array) ( $before['formats'] ?? array() ) ) {
+			return;
+		}
+		$lead_id = LNKup_Org_Leads::lead_for_user( (int) $user_id );
+		if ( $lead_id ) {
+			LNKup_Org_Leads::log_activity(
+				$lead_id,
+				'onboarding_format_selected',
+				array(
+					'channel' => 'product',
+					'summary' => sprintf( 'Organizes: %s', implode( ', ', array_map( 'sanitize_key', $formats ) ) ),
+					'payload' => array( 'formats' => array_values( $formats ) ),
+					'actor'   => (int) $user_id,
+				)
+			);
+		}
+	}
+
+	/**
+	 * @param int $user_id Organizer.
+	 */
+	public static function on_onboarding_completed( $user_id ): void {
+		$lead_id = LNKup_Org_Leads::lead_for_user( (int) $user_id );
+		if ( $lead_id ) {
+			LNKup_Org_Leads::log_activity(
+				$lead_id,
+				'onboarding_completed',
+				array(
+					'channel' => 'product',
+					'summary' => 'Finished guided setup (profile, first event, payouts, published)',
+					'actor'   => (int) $user_id,
+				)
+			);
+		}
 	}
 
 	public static function on_application_submitted( $app_id ): void {

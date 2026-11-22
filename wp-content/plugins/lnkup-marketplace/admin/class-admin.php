@@ -219,6 +219,13 @@ class LNKup_Admin {
 		}
 		$output['application_review_v2_enabled'] = ! empty( $input['application_review_v2_enabled'] );
 		$output['waitlist_offers_enabled']       = ! empty( $input['waitlist_offers_enabled'] );
+		$output['organizer_ops_v2_enabled']          = ! empty( $input['organizer_ops_v2_enabled'] );
+		$output['organizer_onboarding_v2_enabled']   = ! empty( $input['organizer_onboarding_v2_enabled'] );
+		$output['organizer_document_review_enabled'] = ! empty( $input['organizer_document_review_enabled'] );
+		if ( isset( $input['organizer_os_pilot_user_ids'] ) ) {
+			$pilot = array_values( array_unique( array_filter( array_map( 'absint', preg_split( '/[\s,]+/', (string) $input['organizer_os_pilot_user_ids'] ) ) ) ) );
+			$output['organizer_os_pilot_user_ids'] = implode( ',', array_slice( $pilot, 0, 200 ) );
+		}
 		$output['default_packet_lock'] = ! empty( $input['default_packet_lock'] );
 		$output['support_email']       = isset( $input['support_email'] ) ? sanitize_email( $input['support_email'] ) : $output['support_email'];
 		$output['notify_vendor']       = ! empty( $input['notify_vendor'] );
@@ -638,12 +645,31 @@ class LNKup_Admin {
 						</td>
 					</tr>
 					<tr>
+						<th><?php esc_html_e( 'Organizer guided setup (v2)', 'lnkup-marketplace' ); ?></th>
+						<td><label><input type="checkbox" name="lnkup_settings[organizer_onboarding_v2_enabled]" value="1" <?php checked( ! empty( $settings['organizer_onboarding_v2_enabled'] ) ); ?> /> <?php esc_html_e( 'Organizer sign-up asks for organization name, city and category; new organizers land on Get started, choose what they organize (single, recurring, series, tour, production company) and can resume setup on any device.', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
 						<th><?php esc_html_e( 'Application review workspace', 'lnkup-marketplace' ); ?></th>
 						<td><label><input type="checkbox" name="lnkup_settings[application_review_v2_enabled]" value="1" <?php checked( ! empty( $settings['application_review_v2_enabled'] ) ); ?> /> <?php esc_html_e( 'Organizer review queue across events, reviewer assignment, optional scoring rubrics and previewed bulk decisions. Scores never change an application on their own.', 'lnkup-marketplace' ); ?></label></td>
 					</tr>
 					<tr>
 						<th><?php esc_html_e( 'Waitlist offers', 'lnkup-marketplace' ); ?></th>
 						<td><label><input type="checkbox" name="lnkup_settings[waitlist_offers_enabled]" value="1" <?php checked( ! empty( $settings['waitlist_offers_enabled'] ) ); ?> /> <?php esc_html_e( 'Let organizers offer an open spot to a waitlisted vendor with a payment deadline. Unpaid offers expire and return the vendor to the waitlist. Requires the review workspace.', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Event readiness and tasks', 'lnkup-marketplace' ); ?></th>
+						<td><label><input type="checkbox" name="lnkup_settings[organizer_ops_v2_enabled]" value="1" <?php checked( ! empty( $settings['organizer_ops_v2_enabled'] ) ); ?> /> <?php esc_html_e( 'Event task lists with assignees and due dates, an event readiness checklist, and the redesigned organizer Overview.', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Organizer document review', 'lnkup-marketplace' ); ?></th>
+						<td><label><input type="checkbox" name="lnkup_settings[organizer_document_review_enabled]" value="1" <?php checked( ! empty( $settings['organizer_document_review_enabled'] ) ); ?> /> <?php esc_html_e( 'Organizers request, accept or reject required documents for their own events. Decisions apply to that event only, and files open only when the vendor shares them through Passport (requires Passport document sharing).', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><label for="lnkup-organizer-os-pilot"><?php esc_html_e( 'Organizer OS pilot', 'lnkup-marketplace' ); ?></label></th>
+						<td>
+							<input type="text" class="regular-text" id="lnkup-organizer-os-pilot" name="lnkup_settings[organizer_os_pilot_user_ids]" value="<?php echo esc_attr( (string) ( $settings['organizer_os_pilot_user_ids'] ?? '' ) ); ?>" placeholder="12, 48" />
+							<p class="description"><?php esc_html_e( 'Organizer user IDs, comma separated. While a feature above is unchecked, these organizers and their team members still get it. Leave empty for no pilot.', 'lnkup-marketplace' ); ?></p>
+						</td>
 					</tr>
 				</table>
 				<h2><?php esc_html_e( 'Payment methods (Financial OS)', 'lnkup-marketplace' ); ?></h2>

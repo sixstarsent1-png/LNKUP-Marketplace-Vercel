@@ -16,7 +16,7 @@ class LNKup_Partnerships_Admin {
 
 	const SLUG  = 'lnkup-partnerships';
 	const NONCE = 'lnkup_partnerships_admin';
-	const TABS  = array( 'overview', 'applications', 'partners', 'pipeline', 'rules', 'ledger', 'reviews', 'connectors', 'settings' );
+	const TABS  = array( 'overview', 'readiness', 'applications', 'partners', 'pipeline', 'rules', 'ledger', 'reviews', 'connectors', 'settings' );
 
 	public static function init(): void {
 		add_action( 'admin_menu', array( __CLASS__, 'add_menu' ), 25 );
@@ -122,6 +122,10 @@ class LNKup_Partnerships_Admin {
 				LNKup_Partnerships::update_settings( (array) $post );
 				self::redirect( 'settings', __( 'Settings saved.', 'lnkup-marketplace' ) );
 				break;
+			case 'readiness_refresh':
+				LNKup_Partnership_Readiness::flush();
+				self::redirect( 'readiness', __( 'Readiness re-checked.', 'lnkup-marketplace' ) );
+				break;
 			case 'application':
 				self::finish(
 					'applications',
@@ -178,6 +182,7 @@ class LNKup_Partnerships_Admin {
 		}
 		$labels = array(
 			'overview'     => __( 'Overview', 'lnkup-marketplace' ),
+			'readiness'    => __( 'Go-live readiness', 'lnkup-marketplace' ),
 			'applications' => __( 'Applications', 'lnkup-marketplace' ),
 			'partners'     => __( 'Strategic Partners', 'lnkup-marketplace' ),
 			'pipeline'   => __( 'Referral Pipeline', 'lnkup-marketplace' ),
@@ -202,6 +207,9 @@ class LNKup_Partnerships_Admin {
 				<div class="lnkup-partners-panel" style="margin-top:16px;">
 					<?php
 					switch ( $tab ) {
+						case 'readiness':
+							self::render_readiness();
+							break;
 						case 'applications':
 							self::render_applications();
 							break;
@@ -260,6 +268,116 @@ class LNKup_Partnerships_Admin {
 
 	private static function nonce_field(): void {
 		wp_nonce_field( self::NONCE );
+	}
+
+	/**
+	 * Read-only go-live checklist. Mode switches stay in Settings.
+	 */
+	private static function render_readiness(): void {
+		try {
+			$r = LNKup_Partnership_Readiness::report();
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'LNKup readiness report failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
+			echo '<div class="notice notice-error inline" data-testid="lnkup-readiness-error"><p>' . esc_html__( 'The readiness report could not be built. Check the debug log, then reload.', 'lnkup-marketplace' ) . '</p></div>';
+			return;
+		}
+		$status_labels = array(
+			'done'    => __( 'Done', 'lnkup-marketplace' ),
+			'ready'   => __( 'Ready', 'lnkup-marketplace' ),
+			'blocked' => __( 'Blocked', 'lnkup-marketplace' ),
+		);
+		$status_colors = array( 'done' => '#00a32a', 'ready' => '#2271b1', 'blocked' => '#b32d2e' );
+		$level_colors  = array( 'ok' => '#00a32a', 'warn' => '#996800', 'fail' => '#b32d2e', 'info' => '#646970' );
+		$shadow        = (array) $r['shadow'];
+		?>
+		<div data-testid="lnkup-partners-readiness">
+			<p class="description">
+				<?php
+				printf(
+					/* translators: 1: time, 2: mode */
+					esc_html__( 'Checked %1$s (cached 10 minutes). Attribution mode: %2$s. This page only reads data; change the mode in Settings. Follow docs/PARTNERSHIP_ROLLOUT.md for each stage.', 'lnkup-marketplace' ),
+					esc_html( (string) $r['generated_at'] ),
+					'<strong>' . esc_html( (string) $r['mode'] ) . '</strong>'
+				);
+				?>
+			</p>
+			<form method="post" style="margin:8px 0 16px;">
+				<?php self::nonce_field(); ?>
+				<input type="hidden" name="lnkup_partners_action" value="readiness_refresh">
+				<button type="submit" class="button" data-testid="lnkup-readiness-refresh"><?php esc_html_e( 'Re-check now', 'lnkup-marketplace' ); ?></button>
+				<a class="button-link" style="margin-left:12px;" href="<?php echo esc_url( self::url( 'settings' ) ); ?>"><?php esc_html_e( 'Open Settings', 'lnkup-marketplace' ); ?></a>
+			</form>
+
+			<h2><?php esc_html_e( 'Stages', 'lnkup-marketplace' ); ?></h2>
+			<table class="widefat striped" data-testid="lnkup-readiness-stages">
+				<thead><tr><th><?php esc_html_e( 'Stage', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'Status', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'What is left', 'lnkup-marketplace' ); ?></th></tr></thead>
+				<tbody>
+				<?php foreach ( (array) $r['stages'] as $stage ) : ?>
+					<?php $status = (string) $stage['status']; ?>
+					<tr data-testid="lnkup-readiness-stage-<?php echo esc_attr( (string) $stage['key'] ); ?>">
+						<td><strong><?php echo esc_html( (string) $stage['label'] ); ?></strong></td>
+						<td><span style="font-weight:600;color:<?php echo esc_attr( $status_colors[ $status ] ?? '#646970' ); ?>;"><?php echo esc_html( $status_labels[ $status ] ?? $status ); ?></span></td>
+						<td>
+							<?php if ( empty( $stage['blockers'] ) ) : ?>
+								<?php echo 'done' === $status ? esc_html__( 'Nothing.', 'lnkup-marketplace' ) : esc_html__( 'Nothing blocking. Follow the runbook for this stage.', 'lnkup-marketplace' ); ?>
+							<?php else : ?>
+								<ul style="margin:0;list-style:disc;padding-left:18px;">
+									<?php foreach ( (array) $stage['blockers'] as $blocker ) : ?>
+										<li><?php echo esc_html( (string) $blocker ); ?></li>
+									<?php endforeach; ?>
+								</ul>
+							<?php endif; ?>
+						</td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+
+			<h2><?php esc_html_e( 'Shadow-mode evidence (last 30 days)', 'lnkup-marketplace' ); ?></h2>
+			<?php if ( 0 === (int) $shadow['total_30d'] && 0 === (int) $shadow['blocked_30d'] ) : ?>
+				<p data-testid="lnkup-readiness-shadow-empty"><?php esc_html_e( 'No blocks recorded yet. That only counts as evidence once the observation period has passed with real referral traffic.', 'lnkup-marketplace' ); ?></p>
+			<?php else : ?>
+				<div style="display:flex;gap:24px;flex-wrap:wrap;" data-testid="lnkup-readiness-shadow">
+					<?php foreach ( array( 'by_reason' => __( 'By reason', 'lnkup-marketplace' ), 'by_program' => __( 'By program', 'lnkup-marketplace' ) ) as $key => $title ) : ?>
+						<table class="widefat striped" style="max-width:360px;">
+							<thead><tr><th><?php echo esc_html( $title ); ?></th><th><?php esc_html_e( 'Blocks', 'lnkup-marketplace' ); ?></th></tr></thead>
+							<tbody>
+							<?php foreach ( (array) $shadow[ $key ] as $name => $n ) : ?>
+								<tr><td><?php echo esc_html( 'by_program' === $key ? LNKup_Partner_Programs::label( (string) $name ) : str_replace( '_', ' ', (string) $name ) ); ?></td><td><?php echo esc_html( (string) $n ); ?></td></tr>
+							<?php endforeach; ?>
+							</tbody>
+						</table>
+					<?php endforeach; ?>
+				</div>
+				<?php if ( ! empty( $shadow['truncated'] ) ) : ?>
+					<p class="description"><?php esc_html_e( 'Breakdown covers the most recent 5,000 blocks.', 'lnkup-marketplace' ); ?></p>
+				<?php endif; ?>
+			<?php endif; ?>
+
+			<h2><?php esc_html_e( 'All checks', 'lnkup-marketplace' ); ?></h2>
+			<table class="widefat striped" data-testid="lnkup-readiness-checks">
+				<thead><tr><th><?php esc_html_e( 'Result', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'Check', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'Detail', 'lnkup-marketplace' ); ?></th></tr></thead>
+				<tbody>
+				<?php foreach ( (array) $r['checks'] as $check ) : ?>
+					<?php $level = (string) $check['level']; ?>
+					<tr data-testid="lnkup-readiness-check-<?php echo esc_attr( (string) $check['key'] ); ?>">
+						<td><span style="font-weight:600;color:<?php echo esc_attr( $level_colors[ $level ] ?? '#646970' ); ?>;"><?php echo esc_html( strtoupper( $level ) ); ?></span></td>
+						<td>
+							<?php if ( ! empty( $check['link'] ) && in_array( (string) $check['link'], self::TABS, true ) ) : ?>
+								<a href="<?php echo esc_url( self::url( (string) $check['link'] ) ); ?>"><?php echo esc_html( (string) $check['label'] ); ?></a>
+							<?php else : ?>
+								<?php echo esc_html( (string) $check['label'] ); ?>
+							<?php endif; ?>
+						</td>
+						<td><?php echo esc_html( (string) $check['detail'] ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		</div>
+		<?php
 	}
 
 	private static function render_overview(): void {

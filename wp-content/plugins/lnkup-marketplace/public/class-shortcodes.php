@@ -284,9 +284,10 @@ class LNKup_Shortcodes {
 			if ( $vendor_discovery ) {
 				wp_enqueue_script( 'lnkup-marketplace-v2' );
 			}
-			$apply_flags = lnkup_get_settings();
+			$wizard_on = LNKup_Rollout::enabled( 'apply_wizard_enabled' );
+			$multi_on  = LNKup_Rollout::enabled( 'tour_multi_apply_enabled' );
 			// The wizard also powers withdraw buttons and draft resume cards on vendor Requests.
-			if ( ! empty( $apply_flags['apply_wizard_enabled'] ) || ! empty( $apply_flags['tour_multi_apply_enabled'] ) || ( $vendor_dash && in_array( $vendor_view, array( 'home', 'applications', 'bookings' ), true ) ) ) {
+			if ( $wizard_on || $multi_on || ( $vendor_dash && in_array( $vendor_view, array( 'home', 'applications', 'bookings' ), true ) ) ) {
 				wp_enqueue_style( 'lnkup-apply-wizard' );
 				wp_enqueue_script( 'lnkup-apply-wizard' );
 			}
@@ -294,7 +295,7 @@ class LNKup_Shortcodes {
 				wp_enqueue_style( 'lnkup-vendor-bookings', LNKUP_PLUGIN_URL . 'public/css/vendor-bookings.css', array( 'lnkup-marketplace-v2' ), LNKUP_VERSION );
 				wp_enqueue_script( 'lnkup-vendor-bookings', LNKUP_PLUGIN_URL . 'public/js/vendor-bookings.js', array(), LNKUP_VERSION, true );
 			}
-			if ( $feed && ! empty( $_GET['tour_id'] ) && ! empty( $apply_flags['tour_multi_apply_enabled'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( $feed && ! empty( $_GET['tour_id'] ) && $multi_on ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				wp_enqueue_script( 'lnkup-tour-apply' );
 			}
 		}
@@ -417,6 +418,32 @@ class LNKup_Shortcodes {
 				)
 			);
 		}
+		if ( $org['page'] && is_user_logged_in() && LNKup_Organizer_OS_Tables::ready( '2' ) && ( LNKup_Feature_Flags::organizer_ops() || LNKup_Feature_Flags::document_review() ) ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$ops_tab   = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : '';
+			$ops_panel = ( 'workspace' === $org['detail'] && in_array( $ops_tab, array( 'readiness', 'tasks', 'documents' ), true ) )
+				|| ( '' === $org['detail'] && 'tasks' === $org['view'] );
+			if ( $ops_panel || ( '' === $org['detail'] && 'home' === $org['view'] && LNKup_Feature_Flags::organizer_ops() ) || ( 'workspace' === $org['detail'] && LNKup_Capabilities::is_team_only_member() ) ) {
+				wp_enqueue_style( 'lnkup-organizer-ops', LNKUP_PLUGIN_URL . 'public/css/organizer-ops.css', array(), lnkup_asset_version( 'public/css/organizer-ops.css' ) );
+			}
+			if ( $ops_panel || ( 'workspace' === $org['detail'] && LNKup_Capabilities::is_team_only_member() ) ) {
+				wp_enqueue_script( 'lnkup-organizer-ops-core', LNKUP_PLUGIN_URL . 'public/js/organizer-ops-core.js', array(), lnkup_asset_version( 'public/js/organizer-ops-core.js' ), true );
+				foreach ( array( 'readiness', 'tasks', 'documents' ) as $ops_module ) {
+					wp_enqueue_script( 'lnkup-organizer-' . $ops_module, LNKUP_PLUGIN_URL . 'public/js/organizer-' . $ops_module . '.js', array( 'lnkup-organizer-ops-core' ), lnkup_asset_version( 'public/js/organizer-' . $ops_module . '.js' ), true );
+				}
+				wp_localize_script(
+					'lnkup-organizer-ops-core',
+					'lnkupOps',
+					array(
+						'root'      => esc_url_raw( rest_url( 'lnkup/v1' ) ),
+						'nonce'     => wp_create_nonce( 'wp_rest' ),
+						'dashboard' => esc_url_raw( lnkup_page_url_helper( 'organizer-dashboard' ) ),
+						'userId'    => get_current_user_id(),
+					)
+				);
+			}
+		}
+
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$review_classic = isset( $_GET['mode'] ) && 'classic' === sanitize_key( wp_unslash( $_GET['mode'] ) );
 		if ( $org['page'] && '' === $org['detail'] && 'applications' === $org['view'] && is_user_logged_in() && LNKup_Feature_Flags::application_review() && ( ! $review_classic || LNKup_Capabilities::is_team_only_member() ) ) {
@@ -684,9 +711,28 @@ class LNKup_Shortcodes {
 		if ( $event_id && ! empty( $_GET['ops'] ) ) {
 			return self::render_event_operations_view( $event_id );
 		}
+		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : '';
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		if ( $event_id ) {
+			$ops_tabs = self::ops_tabs( $event_id );
+			$tab      = isset( $ops_tabs[ $tab ] ) ? $tab : (string) array_key_first( $ops_tabs );
+			if ( '' !== $tab ) {
+				$links = '';
+				foreach ( $ops_tabs as $key => $label ) {
+					$links .= '<a class="lnkup-btn lnkup-btn--sm ' . ( $key === $tab ? 'lnkup-btn--primary' : 'lnkup-btn--ghost' ) . '" href="' . esc_url( add_query_arg( array( 'event' => $event_id, 'tab' => $key ), lnkup_page_url_helper( 'organizer-dashboard' ) ) ) . '">' . esc_html( $label ) . '</a>';
+				}
+				return '<div class="lnkup-mp lnkup-organizer-dash">' . lnkup_page_header(
+					array(
+						'title'      => get_the_title( $event_id ),
+						'back_url'   => lnkup_organizer_view_url( 'home' ),
+						'back_label' => __( 'My work', 'lnkup-marketplace' ),
+						'actions'    => $links,
+					)
+				) . self::render_ops_panel( $event_id, $tab ) . '</div>';
+			}
+		}
 		$view = lnkup_organizer_dashboard_view();
-		if ( 'team' === $view || ( 'applications' === $view && LNKup_Feature_Flags::application_review() ) || 'help' === $view ) {
+		if ( 'team' === $view || ( 'applications' === $view && LNKup_Feature_Flags::application_review() ) || ( 'tasks' === $view && LNKup_Feature_Flags::organizer_ops() ) || 'help' === $view ) {
 			return LNKup_Organizer_Dashboard_Views::render( $view );
 		}
 		return '<div class="lnkup-mp lnkup-organizer-dash">' . LNKup_Org_Workspace::render_staff_home( get_current_user_id() ) . '</div>';
@@ -2217,30 +2263,6 @@ class LNKup_Shortcodes {
 		</nav>
 		<?php
 		return ob_get_clean();
-	}
-
-	/**
-	 * First-run welcome modal for organizers (parity with vendor).
-	 *
-	 * @return string
-	 */
-	private static function render_organizer_welcome_modal(): string {
-		ob_start();
-		?>
-		<div class="lnkup-modal lnkup-modal--organizer-welcome" id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" hidden>
-			<div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div>
-			<div class="lnkup-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="lnkup-organizer-welcome-title">
-				<button type="button" class="lnkup-modal__close" data-organizer-welcome-close="1" aria-label="<?php esc_attr_e( 'Close', 'lnkup-marketplace' ); ?>">&times;</button>
-				<h2 id="lnkup-organizer-welcome-title" class="lnkup-type-title"><?php echo esc_html( lnkup_copy( 'organizer_tutorial_welcome_title' ) ); ?></h2>
-				<p class="lnkup-muted"><?php echo esc_html( lnkup_copy( 'organizer_tutorial_welcome_body' ) ); ?></p>
-				<div class="lnkup-modal__actions" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:1.25rem;">
-					<button type="button" class="lnkup-btn lnkup-btn--primary" data-organizer-welcome-start><?php echo esc_html( lnkup_copy( 'organizer_tutorial_welcome_start' ) ); ?></button>
-					<button type="button" class="lnkup-btn lnkup-btn--ghost" data-organizer-welcome-skip><?php echo esc_html( lnkup_copy( 'organizer_tutorial_welcome_skip' ) ); ?></button>
-				</div>
-			</div>
-		</div>
-		<?php
-		return (string) ob_get_clean();
 	}
 
 	/**
@@ -4512,14 +4534,44 @@ class LNKup_Shortcodes {
 		return (string) ob_get_clean();
 	}
 
+	/**
+	 * Wave 2 event tabs this viewer can open: readiness and tasks (organizer_ops_v2_enabled, view_roster)
+	 * and documents (organizer_document_review_enabled, view_documents).
+	 *
+	 * @param int $event_id Event.
+	 * @return array<string, string> tab => label
+	 */
+	public static function ops_tabs( $event_id ) {
+		$tabs = array();
+		if ( LNKup_Feature_Flags::organizer_ops() && LNKup_Organizer_OS_Tables::ready( '2' ) && LNKup_Capabilities::staff_can( $event_id, 'view_roster' ) ) {
+			$tabs['readiness'] = __( 'Readiness', 'lnkup-marketplace' );
+			$tabs['tasks']     = __( 'Tasks', 'lnkup-marketplace' );
+		}
+		if ( LNKup_Feature_Flags::document_review() && LNKup_Organizer_OS_Tables::ready( '2' ) && LNKup_Capabilities::staff_can( $event_id, 'view_documents' ) ) {
+			$tabs['documents'] = __( 'Documents', 'lnkup-marketplace' );
+		}
+		return $tabs;
+	}
+
+	/**
+	 * Mount point for public/js/organizer-ops-*.js (readiness, tasks, documents, mytasks).
+	 *
+	 * @param int    $event_id Event (0 for My tasks).
+	 * @param string $panel    readiness|tasks|documents|mytasks.
+	 */
+	public static function render_ops_panel( $event_id, $panel ) {
+		return '<section class="lnkup-ops2" data-ops-panel="' . esc_attr( $panel ) . '" data-event-id="' . esc_attr( (string) absint( $event_id ) ) . '" data-testid="lnkup-ops2-' . esc_attr( $panel ) . '" aria-live="polite">' . lnkup_loading_state( 'list' ) . '</section>';
+	}
+
 	private static function render_event_workspace( $event_id ) {
 		$event_id = (int) $event_id;
 		$event    = get_post( $event_id );
 		if ( ! $event || 'lnkup_event' !== $event->post_type || ! LNKup_Capabilities::organizer_owns_event( $event_id ) ) {
 			return '<p class="lnkup-alert lnkup-alert--error">' . esc_html__( 'You cannot open this event.', 'lnkup-marketplace' ) . '</p>';
 		}
-		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'overview'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( ! in_array( $tab, array( 'overview', 'slots', 'requests', 'vendors', 'financials' ), true ) ) {
+		$tab      = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'overview'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$ops_tabs = self::ops_tabs( $event_id );
+		if ( ! in_array( $tab, array_merge( array( 'overview', 'slots', 'requests', 'vendors', 'financials' ), array_keys( $ops_tabs ) ), true ) ) {
 			$tab = 'overview';
 		}
 		$can_financials = LNKup_Capabilities::can_manage_event_financials( $event_id );
@@ -4590,6 +4642,7 @@ class LNKup_Shortcodes {
 		if ( $can_financials ) {
 			$tabs['financials'] = __( 'Money', 'lnkup-marketplace' );
 		}
+		$tabs          = array_merge( $tabs, $ops_tabs );
 		$switch_events = get_posts(
 			array(
 				'post_type'      => 'lnkup_event',
@@ -4701,7 +4754,9 @@ class LNKup_Shortcodes {
 				)
 			);
 			?>
-			<?php if ( 'overview' === $tab ) : ?>
+			<?php if ( isset( $ops_tabs[ $tab ] ) ) : ?>
+				<?php echo self::render_ops_panel( $event_id, $tab ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php elseif ( 'overview' === $tab ) : ?>
 				<?php
 				$readiness = class_exists( 'LNKup_Vendor_Readiness' ) ? LNKup_Vendor_Readiness::event_readiness_summary( $event_id ) : array();
 				$spots     = self::organizer_event_spots( $event_id );
@@ -5132,7 +5187,7 @@ class LNKup_Shortcodes {
 			);
 			?>
 			<div id="lnkup-ops-kpis" class="lnkup-ops-kpis-wrap"><?php echo LNKup_Operations_Render::kpi_row( $snap['kpis'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
-			<div id="lnkup-ops-lifecycle"><?php echo LNKup_Operations_Render::lifecycle_bar( $snap['lifecycle'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
+			<div id="lnkup-ops-lifecycle"><?php echo LNKup_Operations_Render::lifecycle_bar( $snap['lifecycle'], (int) $event_id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
 			<nav class="lnkup-ops-section-nav lnkup-dash-tabs lnkup-dash-tabs--pills" aria-label="<?php esc_attr_e( 'Operations sections', 'lnkup-marketplace' ); ?>">
 				<button type="button" class="lnkup-dash-tabs__btn lnkup-ops-section is-active" data-section="command"><?php esc_html_e( 'Command', 'lnkup-marketplace' ); ?></button>
 				<button type="button" class="lnkup-dash-tabs__btn lnkup-ops-section" data-section="logistics"><?php esc_html_e( 'Logistics', 'lnkup-marketplace' ); ?></button>

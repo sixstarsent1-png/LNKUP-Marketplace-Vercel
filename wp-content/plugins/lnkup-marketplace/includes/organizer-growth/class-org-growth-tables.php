@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
 
 class LNKup_Org_Growth_Tables {
 
-	const SCHEMA_VERSION = '1.1.0';
+	const SCHEMA_VERSION = '1.2.0';
 	const SCHEMA_OPTION  = 'lnkup_org_growth_schema';
 
 	const LEADS       = 'lnkup_org_leads';
@@ -31,6 +31,7 @@ class LNKup_Org_Growth_Tables {
 	const TEMPLATES   = 'lnkup_org_outreach_templates';
 	const SUPPRESSION = 'lnkup_contact_suppression';
 	const SPEND       = 'lnkup_org_growth_spend';
+	const SUPPLY      = 'lnkup_org_supply_snapshots';
 
 	public static function table( string $suffix ): string {
 		global $wpdb;
@@ -346,6 +347,35 @@ class LNKup_Org_Growth_Tables {
 				PRIMARY KEY  (id),
 				KEY channel_date (channel, spent_on),
 				KEY spent_on (spent_on)
+			) {$c};"
+		);
+
+		dbDelta(
+			'CREATE TABLE ' . self::table( self::SUPPLY ) . " (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				snapshot_date date NOT NULL,
+				city_key varchar(140) NOT NULL DEFAULT '',
+				city varchar(100) NOT NULL DEFAULT '',
+				state varchar(10) NOT NULL DEFAULT '',
+				term_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				vendors_based int(11) NOT NULL DEFAULT 0,
+				vendors_reach int(11) NOT NULL DEFAULT 0,
+				vendors_active int(11) NOT NULL DEFAULT 0,
+				vendors_verified int(11) NOT NULL DEFAULT 0,
+				vendors_applied_90d int(11) NOT NULL DEFAULT 0,
+				vendors_paid_12m int(11) NOT NULL DEFAULT 0,
+				saved_search_vendors int(11) NOT NULL DEFAULT 0,
+				open_opportunities int(11) NOT NULL DEFAULT 0,
+				spots_total int(11) NOT NULL DEFAULT 0,
+				spots_remaining int(11) NOT NULL DEFAULT 0,
+				applications_90d int(11) NOT NULL DEFAULT 0,
+				live_organizers int(11) NOT NULL DEFAULT 0,
+				open_leads int(11) NOT NULL DEFAULT 0,
+				registered_orgs int(11) NOT NULL DEFAULT 0,
+				created_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY snapshot_city_term (snapshot_date, city_key, term_id),
+				KEY city_date (city_key, snapshot_date)
 			) {$c};"
 		);
 

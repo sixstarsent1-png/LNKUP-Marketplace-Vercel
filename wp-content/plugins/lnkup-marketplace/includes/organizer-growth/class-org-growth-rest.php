@@ -201,6 +201,40 @@ class LNKup_Org_Growth_REST {
 		self::route( '/spend/(?P<id>\d+)/void', array( 'POST' => static fn( WP_REST_Request $r ) => LNKup_Org_Growth_Spend::void( (int) $r['id'], (string) $r->get_param( 'reason' ), get_current_user_id() ) ) );
 		self::route( '/spend/import', array( 'POST' => array( __CLASS__, 'spend_import' ) ) );
 
+		// Phase 6 — vendor supply intelligence.
+		$supply_filters = static fn( WP_REST_Request $r ): array => array(
+			'state'      => (string) $r->get_param( 'state' ),
+			'term_id'    => (int) $r->get_param( 'term_id' ),
+			'signal'     => (string) $r->get_param( 'signal' ),
+			'min_active' => (int) $r->get_param( 'min_active' ),
+			'sort'       => (string) $r->get_param( 'sort' ),
+			'limit'      => (int) ( $r->get_param( 'limit' ) ?: 200 ),
+		);
+		self::route( '/supply', array( 'GET' => static fn( WP_REST_Request $r ) => LNKup_Org_Supply_Intel::cities( $supply_filters( $r ) ) ) );
+		self::route( '/supply/city', array( 'GET' => static fn( WP_REST_Request $r ) => LNKup_Org_Supply_Intel::city( (string) $r->get_param( 'key' ) ) ) );
+		self::route(
+			'/supply/export',
+			array(
+				'GET' => static function ( WP_REST_Request $r ) use ( $supply_filters ): array {
+					LNKup_Financial_Audit::log( 'org_growth_supply_exported', 'org_growth', 0, array( 'actor' => get_current_user_id() ) );
+					return array(
+						'filename' => 'vendor-supply-' . gmdate( 'Y-m-d' ) . '.csv',
+						'csv'      => LNKup_Org_Supply_Intel::export_csv( $supply_filters( $r ) ),
+					);
+				},
+			)
+		);
+		self::route( '/supply/rebuild', array( 'POST' => array( __CLASS__, 'supply_rebuild' ) ) );
+		register_rest_route(
+			self::NS,
+			'/connector/supply',
+			array(
+				'methods'             => 'GET',
+				'callback'            => self::safe( array( __CLASS__, 'connector_supply' ) ),
+				'permission_callback' => array( 'LNKup_Partnerships_REST', 'connector_permission' ),
+			)
+		);
+
 		// Phase 3 — outreach.
 		self::route( '/templates', array( 'GET' => static fn() => array( 'items' => LNKup_Org_Outreach::list_templates(), 'merge_fields' => LNKup_Org_Outreach::MERGE_FIELDS ) ) );
 		self::route( '/templates/(?P<key>[a-z0-9_]+)', array( 'PUT' => static fn( WP_REST_Request $r ) => LNKup_Org_Outreach::save_template( (string) $r['key'], (array) $r->get_json_params(), get_current_user_id() ) ) );
@@ -325,7 +359,13 @@ class LNKup_Org_Growth_REST {
 	 */
 	public static function get_lead( WP_REST_Request $r ) {
 		$lead = LNKup_Org_Leads::detail( (int) $r['id'] );
-		return $lead ? array( 'lead' => $lead ) : new WP_Error( 'lnkup_lead_not_found', __( 'Lead not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		if ( ! $lead ) {
+			return new WP_Error( 'lnkup_lead_not_found', __( 'Lead not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		return array(
+			'lead'   => $lead,
+			'supply' => LNKup_Org_Supply_Intel::for_lead( $lead ),
+		);
 	}
 
 	/**
@@ -488,6 +528,39 @@ class LNKup_Org_Growth_REST {
 	/**
 	 * @return array<string, mixed>|WP_Error
 	 */
+	/**
+	 * Rebuild today's supply snapshot (at most once per 10 minutes).
+	 *
+	 * @return array<string, mixed>|WP_Error
+	 */
+	public static function supply_rebuild() {
+		$last = (int) get_option( LNKup_Org_Supply_Intel::REBUILD_OPTION, 0 );
+		if ( $last > time() - 10 * MINUTE_IN_SECONDS ) {
+			return new WP_Error( 'lnkup_supply_rebuild_wait', __( 'The supply snapshot was rebuilt in the last 10 minutes. Try again shortly.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
+		}
+		update_option( LNKup_Org_Supply_Intel::REBUILD_OPTION, time(), false );
+		$result = LNKup_Org_Supply_Intel::build_snapshot();
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		LNKup_Financial_Audit::log( 'org_growth_supply_rebuilt', 'org_growth', 0, array( 'actor' => get_current_user_id(), 'cities' => $result['cities'] ) );
+		return $result;
+	}
+
+	/**
+	 * Supply aggregates for the current connector's territories only.
+	 *
+	 * @return array<string, mixed>|WP_Error
+	 */
+	public static function connector_supply() {
+		$connector = class_exists( 'LNKup_Connector' ) ? LNKup_Connector::get_by_user_id( get_current_user_id() ) : null;
+		if ( ! $connector || 'active' !== ( $connector['status'] ?? '' ) ) {
+			return new WP_Error( 'lnkup_connector_inactive', __( 'Active connector access required.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+		$territories = class_exists( 'LNKup_Partnerships' ) ? LNKup_Partnerships::territories( (int) $connector['id'] ) : array();
+		return LNKup_Org_Supply_Intel::for_territories( $territories, (string) ( $connector['city'] ?? '' ), (string) ( $connector['state'] ?? '' ) );
+	}
+
 	public static function spend_import( WP_REST_Request $r ) {
 		$files = $r->get_file_params();
 		$file  = $files['file'] ?? null;

@@ -31,7 +31,9 @@ This audit was done in two passes. The first (read-only, against an earlier snap
 - Staff without the `lnkup_organizer` role cannot load the organizer dashboard shell, even with a team membership.
 - Recurrence, task records, organizer-side document review (deferred to later waves).
 
-Implementation and data model for this wave: [SYSTEM_OVERVIEW.md §9.22](SYSTEM_OVERVIEW.md); changelog in [CURRENT_STATE.md](CURRENT_STATE.md).
+Implementation and data model: Wave 1 in [SYSTEM_OVERVIEW.md §9.22](SYSTEM_OVERVIEW.md), Wave 2 in §9.25; changelog in [CURRENT_STATE.md](CURRENT_STATE.md).
+
+**Wave 2 status (2026-11-22):** the task-record and organizer-side document review gaps in section 2 are addressed behind flags. Event tasks with records and templates, a per-event readiness checklist, per-event organizer document review built on Passport shares, and a redesigned Overview are in place. Organizer review decisions are per event and never change platform verification.
 
 ## 3. Broken workflows (fixed in this wave unless noted)
 

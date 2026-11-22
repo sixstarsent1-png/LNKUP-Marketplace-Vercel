@@ -126,6 +126,7 @@ Migration runs on `init` when `lnkup_partner_schema` ≠ `1.0.0`. Seeding never 
 | Method | Route | Permission |
 |--------|-------|-----------|
 | GET | `/partners/overview` | `user_has_manage_all` |
+| GET | `/partners/readiness` (go-live stages and checks, read-only) | manage_all |
 | GET | `/partners/referrals?program&attribution_status&market&role&page&per_page` | manage_all |
 | GET | `/partners/ledger?program&status&connector_id&page&per_page` | manage_all |
 | POST | `/partners/ledger/{id}/approve\|hold\|release\|mark-paid` (`reason`, `payout_reference`) | manage_all |
@@ -172,6 +173,12 @@ submitted by them, without contact data or scores.
 Runners: `powershell -File scripts/e2e/run-partnerships-php.ps1`.
 
 ## L. Deployment
+
+The staged go-live (deploy → shadow evidence → enforce → programs → notifications → mobile), with
+entry criteria and a rollback per stage, is in **[PARTNERSHIP_ROLLOUT.md](PARTNERSHIP_ROLLOUT.md)**.
+wp-admin → Partnerships & Referrals → **Go-live readiness** and the read-only
+`scripts/prod/partnerships-preflight.php` report the same checks (`LNKup_Partnership_Readiness`,
+also `GET /partners/readiness`). The notes below are the original foundation deploy steps.
 
 1. Deploy plugin 12.28.0 or later + theme (`inc/dashboard.php` nav). Migration runs on first request.
 2. Leave `partnerships_arbiter_mode = shadow`; review `partner_arbiter_shadow_block` audit rows and
@@ -236,14 +243,64 @@ now returns `program`, `program_label`, `title`, `views`, `terms_pending`, `orga
 `tests/e2e/partnerships.spec.ts` (public pages, application → approval, affiliate dashboard); the seed
 script now also creates `pw_affiliate` / `pw-affiliate-pass`.
 
+## Partner and referral notifications (lnkup-communications, flag `flow_partners`, off by default)
+
+Sent through the existing Communications engine (consent, unsubscribe, dedupe, quiet hours, audit),
+never by the partnership code directly. Details: `wp-content/plugins/lnkup-communications/README.md`.
+
+| Message | To | Channels | Re-checked at send time |
+|---|---|---|---|
+| Application approved | new partner | email, inbox, push | account active |
+| Referral registered | partner | email, inbox, push | referral winning (not superseded or conflicted) |
+| Referral first event / first paid booking | partner | email, inbox, push | referral winning |
+| Commission recorded (15-minute delay) | partner | email, inbox, push (no amount) | reward pending/approved, net > 0, referral winning |
+| Commission approved | partner | email, inbox, push (no amount) | reward still approved |
+| Payout recorded (grouped per day) | partner | email, inbox, push | a reward was marked paid that day |
+| Lead registered / progressed / closed | assigned partner | email, inbox, push | lead still assigned to them |
+| Invite joined | vendor/organizer referrer | inbox, email, push | referral winning |
+| Referral credit added (grouped per day) | vendor/organizer referrer | inbox, email | live (unreversed) credit that day |
+| New partner application / partner review open | LNKup admins | email | still pending / still open |
+
+Applicant emails (received, more information needed, declined) come from lnkup-marketplace's
+mailer because applicants have no account; suppressed addresses are skipped and every outcome is
+audited. New core hooks: `lnkup_partner_referral_attributed`, `lnkup_partner_referral_milestone`
+(fires once, on the conditional first write), `lnkup_org_lead_stage_changed`, `lnkup_org_lead_outcome_changed`.
+
+Tests: `scripts/e2e/php/comms-partners-test.php` (part of `run-comms-php.ps1`).
+
+## Partner home in the mobile app (Expo)
+
+A third home next to vendor and organizer, for City Connectors, affiliates and strategic partner
+contacts. It reuses the existing `lnkup/v1/connector/*` routes; no new server routes were added.
+
+- **Sign-in.** `LNKup_Auth_REST::user_may_use_mobile()` admits `lnkup_connector` / `lnkup_partner`
+  users only while `LNKup_Roles::is_connector()` is true (active account). Suspended or pending
+  accounts still get the "not set up" error.
+- **Home resolution** (`lib/auth/roles.ts`). Partner-only accounts open `/(partner)`. Multi-role accounts
+  use the saved home preference, else organizer, then vendor, then partner. Every More screen shows
+  "Switch to …" rows for the other homes (`components/workspace-switch-group.tsx`).
+- **Tabs** (`app/(partner)/`):
+  - Home: referral code, share links, terms summary, referral counts, earnings snapshot.
+  - Referrals: organizers and vendors, with their milestones.
+  - Leads: list plus a submit sheet; same rules and daily limit as the web.
+  - Earnings: balances and ledger.
+  - More: inbox, notification settings, web resources, switch, sign out.
+  - Data comes from `lib/api/partner.ts`, which reshapes the server's figures without recalculating them and has demo-mode mocks.
+- **Money display.** Approved, pending (hold plus review) and paid are shown separately. Estimates are
+  labeled and never added to a payable figure. No rate is quoted while terms are pending.
+- **Navigation safety.** `/(partner)/*` is in the pending-destination allowlist with a `partner` scope,
+  so vendor or organizer-only accounts can't open partner screens from a push, and partners can't open
+  vendor or organizer screens.
+- **Tests.** `lnk-up-marketplace-mobile/__tests__/partner-home.test.ts`; mobile sign-in gate in
+  `partnerships-programs-test.php`; deep-link allowlist in `comms-security-test.php`.
+
 ## M. Remaining (not built)
 
 - Enterprise / network partners (registry slot stays disabled); partner self-service editing of organization records.
 - Stage 7 payout rail: partners are paid manually; no Stripe transfers. Paying affiliates/connectors
   through Stripe Connect needs a recipient-account, KYC and tax (1099) review first — **blocked on compliance/tax review**.
-- City Connector / affiliate mobile screens (Expo) — not built; REST routes are ready for them.
-- Partner notifications (application received/approved, commission earned) — hooks exist
-  (`lnkup_partner_application_submitted`, `lnkup_partner_application_transitioned`, `lnkup_partner_commission_*`); no templates yet.
+- Mobile: Content Studio, rank roadmap, onboarding steps and the resource library are web only (linked from Partner More).
+- Partner application from inside the app (applicants still apply on the web pages).
 - Campaigns, partner resource library expansion, geographic opportunity analytics, Communications templates.
 - Tour-level reporting: attribution is per payment, so tours never double count, but no tour rollup view exists yet.
 - Rank bonuses are still decided by `LNKup_Connector_Ranks` and are not gated by the arbiter.

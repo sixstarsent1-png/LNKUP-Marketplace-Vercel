@@ -1429,6 +1429,34 @@
     return html + '</ul></section>';
   }
 
+  function renderSupply(data) {
+    data = data || {};
+    var items = data.items || [];
+    var signals = { recruit_organizers: 'Needs organizers', recruit_vendors: 'Needs vendors', balanced: 'Balanced', insufficient_data: 'Not enough data yet' };
+    var html = '<h3>Vendor supply in your cities</h3>' +
+      '<p class="lnkup-muted">Active LNKup vendors who serve each city and the open booths there' + (data.snapshot_date ? ' (as of ' + escapeHtml(data.snapshot_date) + ')' : '') + '. Cities with many vendors and few booths are the best places to bring new organizers.</p>';
+    if (!items.length) {
+      return html + '<div class="lnkup-empty-state lnkup-empty-state--compact"><p>No supply numbers for your cities yet.</p><p class="lnkup-muted">They appear after the next daily update once vendors or events exist there.</p></div>';
+    }
+    html += '<ul class="lnkup-connector-steps">';
+    items.forEach(function (c) {
+      html += '<li><strong>' + escapeHtml(c.label) + ':</strong> ' + escapeHtml(c.vendors_active) + ' active vendors · ' + escapeHtml(c.open_slots) + ' open booths · ' + escapeHtml(signals[c.signal] || c.signal) + '</li>';
+    });
+    return html + '</ul>';
+  }
+
+  function loadSupply(panel) {
+    var box = panel.querySelector('[data-testid="lnkup-connector-supply"]');
+    if (!box) {
+      return;
+    }
+    safeFetch('/connector/supply').then(function (data) {
+      box.innerHTML = renderSupply(data);
+    }).catch(function () {
+      box.innerHTML = '<h3>Vendor supply in your cities</h3><p class="lnkup-muted">Vendor supply numbers are not available right now. Try again later.</p>';
+    });
+  }
+
   function bindLeads(panel) {
     var form = panel.querySelector('[data-testid="lnkup-connector-lead-form"]');
     if (form) {
@@ -2105,7 +2133,9 @@
       });
     } else if (view === 'cities') {
       promise = safeFetch('/connector/territories').then(function (data) {
-        panel.innerHTML = '<div class="lnkup-connector-panel">' + renderCities(data) + '</div>';
+        panel.innerHTML = '<div class="lnkup-connector-panel">' + renderCities(data) +
+          '<section class="lnkup-connector-card" data-testid="lnkup-connector-supply"><h3>Vendor supply in your cities</h3><p class="lnkup-muted">Loading…</p></section></div>';
+        loadSupply(panel);
       });
     } else if (view === 'earnings') {
       promise = safeFetch('/connector/earnings').then(function (data) {

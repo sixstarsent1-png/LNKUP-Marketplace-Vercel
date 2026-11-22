@@ -23,7 +23,8 @@ import { fetchVendorProfileEdit, type VendorProfileEdit } from "@/lib/api/vendor
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import { useAuth } from "@/lib/auth/auth-context"
 import { showToast } from "@/lib/feedback/feedback"
-import { useSignOut, useSwitchRole } from "@/lib/hooks/use-account-actions"
+import { useSignOut } from "@/lib/hooks/use-account-actions"
+import { WorkspaceSwitchGroup } from "@/components/workspace-switch-group"
 import { InlineBanner } from "@/components/ui/banner"
 import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
@@ -133,9 +134,8 @@ function initials(name: string): string {
 }
 
 export default function VendorMoreScreen() {
-  const { session, auth, isOrganizer } = useAuth()
+  const { session, auth } = useAuth()
   const [signOut, signingOut] = useSignOut()
-  const [switchRole, switching] = useSwitchRole()
   const [refreshing, setRefreshing] = useState(false)
   const [loadError, setLoadError] = useState<AppErrorShape | null>(null)
   const [nextPass, setNextPass] = useState<VendorRequest | null>(null)
@@ -274,17 +274,7 @@ export default function VendorMoreScreen() {
         </Surface>
       ) : null}
 
-      {isOrganizer ? (
-        <ListGroup title="Workspace">
-          <ListRow
-            icon="swap-horizontal-outline"
-            iconTone="accent"
-            title="Switch to Organizer"
-            meta={switching ? "Switching…" : "Manage your events and vendors"}
-            onPress={() => void switchRole("organizer")}
-          />
-        </ListGroup>
-      ) : null}
+      <WorkspaceSwitchGroup current="vendor" />
 
       {SECTIONS.map((section) => (
         <ListGroup key={section.title} title={section.title}>

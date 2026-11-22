@@ -89,17 +89,21 @@
 			button.disabled = true;
 			msg.textContent = 'Saving…';
 			const values = {};
-			['public_name', 'city', 'state', 'website', 'bio'].forEach((k) => {
-				values[k] = (form.elements[k] && form.elements[k].value) || '';
+			['public_name', 'city', 'state', 'website', 'bio', 'instagram', 'tiktok', 'service_cities', 'category'].forEach((k) => {
+				if (form.elements[k]) {
+					values[k] = form.elements[k].value || '';
+				}
 			});
 			const saved = await fetchLNKupJson('/organizer/profile', { method: 'POST', body: values });
 			let error = saved.success ? '' : saved.error;
-			const logo = form.elements.logo && form.elements.logo.files && form.elements.logo.files[0];
-			if (!error && logo) {
-				const data = new FormData();
-				data.append('file', logo);
-				const up = await fetchLNKupJson('/organizer/profile/logo', { method: 'POST', body: data });
-				error = up.success ? '' : up.error;
+			for (const [field, path] of [['logo', '/organizer/profile/logo'], ['cover', '/organizer/profile/cover']]) {
+				const file = form.elements[field] && form.elements[field].files && form.elements[field].files[0];
+				if (!error && file) {
+					const data = new FormData();
+					data.append('file', file);
+					const up = await fetchLNKupJson(path, { method: 'POST', body: data });
+					error = up.success ? '' : up.error;
+				}
 			}
 			button.disabled = false;
 			msg.textContent = error ? "We couldn't save your organization. " + error : 'Saved.';
@@ -191,4 +195,130 @@
 	}
 
 	loadSetups();
+
+	// ------------------------------------------------------------------ Guided setup (v2).
+
+	if (root.dataset.onboardingV2 !== '1') {
+		return;
+	}
+
+	function saveOnboarding(changes) {
+		return fetchLNKupJson('/organizer/onboarding', { method: 'PATCH', body: changes });
+	}
+
+	function applyFlow(flow) {
+		if (!flow || !flow.steps) {
+			return;
+		}
+		flow.steps.forEach((step) => {
+			if (step.key === 'first_event' && step.status !== 'complete') {
+				const li = root.querySelector('[data-stage="first_event"]');
+				const link = li && li.querySelector('.lnkup-start__actions a.lnkup-btn');
+				const title = li && li.querySelector('h3');
+				if (link && step.cta_url) {
+					link.href = step.cta_url;
+				}
+				if (title && step.title) {
+					title.textContent = step.title;
+				}
+			}
+			if (step.key === 'format') {
+				const li = root.querySelector('[data-stage="format"]');
+				const badge = li && li.querySelector('.lnkup-start__status');
+				if (li) {
+					li.className = 'lnkup-start__stage is-' + (step.status === 'complete' ? 'complete' : 'not_started');
+				}
+				if (badge) {
+					badge.textContent = step.status === 'complete' ? 'Done' : step.skipped ? 'Skipped' : 'To do';
+				}
+			}
+		});
+	}
+
+	const formatsForm = root.querySelector('[data-start-formats]');
+	if (formatsForm) {
+		formatsForm.addEventListener('change', (event) => {
+			const label = event.target.closest('.lnkup-start__format');
+			if (label) {
+				label.classList.toggle('is-selected', event.target.checked);
+			}
+		});
+		formatsForm.addEventListener('submit', async (event) => {
+			event.preventDefault();
+			const msg = formatsForm.querySelector('.lnkup-start__msg');
+			const formats = Array.from(formatsForm.querySelectorAll('input[name="formats"]:checked')).map((input) => input.value);
+			if (!formats.length) {
+				msg.textContent = 'Pick at least one, or skip for now.';
+				msg.classList.add('is-error');
+				return;
+			}
+			const button = formatsForm.querySelector('button[type="submit"]');
+			button.disabled = true;
+			msg.textContent = 'Saving…';
+			const res = await saveOnboarding({ formats: formats, current_step: 'first_event' });
+			button.disabled = false;
+			msg.classList.toggle('is-error', !res.success);
+			if (!res.success) {
+				msg.textContent = "We couldn't save that. " + res.error;
+				return;
+			}
+			msg.textContent = 'Saved. Your next step is ready below.';
+			applyFlow(res.data && res.data.data);
+			const next = root.querySelector('[data-stage="first_event"]');
+			if (next) {
+				next.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			}
+		});
+	}
+
+	root.querySelectorAll('[data-start-skip]').forEach((button) => {
+		button.addEventListener('click', async () => {
+			const msg = button.parentNode.querySelector('.lnkup-start__msg');
+			button.disabled = true;
+			const res = await saveOnboarding({ skip: button.getAttribute('data-start-skip') });
+			button.disabled = false;
+			if (msg) {
+				msg.textContent = res.success ? 'Okay — you can come back to this anytime.' : "We couldn't save that. " + res.error;
+				msg.classList.toggle('is-error', !res.success);
+			}
+			if (res.success) {
+				applyFlow(res.data && res.data.data);
+			}
+		});
+	});
+
+	const payoutButton = root.querySelector('[data-start-payout]');
+	if (payoutButton) {
+		payoutButton.addEventListener('click', async () => {
+			const msg = payoutButton.parentNode.querySelector('.lnkup-start__msg');
+			const label = payoutButton.textContent;
+			payoutButton.disabled = true;
+			payoutButton.textContent = 'Opening payout setup…';
+			const res = await fetchLNKupJson('/financial/connect/onboarding-link', { method: 'POST', body: {} });
+			if (res.success && res.data && res.data.url) {
+				window.location.href = res.data.url;
+				return;
+			}
+			payoutButton.disabled = false;
+			payoutButton.textContent = label;
+			if (msg) {
+				msg.textContent = (res.data && res.data.message) || "We couldn't open payout setup. Try again from Money.";
+				msg.classList.add('is-error');
+			}
+		});
+	}
+
+	const focus = root.dataset.focusStep;
+	if (focus) {
+		const target = root.querySelector('[data-stage="' + (focus === 'share' ? 'publication' : focus) + '"]');
+		if (target) {
+			target.classList.add('is-focused');
+			target.scrollIntoView({ block: 'start' });
+			const field = target.querySelector('input:not([type="hidden"]), select, textarea, button');
+			if (field) {
+				field.focus({ preventScroll: true });
+			}
+		}
+		saveOnboarding({ current_step: focus });
+	}
 })();

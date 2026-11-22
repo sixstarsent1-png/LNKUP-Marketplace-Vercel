@@ -352,6 +352,45 @@
 	align-items: baseline;
 }
 
+.lnkup-review__rubric-rows {
+	display: grid;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.lnkup-review__rubric-row {
+	display: grid;
+	grid-template-columns: 1fr auto auto;
+	gap: 8px;
+	align-items: center;
+}
+
+.lnkup-review__rubric-row input,
+.lnkup-review__rubric-row select {
+	min-height: 40px;
+	border: 1px solid #d4d4d4;
+	border-radius: 10px;
+	padding: 8px 10px;
+	font: inherit;
+}
+
+.lnkup-review__waitlist li {
+	padding: 6px 8px;
+	border-radius: 8px;
+}
+
+.lnkup-review__waitlist li.is-current {
+	background: #f3fbd6;
+	font-weight: 600;
+}
+
+.lnkup-review__doc {
+	display: grid;
+	gap: 4px;
+	padding: 8px 0;
+	border-bottom: 1px solid #f0f0f0;
+}
+
 .lnkup-review__inline {
 	display: flex;
 	gap: 8px;
