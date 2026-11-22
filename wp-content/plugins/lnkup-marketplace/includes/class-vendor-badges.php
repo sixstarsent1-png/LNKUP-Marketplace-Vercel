@@ -79,36 +79,62 @@ class LNKup_Vendor_Badges {
 			return false;
 		}
 		$table = LNKup_Reputation_Tables::badge_table();
-		$exists = $wpdb->get_var(
+		// One row per (profile, badge) by unique key, revoked or not.
+		$existing = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT id FROM {$table} WHERE vendor_profile_id = %d AND badge_slug = %s AND revoked_at IS NULL",
+				"SELECT id, revoked_at, revoked_by FROM {$table} WHERE vendor_profile_id = %d AND badge_slug = %s",
 				absint( $profile_id ),
 				$slug
+			),
+			ARRAY_A
+		);
+		if ( $existing ) {
+			if ( null === $existing['revoked_at'] ) {
+				return (int) $existing['id'];
+			}
+			// An admin's revocation stands; an automatic one is lifted once the vendor qualifies again.
+			$revoker = (int) $existing['revoked_by'];
+			if ( $revoker > 0 && LNKup_Capabilities::user_has_manage_all( $revoker ) ) {
+				return false;
+			}
+			$wpdb->update(
+				$table,
+				array(
+					'revoked_at' => null,
+					'revoked_by' => 0,
+					'source'     => sanitize_key( $source ),
+					'earned_at'  => current_time( 'mysql' ),
+					'expires_at' => $expires_at,
+				),
+				array( 'id' => (int) $existing['id'] )
+			);
+			LNKup_Vendor_Reputation::log_activity(
+				'badge_awarded',
+				$profile_id,
+				array( 'payload' => array( 'badge' => $slug, 'source' => $source, 'reinstated' => true ) )
+			);
+			return (int) $existing['id'];
+		}
+		// IGNORE: a concurrent award may have inserted the same badge since the lookup.
+		$inserted = $wpdb->query(
+			$wpdb->prepare(
+				"INSERT IGNORE INTO {$table} (vendor_profile_id, badge_slug, source, earned_at, expires_at, revoked_at, revoked_by, meta) VALUES (%d, %s, %s, %s, " . ( null === $expires_at ? 'NULL' : '%s' ) . ', NULL, 0, NULL)',
+				array_merge(
+					array( absint( $profile_id ), $slug, sanitize_key( $source ), current_time( 'mysql' ) ),
+					null === $expires_at ? array() : array( (string) $expires_at )
+				)
 			)
 		);
-		if ( $exists ) {
-			return (int) $exists;
+		if ( 1 !== (int) $inserted ) {
+			return (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE vendor_profile_id = %d AND badge_slug = %s", absint( $profile_id ), $slug ) );
 		}
-		$wpdb->insert(
-			$table,
-			array(
-				'vendor_profile_id' => absint( $profile_id ),
-				'badge_slug'        => $slug,
-				'source'            => sanitize_key( $source ),
-				'earned_at'         => current_time( 'mysql' ),
-				'expires_at'        => $expires_at,
-				'revoked_at'        => null,
-				'revoked_by'        => 0,
-				'meta'              => null,
-			),
-			array( '%d', '%s', '%s', '%s', '%s', '%s', '%d', '%s' )
-		);
+		$badge_id = (int) $wpdb->insert_id;
 		LNKup_Vendor_Reputation::log_activity(
 			'badge_awarded',
 			$profile_id,
 			array( 'payload' => array( 'badge' => $slug, 'source' => $source ) )
 		);
-		return (int) $wpdb->insert_id;
+		return $badge_id;
 	}
 
 	/**

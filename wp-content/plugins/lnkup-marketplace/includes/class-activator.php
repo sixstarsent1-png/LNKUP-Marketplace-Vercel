@@ -109,7 +109,8 @@ class LNKup_Activator {
 	 * Run deferred upgrade work in admin (index rebuild, backfills).
 	 */
 	public static function maybe_run_deferred_upgrade() {
-		if ( ! is_admin() ) {
+		// Heartbeat and other background requests would run the same rebuild in parallel.
+		if ( ! is_admin() || wp_doing_ajax() || wp_doing_cron() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
 			return;
 		}
 		$pending = get_option( 'lnkup_needs_deferred_upgrade' );
@@ -117,6 +118,20 @@ class LNKup_Activator {
 			return;
 		}
 		if ( ! current_user_can( 'manage_options' ) && ! LNKup_Capabilities::user_has_manage_all() ) {
+			return;
+		}
+
+		// A second admin page load while the upgrade runs skips it instead of running it again.
+		LNKup_Financial_Service::with_lock( 'deferred_upgrade', array( __CLASS__, 'run_deferred_upgrade_locked' ), 0 );
+	}
+
+	/**
+	 * Deferred upgrade body; caller holds the deferred_upgrade lock.
+	 */
+	public static function run_deferred_upgrade_locked() {
+		wp_cache_delete( 'lnkup_needs_deferred_upgrade', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		if ( get_option( 'lnkup_needs_deferred_upgrade' ) !== LNKUP_VERSION ) {
 			return;
 		}
 
