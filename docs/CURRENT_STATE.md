@@ -352,7 +352,7 @@ Full findings and verification status: [VENDOR_AUDIT_MATRIX.md](VENDOR_AUDIT_MAT
 ### v12.18.86 (Invite name and one payment)
 
 - Overview invites use the event post title, date, and city. If the saved notice does not match an invite, sent and opened invites for that vendor are shown instead.
-- Vendor Wallet and organizer Money list one row per event. The amount is the overall total. Installments for that event add up.
+- Vendor Wallet and organizer Money list one row per event. The amount is the overall total. Installments for that event add up. (Superseded in 12.22.0: lists are one row per booking.)
 
 ### v12.18.85 (Invite name and Find filters)
 
@@ -1195,9 +1195,9 @@ Organizer approves → payment_required (Payment CPT created)
 Vendor pays (Stripe or simulation) → paid → packet unlocked
 ```
 
-**Application statuses:** `submitted`, `under_review`, `approved`, `payment_required`, `paid`, `waitlisted`, `rejected`, `completed`, `cancelled`
+**Application statuses:** `draft`, `submitted`, `under_review`, `info_requested`, `approved`, `payment_required`, `paid`, `waitlisted`, `rejected`, `completed`, `cancelled`. Allowed moves are `LNKup_Applications::TRANSITIONS`; `paid` is only set from a payment the Financial Service confirmed and is not reachable from `rejected` or `cancelled`.
 
-**Payment statuses:** `pending`, `paid`, `failed`, `refunded`, `disputed`
+**Payment statuses:** `pending`, `processing`, `partially_paid`, `paid`, `failed`, `refunded`, `partially_refunded`, `disputed`
 
 **Document types:** `certificate_of_insurance`, `health_permit`, `business_license`, `w9`, `sales_tax_certificate`, `other`
 
@@ -1298,7 +1298,6 @@ Hardening across bootstrap, meta registration, shortcodes, activator, and admin 
 These exist in the Next.js reference but have no WordPress equivalent yet (or are placeholder-only):
 
 - Admin analytics dashboard (beyond basic LNKup overview stats and Financial Center)
-- Live Stripe Connect onboarding (payout abstraction + manual mark-paid exists)
 - Vendor reviews system (reputation reviews exist; separate from payment disputes)
 - Event import (Eventbrite / Posh / RSS) — **Built** for organizer Create Event + admin URL import; see [PHASE_EXTERNAL_EVENT_IMPORT.md](PHASE_EXTERNAL_EVENT_IMPORT.md)
 - Attendee ticketing
