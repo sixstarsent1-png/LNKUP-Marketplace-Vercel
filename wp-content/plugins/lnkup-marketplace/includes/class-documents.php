@@ -24,6 +24,80 @@ class LNKup_Documents {
 		add_filter( 'ajax_query_attachments_args', array( __CLASS__, 'exclude_private_from_media_rest' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'block_private_attachment_page' ) );
 		add_action( 'admin_init', array( __CLASS__, 'maybe_backfill_private_flags' ) );
+		add_action( self::EXPIRY_CRON, array( __CLASS__, 'mark_expired_documents' ) );
+		add_action( 'updated_post_meta', array( __CLASS__, 'on_expiration_date_updated' ), 10, 4 );
+		add_action( 'init', array( __CLASS__, 'schedule_expiry_cron' ), 20 );
+	}
+
+	const EXPIRY_CRON       = 'lnkup_documents_expire';
+	const EXPIRED_AT_META   = '_lnkup_expired_at';
+	const EXPIRY_BATCH_SIZE = 200;
+
+	/**
+	 * Whether an expiration date (Y-m-d or any strtotime-able value) is before today.
+	 *
+	 * @param string $expires Expiration date meta value.
+	 */
+	public static function is_expired( $expires ) {
+		$expires = trim( (string) $expires );
+		if ( '' === $expires ) {
+			return false;
+		}
+		$ts = strtotime( $expires );
+		return false !== $ts && $ts < strtotime( 'today' );
+	}
+
+	public static function schedule_expiry_cron() {
+		if ( ! wp_next_scheduled( self::EXPIRY_CRON ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::EXPIRY_CRON );
+		}
+	}
+
+	/**
+	 * Daily: stamp approved documents whose expiration date has passed and announce them once.
+	 *
+	 * The verification status is left as reviewed; expiry is derived from the date everywhere it
+	 * is read, so a renewed date un-expires the document without another review.
+	 */
+	public static function mark_expired_documents() {
+		$docs = get_posts(
+			array(
+				'post_type'      => 'lnkup_document',
+				'post_status'    => 'any',
+				'posts_per_page' => self::EXPIRY_BATCH_SIZE,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_verification_status', 'value' => 'approved' ),
+					array( 'key' => '_lnkup_expiration_date', 'value' => gmdate( 'Y-m-d', strtotime( 'today' ) ), 'compare' => '<', 'type' => 'DATE' ),
+					array( 'key' => '_lnkup_expiration_date', 'value' => '', 'compare' => '!=' ),
+					array( 'key' => self::EXPIRED_AT_META, 'compare' => 'NOT EXISTS' ),
+				),
+			)
+		);
+		foreach ( $docs as $doc_id ) {
+			if ( ! self::is_expired( (string) get_post_meta( $doc_id, '_lnkup_expiration_date', true ) ) ) {
+				continue;
+			}
+			update_post_meta( $doc_id, self::EXPIRED_AT_META, current_time( 'mysql' ) );
+			do_action( 'lnkup_document_expired', (int) $doc_id, (int) get_post_meta( $doc_id, '_lnkup_vendor_user_id', true ) );
+		}
+		return count( $docs );
+	}
+
+	/**
+	 * A new expiration date re-arms the expiry notice.
+	 *
+	 * @param int    $meta_id    Meta ID.
+	 * @param int    $object_id  Post ID.
+	 * @param string $meta_key   Meta key.
+	 * @param mixed  $meta_value New value.
+	 */
+	public static function on_expiration_date_updated( $meta_id, $object_id, $meta_key, $meta_value ) {
+		unset( $meta_id );
+		if ( '_lnkup_expiration_date' === $meta_key && 'lnkup_document' === get_post_type( $object_id ) && ! self::is_expired( (string) $meta_value ) ) {
+			delete_post_meta( $object_id, self::EXPIRED_AT_META );
+		}
 	}
 
 	/**
@@ -319,7 +393,10 @@ class LNKup_Documents {
 				$ver_status = get_post_meta( $doc->ID, '_lnkup_verification_status', true );
 				$expires    = get_post_meta( $doc->ID, '_lnkup_expiration_date', true );
 				if ( 'approved' === $ver_status ) {
-					if ( $expires && strtotime( $expires ) <= strtotime( '+30 days' ) ) {
+					if ( self::is_expired( (string) $expires ) ) {
+						$status = 'expired';
+						$attention++;
+					} elseif ( $expires && strtotime( $expires ) <= strtotime( '+30 days' ) ) {
 						$status = 'expiring';
 						$attention++;
 					} else {
@@ -385,6 +462,21 @@ class LNKup_Documents {
 		$file          = get_attached_file( $attachment_id );
 		if ( ! $file || ! file_exists( $file ) ) {
 			wp_die( esc_html__( 'File not found.', 'lnkup-marketplace' ), 404 );
+		}
+
+		if ( class_exists( 'LNKup_Audit_Log' ) ) {
+			LNKup_Audit_Log::log(
+				'document_downloaded',
+				'document',
+				$doc_id,
+				array(
+					'new' => array(
+						'channel'        => 'ajax',
+						'vendor_user_id' => $vendor_id,
+						'document_type'  => (string) get_post_meta( $doc_id, '_lnkup_document_type', true ),
+					),
+				)
+			);
 		}
 
 		$mime = get_post_mime_type( $attachment_id );

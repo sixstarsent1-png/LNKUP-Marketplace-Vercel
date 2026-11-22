@@ -620,23 +620,45 @@ class LNKup_Organizer_Recruit_Referrals {
 			return;
 		}
 
-		$platform_fee = self::resolve_platform_fee_for_payment( $payment_id );
-		if ( $platform_fee <= 0 ) {
-			return;
+		self::reward_payment_for_referral( $referral, $payment_id );
+	}
+
+	/**
+	 * Calculate and issue the fee-share reward for one referral + payment (idempotent).
+	 *
+	 * @param array<string, mixed> $referral Referral row.
+	 * @param int                  $payment_id Payment ID.
+	 * @return int Reward ID, or 0 when nothing was issued.
+	 */
+	public static function reward_payment_for_referral( array $referral, int $payment_id ): int {
+		if ( ! self::is_enabled() ) {
+			return 0;
+		}
+		$rule = class_exists( 'LNKup_Commission_Rules' ) ? LNKup_Commission_Rules::rule_for_referral( $referral ) : null;
+		if ( $rule ) {
+			$calc         = LNKup_Commission_Rules::calculate( $rule, $payment_id );
+			$platform_fee = $calc['basis_amount'];
+			$amount       = $calc['amount'];
+		} else {
+			$platform_fee = self::resolve_platform_fee_for_payment( $payment_id );
+			$amount       = round( $platform_fee * ( self::commission_percent() / 100.0 ), 2 );
+			$calc         = array( 'rule_id' => 0, 'rule_version' => 0, 'basis' => 'platform_fee' );
+		}
+		if ( $platform_fee <= 0 || $amount <= 0 ) {
+			return 0;
+		}
+		if ( class_exists( 'LNKup_Attribution_Arbiter' ) && ! LNKup_Attribution_Arbiter::allows( (int) $referral['id'], $payment_id ) ) {
+			return 0;
 		}
 
-		$amount = round( $platform_fee * ( self::commission_percent() / 100.0 ), 2 );
-		if ( $amount <= 0 ) {
-			return;
-		}
-
-		self::issue_reward(
+		return self::issue_reward(
 			(int) $referral['referrer_user_id'],
 			(int) $referral['id'],
 			$payment_id,
-			$event_id,
+			(int) get_post_meta( $payment_id, '_lnkup_event_id', true ),
 			$amount,
-			$platform_fee
+			$platform_fee,
+			$calc
 		);
 	}
 
@@ -655,8 +677,16 @@ class LNKup_Organizer_Recruit_Referrals {
 			return round( (float) $meta, 2 );
 		}
 		$breakdown = get_post_meta( $payment_id, '_lnkup_fee_breakdown', true );
-		if ( is_array( $breakdown ) && isset( $breakdown['platform_fee'] ) ) {
-			return round( (float) $breakdown['platform_fee'], 2 );
+		if ( is_string( $breakdown ) && '' !== $breakdown ) {
+			$breakdown = json_decode( $breakdown, true );
+		}
+		if ( is_array( $breakdown ) ) {
+			if ( isset( $breakdown['lnkup_platform_fee'] ) ) {
+				return round( (float) $breakdown['lnkup_platform_fee'], 2 );
+			}
+			if ( isset( $breakdown['platform_fee'] ) ) {
+				return round( (float) $breakdown['platform_fee'], 2 );
+			}
 		}
 		return 0.0;
 	}
@@ -670,8 +700,9 @@ class LNKup_Organizer_Recruit_Referrals {
 	 * @param int   $event_id     Event.
 	 * @param float $amount       Credit amount.
 	 * @param float $platform_fee Base platform fee.
+	 * @param array $calc         Optional rule stamp (rule_id, rule_version, basis).
 	 */
-	public static function issue_reward( int $referrer_id, int $referral_id, int $payment_id, int $event_id, float $amount, float $platform_fee ): int {
+	public static function issue_reward( int $referrer_id, int $referral_id, int $payment_id, int $event_id, float $amount, float $platform_fee, array $calc = array() ): int {
 		global $wpdb;
 		$table = LNKup_Treasury_Tables::referral_rewards_table();
 		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
@@ -691,23 +722,30 @@ class LNKup_Organizer_Recruit_Referrals {
 		}
 
 		$now = current_time( 'mysql' );
-		$wpdb->insert(
-			$table,
-			array(
-				'referral_id'   => $referral_id,
-				'user_id'       => $referrer_id,
-				'event_type'    => self::EVENT_TYPE,
-				'amount'        => $amount,
-				'status'        => 'available',
-				'reward_status' => 'paid',
-				'payment_id'    => $payment_id,
-				'event_id'      => $event_id,
-				'program'       => self::PROGRAM,
-				'created_at'    => $now,
-				'available_at'  => $now,
-				'paid_at'       => $now,
-			)
+		$row = array(
+			'referral_id'   => $referral_id,
+			'user_id'       => $referrer_id,
+			'event_type'    => self::EVENT_TYPE,
+			'amount'        => $amount,
+			'status'        => 'available',
+			'reward_status' => 'paid',
+			'payment_id'    => $payment_id,
+			'event_id'      => $event_id,
+			'program'       => self::PROGRAM,
+			'created_at'    => $now,
+			'available_at'  => $now,
+			'paid_at'       => $now,
 		);
+		if ( class_exists( 'LNKup_Partner_Tables' ) && LNKup_Partner_Tables::ready() ) {
+			$row += array(
+				'rule_id'         => (int) ( $calc['rule_id'] ?? 0 ),
+				'rule_version'    => (int) ( $calc['rule_version'] ?? 0 ),
+				'basis'           => (string) ( $calc['basis'] ?? 'platform_fee' ),
+				'basis_amount'    => round( $platform_fee, 2 ),
+				'idempotency_key' => LNKup_Partner_Tables::reward_key( self::PROGRAM, $referrer_id, $referral_id, $payment_id, self::EVENT_TYPE ),
+			);
+		}
+		$wpdb->insert( $table, $row );
 		$reward_id = (int) $wpdb->insert_id;
 		if ( ! $reward_id ) {
 			return 0;
@@ -740,6 +778,8 @@ class LNKup_Organizer_Recruit_Referrals {
 				$referral_id
 			)
 		);
+
+		do_action( 'lnkup_partner_commission_recorded', $reward_id, self::PROGRAM, $referral_id, $payment_id );
 
 		return $reward_id;
 	}

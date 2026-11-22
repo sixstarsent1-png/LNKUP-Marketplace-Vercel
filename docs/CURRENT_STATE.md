@@ -6,8 +6,102 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
-**Plugin version:** 12.22.0  
-**Theme version:** 1.6.0
+**Plugin version:** 12.29.0  
+**Theme version:** 1.6.1
+
+### v12.29.0 (Organizer Acquisition wrap-up + Phase 4 Onboarding & Activation)
+
+Architecture: SYSTEM_OVERVIEW §9.21. Stripe end-to-end check: [finance/STRIPE_TEST_MODE_RUNBOOK.md](finance/STRIPE_TEST_MODE_RUNBOOK.md).
+
+- **Refunded-fee backfill:** reconciliation issue `refunded_fee_not_recorded`, repair item `sync_refunded_fee` (reporting only, token-gated, audited); Reconciliation page lists every organizer with refunded bookings still to fix.
+- **Stripe test-mode runbook** + read-only `scripts/e2e/php/org-growth-stripe-check.php <payment_id> paid|partial|full` (refuses live keys).
+- **Organizer Growth → Settings readiness panel:** postal address, house IDs, Communications loaded, daily cron, fee backfill, outreach flag.
+- **Activation model** (`LNKup_Organizer_Activation`, `GET organizer/activation`) shared by the launch checklist (same shape; free booths and multi-event fixed), the new **Get started** view, Communications next-step nudges, the Expo home card and Organizer Growth.
+- **Share & embed:** publish returns the direct `?apply=` link; public card route + `public/js/embed.js` Apply button.
+- **Saved event setups** (`organizer/setups`, `setup_id` on create/publish) copy booth types, prices, requirements and application questions; `duplicate_event()` now copies questions.
+- **Vendor import consent:** invites need a consent basis (stored on the job); `past_applicants` preset.
+- **Tests:** 25 PHP suites pass (new: `organizer-activation-test` 69, `financial-fee-backfill-test` 16), Playwright `organizer-start.spec.ts` 4/4 and `organizer-growth.spec.ts` 7/7, mobile Jest 143/143, `tsc` clean.
+
+### Trust, Safety & Compliance OS — Stages 1–3 (Trust schema v1)
+
+Audit: [TRUST_SAFETY_AUDIT.md](TRUST_SAFETY_AUDIT.md) · Roadmap, flags and rollback: [TRUST_SAFETY_ROADMAP.md](TRUST_SAFETY_ROADMAP.md).
+
+- **Claims:** external event claim links are bound to the invited email/domain; second claimants get `claim_disputed` + a case, never the listing; rate limits; admin approve/reject.
+- **Foundation:** hash-chained `wp_lnkup_audit_log` (daily integrity check, document downloads logged, financial audit IPs hashed); `wp_lnkup_trust_cases` queue fed by fraud flags, chargebacks and rejected payment confirmations; wp-admin **LNKup → Trust & Safety**.
+- **Organizers:** verification status machine + domain control (email code / DNS TXT); separate payout / domain / LNKup-review indicators; organizer **Team & Trust** view with organization teams (flag `trust_org_teams`).
+- **Listings:** `_lnkup_authenticity_status`; flag `trust_publish_gate` enforced in discovery, apply and checkout; payout-account swaps and organizer changes open cases; duplicate scan opens cases only.
+- **Tests:** `scripts/e2e/php/trust-safety-test.php` (65 assertions) and `trust-admin-render-check.php` (11) pass on wp-env; `tests/e2e/trust-safety.spec.ts` 9 passed / 1 skipped (no admin user seeded); `organizer-security.spec.ts` passes with 4 new cross-tenant checks.
+
+### v12.27.0 + lnkup-communications 1.1.0 (Matching alerts — Phase 6)
+
+Reference: [MATCHING_DISCOVERY.md](MATCHING_DISCOVERY.md) §9.
+
+- **Match-driven alerts through Communications:** match alerts now require the engine's cached recommendation and are re-checked at send time; new triggers `v_tour_match` (one grouped message per tour), `v_weekly_matches`, `v_saved_search_match`, `v_saved_deadline`, `v_invited_to_apply`, `o_open_spots`, `o_new_matching_vendors`; new flags `flow_discovery_tours`, `flow_discovery_weekly`, `flow_recruitment_updates` (off by default).
+- **Core:** `first_matched_at` on match results; `LNKup_Match_Service` alert helpers; saved-search scan paged by Action Scheduler; favorite deadline reminders pass the opportunity ID so Communications can validate them.
+- **Measurement:** observed `match_alert_application` events and per-trigger counts on Marketplace Intelligence → Overview.
+- **Mobile:** tour push routing, open-spots routing, new inbox types and labels.
+- **Tests:** `matching-alerts-test.php` 36/36; comms suites and `matching-test.php` pass; Expo routing Jest 49/49; mobile typecheck clean.
+
+### v12.28.0 (Referral, Affiliate & Partnership OS — Foundation)
+
+Full audit, rules, routes, tests and rollout: [PARTNERSHIP_OS.md](PARTNERSHIP_OS.md).
+
+- **Unified model:** program registry, versioned immutable commission rules (City Connector v1 = existing 10% of booth GMV, grandfathered for every approved connector; v2 = share of LNKup fees, draft until published), rule + basis stamped on every new reward.
+- **Attribution arbiter:** earliest referral wins across programs; conflicts within 72h go to a review queue; one exclusive commission per payment (organizer side first). Ships in `shadow` mode.
+- **Ledger hardening:** hold-gated, atomic approve / mark-paid (with payout reference), hold/release, proportional connector reversals on partial refunds, one clawback review per paid reward, unique reward idempotency key.
+- **Admin:** LNKup → Partnerships & Referrals (overview, pipeline, rules, ledger + CSV, reviews, territories, settings). **Connector dashboard:** Organizer Leads (submits into Organizer Growth, duplicate-private) and My Cities.
+- **Tests:** `scripts/e2e/php/partnerships-test.php` (116 assertions), `tests/e2e/partnerships.spec.ts` (10 Chromium tests) pass on wp-env; Organizer Growth and all 14 financial PHP suites still pass.
+
+### v12.25.0 (Organizer Acquisition OS — Phases 0–3)
+
+Audit, routes, test evidence and deployment notes: [ORGANIZER_ACQUISITION_AUDIT.md](ORGANIZER_ACQUISITION_AUDIT.md). Architecture: SYSTEM_OVERVIEW §9.20.
+
+- **Money integrity (Stage 0):** vendor-referral credits only pay `program = vendor_referral`; every refund path (admin, Stripe Dashboard webhook, dispute credit) fires `lnkup_payment_refund_synced` once per increase; connector rewards/ranks and organizer-recruit rewards reverse through `LNKup_Referral_Reversals` (recruit credit clawed back proportionally, spent credit and paid connector rewards flagged once for review); `wp_lnkup_platform_fees.refunded_platform_fee` + `sum_net_platform_fees()`; lost chargebacks forfeit the fee; organizer-recruit fee fallback reads the JSON snapshot.
+- **New milestone hook:** `lnkup_event_first_live` (events are inserted published before slots exist, so `lnkup_event_published` is not a usable milestone).
+- **Organizer Growth admin** (wp-admin → LNKup → Organizer Growth, flag off by default): overview (house vs independent, net fees, funnel, sources, 12-week trend; CAC shown as unavailable), lead CRM (filters, saved views, bulk actions, CSV export), Kanban pipeline, lead drawer (activity, tasks, score explanation, account linking, merge review, known events), CSV import with dry run + rollback, settings + scoring weights.
+- **Outreach Studio:** 12 seeded templates with declared required facts + fallbacks; campaigns exclude suppressed / unverified / recently contacted / registered leads with reasons; second-admin approval above a threshold; per-campaign daily cap; signed one-click unsubscribe, `List-Unsubscribe` headers and sender postal address; manual logging for calls, DMs, contact forms and meetings; follow-up tasks with daily digest. Plain outreach campaigns now also skip suppressed addresses.
+- **Tests:** `scripts/e2e/run-org-growth-php.ps1` (184 assertions) and `tests/e2e/organizer-growth.spec.ts` (7 Playwright tests) pass on wp-env; the 13 existing financial PHP suites still pass.
+
+### lnkup-communications 1.0.0 (Communications & Engagement OS) + lnkup-marketplace seam hooks
+
+Full reference: [COMMUNICATIONS_AUDIT.md](COMMUNICATIONS_AUDIT.md), [COMMUNICATIONS_MATRIX.md](COMMUNICATIONS_MATRIX.md), `wp-content/plugins/lnkup-communications/README.md`. Every flow flag is off by default, and core keeps sending until a flow is enabled.
+
+- **New plugin `lnkup-communications`:**
+  - One engine for push (Expo tickets + receipts, `DeviceNotRegistered` cleanup), email (`wp_mail`, branded responsive HTML + plain text, RFC 8058 one-click unsubscribe) and the in-app inbox (reuses `wp_lnkup_inbox_index`).
+  - Delivery runs on bundled Action Scheduler 4.2.0, with dedupe, send-time revalidation of canonical state, cancel keys, retries with backoff, quiet hours, frequency caps, daily/weekly digests and retention purge.
+- **Flows (55 triggers):** application lifecycle; payments/refunds/disputes from verified hooks only; documents; operations; critical event cancellation; countdowns in event timezone; onboarding (new accounts only); discovery via the core match engine; organizer recruitment and retention; organizer event communications; admin campaigns; health alerts.
+- **lnkup-marketplace seam edits (additive):**
+  - `lnkup_pre_send_notification` delegation filter on every legacy send.
+  - `LNKup_Lifecycle_Hooks` meta watcher, firing `*_status_changed` for payments, events, opportunities, documents and invites.
+  - New hooks: `lnkup_refund_synced`, `lnkup_chargeback_closed`, `lnkup_connect_account_status_changed`, `lnkup_organizer_payout_status_changed`, `lnkup_checkin_recorded`, `lnkup_application_event_completed`, `lnkup_document_uploaded`, `lnkup_event_logistics_changed`.
+  - Vendor withdraw (`POST /applications/{id}/withdraw`) and organizer cancel/postpone (`POST /organizer/events/{id}/status`).
+  - Filters `lnkup_event_workspace_actions` and the theme's `lnkup_dashboard_nav_items`.
+  - Fixes: document `expiring` status (was reported as `expired`), and external-event vendor lookup now uses `_lnkup_owner_user_id`.
+- **wp-admin → LNKup → Communications:** overview, automated flows (pause/test), template editor with live preview, campaigns (segment preview, test send, confirm count, pause/cancel), delivery logs, analytics (attribution window, correlation only), settings/flags, system health.
+- **Mobile (OTA-eligible JavaScript):**
+  - Categorized, paginated inbox with server deep links and open tracking.
+  - Full notification settings screen.
+  - Contextual push pre-prompt; no longer prompts at sign-in.
+  - Android channels, next-steps cards, organizer event communications screen.
+  - **Native change still needed:** FCM `google-services.json` and a new EAS build for Android delivery.
+- **Web (Next.js):** BFF proxies `/comms/preferences` and `/comms/inbox`, with a category × channel preferences form and inbox category tabs.
+- **Tests:**
+  - 7 wp-env PHP suites (`npm run test:comms:php`).
+  - `tests/e2e/communications.spec.ts` (11 tests).
+  - Mobile Jest: 129 tests.
+  - The financial suites still pass (`financial-repair-test` failed once and passed on two reruns).
+
+### v12.24.0 (Matching & Discovery OS — Phases 1–4)
+
+Full reference: [MATCHING_DISCOVERY.md](MATCHING_DISCOVERY.md). All features behind flags (off by default); privacy fixes always on.
+
+- **Engine:** `LNKup_Match_Engine` (pure, explainable): hard eligibility first, then weighted relevance (category 30 · geography 25 · requirements 20 · preferences 10 · dates 10 · signals 5); missing data is dropped and rescaled (cold start); popularity never scored.
+- **Data:** vendor matching preferences, `lnkup_tour` CPT, derived tables `lnkup_match_*` and `lnkup_recruitment_*`; incremental recompute queue + nightly rebuild.
+- **Vendor discovery:** recommendation sections on WordPress, Next.js and Expo; Matching Preferences on all three; tour pages; Discovery radius filtering now in SQL before pagination, real distance sort, FULLTEXT search, `sort=recommended`.
+- **Organizer:** Find Vendors (public cards, reasons, shortlist, previewed batch invites with suppression reasons), recruitment pipeline, deterministic recruitment assistant, "event published" prompt, Tours & series manager.
+- **Privacy:** organizer contact/doc access only after the vendor applied or accepted an invite; discovery opt-out; invite caps; admin-only platform contact export; reliability route ownership check.
+- **Admin:** LNKup → Marketplace Intelligence (rules, category groups, data quality, why matched, job health).
+- **Fix:** vendor profile section saves no longer blank the business description.
 
 ### v12.22.0 (Financial reconciliation — ledger integrity, money contract, repair)
 

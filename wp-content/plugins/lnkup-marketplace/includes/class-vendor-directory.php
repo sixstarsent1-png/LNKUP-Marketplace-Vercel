@@ -43,15 +43,25 @@ class LNKup_Vendor_Directory {
 				'state'    => $args['state'] ?? '',
 				'category' => $args['category'] ?? '',
 				'verified' => ! empty( $args['verified'] ) ? true : '',
+				'organizer_id' => (int) $organizer_id,
 			)
 		);
 
-		$items = array();
+		$items      = array();
+		$vendor_ids = array();
 		foreach ( $query['posts'] as $post ) {
-			$profile = LNKup_Vendor_CRM_Profile::get( $post->ID, $organizer_id );
-			if ( $profile ) {
-				$items[] = lnkup_normalize_vendor_card( $profile );
+			$vendor_ids[] = (int) get_post_meta( $post->ID, '_lnkup_owner_user_id', true );
+		}
+		LNKup_Organizer_CRM::prime_relationships( (int) $organizer_id, $vendor_ids );
+		try {
+			foreach ( $query['posts'] as $post ) {
+				$profile = LNKup_Vendor_CRM_Profile::get( $post->ID, $organizer_id );
+				if ( $profile ) {
+					$items[] = lnkup_normalize_vendor_card( $profile );
+				}
 			}
+		} finally {
+			LNKup_Organizer_CRM::end_relationship_batch();
 		}
 		$items = self::sort_items( $items, $args );
 
@@ -470,6 +480,9 @@ class LNKup_Vendor_Directory {
 	 * @return string[][]
 	 */
 	public static function contact_rows_for_platform( $category = '' ) {
+		if ( ! LNKup_Capabilities::user_has_manage_all() && ! current_user_can( 'manage_options' ) ) {
+			return array();
+		}
 		$category = sanitize_text_field( (string) $category );
 		$args     = array(
 			'post_type'      => 'lnkup_vendor_profile',

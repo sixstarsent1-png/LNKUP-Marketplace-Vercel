@@ -8,7 +8,9 @@ import { useNotifications, type NotificationFilter } from "@/lib/hooks/use-notif
 import { useAuth } from "@/lib/hooks/use-auth"
 import { trackLnkupEvent } from "@/lib/analytics/track-event"
 import { PageHeader } from "@/components/marketplace/page-header"
+import { CommsInboxSection } from "@/components/notifications/comms-inbox-section"
 import { NotificationList } from "@/components/notifications/notification-list"
+import { useCommsInbox } from "@/lib/hooks/use-comms-inbox"
 import { WordPressSettingsHandoff } from "@/components/notifications/wordpress-settings-handoff"
 import { PanelContent, SkeletonList } from "@/components/marketplace/states"
 import { Button } from "@/components/ui/button"
@@ -22,6 +24,7 @@ function NotificationsContent() {
   const [filter, setFilter] = useState<NotificationFilter>("all")
   const { items, loading, error, unauthenticated, retry, markRead, markAllRead, filterItems } =
     useNotifications()
+  const commsInbox = useCommsInbox(handoffRole)
 
   const filtered = useMemo(() => filterItems(filter), [filterItems, filter])
 
@@ -56,6 +59,9 @@ function NotificationsContent() {
         }
       />
 
+      {commsInbox.available ? <CommsInboxSection inbox={commsInbox} /> : null}
+
+      {commsInbox.available ? null : (
       <Tabs value={filter} onValueChange={(v) => setFilter(v as NotificationFilter)}>
         <TabsList>
           <TabsTrigger value="all">All</TabsTrigger>
@@ -94,8 +100,9 @@ function NotificationsContent() {
           </TabsContent>
         ))}
       </Tabs>
+      )}
 
-      {live && isAuthenticated && (
+      {live && isAuthenticated && !commsInbox.available && (
         <WordPressSettingsHandoff role={handoffRole} />
       )}
     </div>

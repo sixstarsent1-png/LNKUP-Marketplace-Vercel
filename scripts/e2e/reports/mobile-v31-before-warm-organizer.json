@@ -1,0 +1,64 @@
+{
+  "metrics": [
+    {
+      "tab": "Events",
+      "ms": 149,
+      "apiCalls": 1,
+      "calls": [
+        "GET /lnkup/v1/crm/events/invite-options?include_all=1"
+      ]
+    },
+    {
+      "tab": "Vendors",
+      "ms": 160,
+      "apiCalls": 0,
+      "calls": []
+    },
+    {
+      "tab": "Money",
+      "ms": 151,
+      "apiCalls": 1,
+      "calls": [
+        "GET /lnkup/v1/financial/organizer-payouts"
+      ]
+    },
+    {
+      "tab": "More",
+      "ms": 177,
+      "apiCalls": 1,
+      "calls": [
+        "GET /lnkup/v1/push/preferences"
+      ]
+    },
+    {
+      "tab": "Home",
+      "ms": 140,
+      "apiCalls": 6,
+      "calls": [
+        "GET /lnkup/v1/intelligence/organizer/summary",
+        "GET /lnkup/v1/crm/dashboard/widgets",
+        "GET /lnkup/v1/crm/launch-checklist",
+        "GET /lnkup/v1/financial/organizer-balances",
+        "GET /lnkup/v1/financial/dashboard?role=organizer",
+        "GET /lnkup/v1/financial/activity?role=organizer"
+      ]
+    },
+    {
+      "tab": "Events",
+      "ms": 121,
+      "apiCalls": 0,
+      "calls": []
+    },
+    {
+      "tab": "Money",
+      "ms": 126,
+      "apiCalls": 4,
+      "calls": [
+        "GET /lnkup/v1/financial/organizer-payouts",
+        "GET /lnkup/v1/financial/organizer-balances",
+        "GET /lnkup/v1/financial/dashboard?role=organizer",
+        "GET /lnkup/v1/financial/activity?role=organizer"
+      ]
+    }
+  ]
+}

@@ -351,10 +351,86 @@ class LNKup_Vendor_Dashboard_Views {
 				<?php if ( $event_url ) : ?>
 					<a class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" href="<?php echo esc_url( $event_url ); ?>"><?php esc_html_e( 'View event', 'lnkup-marketplace' ); ?></a>
 				<?php endif; ?>
+				<?php if ( in_array( $status, LNKup_Applications::WITHDRAWABLE, true ) && ! ( $payment && in_array( (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true ), array( 'processing', 'paid', 'partially_paid' ), true ) ) ) : ?>
+					<button type="button" class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" data-withdraw-application data-endpoint="<?php echo esc_url( rest_url( 'lnkup/v1/applications/' . (int) $app->ID . '/withdraw' ) ); ?>" data-testid="lnkup-vendor-withdraw"><?php esc_html_e( 'Withdraw', 'lnkup-marketplace' ); ?></button>
+				<?php endif; ?>
 			</div>
+			<p class="lnkup-request-row__meta" role="status" aria-live="polite" data-withdraw-status hidden></p>
 		</article>
 		<?php
 		return ob_get_clean();
+	}
+
+	/**
+	 * "Continue your application" cards for open server-side drafts.
+	 *
+	 * @param int $user_id Vendor.
+	 * @return string
+	 */
+	public static function render_draft_resume_cards( $user_id ) {
+		if ( ! $user_id || ! class_exists( 'LNKup_Application_Drafts' ) ) {
+			return '';
+		}
+		$drafts = LNKup_Application_Drafts::list_for_vendor( $user_id );
+		if ( ! $drafts ) {
+			return '';
+		}
+		ob_start();
+		?>
+		<section class="lnkup-panel lnkup-draft-resume" aria-labelledby="lnkup-draft-resume-title" data-testid="lnkup-draft-resume">
+			<h2 class="lnkup-draft-resume__title" id="lnkup-draft-resume-title"><?php esc_html_e( 'Continue your application', 'lnkup-marketplace' ); ?></h2>
+			<ul class="lnkup-draft-resume__list">
+				<?php foreach ( $drafts as $draft ) : ?>
+					<?php
+					$date_ts     = $draft['event_date'] ? strtotime( $draft['event_date'] ) : false;
+					$deadline_ts = $draft['deadline'] ? strtotime( $draft['deadline'] ) : false;
+					$updated_ts  = $draft['updated_at'] ? strtotime( $draft['updated_at'] ) : false;
+					?>
+					<li class="lnkup-draft-resume__item" data-testid="lnkup-draft-resume-item">
+						<div class="lnkup-draft-resume__copy">
+							<p class="lnkup-request-row__title"><?php echo esc_html( $draft['event_name'] ?: $draft['opportunity_title'] ); ?></p>
+							<p class="lnkup-request-row__meta">
+								<?php
+								echo esc_html(
+									implode(
+										' · ',
+										array_filter(
+											array(
+												$date_ts ? date_i18n( 'D, M j, Y', $date_ts ) : '',
+												$draft['location_label'],
+												$draft['opportunity_title'],
+											)
+										)
+									)
+								);
+								?>
+							</p>
+							<div class="lnkup-draft-resume__progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<?php echo esc_attr( (string) $draft['progress_percent'] ); ?>" aria-label="<?php esc_attr_e( 'Application progress', 'lnkup-marketplace' ); ?>">
+								<span style="width:<?php echo esc_attr( (string) max( 5, (int) $draft['progress_percent'] ) ); ?>%"></span>
+							</div>
+							<p class="lnkup-request-row__meta">
+								<?php if ( $updated_ts ) : ?>
+									<?php /* translators: %s: relative time */ echo esc_html( sprintf( __( 'Saved %s ago', 'lnkup-marketplace' ), human_time_diff( $updated_ts, current_time( 'timestamp' ) ) ) ); ?>
+								<?php endif; ?>
+								<?php if ( $deadline_ts ) : ?>
+									· <?php /* translators: %s: date */ echo esc_html( sprintf( __( 'Apply by %s', 'lnkup-marketplace' ), date_i18n( 'M j', $deadline_ts ) ) ); ?>
+								<?php endif; ?>
+							</p>
+							<?php if ( ! $draft['can_submit'] ) : ?>
+								<p class="lnkup-request-row__meta lnkup-request-row__note"><?php esc_html_e( 'This booth is no longer accepting applications.', 'lnkup-marketplace' ); ?></p>
+							<?php elseif ( $draft['price']['changed'] ) : ?>
+								<p class="lnkup-request-row__meta lnkup-request-row__note"><?php /* translators: %s: price */ echo esc_html( sprintf( __( 'The booth price changed to %s.', 'lnkup-marketplace' ), lnkup_currency( $draft['price']['current'] ) ) ); ?></p>
+							<?php endif; ?>
+						</div>
+						<?php if ( $draft['can_submit'] ) : ?>
+							<a class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" href="<?php echo esc_url( $draft['resume_url'] ); ?>" data-testid="lnkup-draft-continue"><?php esc_html_e( 'Continue', 'lnkup-marketplace' ); ?></a>
+						<?php endif; ?>
+					</li>
+				<?php endforeach; ?>
+			</ul>
+		</section>
+		<?php
+		return (string) ob_get_clean();
 	}
 
 	/**
@@ -1006,6 +1082,7 @@ class LNKup_Vendor_Dashboard_Views {
 				);
 			}
 			echo lnkup_dash_tabs( $request_tabs, $active, array( 'variant' => 'pills', 'label' => __( 'Filter requests', 'lnkup-marketplace' ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			echo self::render_draft_resume_cards( (int) $ctx['user_id'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			?>
 
 			<div class="lnkup-panel lnkup-panel--flush">

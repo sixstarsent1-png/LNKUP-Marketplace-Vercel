@@ -2,7 +2,9 @@ import { useCallback, useMemo, useRef, useState } from "react"
 import { Linking, StyleSheet, View } from "react-native"
 import { router, type Href, useFocusEffect } from "expo-router"
 
+import { NextStepsCard } from "@/components/next-steps-card"
 import { NotificationBell } from "@/components/notification-bell"
+import { PushPermissionPrompt } from "@/components/push-permission-prompt"
 import { GuidedTutorialChecklist } from "@/components/guided-tutorial-checklist"
 import { TutorialPopupModal } from "@/components/tutorial-popup-modal"
 import { OrganizerIntelligenceCard } from "@/components/organizer-intelligence-card"
@@ -23,6 +25,7 @@ import { Surface } from "@/components/ui/surface"
 import { Body, Eyebrow, Meta, SectionTitle } from "@/components/ui/typography"
 import { trackMobileEvent } from "@/lib/analytics/mobile-events"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
+import { fetchInboxCount } from "@/lib/api/comms"
 import { fetchNotifications } from "@/lib/api/notifications"
 import type { OrganizerRecommendation } from "@/lib/api/organizer-intelligence"
 import { formatMoneyOrZero } from "@/lib/api/organizer-financial"
@@ -233,9 +236,10 @@ export default function OrganizerHomeScreen() {
       setRefreshError(null)
       setSecondaryNote(null)
       try {
-        const [data, notifications] = await Promise.all([
+        const [data, notifications, serverCount] = await Promise.all([
           fetchOrganizerHome(auth, { force: mode === "refresh" }),
           fetchNotifications("organizer", { auth, userId: session?.user.id }).catch(() => []),
+          fetchInboxCount("organizer", auth),
         ])
         setSummary(data)
         try {
@@ -271,8 +275,9 @@ export default function OrganizerHomeScreen() {
             },
           })
         }
-        setUnreadCount(getUnreadCount(notifications))
-        void syncAppBadge(getUnreadCount(notifications))
+        const unread = serverCount ? serverCount.unread : getUnreadCount(notifications)
+        setUnreadCount(unread)
+        void syncAppBadge(unread)
 
         const [eventsSettled, requestsSettled] = await Promise.allSettled([
           fetchOrganizerEvents(auth, { force: mode === "refresh" }),
@@ -332,7 +337,7 @@ export default function OrganizerHomeScreen() {
     if (!summary) return []
     const incomplete = summary.launchChecklist.filter((item) => !item.complete)
     const sliced = incomplete.slice(0, 3)
-    if (!needsPublicProfile) return sliced
+    if (!needsPublicProfile || sliced.some((item) => checklistKey(item) === "public_profile")) return sliced
     const profileStep: OrganizerChecklistItem = {
       id: "public-profile",
       key: "public_profile",
@@ -419,6 +424,10 @@ export default function OrganizerHomeScreen() {
           {secondaryNote ? <InlineBanner tone="attention" message={secondaryNote} /> : null}
 
           {hero ? <OrganizerHomeHero hero={hero} /> : null}
+
+          <PushPermissionPrompt role="organizer" />
+
+          <NextStepsCard role="organizer" />
 
           <View style={styles.statsBlock}>
             <StatGrid>
@@ -676,7 +685,10 @@ export default function OrganizerHomeScreen() {
 
           {checklistVisible.length > 0 ? (
             <View style={styles.section}>
-              <SectionHeader title="Next steps" icon="list-outline" />
+              <SectionHeader
+                title={summary?.activation ? `Next steps · ${summary.activation.percent}% set up` : "Next steps"}
+                icon="list-outline"
+              />
               <ListGroup>
                 {checklistVisible.map((item) => (
                   <ListRow

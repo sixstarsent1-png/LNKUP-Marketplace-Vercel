@@ -87,6 +87,28 @@ test.describe('Organizer tenant isolation and staff permissions', () => {
     expect([400, 403]).toContain(response.status());
   });
 
+  test('another organizer cannot read foreign event staff', async () => {
+    const response = await lnkupRest(sessions.orgB!, 'GET', `/operations/events/${eventA}/staff`);
+    expect([403, 404]).toContain(response.status());
+  });
+
+  test('another organizer cannot read a foreign payment timeline', async () => {
+    test.skip(!paymentA, 'Set PLAYWRIGHT_VENDOR_PENDING_PAYMENT_ID');
+    const response = await lnkupRest(sessions.orgB!, 'GET', `/financial/payments/${paymentA}/timeline`);
+    expect(response.status()).toBe(403);
+  });
+
+  test('another organizer cannot reconcile a foreign payment', async () => {
+    test.skip(!paymentA, 'Set PLAYWRIGHT_VENDOR_PENDING_PAYMENT_ID');
+    const response = await lnkupRest(sessions.orgB!, 'POST', `/financial/payments/${paymentA}/reconcile`, { intent_id: 'pi_forged' });
+    expect(response.status()).toBe(403);
+  });
+
+  test('organizer cannot open the trust case queue', async () => {
+    const response = await lnkupRest(sessions.orgA!, 'GET', '/trust/cases');
+    expect(response.status()).toBe(403);
+  });
+
   test('intelligence AJAX without a nonce returns JSON 403', async () => {
     const response = await sessions.orgA!.request.post('/wp-admin/admin-ajax.php', {
       form: { action: 'lnkup_event_intelligence' },

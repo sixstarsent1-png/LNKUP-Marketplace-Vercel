@@ -14,6 +14,7 @@ import { router, useLocalSearchParams, type Href } from "expo-router"
 
 import { DiscoveryMap } from "@/components/discovery-map"
 import { FilterSheet } from "@/components/filter-sheet"
+import { MatchRails } from "@/components/match-rails"
 import { NearMeButton } from "@/components/near-me-button"
 import { OpportunityCard } from "@/components/opportunity-card"
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
@@ -458,6 +459,14 @@ export default function VendorFindScreen() {
                 auth={auth}
                 refreshToken={mapRefreshToken}
                 testID="vendor-find-map"
+              />
+            ) : null}
+
+            {viewMode === "list" && !active ? (
+              <MatchRails
+                auth={auth ?? undefined}
+                savedIds={savedIds}
+                onToggleSave={(opportunityId) => void favorites.toggle(opportunityId)}
               />
             ) : null}
 

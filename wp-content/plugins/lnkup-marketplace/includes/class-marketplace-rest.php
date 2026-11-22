@@ -124,7 +124,7 @@ class LNKup_Marketplace_REST {
 			'food_truck_allowed', 'verified_organizer', 'featured_organizer',
 			'instant_approval', 'has_spots', 'show_closed', 'newly_added',
 			'closing_soon', 'almost_full', 'applications_open', 'doc_none',
-			'include_external', 'high_demand',
+			'include_external', 'high_demand', 'preferred_markets', 'previous_organizers',
 		);
 		foreach ( $bool_keys as $key ) {
 			if ( isset( $params[ $key ] ) ) {

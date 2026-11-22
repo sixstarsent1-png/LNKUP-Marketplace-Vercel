@@ -20,12 +20,8 @@ class LNKup_Checkout {
 			return new WP_Error( 'invalid', __( 'Invalid payment.', 'lnkup-marketplace' ) );
 		}
 
-		LNKup_Payments::refresh_pending_fees( $payment_id );
-
-		$intent_id = (string) get_post_meta( $payment_id, '_lnkup_stripe_payment_intent', true );
-		if ( $intent_id && 'pending' === get_post_meta( $payment_id, '_lnkup_payment_status', true ) ) {
-			LNKup_Financial_Service::confirm_checkout( $payment_id, $intent_id );
-		}
+		// Read-only: fees are persisted by prepare(), confirmation happens via POST /confirm and webhooks.
+		$preview = LNKup_Payments::pending_fee_preview( $payment_id );
 
 		$event_id   = (int) get_post_meta( $payment_id, '_lnkup_event_id', true );
 		$opp_id     = (int) get_post_meta( $payment_id, '_lnkup_opportunity_id', true );
@@ -38,13 +34,21 @@ class LNKup_Checkout {
 
 		$vendor_fee    = (float) get_post_meta( $payment_id, '_lnkup_vendor_spot_fee', true );
 		$checkout_fee  = (float) get_post_meta( $payment_id, '_lnkup_vendor_checkout_fee', true );
-		$booth_total   = round( $vendor_fee + $checkout_fee, 2 );
 		$processing    = (float) get_post_meta( $payment_id, '_lnkup_processing_fee', true );
 		$tax_amount    = (float) get_post_meta( $payment_id, '_lnkup_tax_amount', true );
 		$discount      = (float) get_post_meta( $payment_id, '_lnkup_discount_amount', true );
 		$credit_avail  = LNKup_Wallet::get_balance( $vendor_id, 'vendor' );
 		$credit_applied = (float) get_post_meta( $payment_id, '_lnkup_credit_applied', true );
-		$total         = LNKup_Financial_Service::get_checkout_amount( $payment_id );
+		$total         = LNKup_Financial_Service::stored_amount_due( $payment_id );
+		// Show the amount prepare() will charge: stored fees may be stale while the payment is pending.
+		if ( is_array( $preview ) && '' === (string) get_post_meta( $payment_id, '_lnkup_installment_amount', true ) ) {
+			$delta        = round( (float) $preview['total'] - (float) get_post_meta( $payment_id, '_lnkup_total_amount', true ), 2 );
+			$checkout_fee = (float) $preview['vendor_checkout_fee'];
+			$processing   = (float) $preview['processing_fee'];
+			$tax_amount   = (float) $preview['tax_amount'];
+			$total        = max( 0, round( $total + $delta, 2 ) );
+		}
+		$booth_total   = round( $vendor_fee + $checkout_fee, 2 );
 		$image_id      = $event_id ? (int) get_post_thumbnail_id( $event_id ) : 0;
 		$image_url     = $image_id ? wp_get_attachment_image_url( $image_id, 'medium' ) : '';
 

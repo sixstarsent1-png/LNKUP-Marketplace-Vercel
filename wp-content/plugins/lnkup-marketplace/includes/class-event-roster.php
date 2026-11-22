@@ -39,6 +39,24 @@ class LNKup_Event_Roster {
 			'checked_in'        => array(),
 			'no_shows'          => array(),
 		);
+		LNKup_Vendor_Readiness::begin_batch();
+		try {
+			$result = self::build( $event_id, $apps, $groups, $organizer_id );
+		} finally {
+			LNKup_Vendor_Readiness::end_batch();
+		}
+		return $result;
+	}
+
+	/**
+	 * Group rows and render; readiness is computed once per application (format_roster_row).
+	 *
+	 * @param int       $event_id     Event ID.
+	 * @param WP_Post[] $apps         Applications.
+	 * @param array     $groups       Empty group buckets.
+	 * @param int       $organizer_id Actor.
+	 */
+	private static function build( $event_id, $apps, $groups, $organizer_id ) {
 		$rows       = array();
 		$membership = array();
 		foreach ( $apps as $app ) {
@@ -60,7 +78,7 @@ class LNKup_Event_Roster {
 				if ( ! $paid ) {
 					$keys[] = 'missing_payment';
 				} else {
-					$readiness = LNKup_Vendor_Readiness::refresh( $app->ID );
+					$readiness = (string) $row['readiness'];
 					$doc_code  = '';
 					if ( class_exists( 'LNKup_Verification' ) ) {
 						$doc_ctx  = LNKup_Verification::get_application_document_context( (int) $app->ID );
@@ -239,6 +257,7 @@ class LNKup_Event_Roster {
 				case 'approve':
 				case 'reject':
 				case 'waitlist':
+				case 'allow_reapply':
 					$results[] = LNKup_Applications::handle_organizer_action( $app_id, $action, $organizer_id, $extra );
 					break;
 				case 'check_in':

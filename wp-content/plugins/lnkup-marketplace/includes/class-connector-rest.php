@@ -288,7 +288,7 @@ class LNKup_Connector_REST {
 		$payload = LNKup_Connector::get_onboarding( (int) $connector['id'] );
 		$payload['links']     = LNKup_Connector::build_referral_links( $connector );
 		$payload['connector'] = LNKup_Connector::public_connector( $connector );
-		$payload['terms']     = LNKup_Connector_Rewards::terms();
+		$payload['terms']     = LNKup_Connector_Rewards::terms( (int) $connector['id'] );
 		$code                 = LNKup_Connector::get_code_for_connector( (int) $connector['id'] );
 		$payload['code']      = $code['code'] ?? '';
 		return rest_ensure_response( $payload );
@@ -335,7 +335,7 @@ class LNKup_Connector_REST {
 		if ( is_wp_error( $connector ) ) {
 			return $connector;
 		}
-		return rest_ensure_response( LNKup_Connector_Rewards::terms() );
+		return rest_ensure_response( LNKup_Connector_Rewards::terms( (int) $connector['id'] ) );
 	}
 
 	public static function post_calculator( WP_REST_Request $request ) {
@@ -346,7 +346,7 @@ class LNKup_Connector_REST {
 		$booth = (float) $request->get_param( 'booth_price' );
 		$books = (int) $request->get_param( 'paid_bookings' );
 		$orgs  = (int) $request->get_param( 'organizers' );
-		return rest_ensure_response( LNKup_Connector_Rewards::estimate_earnings( $booth, $books, $orgs ) );
+		return rest_ensure_response( LNKup_Connector_Rewards::estimate_earnings( $booth, $books, $orgs, (int) $connector['id'] ) );
 	}
 
 	public static function post_profile( WP_REST_Request $request ) {
@@ -593,12 +593,12 @@ class LNKup_Connector_REST {
 		$reward_id = absint( $request->get_param( 'reward_id' ) );
 		$action    = sanitize_key( (string) $request->get_param( 'action' ) );
 		if ( 'paid' === $action ) {
-			LNKup_Connector_Rewards::mark_paid( $reward_id );
+			$result = LNKup_Connector_Rewards::mark_paid( $reward_id, (string) $request->get_param( 'payout_reference' ) );
 		} else {
 			$result = LNKup_Connector_Rewards::approve_reward( $reward_id );
-			if ( is_wp_error( $result ) ) {
-				return $result;
-			}
+		}
+		if ( is_wp_error( $result ) ) {
+			return $result;
 		}
 		return rest_ensure_response( array( 'success' => true ) );
 	}

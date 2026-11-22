@@ -47,7 +47,7 @@ const requiredChecks = [
     snippets: [
       "mark_payment_processing",
       "payment_processing",
-      "Signing secret configured",
+      "Unsigned payloads are never accepted",
     ],
   },
   {

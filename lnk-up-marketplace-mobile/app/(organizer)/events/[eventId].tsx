@@ -456,6 +456,7 @@ export default function OrganizerEventWorkspaceScreen() {
                   <ListRow icon="pricetag-outline" iconTone="accent" title="Add a vendor slot" meta="Set booth types, prices and spots" onPress={() => setTab("slots")} />
                 ) : null}
                 <ListRow icon="qr-code-outline" title="Event-day check-in" meta="Check vendors in and see who's arrived" onPress={() => router.push(`/(organizer)/events/checkin?eventId=${id}` as Href)} />
+                <ListRow icon="megaphone-outline" title="Communications" meta="Message your vendors and see what was sent" onPress={() => router.push(`/(organizer)/event-comms/${id}` as Href)} />
                 <ListRow icon="document-text-outline" title="Pass details" meta="Arrival, gate and rules on vendor passes" onPress={() => setTab("packet")} />
               </ListGroup>
               <CollapsibleSection title="Edit event details" subtitle="Name, date, location, and description" icon="create-outline">

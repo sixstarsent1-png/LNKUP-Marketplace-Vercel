@@ -82,6 +82,8 @@ export async function wpFetchJson<T>(
     timeoutMs?: number
     /** Caller cancellation; an aborted request rejects with an AbortError (see isAbortError). */
     signal?: AbortSignal
+    /** Extra headers (e.g. Idempotency-Key); Accept, Content-Type and Authorization always win. */
+    headers?: Record<string, string>
   } = {},
 ): Promise<T> {
   const namespace = options.namespace ?? "lnkup"
@@ -98,6 +100,7 @@ export async function wpFetchJson<T>(
   }
 
   const headers: Record<string, string> = {
+    ...(options.headers ?? {}),
     Accept: "application/json",
   }
 

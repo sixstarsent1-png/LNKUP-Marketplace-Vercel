@@ -97,7 +97,20 @@ class LNKup_Vendor_Lists {
 		if ( ! LNKup_Capabilities::organizer_owns_crm_object( $list_id, $organizer_id ) ) {
 			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ) );
 		}
+		$profile_id = absint( $profile_id );
+		if ( 'lnkup_vendor_profile' !== get_post_type( $profile_id ) || 'publish' !== get_post_status( $profile_id ) ) {
+			return new WP_Error( 'invalid_vendor', __( 'That vendor profile is not available.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
 		$vendor_id = (int) get_post_meta( $profile_id, '_lnkup_owner_user_id', true );
+		if ( ! $vendor_id ) {
+			return new WP_Error( 'invalid_vendor', __( 'That vendor profile is not available.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		$discoverable = get_post_meta( $profile_id, '_lnkup_discoverable', true );
+		if ( '0' === (string) $discoverable
+			&& ! LNKup_Capabilities::user_has_manage_all( $organizer_id )
+			&& ! in_array( $vendor_id, LNKup_Match_Service::related_vendor_users( $organizer_id ), true ) ) {
+			return new WP_Error( 'invalid_vendor', __( 'That vendor profile is not available.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
 		LNKup_Organizer_CRM::ensure_relationship( $organizer_id, $vendor_id, $profile_id );
 		global $wpdb;
 		$wpdb->replace(

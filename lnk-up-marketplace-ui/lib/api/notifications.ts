@@ -1,3 +1,4 @@
+import type { CommsPreferences } from "@/lib/api/comms"
 import type { OrganizerHomeSummary } from "@/lib/api/organizer-home"
 import type { OrganizerVendorRequest } from "@/lib/api/organizer-requests"
 import type { SavedSearch } from "@/lib/api/saved-searches"
@@ -78,6 +79,8 @@ export type NotificationPreferences = {
   pushAvailable?: boolean
   unavailable?: boolean
   handoffUrl?: string
+  /** Present when lnkup-communications is installed (category × channel preferences). */
+  comms?: CommsPreferences
   raw?: unknown
 }
 

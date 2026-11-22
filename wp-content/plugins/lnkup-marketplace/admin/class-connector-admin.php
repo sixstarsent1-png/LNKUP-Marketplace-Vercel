@@ -80,8 +80,13 @@ class LNKup_Connector_Admin {
 		}
 		if ( 'reward_paid' === $action ) {
 			$reward_id = absint( $_POST['reward_id'] ?? 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
-			LNKup_Connector_Rewards::mark_paid( $reward_id );
-			self::redirect_notice( __( 'Reward marked paid.', 'lnkup-marketplace' ), 'success', 'rewards' );
+			$reference = sanitize_text_field( wp_unslash( $_POST['payout_reference'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$result    = LNKup_Connector_Rewards::mark_paid( $reward_id, $reference );
+			self::redirect_notice(
+				is_wp_error( $result ) ? $result->get_error_message() : __( 'Reward marked paid.', 'lnkup-marketplace' ),
+				is_wp_error( $result ) ? 'error' : 'success',
+				'rewards'
+			);
 		}
 		if ( 'generate_code' === $action && $id ) {
 			$custom = sanitize_text_field( wp_unslash( $_POST['custom_code'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
@@ -252,7 +257,7 @@ class LNKup_Connector_Admin {
 							<td><?php echo esc_html( (string) $reward['id'] ); ?></td>
 							<td><?php echo esc_html( $connector['display_name'] ?? '' ); ?></td>
 							<td><?php echo esc_html( (string) ( $reward['event_type'] ?? '' ) ); ?></td>
-							<td>$<?php echo esc_html( number_format( (float) ( $reward['amount'] ?? 0 ), 2 ) ); ?></td>
+							<td>$<?php echo esc_html( number_format( max( 0, (float) ( $reward['amount'] ?? 0 ) - (float) ( $reward['reversed_amount'] ?? 0 ) ), 2 ) ); ?></td>
 							<td><?php echo esc_html( (string) ( $reward['reward_status'] ?? '' ) ); ?></td>
 							<td>
 								<?php if ( 'pending' === ( $reward['reward_status'] ?? '' ) ) : ?>
@@ -265,6 +270,7 @@ class LNKup_Connector_Admin {
 									<form method="post" style="display:inline;"><?php wp_nonce_field( 'lnkup_connector_admin' ); ?>
 										<input type="hidden" name="lnkup_connector_action" value="reward_paid" />
 										<input type="hidden" name="reward_id" value="<?php echo esc_attr( (string) $reward['id'] ); ?>" />
+										<input type="text" name="payout_reference" class="small-text" placeholder="<?php esc_attr_e( 'Payout ref', 'lnkup-marketplace' ); ?>" aria-label="<?php esc_attr_e( 'Payout reference', 'lnkup-marketplace' ); ?>" />
 										<button type="submit" class="button button-small"><?php esc_html_e( 'Mark paid', 'lnkup-marketplace' ); ?></button>
 									</form>
 								<?php endif; ?>

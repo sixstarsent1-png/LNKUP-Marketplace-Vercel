@@ -23,6 +23,10 @@ class LNKup_Vendor_CRM_Profile {
 		}
 		$vendor_id = (int) get_post_meta( $profile_id, '_lnkup_owner_user_id', true );
 		$can_manage = LNKup_Capabilities::organizer_can_manage_vendor( $organizer_id, $vendor_id );
+		// System contexts (no viewer, e.g. snapshots in cron) and the profile owner see everything.
+		$can_view_contact = ! $organizer_id
+			|| (int) $organizer_id === $vendor_id
+			|| LNKup_Capabilities::organizer_can_view_vendor_contact( $organizer_id, $profile_id );
 		$rel = LNKup_Organizer_CRM::get_relationship( $organizer_id, $vendor_id );
 		$cities = json_decode( get_post_meta( $profile_id, '_lnkup_cities_served', true ) ?: '[]', true ) ?: array();
 		$states = json_decode( get_post_meta( $profile_id, '_lnkup_states_served', true ) ?: '[]', true ) ?: array();
@@ -80,7 +84,7 @@ class LNKup_Vendor_CRM_Profile {
 			}
 		}
 
-		$docs = LNKup_Documents::get_for_vendor( $vendor_id );
+		$docs = $can_view_contact ? LNKup_Documents::get_for_vendor( $vendor_id ) : array();
 		$doc_summary = array();
 		foreach ( $docs as $doc ) {
 			$doc_summary[] = array(
@@ -109,9 +113,10 @@ class LNKup_Vendor_CRM_Profile {
 			'profile_id'        => $profile_id,
 			'vendor_user_id'    => $vendor_id,
 			'business_name'     => get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: $post->post_title,
-			'owner_name'        => get_post_meta( $profile_id, '_lnkup_owner_name', true ),
-			'email'             => get_post_meta( $profile_id, '_lnkup_contact_email', true ),
-			'phone'             => get_post_meta( $profile_id, '_lnkup_contact_phone', true ),
+			'owner_name'        => $can_view_contact ? get_post_meta( $profile_id, '_lnkup_owner_name', true ) : '',
+			'email'             => $can_view_contact ? get_post_meta( $profile_id, '_lnkup_contact_email', true ) : '',
+			'phone'             => $can_view_contact ? get_post_meta( $profile_id, '_lnkup_contact_phone', true ) : '',
+			'can_view_contact'  => $can_view_contact,
 			'instagram'         => get_post_meta( $profile_id, '_lnkup_instagram', true ),
 			'website'           => get_post_meta( $profile_id, '_lnkup_website', true ),
 			'category'          => $categories,

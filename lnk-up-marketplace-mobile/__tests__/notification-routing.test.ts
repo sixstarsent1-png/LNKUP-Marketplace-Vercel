@@ -33,10 +33,13 @@ const VENDOR_TYPES = [
   "discovery_almost_full",
   "discovery_profile_match",
   "discovery_invite",
+  "discovery_weekly_matches",
 ]
 
 const ORGANIZER_TYPES = [
   "activation_create_event",
+  "organizer_recruit_vendors",
+  "organizer_open_spots",
   "activation_org_review",
   "review_requested",
   "organizer_event_needs_attention",
@@ -72,6 +75,17 @@ describe("hrefFromNotificationData", () => {
 
   it("scopes organizer request pushes to the event", () => {
     expect(hrefFromNotificationData({ type: "organizer_new_vendor_request", eventId: 56 })).toBe("/(organizer)/vendors?event=56")
+  })
+
+  it("opens the tour for a tour match and falls back to Find without one", () => {
+    expect(hrefFromNotificationData({ type: "discovery_tour_match", tourId: "12" })).toBe("/tour/12")
+    expect(hrefFromNotificationData({ type: "discovery_tour_match", tour_id: 12 })).toBe("/tour/12")
+    expect(hrefFromNotificationData({ type: "discovery_tour_match" })).toBe("/(vendor)/find")
+  })
+
+  it("trusts a comms tour href and routes open-spots reminders to vendor search for the event", () => {
+    expect(hrefFromNotificationData({ type: "discovery_tour_match", notificationId: 9, href: "/tour/12" })).toBe("/tour/12")
+    expect(hrefFromNotificationData({ type: "organizer_open_spots", eventId: "56" })).toBe("/(organizer)/vendors/find?event=56")
   })
 
   it.each(VENDOR_TYPES)("%s routes to a vendor-only screen", (type) => {

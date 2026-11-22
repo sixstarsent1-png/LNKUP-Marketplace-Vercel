@@ -206,6 +206,12 @@ class LNKup_Vendor_Profile_Form {
 						</div>
 						<?php
 					} );
+					if ( $profile_id && class_exists( 'LNKup_Match_REST' ) ) {
+						$matching = LNKup_Match_REST::preferences_payload( (int) $profile_id );
+						self::section_form( 'matching_preferences', __( 'Matching Preferences', 'lnkup-marketplace' ), $strength, $meta, function () use ( $matching ) {
+							self::matching_fields( $matching );
+						} );
+					}
 					if ( class_exists( 'LNKup_App_Promo' ) ) {
 						echo LNKup_App_Promo::render_preference_toggle(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					}
@@ -223,6 +229,92 @@ class LNKup_Vendor_Profile_Form {
 		</div>
 		<?php
 		return ob_get_clean();
+	}
+
+	/**
+	 * Matching preference fields (progressive: every field is optional).
+	 *
+	 * @param array<string, mixed> $matching LNKup_Match_REST::preferences_payload().
+	 */
+	private static function matching_fields( array $matching ): void {
+		$prefs        = $matching['preferences'];
+		$completeness = $matching['completeness'];
+		$names        = array();
+		foreach ( $matching['options']['categories'] as $option ) {
+			$names[ $option['id'] ] = $option['name'];
+		}
+		$months = array();
+		for ( $m = 1; $m <= 12; $m++ ) {
+			$months[ $m ] = date_i18n( 'M', mktime( 0, 0, 0, $m, 1 ) );
+		}
+		?>
+		<div class="lnkup-match-completeness" data-testid="lnkup-match-completeness">
+			<p><strong><?php echo esc_html( sprintf( __( 'Matching profile %d%% complete', 'lnkup-marketplace' ), (int) $completeness['score'] ) ); ?></strong></p>
+			<div class="lnkup-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<?php echo esc_attr( (string) (int) $completeness['score'] ); ?>"><span style="width:<?php echo esc_attr( (string) (int) $completeness['score'] ); ?>%"></span></div>
+			<?php if ( $completeness['missing'] ) : ?>
+				<ul class="lnkup-muted lnkup-match-completeness__missing">
+					<?php foreach ( $completeness['missing'] as $item ) : ?>
+						<li><?php echo esc_html( $item['label'] ); ?></li>
+					<?php endforeach; ?>
+				</ul>
+			<?php endif; ?>
+			<p class="lnkup-muted"><?php esc_html_e( 'Everything here is optional. The more you share, the better your event recommendations. Your exact location is never shown to organizers.', 'lnkup-marketplace' ); ?></p>
+		</div>
+		<div class="lnkup-grid lnkup-grid--2">
+			<div class="lnkup-form-row">
+				<label for="match_primary_category"><?php esc_html_e( 'Primary category', 'lnkup-marketplace' ); ?></label>
+				<select id="match_primary_category" name="match_prefs[primary_category]">
+					<option value="0"><?php esc_html_e( 'Select…', 'lnkup-marketplace' ); ?></option>
+					<?php foreach ( $prefs['categories'] as $term_id ) : ?>
+						<option value="<?php echo esc_attr( (string) $term_id ); ?>" <?php selected( (int) $prefs['primary_category'], (int) $term_id ); ?>><?php echo esc_html( $names[ $term_id ] ?? '' ); ?></option>
+					<?php endforeach; ?>
+				</select>
+				<?php if ( ! $prefs['categories'] ) : ?>
+					<p class="lnkup-muted"><?php esc_html_e( 'Choose your vendor categories in Business Basics first.', 'lnkup-marketplace' ); ?></p>
+				<?php endif; ?>
+			</div>
+			<div class="lnkup-form-row">
+				<label for="match_zip"><?php esc_html_e( 'ZIP code (optional)', 'lnkup-marketplace' ); ?></label>
+				<input type="text" id="match_zip" name="match_prefs[zip]" maxlength="10" inputmode="numeric" value="<?php echo esc_attr( $prefs['zip'] ); ?>" />
+			</div>
+			<div class="lnkup-form-row lnkup-form-row--checkbox">
+				<input type="hidden" name="match_prefs[travel_national]" value="0" />
+				<label><input type="checkbox" name="match_prefs[travel_national]" value="1" <?php checked( $prefs['travel_national'] ); ?> /> <?php esc_html_e( 'I travel nationally for the right event', 'lnkup-marketplace' ); ?></label>
+			</div>
+		</div>
+		<div class="lnkup-form-row">
+			<label><?php esc_html_e( 'Event types you like', 'lnkup-marketplace' ); ?></label>
+			<input type="hidden" name="match_prefs[event_types]" value="" />
+			<div class="lnkup-chip-select">
+				<?php foreach ( $matching['options']['event_types'] as $type ) : ?>
+					<label>
+						<input type="checkbox" name="match_prefs[event_types][]" value="<?php echo esc_attr( (string) $type['id'] ); ?>" <?php checked( in_array( $type['name'], $prefs['event_types'], true ) ); ?> />
+						<span><?php echo esc_html( $type['name'] ); ?></span>
+					</label>
+				<?php endforeach; ?>
+			</div>
+		</div>
+		<div class="lnkup-form-row">
+			<label><?php esc_html_e( 'Months you are available', 'lnkup-marketplace' ); ?></label>
+			<input type="hidden" name="match_prefs[available_months]" value="" />
+			<div class="lnkup-chip-select">
+				<?php foreach ( $months as $num => $label ) : ?>
+					<label>
+						<input type="checkbox" name="match_prefs[available_months][]" value="<?php echo esc_attr( (string) $num ); ?>" <?php checked( in_array( $num, array_map( 'intval', $prefs['available_months'] ), true ) ); ?> />
+						<span><?php echo esc_html( $label ); ?></span>
+					</label>
+				<?php endforeach; ?>
+			</div>
+		</div>
+		<fieldset class="lnkup-form-row">
+			<legend><?php esc_html_e( 'Discovery & invites', 'lnkup-marketplace' ); ?></legend>
+			<input type="hidden" name="match_prefs[discoverable]" value="0" />
+			<label class="lnkup-form-row--checkbox"><input type="checkbox" name="match_prefs[discoverable]" value="1" data-testid="lnkup-match-discoverable" <?php checked( $prefs['discoverable'] ); ?> /> <?php esc_html_e( 'Let organizers find my business in vendor search', 'lnkup-marketplace' ); ?></label>
+			<input type="hidden" name="match_prefs[accept_invites]" value="0" />
+			<label class="lnkup-form-row--checkbox"><input type="checkbox" name="match_prefs[accept_invites]" value="1" <?php checked( $prefs['accept_invites'] ); ?> /> <?php esc_html_e( 'Organizers I have not worked with can invite me to apply', 'lnkup-marketplace' ); ?></label>
+			<p class="lnkup-muted"><?php esc_html_e( 'Organizers only see your public profile (name, logo, categories, city, description, photos). Your email, phone, documents, applications and payments stay private until you apply to their event or accept their invite.', 'lnkup-marketplace' ); ?></p>
+		</fieldset>
+		<?php
 	}
 
 	/**

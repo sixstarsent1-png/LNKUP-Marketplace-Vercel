@@ -16,6 +16,7 @@ class LNKup_Meta {
 		add_action( 'init', array( __CLASS__, 'register_meta' ), 20 );
 		add_action( 'add_meta_boxes', array( __CLASS__, 'add_meta_boxes' ) );
 		add_action( 'save_post', array( __CLASS__, 'save_meta_boxes' ), 10, 2 );
+		add_action( 'admin_notices', array( __CLASS__, 'render_workflow_error_notice' ) );
 	}
 
 	/**
@@ -102,8 +103,26 @@ class LNKup_Meta {
 				'_lnkup_reputation_breakdown' => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
 				'_lnkup_reputation_updated_at'=> array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
 				'_lnkup_reputation_score_override' => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
+				'_lnkup_zip'                  => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
+				'_lnkup_geo_lat'              => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'show_in_rest' => false ),
+				'_lnkup_geo_lng'              => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'show_in_rest' => false ),
+				'_lnkup_primary_category'     => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
+				'_lnkup_willing_to_travel_national' => array( 'type' => 'boolean', 'default' => false, 'sanitize_callback' => 'rest_sanitize_boolean' ),
+				'_lnkup_preferred_event_types' => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
+				'_lnkup_preferred_markets'    => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
+				'_lnkup_available_months'     => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
+				'_lnkup_blackout_dates'       => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
+				'_lnkup_discoverable'         => array( 'type' => 'string', 'sanitize_callback' => array( 'LNKup_Match_Vendor_Index', 'sanitize_flag' ) ),
+				'_lnkup_accept_invites'       => array( 'type' => 'string', 'sanitize_callback' => array( 'LNKup_Match_Vendor_Index', 'sanitize_flag' ) ),
+			),
+			'lnkup_tour' => array(
+				'_lnkup_organizer_user_id'   => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
+				'_lnkup_tour_type'           => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ),
+				'_lnkup_tour_status'         => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ),
 			),
 			'lnkup_event' => array(
+				'_lnkup_tour_id'             => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
+				'_lnkup_tour_stop_order'     => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
 				'_lnkup_organizer_user_id'   => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
 				'_lnkup_event_date'          => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
 				'_lnkup_start_time'          => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
@@ -204,9 +223,13 @@ class LNKup_Meta {
 				'_lnkup_readiness_percent'   => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
 				'_lnkup_selected_category'   => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
 				'_lnkup_setup_notes'         => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field' ),
-				'_lnkup_profile_snapshot'    => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
-				'_lnkup_documents_snapshot'  => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
+				'_lnkup_profile_snapshot'    => array( 'type' => 'string', 'sanitize_callback' => array( __CLASS__, 'sanitize_json_meta' ) ),
+				'_lnkup_documents_snapshot'  => array( 'type' => 'string', 'sanitize_callback' => array( __CLASS__, 'sanitize_json_meta' ) ),
 				'_lnkup_documents_missing'   => array( 'type' => 'boolean', 'default' => false, 'sanitize_callback' => 'rest_sanitize_boolean' ),
+				'_lnkup_decided_at'          => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
+				'_lnkup_application_answers' => array( 'type' => 'string', 'sanitize_callback' => array( __CLASS__, 'sanitize_json_meta' ) ),
+				'_lnkup_draft_answers'       => array( 'type' => 'string', 'sanitize_callback' => array( __CLASS__, 'sanitize_json_meta' ) ),
+				'_lnkup_submission_group_id' => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ),
 			),
 			'lnkup_vendor_note' => array(
 				'_lnkup_organizer_user_id' => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
@@ -374,8 +397,13 @@ class LNKup_Meta {
 		if ( empty( $schema[ $post->post_type ] ) ) {
 			return;
 		}
+		$is_application = 'lnkup_application' === $post->post_type;
 		foreach ( $schema[ $post->post_type ] as $key => $config ) {
 			if ( ! isset( $_POST[ $key ] ) ) {
+				continue;
+			}
+			// Application status and ownership links only change through the workflow (B-18).
+			if ( $is_application && in_array( $key, self::APPLICATION_WORKFLOW_KEYS, true ) ) {
 				continue;
 			}
 			$raw = wp_unslash( $_POST[ $key ] );
@@ -383,5 +411,85 @@ class LNKup_Meta {
 			$value = is_callable( $sanitize ) ? call_user_func( $sanitize, $raw ) : sanitize_text_field( $raw );
 			update_post_meta( $post_id, $key, $value );
 		}
+		if ( $is_application && isset( $_POST['_lnkup_application_status'] ) && class_exists( 'LNKup_Applications' ) ) {
+			$target  = LNKup_Security::sanitize_application_status( wp_unslash( $_POST['_lnkup_application_status'] ) );
+			$current = (string) get_post_meta( $post_id, '_lnkup_application_status', true );
+			if ( $target !== $current && in_array( $target, array( 'payment_required', 'paid', 'completed' ), true ) ) {
+				// Payment-driven statuses come only from verified payments, never a manual edit.
+				set_transient( 'lnkup_meta_error_' . get_current_user_id(), __( 'Payment statuses change only through verified payments. Use Approve, or the Financial tools.', 'lnkup-marketplace' ), 60 );
+			} elseif ( $target !== $current ) {
+				$result = LNKup_Applications::transition( $post_id, $target, array( 'source' => 'wp_admin' ) );
+				if ( is_wp_error( $result ) ) {
+					set_transient( 'lnkup_meta_error_' . get_current_user_id(), $result->get_error_message(), 60 );
+				}
+			}
+		}
+	}
+
+	/**
+	 * Show a rejected wp-admin status change (e.g. invalid transition) after the save redirect.
+	 */
+	public static function render_workflow_error_notice() {
+		$key     = 'lnkup_meta_error_' . get_current_user_id();
+		$message = get_transient( $key );
+		if ( ! $message ) {
+			return;
+		}
+		delete_transient( $key );
+		echo '<div class="notice notice-error"><p>' . esc_html( (string) $message ) . '</p></div>';
+	}
+
+	/**
+	 * Application meta that must only change through LNKup_Applications.
+	 */
+	const APPLICATION_WORKFLOW_KEYS = array(
+		'_lnkup_application_status',
+		'_lnkup_vendor_profile_id',
+		'_lnkup_vendor_user_id',
+		'_lnkup_opportunity_id',
+		'_lnkup_event_id',
+		'_lnkup_organizer_user_id',
+		'_lnkup_profile_snapshot',
+		'_lnkup_documents_snapshot',
+		'_lnkup_application_answers',
+		'_lnkup_draft_answers',
+		'_lnkup_submission_group_id',
+	);
+
+	/**
+	 * Sanitize a JSON-encoded meta string without mangling URLs (sanitize_text_field strips %xx).
+	 *
+	 * @param mixed $value Raw JSON string or array.
+	 * @return string JSON string ('' when invalid).
+	 */
+	public static function sanitize_json_meta( $value ) {
+		$decoded = is_array( $value ) ? $value : json_decode( (string) $value, true );
+		if ( ! is_array( $decoded ) ) {
+			return '';
+		}
+		$clean = map_deep(
+			$decoded,
+			static function ( $item ) {
+				if ( is_bool( $item ) || is_int( $item ) || is_float( $item ) || null === $item ) {
+					return $item;
+				}
+				$item = (string) $item;
+				if ( preg_match( '#^https?://#i', $item ) ) {
+					return esc_url_raw( $item );
+				}
+				return sanitize_textarea_field( $item );
+			}
+		);
+		return (string) wp_json_encode( $clean, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+	}
+
+	/**
+	 * Encode data for update_post_meta(): update_metadata() unslashes values, which would
+	 * corrupt escaped quotes inside JSON, so the encoded string is slashed first.
+	 *
+	 * @param mixed $data Data to encode.
+	 */
+	public static function json_for_meta( $data ) {
+		return wp_slash( (string) wp_json_encode( $data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
 	}
 }

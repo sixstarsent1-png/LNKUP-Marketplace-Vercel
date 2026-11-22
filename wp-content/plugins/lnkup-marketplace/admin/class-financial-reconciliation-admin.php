@@ -101,6 +101,27 @@ class LNKup_Financial_Reconciliation_Admin {
 			echo '</tbody></table>';
 		}
 
+		$backfill = LNKup_Platform_Fees::backfill_candidates();
+		echo '<h2>' . esc_html__( 'Refunded-fee backfill (reporting only)', 'lnkup-marketplace' ) . '</h2>';
+		if ( ! $backfill ) {
+			echo '<p style="color:#008a20">' . esc_html__( 'Every refunded or charged-back booking has its refunded platform fee recorded.', 'lnkup-marketplace' ) . '</p>';
+		} else {
+			echo '<p>' . esc_html__( 'These bookings were refunded before refunded fees were tracked, so net platform-fee revenue is overstated. Open each organizer, run a dry run and apply the "sync_refunded_fee" items. No money moves.', 'lnkup-marketplace' ) . '</p>';
+			echo '<table class="widefat striped" style="max-width:900px"><thead><tr><th>Organizer</th><th>Bookings to fix</th><th></th></tr></thead><tbody>';
+			foreach ( $backfill as $org_id => $pids ) {
+				$user = get_userdata( (int) $org_id );
+				printf(
+					'<tr><td>%s <span class="description">#%d</span></td><td>%d</td><td><a class="button" href="%s">%s</a></td></tr>',
+					esc_html( $user ? $user->display_name : __( '(no organizer)', 'lnkup-marketplace' ) ),
+					(int) $org_id,
+					count( $pids ),
+					esc_url( self::url( array( 'organizer_id' => (int) $org_id ) ) ),
+					esc_html__( 'Open & dry run', 'lnkup-marketplace' )
+				);
+			}
+			echo '</tbody></table>';
+		}
+
 		echo '<h2>' . esc_html__( 'Organizers', 'lnkup-marketplace' ) . '</h2><table class="widefat striped"><thead><tr><th>Organizer</th><th>Payments</th><th>Paid</th><th>Collected</th><th>Ledger rows</th><th>Issues</th><th></th></tr></thead><tbody>';
 		foreach ( $summary['organizers'] as $row ) {
 			$issues = array();

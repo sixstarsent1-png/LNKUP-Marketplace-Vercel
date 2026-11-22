@@ -17,6 +17,13 @@ describe("destination rules", () => {
     expect(destinationScope("/(organizer)/events/56")).toBe("organizer")
     expect(destinationScope("/pass/71")).toBe("vendor")
     expect(destinationScope("/opportunity/59")).toBe("any")
+    expect(destinationScope("/tour/12")).toBe("any")
+    expect(destinationScope("/(organizer)/vendors/find?event=56")).toBe("organizer")
+  })
+
+  it("rejects malformed tour routes", () => {
+    expect(destinationScope("/tour/abc")).toBeNull()
+    expect(destinationScope("/tour/12/../x")).toBeNull()
   })
 
   it("rejects external, protocol-relative and traversal paths", () => {

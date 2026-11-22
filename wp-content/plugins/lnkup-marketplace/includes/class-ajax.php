@@ -81,10 +81,15 @@ class LNKup_Ajax {
 				'selected_category'   => $category,
 				'setup_notes'         => $setup_notes,
 				'accepted_terms'      => $accepted,
+				'invite_token'        => isset( $_POST['invite_token'] ) ? sanitize_text_field( wp_unslash( $_POST['invite_token'] ) ) : '',
+				// Sanitized per field by LNKup_Application_Questions::validate_answers() and owned_document_ids().
+				'answers'             => isset( $_POST['answers'] ) && is_array( $_POST['answers'] ) ? wp_unslash( $_POST['answers'] ) : array(), // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+				'document_ids'        => isset( $_POST['document_ids'] ) ? array_map( 'absint', (array) wp_unslash( $_POST['document_ids'] ) ) : array(),
+				'idempotency_key'     => isset( $_POST['idempotency_key'] ) ? sanitize_text_field( wp_unslash( $_POST['idempotency_key'] ) ) : '',
 			)
 		);
 		if ( is_wp_error( $result ) ) {
-			$payload = array( 'message' => $result->get_error_message() );
+			$payload = array( 'message' => $result->get_error_message(), 'code' => $result->get_error_code() );
 			$data    = $result->get_error_data();
 			if ( is_array( $data ) && ! empty( $data['existing_application_id'] ) ) {
 				$payload['existing_application_id'] = (int) $data['existing_application_id'];
@@ -133,8 +138,11 @@ class LNKup_Ajax {
 			'post_title'   => $business,
 			'post_type'    => 'lnkup_vendor_profile',
 			'post_status'  => 'publish',
-			'post_content' => isset( $_POST['description'] ) ? sanitize_textarea_field( wp_unslash( $_POST['description'] ) ) : '',
 		);
+		// Section forms post only their own fields; keep the description unless this section sent it.
+		if ( isset( $_POST['description'] ) || ! $profile_id ) {
+			$data['post_content'] = isset( $_POST['description'] ) ? sanitize_textarea_field( wp_unslash( $_POST['description'] ) ) : '';
+		}
 
 		if ( $profile_id ) {
 			$data['ID'] = $profile_id;
@@ -213,6 +221,14 @@ class LNKup_Ajax {
 		if ( ! empty( $_POST['categories'] ) && is_array( $_POST['categories'] ) ) {
 			$cats = array_map( 'sanitize_text_field', wp_unslash( $_POST['categories'] ) );
 			wp_set_object_terms( $profile_id, $cats, 'lnkup_vendor_category' );
+		}
+
+		if ( class_exists( 'LNKup_Match_REST' ) ) {
+			$match_prefs = isset( $_POST['match_prefs'] ) && is_array( $_POST['match_prefs'] ) ? wp_unslash( $_POST['match_prefs'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated field by field in apply_preferences().
+			$applied     = LNKup_Match_REST::apply_preferences( (int) $profile_id, $match_prefs );
+			if ( is_wp_error( $applied ) ) {
+				wp_send_json_error( array( 'message' => $applied->get_error_message() ) );
+			}
 		}
 
 		wp_send_json_success(

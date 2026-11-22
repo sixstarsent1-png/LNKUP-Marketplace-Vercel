@@ -271,6 +271,19 @@ class LNKup_Financial_Repair {
 				);
 			}
 
+			$fee_gap = class_exists( 'LNKup_Platform_Fees' ) ? LNKup_Platform_Fees::refunded_fee_gap( (int) $payment['id'] ) : null;
+			if ( $fee_gap ) {
+				$items[] = array(
+					'id'                  => 'refund_fee:' . $payment['id'],
+					'type'                => 'sync_refunded_fee',
+					'payment_id'          => $payment['id'],
+					'amount_cents'        => (int) round( ( $fee_gap['expected'] - $fee_gap['recorded'] ) * 100 ),
+					'ledger_effect_cents' => 0,
+					'applicable'          => true,
+					'reason'              => sprintf( 'Reporting only: LNKup\'s refunded platform fee is recorded as $%s but the refund history says $%s. No money moves.', number_format( $fee_gap['recorded'], 2 ), number_format( $fee_gap['expected'], 2 ) ),
+				);
+			}
+
 			foreach ( (array) ( $payment['extra_charges'] ?? array() ) as $extra_intent ) {
 				$extra   = $stripe_on ? self::stripe_intent( (string) $extra_intent ) : null;
 				$charged = $extra && 'succeeded' === ( $extra['status'] ?? '' ) && (int) ( $extra['amount_refunded'] ?? 0 ) < (int) ( $extra['amount_received'] ?? 0 );
@@ -369,6 +382,8 @@ class LNKup_Financial_Repair {
 				return self::refund_extra_charge( $item, $context );
 			case 'record_late_payout':
 				return LNKup_Organizer_Payouts::mark_paid( (int) $item['payout_id'], (string) $item['stripe_payout_id'] );
+			case 'sync_refunded_fee':
+				return LNKup_Platform_Fees::resync_refunded_fee( (int) $item['payment_id'] );
 			default:
 				return new WP_Error( 'lnkup_repair_unknown', 'Unknown repair item.' );
 		}

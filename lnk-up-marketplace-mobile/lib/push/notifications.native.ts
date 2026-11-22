@@ -69,11 +69,56 @@ async function saveStoredPushToken(token: string | null): Promise<void> {
   }
 }
 
+export type PushPermissionState = "granted" | "denied" | "undetermined" | "unavailable"
+
+/** Current OS permission without prompting. "denied" means only OS Settings can change it. */
+export async function getPushPermissionState(): Promise<PushPermissionState> {
+  if (!Device.isDevice || !resolveProjectId()) return "unavailable"
+  try {
+    const current = await Notifications.getPermissionsAsync()
+    if (current.status === "granted") return "granted"
+    if (current.status === "denied" && !current.canAskAgain) return "denied"
+    return current.status === "denied" ? "denied" : "undetermined"
+  } catch {
+    return "unavailable"
+  }
+}
+
 /**
- * Request permission, obtain Expo push token, register with WordPress.
+ * Android channels the server can target (enabled server-side only after this build is live).
+ * Channel creation is JS-only, so it ships over the air.
+ */
+export async function ensureAndroidChannels(): Promise<void> {
+  if (Platform.OS !== "android") return
+  try {
+    await Promise.all([
+      Notifications.setNotificationChannelAsync("transactional", {
+        name: "Bookings & payments",
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 200, 120, 200],
+      }),
+      Notifications.setNotificationChannelAsync("operations", {
+        name: "Event operations",
+        importance: Notifications.AndroidImportance.HIGH,
+      }),
+      Notifications.setNotificationChannelAsync("opportunities", {
+        name: "New opportunities",
+        importance: Notifications.AndroidImportance.DEFAULT,
+      }),
+    ])
+  } catch {
+    // Older Android versions without channels.
+  }
+}
+
+/**
+ * Obtain an Expo push token and register it with WordPress.
+ * With `prompt: false` (app start) it only registers when permission was already granted, so the
+ * OS prompt is only ever shown from an explicit, contextual user action.
  * Gracefully no-ops on simulators without push or missing EAS projectId.
  */
-export async function syncPushRegistration(auth?: WpAuth): Promise<string | null> {
+export async function syncPushRegistration(auth?: WpAuth, options: { prompt?: boolean } = {}): Promise<string | null> {
+  const prompt = options.prompt ?? true
   if (!Device.isDevice) {
     return null
   }
@@ -86,12 +131,16 @@ export async function syncPushRegistration(auth?: WpAuth): Promise<string | null
   const existing = await Notifications.getPermissionsAsync()
   let status = existing.status
   if (status !== "granted") {
+    if (!prompt || existing.canAskAgain === false) {
+      return null
+    }
     const requested = await Notifications.requestPermissionsAsync()
     status = requested.status
   }
   if (status !== "granted") {
     return null
   }
+  await ensureAndroidChannels()
 
   try {
     const result = await Notifications.getExpoPushTokenAsync({ projectId })

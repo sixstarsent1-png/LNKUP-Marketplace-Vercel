@@ -11,6 +11,7 @@ export default function OrganizerVendorsLayout() {
       }}
     >
       <Stack.Screen name="index" />
+      <Stack.Screen name="find" />
       <Stack.Screen name="[profileId]" />
     </Stack>
   )

@@ -109,7 +109,7 @@ class LNKup_Connector {
 		if ( ! $row ) {
 			return null;
 		}
-		if ( self::PROGRAM === ( $row['program'] ?? 'vendor_referral' ) ) {
+		if ( self::is_account_program( (string) ( $row['program'] ?? 'vendor_referral' ) ) ) {
 			$connector = self::get_active( (int) ( $row['connector_id'] ?? 0 ) );
 			if ( ! $connector ) {
 				return null;
@@ -188,13 +188,54 @@ class LNKup_Connector {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE connector_id = %d AND program = %s LIMIT 1",
-				absint( $connector_id ),
-				self::PROGRAM
+				"SELECT * FROM {$table} WHERE connector_id = %d AND program IN (" . self::programs_sql() . ') ORDER BY id ASC LIMIT 1', // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				absint( $connector_id )
 			),
 			ARRAY_A
 		);
 		return $row ?: null;
+	}
+
+	/**
+	 * Program slugs that hold a partner account row in this table.
+	 *
+	 * @return string[]
+	 */
+	public static function account_programs() {
+		return class_exists( 'LNKup_Partner_Programs' ) ? LNKup_Partner_Programs::ACCOUNT_PROGRAMS : array( self::PROGRAM );
+	}
+
+	/**
+	 * @param string $program Program slug.
+	 */
+	public static function is_account_program( $program ) {
+		return in_array( (string) $program, self::account_programs(), true );
+	}
+
+	/**
+	 * SQL IN list of account programs (constants only).
+	 */
+	public static function programs_sql() {
+		return "'" . implode( "','", self::account_programs() ) . "'";
+	}
+
+	/**
+	 * Program a partner account belongs to (rows from before the program column default to City Connector).
+	 *
+	 * @param array|null $connector Connector row.
+	 */
+	public static function program_of( $connector ) {
+		$program = (string) ( $connector['program'] ?? '' );
+		return self::is_account_program( $program ) ? $program : self::PROGRAM;
+	}
+
+	/**
+	 * WordPress role granted to an approved account of a program.
+	 *
+	 * @param string $program Program slug.
+	 */
+	public static function role_for_program( $program ) {
+		return self::PROGRAM === $program ? 'lnkup_connector' : 'lnkup_partner';
 	}
 
 	/**
@@ -208,12 +249,17 @@ class LNKup_Connector {
 		if ( ! $connector ) {
 			return null;
 		}
-		$custom = strtoupper( preg_replace( '/[^A-Z0-9\-]/', '', sanitize_text_field( $custom ) ) );
+		$program = self::program_of( $connector );
+		$custom  = strtoupper( preg_replace( '/[^A-Z0-9\-]/', '', sanitize_text_field( $custom ) ) );
+		if ( self::PROGRAM === $program ) {
+			$prefix = $connector['market_slug'] ? strtoupper( substr( preg_replace( '/[^a-z]/', '', $connector['market_slug'] ), 0, 3 ) ) : 'LNK';
+		} else {
+			$prefix = 'affiliate' === $program ? 'AFF' : 'PTR';
+		}
 		if ( $custom ) {
 			$code = $custom;
 		} else {
-			$prefix = $connector['market_slug'] ? strtoupper( substr( preg_replace( '/[^a-z]/', '', $connector['market_slug'] ), 0, 3 ) ) : 'LNK';
-			$code   = $prefix . '-' . strtoupper( substr( md5( (string) $connector_id . wp_salt() ), 0, 6 ) );
+			$code = $prefix . '-' . strtoupper( substr( md5( (string) $connector_id . wp_salt() ), 0, 6 ) );
 		}
 		global $wpdb;
 		$table = LNKup_Treasury_Tables::referral_codes_table();
@@ -221,15 +267,14 @@ class LNKup_Connector {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE code = %s LIMIT 1", $code ) );
 		if ( $exists && ! $existing ) {
-			$prefix = $connector['market_slug'] ? strtoupper( substr( preg_replace( '/[^a-z]/', '', $connector['market_slug'] ), 0, 3 ) ) : 'LNK';
-			$code   = $prefix . '-' . strtoupper( substr( md5( (string) microtime( true ) ), 0, 6 ) );
+			$code = $prefix . '-' . strtoupper( substr( md5( (string) microtime( true ) ), 0, 6 ) );
 		}
 		$now      = current_time( 'mysql' );
 		$data     = array(
 			'user_id'      => (int) ( $connector['user_id'] ?? 0 ),
 			'code'         => $code,
 			'role_type'    => 'connector',
-			'program'      => self::PROGRAM,
+			'program'      => $program,
 			'market_slug'  => (string) ( $connector['market_slug'] ?? '' ),
 			'connector_id' => absint( $connector_id ),
 			'is_active'    => 1,
@@ -316,6 +361,7 @@ class LNKup_Connector {
 		}
 		$user_id     = (int) ( $connector['user_id'] ?? 0 );
 		$created_new = false;
+		$role        = self::role_for_program( self::program_of( $connector ) );
 		if ( ! $user_id ) {
 			if ( email_exists( $connector['email'] ) ) {
 				$user_id = (int) email_exists( $connector['email'] );
@@ -335,25 +381,29 @@ class LNKup_Connector {
 				$created_new = true;
 				wp_new_user_notification( $user_id, null, 'user' );
 			}
-			self::ensure_connector_role( $user_id, $created_new );
 			if ( $connector['display_name'] ) {
 				wp_update_user( array( 'ID' => $user_id, 'display_name' => $connector['display_name'] ) );
 			}
 		}
+		self::ensure_connector_role( $user_id, $created_new, $role );
 		$now = current_time( 'mysql' );
 		global $wpdb;
-		$wpdb->update(
-			LNKup_Connector_Tables::connectors_table(),
-			array(
-				'user_id'     => $user_id,
-				'status'      => 'active',
-				'approved_by' => absint( $admin_id ?: get_current_user_id() ),
-				'approved_at' => $now,
-				'updated_at'  => $now,
-			),
-			array( 'id' => absint( $connector_id ) )
+		$update = array(
+			'user_id'     => $user_id,
+			'status'      => 'active',
+			'approved_by' => absint( $admin_id ?: get_current_user_id() ),
+			'approved_at' => $now,
+			'updated_at'  => $now,
 		);
+		$agreement_rule = self::agreement_rule_id( $connector );
+		if ( $agreement_rule && empty( $connector['commission_rule_id'] ) ) {
+			$update['commission_rule_id'] = $agreement_rule;
+		}
+		$wpdb->update( LNKup_Connector_Tables::connectors_table(), $update, array( 'id' => absint( $connector_id ) ) );
 		self::generate_code( $connector_id );
+		if ( class_exists( 'LNKup_Connector_Rewards' ) ) {
+			LNKup_Connector_Rewards::rule_for( (int) $connector_id );
+		}
 		if ( class_exists( 'LNKup_Connector_Ranks' ) ) {
 			LNKup_Connector_Ranks::recalculate( $connector_id, 'approve' );
 		}
@@ -366,18 +416,36 @@ class LNKup_Connector {
 	 * @param int  $user_id     User ID.
 	 * @param bool $created_new Whether this user was just created for the connector.
 	 */
-	public static function ensure_connector_role( $user_id, $created_new = false ) {
+	public static function ensure_connector_role( $user_id, $created_new = false, $role = 'lnkup_connector' ) {
 		$user = new WP_User( absint( $user_id ) );
 		if ( ! $user->exists() ) {
 			return;
 		}
+		if ( ! get_role( $role ) ) {
+			LNKup_Roles::sync_role_capabilities();
+		}
 		$roles    = (array) $user->roles;
 		$elevated = in_array( 'administrator', $roles, true ) || in_array( 'lnkup_admin', $roles, true );
 		if ( $elevated || ! $created_new ) {
-			$user->add_role( 'lnkup_connector' );
+			$user->add_role( $role );
 			return;
 		}
-		$user->set_role( 'lnkup_connector' );
+		$user->set_role( $role );
+	}
+
+	/**
+	 * Agreement rule of a strategic contact's partner organization, if one is set.
+	 *
+	 * @param array $connector Connector row.
+	 */
+	public static function agreement_rule_id( $connector ) {
+		$partner_id = (int) ( $connector['partner_id'] ?? 0 );
+		if ( ! $partner_id || ! class_exists( 'LNKup_Org_Growth_Tables' ) ) {
+			return 0;
+		}
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT commission_rule_id FROM ' . LNKup_Org_Growth_Tables::table( LNKup_Org_Growth_Tables::PARTNERS ) . ' WHERE id = %d', $partner_id ) );
 	}
 
 	/**
@@ -435,7 +503,7 @@ class LNKup_Connector {
 					SUM(attributed_revenue) AS attributed_revenue
 				FROM {$ref_table}
 				WHERE program = %s AND referral_code_id = %d",
-				self::PROGRAM,
+				(string) ( $code['program'] ?? self::PROGRAM ),
 				(int) ( $code['id'] ?? 0 )
 			),
 			ARRAY_A
@@ -445,13 +513,25 @@ class LNKup_Connector {
 		$paid_bookings   = $unique_payments > 0 ? $unique_payments : (int) ( $stats['paid_bookings'] ?? 0 );
 		$onboarding      = self::get_onboarding( $connector_id );
 		$activated       = self::count_activated_organizers( $connector_id );
+		$program         = self::program_of( $connector );
+		$views           = self::dashboard_views( $connector );
+		$organization    = (string) ( $connector['organization'] ?? '' );
+		$account_status  = (string) ( $connector['status'] ?? '' );
+		$terms           = LNKup_Connector_Rewards::terms( $connector_id );
 		$connector       = self::public_connector( $connector );
 		return array(
+			'program'        => $program,
+			'program_label'  => class_exists( 'LNKup_Partner_Programs' ) ? LNKup_Partner_Programs::label( $program ) : '',
+			'title'          => self::dashboard_title( array( 'program' => $program ) ),
+			'views'          => array_keys( $views ),
+			'terms_pending'  => (bool) $terms['terms_pending'],
+			'organization'   => $organization,
+			'account_status' => $account_status,
 			'connector'    => $connector,
 			'code'         => $code['code'] ?? '',
 			'links'        => self::build_referral_links( $connector ),
-			'terms'        => LNKup_Connector_Rewards::terms(),
-			'default_view' => $onboarding['default_view'],
+			'terms'        => $terms,
+			'default_view' => self::PROGRAM === $program ? $onboarding['default_view'] : 'home',
 			'onboarding'   => $onboarding,
 			'next_action'  => self::next_best_action( $connector_id ),
 			'stats'        => array(
@@ -464,12 +544,12 @@ class LNKup_Connector {
 				'activated'          => $activated,
 				'attributed_revenue' => (float) ( $stats['attributed_revenue'] ?? 0 ),
 			),
-			'rank'         => class_exists( 'LNKup_Connector_Ranks' ) ? LNKup_Connector_Ranks::dto( $connector_id ) : null,
+			'rank'         => self::PROGRAM === $program && class_exists( 'LNKup_Connector_Ranks' ) ? LNKup_Connector_Ranks::dto( $connector_id ) : null,
 			'rewards'      => $rewards,
 			'earnings'     => array_merge(
 				LNKup_Connector_Rewards::balances_for_connector( $connector_id ),
 				array(
-					'estimated' => LNKup_Connector_Rewards::amount_from_gmv( (float) ( $stats['attributed_revenue'] ?? 0 ) ),
+					'estimated' => LNKup_Connector_Rewards::estimate_from_gmv_total( (float) ( $stats['attributed_revenue'] ?? 0 ), $connector_id ),
 				)
 			),
 		);
@@ -489,7 +569,7 @@ class LNKup_Connector {
 		}
 		$ref_table = LNKup_Treasury_Tables::referrals_table();
 		$sql       = "SELECT * FROM {$ref_table} WHERE program = %s AND referral_code_id = %d";
-		$params    = array( self::PROGRAM, (int) $code['id'] );
+		$params    = array( (string) ( $code['program'] ?? self::PROGRAM ), (int) $code['id'] );
 		if ( 'vendor' === $role_filter ) {
 			$sql .= " AND (target_role = 'vendor' OR target_role = 'lnkup_vendor' OR target_role = '')";
 		} elseif ( 'organizer' === $role_filter ) {
@@ -653,12 +733,53 @@ class LNKup_Connector {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		return $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE referred_user_id = %d AND program = %s LIMIT 1",
-				absint( $user_id ),
-				self::PROGRAM
+				"SELECT * FROM {$table} WHERE referred_user_id = %d AND program IN (" . self::programs_sql() . ') ORDER BY created_at ASC, id ASC LIMIT 1', // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				absint( $user_id )
 			),
 			ARRAY_A
 		);
+	}
+
+	/**
+	 * Dashboard views (slug => label) a partner account can open. City Connectors keep every view;
+	 * affiliates and strategic contacts have no ranks, content studio, launch plan or territories.
+	 *
+	 * @param array|null $connector Connector row (null = City Connector set).
+	 * @return array<string, string>
+	 */
+	public static function dashboard_views( $connector = null ) {
+		$all = array(
+			'home'      => __( 'Overview', 'lnkup-marketplace' ),
+			'start'     => __( 'Get Started', 'lnkup-marketplace' ),
+			'referrals' => __( 'My Referrals', 'lnkup-marketplace' ),
+			'leads'     => __( 'Organizer Leads', 'lnkup-marketplace' ),
+			'cities'    => __( 'My Cities', 'lnkup-marketplace' ),
+			'earnings'  => __( 'Earnings', 'lnkup-marketplace' ),
+			'ranks'     => __( 'Ranks', 'lnkup-marketplace' ),
+			'resources' => __( 'Resources', 'lnkup-marketplace' ),
+			'studio'    => __( 'Content Studio', 'lnkup-marketplace' ),
+			'profile'   => __( 'Profile', 'lnkup-marketplace' ),
+		);
+		if ( ! $connector || self::PROGRAM === self::program_of( $connector ) ) {
+			return $all;
+		}
+		return array_intersect_key( $all, array_flip( array( 'home', 'referrals', 'leads', 'earnings', 'resources', 'profile' ) ) );
+	}
+
+	/**
+	 * Dashboard title for an account's program.
+	 *
+	 * @param array|null $connector Connector row.
+	 */
+	public static function dashboard_title( $connector = null ) {
+		switch ( self::program_of( $connector ) ) {
+			case 'affiliate':
+				return __( 'Affiliate Dashboard', 'lnkup-marketplace' );
+			case 'strategic_partner':
+				return __( 'Partner Dashboard', 'lnkup-marketplace' );
+			default:
+				return __( 'Connector Dashboard', 'lnkup-marketplace' );
+		}
 	}
 
 	/**
@@ -681,9 +802,12 @@ class LNKup_Connector {
 		if ( isset( $aliases[ $requested ] ) ) {
 			$requested = $aliases[ $requested ];
 		}
-		$allowed = array( 'home', 'start', 'referrals', 'earnings', 'resources', 'profile', 'ranks', 'studio' );
+		$allowed = array_keys( self::dashboard_views( $connector ) );
 		if ( $requested && in_array( $requested, $allowed, true ) ) {
 			return $requested;
+		}
+		if ( $connector && self::PROGRAM !== self::program_of( $connector ) ) {
+			return 'home';
 		}
 		if ( $connector ) {
 			$onboarding = self::get_onboarding( (int) $connector['id'] );
@@ -822,7 +946,7 @@ class LNKup_Connector {
 					SUM(CASE WHEN first_payment_at IS NOT NULL AND (target_role = 'lnkup_organizer' OR target_role = 'organizer') THEN 1 ELSE 0 END) AS paid
 				FROM {$ref_table}
 				WHERE program = %s AND referral_code_id = %d",
-				self::PROGRAM,
+				(string) ( $code['program'] ?? self::PROGRAM ),
 				(int) ( $code['id'] ?? 0 )
 			),
 			ARRAY_A
@@ -1427,7 +1551,7 @@ class LNKup_Connector {
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT * FROM {$ref_table} WHERE program = %s AND referral_code_id = %d ORDER BY created_at DESC LIMIT 100",
-				self::PROGRAM,
+				(string) ( $code['program'] ?? self::PROGRAM ),
 				(int) $code['id']
 			),
 			ARRAY_A
@@ -1487,7 +1611,7 @@ class LNKup_Connector {
 				'referral_date'      => $row['created_at'] ?? '',
 				'milestone'          => self::referral_pipeline_milestone( $row, $activation, $earn ),
 				'qualifying_gmv'     => $gmv,
-				'estimated_earnings' => LNKup_Connector_Rewards::amount_from_gmv( $gmv ),
+				'estimated_earnings' => LNKup_Connector_Rewards::estimate_from_gmv_total( $gmv, $connector_id ),
 				'approved_earnings'  => (float) $earn['approved'],
 				'remaining_term'     => LNKup_Connector_Rewards::remaining_term_label( $row ),
 				'last_activity'      => $row['first_payment_at'] ?: ( $row['first_opportunity_at'] ?: ( $row['created_at'] ?? '' ) ),
@@ -1590,12 +1714,12 @@ class LNKup_Connector {
 		foreach ( $ledger as $row ) {
 			$gmv += (float) ( $row['booking_amount'] ?? 0 );
 		}
-		$balances['estimated'] = LNKup_Connector_Rewards::amount_from_gmv( $gmv );
+		$balances['estimated'] = LNKup_Connector_Rewards::estimate_from_gmv_total( $gmv, $connector_id );
 		return array(
-			'terms'       => LNKup_Connector_Rewards::terms(),
+			'terms'       => LNKup_Connector_Rewards::terms( $connector_id ),
 			'balances'    => $balances,
 			'ledger'      => $ledger,
-			'example'     => LNKup_Connector_Rewards::estimate_earnings( 250, 1, 1 ),
+			'example'     => LNKup_Connector_Rewards::estimate_earnings( 250, 1, 1, $connector_id ),
 			'next_payout' => $next ? $next : __( 'After LNKup approval', 'lnkup-marketplace' ),
 		);
 	}

@@ -212,6 +212,9 @@ class LNKup_Verification {
 			'organizer_id'     => $organizer_id,
 			'payout_connected' => $payout_connected,
 		);
+		if ( class_exists( 'LNKup_Organizer_Verification' ) && ( $is_public || get_current_user_id() === $organizer_id || LNKup_Capabilities::user_has_manage_all() ) ) {
+			$response['indicators'] = LNKup_Organizer_Verification::indicators( $organizer_id, $is_public );
+		}
 
 		if ( ! $is_public && LNKup_Capabilities::user_has_manage_all() ) {
 			$response['internal_notes'] = (string) get_user_meta( $organizer_id, 'lnkup_organizer_verification_notes', true );
@@ -327,7 +330,9 @@ class LNKup_Verification {
 				$ver = (string) get_post_meta( $doc->ID, '_lnkup_verification_status', true );
 				if ( 'approved' === $ver ) {
 					$exp = get_post_meta( $doc->ID, '_lnkup_expiration_date', true );
-					if ( $exp && strtotime( (string) $exp ) < strtotime( '+30 days' ) ) {
+					if ( LNKup_Documents::is_expired( (string) $exp ) ) {
+						$status = 'expired';
+					} elseif ( $exp && strtotime( (string) $exp ) < strtotime( '+30 days' ) ) {
 						$status = 'expiring';
 					} else {
 						$status = 'approved';
@@ -983,7 +988,9 @@ class LNKup_Verification {
 		$payout_connected = self::is_payout_connected( $organizer_id );
 		$event_details    = self::organizer_event_details_verified( $organizer_id );
 		$has_live_opp     = self::organizer_has_live_opportunity( $organizer_id );
-		$manual_verified  = (bool) get_user_meta( $organizer_id, 'lnkup_organizer_verified', true );
+		$manual_verified  = class_exists( 'LNKup_Organizer_Verification' )
+			? LNKup_Organizer_Verification::is_verified( $organizer_id )
+			: (bool) get_user_meta( $organizer_id, 'lnkup_organizer_verified', true );
 		$verified         = $payout_connected && $event_details && $has_live_opp && $manual_verified;
 		$trusted          = $verified && self::is_trusted_organizer( $organizer_id );
 

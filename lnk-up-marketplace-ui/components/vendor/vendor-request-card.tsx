@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Calendar, MapPin, Info } from "lucide-react"
@@ -8,6 +9,7 @@ import {
   vendorRequestStatusLabel,
   vendorRequestStatusVariant,
 } from "@/lib/api/vendor-requests"
+import { canWithdrawStatus, withdrawApplication } from "@/lib/api/apply-client"
 import { getPublicWpSiteUrl } from "@/lib/api/config"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,9 +18,11 @@ import { StatusBadge } from "@/components/marketplace/badges"
 export function VendorRequestCard({
   request,
   onContinuePayment,
+  onWithdrawn,
 }: {
   request: VendorRequest
   onContinuePayment?: (request: VendorRequest) => void
+  onWithdrawn?: (request: VendorRequest) => void
 }) {
   const location = request.city ?? [request.city, request.state].filter(Boolean).join(", ")
   const fee = request.amountDue ?? request.vendorFee
@@ -99,8 +103,72 @@ export function VendorRequestCard({
           )}
           <VendorRequestCta request={request} onContinuePayment={onContinuePayment} />
         </div>
+        <WithdrawRequestButton request={request} onWithdrawn={onWithdrawn} />
       </div>
     </Card>
+  )
+}
+
+const PAYMENT_IN_PROGRESS = ["processing", "paid", "partially_paid"]
+
+/** Withdraw an unpaid application (server re-checks status and payment). */
+function WithdrawRequestButton({
+  request,
+  onWithdrawn,
+}: {
+  request: VendorRequest
+  onWithdrawn?: (request: VendorRequest) => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  if (!onWithdrawn || !canWithdrawStatus(request.status, PAYMENT_IN_PROGRESS.includes(request.paymentStatus ?? ""))) {
+    return null
+  }
+
+  async function handleWithdraw() {
+    setBusy(true)
+    setError(null)
+    const result = await withdrawApplication(request.id)
+    setBusy(false)
+    if (!result.ok) {
+      setError(result.message)
+      return
+    }
+    setConfirming(false)
+    onWithdrawn?.(request)
+  }
+
+  if (!confirming) {
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        className="self-start px-0 text-xs text-muted-foreground"
+        onClick={() => setConfirming(true)}
+        data-testid="vendor-request-withdraw"
+      >
+        Withdraw application
+      </Button>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-muted p-2 text-xs" role="group" aria-label="Confirm withdrawal">
+      <p>Withdraw this application? The organizer won&apos;t review it, and you can apply again later.</p>
+      {error && (
+        <p className="text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" onClick={() => setConfirming(false)} disabled={busy}>
+          Keep it
+        </Button>
+        <Button size="sm" variant="destructive" onClick={() => void handleWithdraw()} disabled={busy} data-testid="vendor-request-withdraw-confirm">
+          {busy ? "Withdrawing…" : "Withdraw"}
+        </Button>
+      </div>
+    </div>
   )
 }
 
@@ -165,7 +233,16 @@ function VendorRequestCta({
         </div>
       )
     case "cancelled":
-      return (
+      return request.opportunityId ? (
+        <Button
+          size="sm"
+          variant="outline"
+          nativeButton={false}
+          render={<Link href={`/vendor/find?opportunityId=${request.opportunityId}&apply=1`} data-testid="vendor-request-apply-again" />}
+        >
+          Apply again
+        </Button>
+      ) : (
         <Button size="sm" variant="ghost" nativeButton={false} render={<Link href="/vendor/find" />}>
           Find more events
         </Button>

@@ -70,18 +70,27 @@ class LNKup_Loadin_Schedule {
 		if ( ! LNKup_Capabilities::application_in_event( $app_id, (int) $window['event_id'] ) ) {
 			return new WP_Error( 'wrong_event', __( 'That vendor is not booked for this event.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
 		}
-		if ( self::count_assignments( $window_id ) >= (int) $window['max_slots'] ) {
-			return new WP_Error( 'full', __( 'Load-in window is full.', 'lnkup-marketplace' ) );
+		$lock = 'lnkup_loadin_' . absint( $window_id );
+		if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return new WP_Error( 'busy', __( 'Another change to this load-in window is in progress. Try again.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
 		}
-		$wpdb->replace(
-			$assign,
-			array(
-				'window_id'      => absint( $window_id ),
-				'application_id' => absint( $app_id ),
-				'assigned_at'    => current_time( 'mysql' ),
-			),
-			array( '%d', '%d', '%s' )
-		);
+		try {
+			$already = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$assign} WHERE window_id = %d AND application_id = %d", absint( $window_id ), absint( $app_id ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( ! $already && self::count_assignments( $window_id ) >= (int) $window['max_slots'] ) {
+				return new WP_Error( 'full', __( 'Load-in window is full.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+			}
+			$wpdb->replace( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$assign,
+				array(
+					'window_id'      => absint( $window_id ),
+					'application_id' => absint( $app_id ),
+					'assigned_at'    => current_time( 'mysql' ),
+				),
+				array( '%d', '%d', '%s' )
+			);
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
 		$label = gmdate( 'g:i A', strtotime( $window['start_at'] ) ) . ' – ' . gmdate( 'g:i A', strtotime( $window['end_at'] ) );
 		$packets = get_posts(
 			array(

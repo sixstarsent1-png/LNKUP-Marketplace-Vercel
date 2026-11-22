@@ -29,20 +29,136 @@ class LNKup_Invoices {
 				'meta_key'       => '_lnkup_application_id',
 				'meta_value'     => absint( $app_id ),
 				'fields'         => 'ids',
+				'orderby'        => 'ID',
+				'order'          => 'DESC',
 			) );
 			$payment_id = $payments ? (int) $payments[0] : 0;
 		}
 		if ( ! $payment_id ) {
 			return;
 		}
-		$invoice_id = self::create_from_payment( $payment_id );
-		if ( $invoice_id ) {
-			do_action( 'lnkup_invoice_created', $invoice_id, $payment_id );
-			$invoice = self::get( $invoice_id );
-			if ( $invoice ) {
-				self::email_invoice( $invoice );
+		// LNKup_Payments creates the invoice and fires lnkup_invoice_created( $payment_id, $invoice_id ).
+		$invoice_id = (int) ( self::get_by_payment( $payment_id )['id'] ?? 0 );
+		if ( ! $invoice_id ) {
+			$invoice_id = self::create_from_payment( $payment_id );
+			if ( $invoice_id ) {
+				do_action( 'lnkup_invoice_created', $payment_id, $invoice_id );
 			}
 		}
+		$invoice = $invoice_id ? self::get( $invoice_id ) : null;
+		if ( ! $invoice || (float) $invoice['total_amount'] <= 0 || self::meta_flag( $invoice, 'emailed_at' ) ) {
+			return;
+		}
+		if ( self::email_invoice( $invoice ) ) {
+			self::set_meta_flag( $invoice_id, 'emailed_at', current_time( 'mysql' ) );
+		}
+	}
+
+	/**
+	 * Latest invoice for a payment post (matched through its application).
+	 *
+	 * @param int $payment_id Payment post ID.
+	 * @return array|null
+	 */
+	public static function get_by_payment( $payment_id ) {
+		$app_id = (int) get_post_meta( absint( $payment_id ), '_lnkup_application_id', true );
+		return $app_id ? self::get_by_application( $app_id ) : null;
+	}
+
+	/**
+	 * @param array  $invoice Invoice row.
+	 * @param string $key     Metadata key.
+	 * @return mixed
+	 */
+	private static function meta_flag( $invoice, $key ) {
+		$meta = ! empty( $invoice['metadata'] ) ? json_decode( (string) $invoice['metadata'], true ) : array();
+		return is_array( $meta ) ? ( $meta[ $key ] ?? null ) : null;
+	}
+
+	/**
+	 * Merge one key into the invoice metadata JSON.
+	 *
+	 * @param int    $invoice_id Invoice ID.
+	 * @param string $key        Metadata key.
+	 * @param mixed  $value      Value.
+	 */
+	private static function set_meta_flag( $invoice_id, $key, $value ) {
+		global $wpdb;
+		$invoice = self::get( $invoice_id );
+		if ( ! $invoice ) {
+			return;
+		}
+		$meta         = ! empty( $invoice['metadata'] ) ? json_decode( (string) $invoice['metadata'], true ) : array();
+		$meta         = is_array( $meta ) ? $meta : array();
+		$meta[ $key ] = $value;
+		$wpdb->update( LNKup_Financial_Tables::invoices_table(), array( 'metadata' => wp_json_encode( $meta ) ), array( 'id' => absint( $invoice_id ) ), array( '%s' ), array( '%d' ) );
+	}
+
+	/**
+	 * Close an unpaid invoice whose booking left the payment flow (rejected, withdrawn, expired).
+	 *
+	 * @param int    $application_id Application ID.
+	 * @param string $reason         Audit reason.
+	 */
+	public static function mark_void_for_application( $application_id, $reason = '' ) {
+		global $wpdb;
+		$invoice = self::get_by_application( $application_id );
+		if ( ! $invoice || in_array( $invoice['status'], array( 'paid', 'partially_paid', 'refunded', 'void', 'cancelled' ), true ) ) {
+			return false;
+		}
+		$wpdb->update( LNKup_Financial_Tables::invoices_table(), array( 'status' => 'void', 'updated_at' => current_time( 'mysql' ) ), array( 'id' => (int) $invoice['id'] ), array( '%s', '%s' ), array( '%d' ) );
+		LNKup_Financial_Audit::log( 'invoice_voided', 'invoice', (int) $invoice['id'], array( 'reason' => sanitize_key( $reason ), 'application_id' => (int) $application_id ) );
+		return true;
+	}
+
+	/**
+	 * Reflect a refund on the invoice; paid_amount keeps the original collected amount for history.
+	 *
+	 * @param int  $application_id Application ID.
+	 * @param bool $full           Full refund.
+	 */
+	public static function mark_refunded_for_application( $application_id, $full ) {
+		global $wpdb;
+		$invoice = self::get_by_application( $application_id );
+		if ( ! $invoice || ! in_array( $invoice['status'], array( 'paid', 'partially_paid', 'refunded' ), true ) ) {
+			return false;
+		}
+		$status = $full ? 'refunded' : (string) $invoice['status'];
+		$wpdb->update( LNKup_Financial_Tables::invoices_table(), array( 'status' => $status, 'updated_at' => current_time( 'mysql' ) ), array( 'id' => (int) $invoice['id'] ), array( '%s', '%s' ), array( '%d' ) );
+		self::set_meta_flag( (int) $invoice['id'], $full ? 'refunded_at' : 'partially_refunded_at', current_time( 'mysql' ) );
+		LNKup_Financial_Audit::log( $full ? 'invoice_refunded' : 'invoice_partially_refunded', 'invoice', (int) $invoice['id'], array( 'application_id' => (int) $application_id ) );
+		return true;
+	}
+
+	/**
+	 * Vendor-facing line items: only what the vendor pays, summing to the payment total.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 * @return array<int, array{0:string,1:float}>
+	 */
+	public static function line_items_for_payment( $payment_id ) {
+		$items = array(
+			array( __( 'Booth fee', 'lnkup-marketplace' ), (float) get_post_meta( $payment_id, '_lnkup_vendor_spot_fee', true ) ),
+			array( __( 'LNKup checkout fee', 'lnkup-marketplace' ), (float) get_post_meta( $payment_id, '_lnkup_vendor_checkout_fee', true ) ),
+			array( __( 'Processing fee', 'lnkup-marketplace' ), (float) get_post_meta( $payment_id, '_lnkup_processing_fee', true ) ),
+			array( __( 'Sales tax', 'lnkup-marketplace' ), (float) get_post_meta( $payment_id, '_lnkup_tax_amount', true ) ),
+			array( __( 'Discount', 'lnkup-marketplace' ), -1 * (float) get_post_meta( $payment_id, '_lnkup_discount_amount', true ) ),
+		);
+		$items = array_values(
+			array_filter(
+				$items,
+				static function ( $row ) {
+					return abs( $row[1] ) >= 0.005;
+				}
+			)
+		);
+		$sum    = array_sum( array_column( $items, 1 ) );
+		$total  = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
+		$credit = (float) get_post_meta( $payment_id, '_lnkup_credit_applied', true );
+		if ( $credit > 0 && abs( ( $sum - $credit ) - $total ) < 0.01 ) {
+			$items[] = array( __( 'Credit applied', 'lnkup-marketplace' ), -1 * $credit );
+		}
+		return $items;
 	}
 
 	public static function generate_number() {
@@ -57,7 +173,8 @@ class LNKup_Invoices {
 		$app_id = (int) get_post_meta( $payment_id, '_lnkup_application_id', true );
 		if ( $app_id ) {
 			$existing = self::get_by_application( $app_id );
-			if ( $existing ) {
+			// A voided invoice belongs to a replaced payment; the new payment gets its own invoice.
+			if ( $existing && ! in_array( $existing['status'], array( 'void', 'cancelled' ), true ) ) {
 				return (int) $existing['id'];
 			}
 		}
@@ -95,9 +212,9 @@ class LNKup_Invoices {
 			array( '%s', '%s' ),
 			array( '%d' )
 		);
-		self::add_item( $invoice_id, __( 'Vendor spot fee', 'lnkup-marketplace' ), (float) get_post_meta( $payment_id, '_lnkup_vendor_spot_fee', true ) );
-		self::add_item( $invoice_id, __( 'LNKup platform fee', 'lnkup-marketplace' ), (float) get_post_meta( $payment_id, '_lnkup_lnkup_fee', true ) );
-		self::add_item( $invoice_id, __( 'Processing fee', 'lnkup-marketplace' ), (float) get_post_meta( $payment_id, '_lnkup_processing_fee', true ) );
+		foreach ( self::line_items_for_payment( $payment_id ) as $row ) {
+			self::add_item( $invoice_id, $row[0], $row[1] );
+		}
 		LNKup_Financial_Audit::log( 'invoice_generated', 'invoice', $invoice_id, array( 'amount' => $total ) );
 		return $invoice_id;
 	}
@@ -225,7 +342,7 @@ class LNKup_Invoices {
 		$org     = get_userdata( (int) $invoice['organizer_user_id'] );
 		$meta    = ! empty( $invoice['metadata'] ) ? json_decode( $invoice['metadata'], true ) : array();
 		$verify  = $meta['verify_token'] ?? '';
-		$qr_url  = $verify ? 'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=' . rawurlencode( add_query_arg( 'lnkup_verify_invoice', $verify, home_url( '/' ) ) ) : '';
+		$verify_url = $verify ? add_query_arg( 'lnkup_verify_invoice', $verify, home_url( '/' ) ) : '';
 
 		ob_start();
 		?>
@@ -258,7 +375,7 @@ class LNKup_Invoices {
 		</tbody></table>
 		<p class="total">Total: <?php echo esc_html( lnkup_currency( $invoice['total_amount'] ) ); ?></p>
 		<p>Status: <?php echo esc_html( ucfirst( $invoice['status'] ) ); ?></p>
-		<?php if ( $qr_url ) : ?><div class="qr"><img src="<?php echo esc_url( $qr_url ); ?>" alt="Verify" width="120" height="120"><p class="lnkup-muted">Scan to verify invoice</p></div><?php endif; ?>
+		<?php if ( $verify_url ) : ?><div class="qr"><p class="lnkup-muted"><?php esc_html_e( 'Verify this invoice at:', 'lnkup-marketplace' ); ?><br><?php echo esc_html( $verify_url ); ?></p></div><?php endif; ?>
 		</body></html>
 		<?php
 		return ob_get_clean();
@@ -278,10 +395,27 @@ class LNKup_Invoices {
 		return wp_mail( $vendor->user_email, $subject, $body, $headers );
 	}
 
+	/**
+	 * Find an invoice by its exact verification token. Tokens are 24 alphanumeric characters.
+	 *
+	 * @param string $token Token from the verify link.
+	 * @return array|null
+	 */
 	public static function verify_by_token( $token ) {
 		global $wpdb;
-		$table = LNKup_Financial_Tables::invoices_table();
-		$rows  = $wpdb->get_results( "SELECT * FROM {$table} WHERE metadata LIKE '%" . esc_sql( $token ) . "%' LIMIT 1", ARRAY_A );
-		return $rows[0] ?? null;
+		$token = (string) $token;
+		if ( ! preg_match( '/^[A-Za-z0-9]{20,64}$/', $token ) ) {
+			return null;
+		}
+		$table  = LNKup_Financial_Tables::invoices_table();
+		$needle = '%' . $wpdb->esc_like( '"verify_token":"' . $token . '"' ) . '%';
+		$rows   = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE metadata LIKE %s LIMIT 2", $needle ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		foreach ( (array) $rows as $row ) {
+			$meta = json_decode( (string) $row['metadata'], true );
+			if ( is_array( $meta ) && isset( $meta['verify_token'] ) && hash_equals( (string) $meta['verify_token'], $token ) ) {
+				return $row;
+			}
+		}
+		return null;
 	}
 }

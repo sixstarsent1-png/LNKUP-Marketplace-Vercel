@@ -121,7 +121,33 @@ class LNKup_Financial_Disputes {
 			0,
 			array( 'force' => true )
 		);
-		return is_wp_error( $result ) ? 0 : (int) $result;
+		if ( is_wp_error( $result ) ) {
+			return 0;
+		}
+		if ( class_exists( 'LNKup_Trust_Cases' ) ) {
+			LNKup_Trust_Cases::open(
+				array(
+					'case_type'      => 'chargeback',
+					'severity'       => 'elevated',
+					'subject_type'   => 'payment',
+					'subject_id'     => $payment_id,
+					'payment_id'     => $payment_id,
+					'event_id'       => (int) get_post_meta( $payment_id, '_lnkup_event_id', true ),
+					'application_id' => (int) get_post_meta( $payment_id, '_lnkup_application_id', true ),
+					'signal_key'     => 'chargeback_' . $payment_id,
+					'summary'        => sanitize_text_field( $reason ?: 'Card network chargeback opened.' ),
+					'evidence'       => array(
+						array(
+							'source'      => 'stripe_webhook',
+							'dispute_row' => (int) $result,
+							'at'          => current_time( 'mysql', true ),
+						),
+					),
+					'next_step'      => __( 'Check the evidence deadline in the Stripe Dashboard and gather booking, acceptance and check-in records.', 'lnkup-marketplace' ),
+				)
+			);
+		}
+		return (int) $result;
 	}
 
 	/**

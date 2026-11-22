@@ -294,7 +294,7 @@ export default function VendorMoreScreen() {
         </ListGroup>
       ))}
 
-      <PushPreferencesCard />
+      <PushPreferencesCard settingsHref="/(vendor)/notification-settings" />
 
       <Button
         label="Sign out"

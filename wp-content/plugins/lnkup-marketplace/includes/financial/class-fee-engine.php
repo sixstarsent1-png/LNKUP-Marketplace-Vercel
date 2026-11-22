@@ -160,8 +160,50 @@ class LNKup_Fee_Engine {
 				"UPDATE {$table} SET status = 'inactive' WHERE status = 'active' AND fee_type = 'flat' AND scope_type = 'global'"
 			);
 		}
+		self::migrate_global_commission_rule();
 
 		update_option( 'lnkup_fee_settings_migrated_v2', LNKUP_VERSION );
+	}
+
+	/**
+	 * B-12: the seeded global `percent` rule silently overrode organizer_commission_percent, so
+	 * admin changes to that setting did nothing. Copy the rule's value into the setting first
+	 * (effective fees do not change), then retire the global rule so the setting is authoritative.
+	 * Scoped (organizer / event / category) rules keep precedence over the setting.
+	 *
+	 * @return array{migrated:bool, from:float|null, to:float|null}
+	 */
+	public static function migrate_global_commission_rule() {
+		global $wpdb;
+		$out   = array( 'migrated' => false, 'from' => null, 'to' => null );
+		$table = LNKup_Financial_Tables::fee_rules_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return $out;
+		}
+		$rule = $wpdb->get_row( "SELECT * FROM {$table} WHERE status = 'active' AND fee_type = 'percent' AND scope_type = 'global' ORDER BY priority ASC, id ASC LIMIT 1", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( ! $rule ) {
+			return $out;
+		}
+		$stored  = get_option( 'lnkup_settings', array() );
+		$stored  = is_array( $stored ) ? $stored : array();
+		$current = isset( $stored['organizer_commission_percent'] ) ? (float) $stored['organizer_commission_percent'] : 6.0;
+		$value   = (float) $rule['fee_value'];
+		$stored['organizer_commission_percent'] = $value;
+		update_option( 'lnkup_settings', $stored );
+		$wpdb->query( "UPDATE {$table} SET status = 'inactive' WHERE status = 'active' AND fee_type = 'percent' AND scope_type = 'global'" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( class_exists( 'LNKup_Financial_Audit' ) ) {
+			LNKup_Financial_Audit::log(
+				'fee_global_commission_rule_retired',
+				'fee_rule',
+				(int) $rule['id'],
+				array(
+					'rule_percent'             => $value,
+					'previous_setting_percent' => $current,
+					'note'                     => 'Effective commission unchanged; organizer_commission_percent is now authoritative.',
+				)
+			);
+		}
+		return array( 'migrated' => true, 'from' => $current, 'to' => $value );
 	}
 
 	/**
@@ -204,6 +246,13 @@ class LNKup_Fee_Engine {
 	 * @param string $category     Category slug.
 	 */
 	private static function match_commission_rule( $organizer_id, $event_id, $category ) {
+		// Scoped (organizer / event / category) rules always beat a global rule, whatever the priority.
+		$rule = self::match_rule_by_types( $organizer_id, $event_id, $category, array( 'percent', 'hybrid' ), true );
+		if ( $rule ) {
+			return $rule;
+		}
+		// An active global rule still applies until migrate_global_commission_rule() retires it,
+		// so effective fees never change between deploy and migration.
 		return self::match_rule_by_types( $organizer_id, $event_id, $category, array( 'percent', 'hybrid' ) );
 	}
 
@@ -231,8 +280,9 @@ class LNKup_Fee_Engine {
 	 * @param int    $event_id     Event ID.
 	 * @param string $category     Category slug.
 	 * @param array  $fee_types    Allowed fee_type values.
+	 * @param bool   $scoped_only  Skip global rules (settings own the global default).
 	 */
-	private static function match_rule_by_types( $organizer_id, $event_id, $category, array $fee_types ) {
+	private static function match_rule_by_types( $organizer_id, $event_id, $category, array $fee_types, $scoped_only = false ) {
 		global $wpdb;
 		$table = LNKup_Financial_Tables::fee_rules_table();
 		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
@@ -248,6 +298,9 @@ class LNKup_Fee_Engine {
 			}
 			$scope    = $rule['scope_type'] ?? 'global';
 			$scope_id = $rule['scope_id'] ?? '';
+			if ( $scoped_only && 'global' === $scope ) {
+				continue;
+			}
 			if ( 'organizer' === $scope && (int) $scope_id !== $organizer_id ) {
 				continue;
 			}
@@ -316,11 +369,13 @@ class LNKup_Fee_Engine {
 		$gross        = (float) get_post_meta( $payment_id, '_lnkup_total_amount', true );
 
 		$base = self::calculate( array(
-			'vendor_fee'   => $vendor_fee,
-			'organizer_id' => $organizer_id,
-			'event_id'     => $event_id,
-			'discount'     => $discount,
-			'credit'       => $credit,
+			'vendor_fee'     => $vendor_fee,
+			'organizer_id'   => $organizer_id,
+			'event_id'       => $event_id,
+			'category'       => class_exists( 'LNKup_Payments' ) ? LNKup_Payments::fee_category_for_payment( $payment_id ) : '',
+			'payment_method' => (string) get_post_meta( $payment_id, '_lnkup_payment_method', true ) ?: 'card',
+			'discount'       => $discount,
+			'credit'         => $credit,
 		) );
 
 		$platform_fee      = (float) ( $base['platform_fee'] ?? 0 );
@@ -428,28 +483,9 @@ class LNKup_Fee_Engine {
 	}
 
 	/**
-	 * Seed default global fee rule if none exist.
+	 * No-op: the global commission default lives in lnkup_settings.organizer_commission_percent.
+	 * Seeding a global percent rule here shadowed that setting (B-12). Kept for callers.
 	 */
 	public static function seed_defaults() {
-		global $wpdb;
-		$table = LNKup_Financial_Tables::fee_rules_table();
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
-		if ( $count > 0 ) {
-			return;
-		}
-		$settings = lnkup_get_settings();
-		$wpdb->insert(
-			$table,
-			array(
-				'name'       => 'Default organizer commission',
-				'scope_type' => 'global',
-				'scope_id'   => '',
-				'fee_type'   => 'percent',
-				'fee_value'  => (float) ( $settings['organizer_commission_percent'] ?? 6 ),
-				'priority'   => 100,
-				'status'     => 'active',
-				'created_at' => current_time( 'mysql' ),
-			)
-		);
 	}
 }

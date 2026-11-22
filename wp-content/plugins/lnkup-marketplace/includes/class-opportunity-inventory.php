@@ -40,7 +40,7 @@ class LNKup_Opportunity_Inventory {
 				"SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
 				INNER JOIN {$wpdb->postmeta} o ON o.post_id = p.ID AND o.meta_key = '_lnkup_opportunity_id' AND o.meta_value = %s
 				INNER JOIN {$wpdb->postmeta} s ON s.post_id = p.ID AND s.meta_key = '_lnkup_application_status' AND s.meta_value IN ({$placeholders})
-				WHERE p.post_type = 'lnkup_application' AND p.post_status NOT IN ('trash','auto-draft') AND p.ID <> %d",
+				WHERE p.post_type = 'lnkup_application' AND p.post_status NOT IN ('trash','auto-draft','lnkup_app_draft') AND p.ID <> %d",
 				array_merge( array( (string) absint( $opp_id ) ), $statuses, array( absint( $exclude_app_id ) ) )
 			)
 		);
@@ -200,7 +200,7 @@ class LNKup_Opportunity_Inventory {
 				"SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
 				INNER JOIN {$wpdb->postmeta} o ON o.post_id = p.ID AND o.meta_key = '_lnkup_opportunity_id' AND o.meta_value = %s
 				INNER JOIN {$wpdb->postmeta} s ON s.post_id = p.ID AND s.meta_key = '_lnkup_application_status' AND s.meta_value IN ({$placeholders})
-				WHERE p.post_type = 'lnkup_application' AND p.post_status NOT IN ('trash','auto-draft')",
+				WHERE p.post_type = 'lnkup_application' AND p.post_status NOT IN ('trash','auto-draft','lnkup_app_draft')",
 				array_merge( array( (string) absint( $opp_id ) ), $statuses )
 			)
 		);
