@@ -4,7 +4,8 @@ import { isEventPast } from "@/lib/vendor/vendor-stage"
 export type TimelineState = "done" | "current" | "upcoming" | "stopped"
 
 export type TimelineStep = {
-  key: "applied" | "review" | "info" | "decision" | "payment" | "event"
+  /** Local steps use applied/review/info/decision/payment/event; server timelines use their own keys. */
+  key: string
   label: string
   detail?: string
   state: TimelineState

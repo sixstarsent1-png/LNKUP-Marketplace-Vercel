@@ -30,7 +30,7 @@ Plugin 12.33.0, built on the Booking & Application OS foundation ([BOOKING_APPLI
 | GET | `/bookings/vendor` | vendor | Query `bucket, tour_id, city, from, to, page, per_page`. Returns `items, total, page, pages, per_page, counts, filters, filter_options{cities,tours}`. |
 | GET | `/bookings/vendor/{id}` | vendor + ownership | 404 for anything the caller does not own. |
 
-Mobile contract: `app/booking/[applicationId].tsx` can switch from fetching the whole request list to `/bookings/vendor/{id}` (not changed in this stage).
+Mobile: `app/booking/[applicationId].tsx` uses `/bookings/vendor/{id}` since Stage 11 (below).
 
 ### Web UI
 
@@ -91,8 +91,21 @@ The two Playwright failures are not caused by this change:
 2. Turn on `flow_application_drafts` in Communications settings after checking one test draft on staging (two scheduled messages appear in the queue).
 3. Rollback: turn the flag off (scheduled draft reminders are suppressed at send time by the flag check) and remove the My Bookings nav item if needed; `?view=bookings` keeps working.
 
+## Stage 11: Mobile (Expo) booking and apply parity
+
+Client-only; no plugin change or version bump. Uses existing `lnkup/v1` routes with the app's Application Password (Basic auth).
+
+| Screen | Change | Routes |
+|---|---|---|
+| `app/booking/[applicationId].tsx` | Payment (total, wallet credit, card charge, due now with deadline, refunds, receipts), "Before the event" readiness checklist, booth and venue address, submitted answers, organizer note, server timeline. The cached request list still supplies the opportunity link and the organizer question; older servers without the route fall back to the list. | `GET /bookings/vendor/{id}`, `GET /applications/vendor` |
+| `app/(vendor)/requests.tsx` | "Continue applying" section (`components/vendor/draft-resume-list.tsx`): resume opens `/apply/{opp}`, discard asks for confirmation. Hidden when there are no drafts or the call fails. | `GET /applications/drafts`, `DELETE /applications/drafts/{opp}` |
+| `app/apply/[opportunityId].tsx` | "Your profile" card (`components/apply/apply-profile-card.tsx`) with "this application only" edits for business name, products, setup needs, contact email and phone; only fields that differ from the profile are sent. Fee engine breakdown (booth, checkout fee, processing, tax, estimated total) replaces the single fee row, which stays as the fallback. | `GET /applications/apply-context/{opp}`, `GET/PUT /applications/drafts/{opp}`, `GET /applications/price-quote/{opp}`, `POST /applications/apply-with-profile` |
+
+Note: the apply-context draft omits `profile_overrides`, and autosave replaces overrides wholesale. When a draft exists the app also loads `GET /applications/drafts/{opp}` (as the web wizard does), and the screen fails to load rather than autosave without them.
+
+Verified: `tsc --noEmit`; Jest 178/178 (new `__tests__/booking-parity.test.ts`); Expo web against seeded wp-env as `e2e_vendor_a`: drafts card resume, apply breakdown ($212.26 estimate), overrides persisting across autosave and reload, unpaid booking (Pay $129.94, due date), paid free booking (receipt, readiness, Open event pass), unknown booking ID ("Booking not found").
+
 ## Limitations
 
-- Expo screens still use the request list for booking detail; switch to `/bookings/vendor/{id}` in the mobile stage.
 - Booking modifications (date / booth change requests) and organizer-side unpaid queues are later stages.
 - Draft reminders respect category preferences but not a separate "marketing" opt-out, because they are operational for an application the vendor started.

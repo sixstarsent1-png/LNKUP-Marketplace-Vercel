@@ -46,6 +46,7 @@ describe("apply context mapping", () => {
       updatedAt: "",
       fields: { selectedCategory: "Food", message: "Hi", setupNotes: "10x10" },
       answers: { q1: "Yes" },
+      profileOverrides: {},
     })
     expect(ctx.tourId).toBe(77)
     expect(ctx.features).toEqual({ drafts: true, tourMultiApply: false })

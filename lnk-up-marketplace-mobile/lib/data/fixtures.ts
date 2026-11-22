@@ -334,6 +334,7 @@ export const MOCK_APPLY_CONTEXT: ApplyContext = {
   previousApplication: null,
   tourId: null,
   features: { drafts: false, tourMultiApply: false },
+  profile: null,
 }
 
 const MOCK_CONNECT_SETUP_REQUIRED: OrganizerConnectState = {

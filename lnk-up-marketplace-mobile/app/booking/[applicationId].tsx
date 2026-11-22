@@ -14,7 +14,9 @@ import { Surface } from "@/components/ui/surface"
 import { DisplayTitle, Meta, SectionTitle } from "@/components/ui/typography"
 import { BookingTimelineView } from "@/components/vendor/booking-timeline-view"
 import { canWithdraw, withdrawApplication } from "@/lib/api/apply"
-import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
+import { isLiveApiEnabled } from "@/lib/api/config"
+import { appErrorFromWp, WpFetchError, type AppErrorShape } from "@/lib/api/errors"
+import { fetchVendorBooking, type BookingPayment, type VendorBooking } from "@/lib/api/vendor-bookings"
 import { fetchVendorRequests, invalidateVendorRequests, type VendorRequest } from "@/lib/api/vendor-requests"
 import { formatMoney } from "@/lib/api/vendor-wallet"
 import { useAuth } from "@/lib/auth/auth-context"
@@ -42,7 +44,61 @@ function primaryActionFor(request: VendorRequest): PrimaryAction | null {
   return null
 }
 
-/** One application/booking: status, timeline, organizer question, and the next action. */
+const money = (amount: number) => formatMoney(amount, "USD")
+
+function PaymentRows({ payment }: { payment: BookingPayment }) {
+  return (
+    <>
+      <ListRow icon="card-outline" title="Booking total" meta={money(payment.total)} />
+      {payment.creditApplied > 0 ? (
+        <ListRow icon="wallet-outline" title="Wallet credit used" meta={money(payment.creditApplied)} />
+      ) : null}
+      {payment.cardCharged > 0 ? (
+        <ListRow
+          icon="checkmark-circle-outline"
+          title="Charged to your card"
+          meta={[money(payment.cardCharged), payment.paidAt].filter(Boolean).join(" · ")}
+        />
+      ) : null}
+      {payment.amountDue > 0 ? (
+        <ListRow
+          icon="alert-circle-outline"
+          iconTone="accent"
+          title="Due now"
+          meta={[money(payment.amountDue), payment.dueAt ? `by ${payment.dueAt}` : ""].filter(Boolean).join(" · ")}
+        />
+      ) : null}
+      {payment.refunded > 0 ? <ListRow icon="return-down-back-outline" title="Refunded" meta={money(payment.refunded)} /> : null}
+      {payment.receipts.map((receipt) => (
+        <ListRow
+          key={`receipt-${receipt.id}`}
+          icon="receipt-outline"
+          title={receipt.number ? `Receipt ${receipt.number}` : "Receipt"}
+          meta={[money(receipt.amount), receipt.createdAt].filter(Boolean).join(" · ")}
+        />
+      ))}
+      {payment.refunds.map((refund) => (
+        <ListRow
+          key={`refund-${refund.id}`}
+          icon="return-down-back-outline"
+          title={`Refund ${money(refund.amount)}`}
+          meta={[refund.status, refund.createdAt].filter(Boolean).join(" · ")}
+        />
+      ))}
+      {payment.receipts.length > 0 ? (
+        <ListRow
+          icon="wallet-outline"
+          title="Receipts and invoices"
+          meta="Open in Wallet"
+          showChevron
+          onPress={() => router.push("/(vendor)/wallet" as Href)}
+        />
+      ) : null}
+    </>
+  )
+}
+
+/** One application/booking: status, payment, readiness, timeline, organizer question, and the next action. */
 export default function BookingDetailScreen() {
   const { applicationId } = useLocalSearchParams<{ applicationId: string }>()
   const { auth, isAuthenticated } = useAuth()
@@ -50,6 +106,7 @@ export default function BookingDetailScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<AppErrorShape | null>(null)
   const [request, setRequest] = useState<VendorRequest | null>(null)
+  const [booking, setBooking] = useState<VendorBooking | null>(null)
   const loadedOnce = useRef(false)
   const id = String(applicationId ?? "")
 
@@ -58,10 +115,23 @@ export default function BookingDetailScreen() {
       if (force) setRefreshing(true)
       setError(null)
       try {
-        const { items } = await fetchVendorRequests(auth, { force })
-        setRequest(items.find((item) => item.id === id) ?? null)
+        // The booking route has no opportunity link or organizer question, and older servers lack it;
+        // the (shared, cached) request list fills those in.
+        const listPromise = fetchVendorRequests(auth, { force })
+        listPromise.catch(() => undefined) // Handled below; avoids an unhandled rejection if the detail call throws first.
+        const detail = auth && isLiveApiEnabled() ? await fetchVendorBooking(id, auth) : null
+        const listed = detail
+          ? await listPromise.then((r) => r.items.find((item) => item.id === id) ?? null).catch(() => null)
+          : ((await listPromise).items.find((item) => item.id === id) ?? null)
+        setBooking(detail)
+        setRequest(detail ? { ...detail.request, opportunityId: listed?.opportunityId, infoRequest: listed?.infoRequest } : listed)
       } catch (err) {
-        setError(appErrorFromWp(err))
+        if (err instanceof WpFetchError && err.status === 404) {
+          setBooking(null)
+          setRequest(null)
+        } else {
+          setError(appErrorFromWp(err))
+        }
       } finally {
         setLoading(false)
         setRefreshing(false)
@@ -77,9 +147,14 @@ export default function BookingDetailScreen() {
     }, [load]),
   )
 
-  const timeline = useMemo(() => (request ? bookingTimeline(request) : []), [request])
+  const timeline = useMemo(() => {
+    if (booking?.timeline.length) return booking.timeline
+    return request ? bookingTimeline(request) : []
+  }, [booking, request])
   const action = request ? primaryActionFor(request) : null
   const [withdrawing, setWithdrawing] = useState(false)
+  const withdrawable = booking ? booking.canWithdraw : request ? canWithdraw(request.status, request.paymentStatus) : false
+  const decided = request ? ["approved", "payment_required", "paid", "completed"].includes(request.status) : false
 
   async function handleWithdraw() {
     if (!request || withdrawing) return
@@ -106,6 +181,8 @@ export default function BookingDetailScreen() {
   if (!isAuthenticated) {
     return <Redirect href={{ pathname: "/login", params: { returnTo: `/booking/${id}` } }} />
   }
+
+  const venueLine = booking ? [booking.venue, booking.venueAddress].filter(Boolean).join(" · ") : ""
 
   return (
     <Screen
@@ -145,7 +222,7 @@ export default function BookingDetailScreen() {
             <DisplayTitle accessibilityRole="header" style={styles.title}>
               {request.eventName}
             </DisplayTitle>
-            <Meta>{[request.eventDate, request.city].filter(Boolean).join(" · ")}</Meta>
+            <Meta>{[request.eventDate, booking?.startTime, request.city].filter(Boolean).join(" · ")}</Meta>
           </View>
 
           {request.status === "info_requested" && request.infoRequest ? (
@@ -168,10 +245,50 @@ export default function BookingDetailScreen() {
             <BookingTimelineView steps={timeline} />
           </Surface>
 
+          {booking ? (
+            <View testID="booking-payment">
+              <ListGroup title="Payment">
+                {booking.payment ? (
+                  <PaymentRows payment={booking.payment} />
+                ) : (
+                  <ListRow
+                    icon="card-outline"
+                    title={decided ? "No payment due" : "No payment yet"}
+                    meta={decided ? undefined : "You only pay after the organizer approves you."}
+                  />
+                )}
+              </ListGroup>
+            </View>
+          ) : null}
+
+          {booking?.readiness ? (
+            <View testID="booking-readiness">
+              <ListGroup title={`Before the event · ${booking.readiness.percent}% ready`}>
+                {booking.readiness.items.map((item) => (
+                  <ListRow
+                    key={item.key}
+                    icon={item.done ? "checkmark-circle" : "ellipse-outline"}
+                    iconTone={item.done ? "default" : "accent"}
+                    title={item.label}
+                    accessibilityLabel={`${item.label}, ${item.done ? "done" : "to do"}`}
+                  />
+                ))}
+                <ListRow
+                  icon="document-text-outline"
+                  title="Manage documents"
+                  showChevron
+                  onPress={() => router.push("/(vendor)/documents" as Href)}
+                />
+              </ListGroup>
+            </View>
+          ) : null}
+
           <ListGroup title="Details">
             {request.organizerName ? <ListRow icon="business-outline" title="Organizer" meta={request.organizerName} /> : null}
+            {booking?.booth ? <ListRow icon="grid-outline" title="Booth" meta={booking.booth} /> : null}
+            {venueLine ? <ListRow icon="location-outline" title="Venue" meta={venueLine} /> : null}
             {request.category ? <ListRow icon="pricetag-outline" title="Vendor category" meta={request.category} /> : null}
-            {request.amountDue != null && request.amountDue > 0 ? (
+            {!booking && request.amountDue != null && request.amountDue > 0 ? (
               <ListRow
                 icon="card-outline"
                 title="Booth fee"
@@ -189,7 +306,18 @@ export default function BookingDetailScreen() {
             ) : null}
           </ListGroup>
 
-          {canWithdraw(request.status, request.paymentStatus) ? (
+          {booking && (booking.answers.length > 0 || booking.rejectionReason) ? (
+            <ListGroup title="Your application">
+              {booking.answers.map((answer) => (
+                <ListRow key={answer.id} icon="chatbox-ellipses-outline" title={answer.label} meta={answer.value} />
+              ))}
+              {booking.rejectionReason ? (
+                <ListRow icon="chatbubble-outline" title="Organizer note" meta={booking.rejectionReason} />
+              ) : null}
+            </ListGroup>
+          ) : null}
+
+          {withdrawable ? (
             <Button
               label="Withdraw application"
               variant="ghost"

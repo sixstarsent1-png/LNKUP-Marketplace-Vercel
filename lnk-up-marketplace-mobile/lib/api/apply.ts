@@ -3,6 +3,7 @@ import { invalidateVendorRequests } from "@/lib/api/vendor-requests"
 import type { WpAuth } from "@/lib/api/wp-client"
 import { wpFetchJson } from "@/lib/api/wp-client"
 import { MOCK_APPLY_CONTEXT } from "@/lib/data/fixtures"
+import { formatShortDate } from "@/lib/format/date"
 
 export type ApplyContext = {
   opportunityId: number
@@ -27,6 +28,59 @@ export type ApplyContext = {
   previousApplication: PreviousApplication | null
   tourId: number | null
   features: { drafts: boolean; tourMultiApply: boolean }
+  /** What the organizer will see from the vendor profile; null when the vendor has no profile yet. */
+  profile: ApplyProfile | null
+}
+
+/** Profile snapshot fields a vendor may change for one application (LNKup_Applications::PROFILE_OVERRIDE_FIELDS). */
+export const PROFILE_OVERRIDE_FIELDS = ["businessName", "products", "setupNeeds", "contactEmail", "contactPhone"] as const
+
+export type ProfileOverrideField = (typeof PROFILE_OVERRIDE_FIELDS)[number]
+
+export type ApplyProfile = Record<ProfileOverrideField, string>
+
+export type ProfileOverrides = Partial<ApplyProfile>
+
+const OVERRIDE_WIRE: Record<ProfileOverrideField, string> = {
+  businessName: "business_name",
+  products: "products",
+  setupNeeds: "setup_needs",
+  contactEmail: "contact_email",
+  contactPhone: "contact_phone",
+}
+
+type WpProfileFields = Partial<Record<string, unknown>>
+
+function mapProfileFields(raw: WpProfileFields | null | undefined): ProfileOverrides {
+  const out: ProfileOverrides = {}
+  if (!raw || typeof raw !== "object") return out
+  for (const field of PROFILE_OVERRIDE_FIELDS) {
+    const value = raw[OVERRIDE_WIRE[field]]
+    if (typeof value === "string") out[field] = value
+  }
+  return out
+}
+
+/** Only the fields that differ from the profile, so unchanged ones keep tracking it. */
+export function changedProfileFields(overrides: ProfileOverrides, profile: ApplyProfile | null): ProfileOverrides {
+  const out: ProfileOverrides = {}
+  for (const field of PROFILE_OVERRIDE_FIELDS) {
+    const value = overrides[field]
+    if (value === undefined) continue
+    const trimmed = value.trim()
+    if (trimmed !== (profile?.[field] ?? "").trim()) out[field] = trimmed
+  }
+  return out
+}
+
+/** Wire body for `profile_overrides`. */
+export function profileOverridesBody(overrides: ProfileOverrides | undefined): Record<string, string> {
+  const body: Record<string, string> = {}
+  for (const field of PROFILE_OVERRIDE_FIELDS) {
+    const value = overrides?.[field]
+    if (value !== undefined) body[OVERRIDE_WIRE[field]] = value
+  }
+  return body
 }
 
 export type ApplyAnswerValue = string | boolean | number
@@ -46,6 +100,7 @@ export type ApplyDraft = {
   updatedAt: string
   fields: { selectedCategory: string; message: string; setupNotes: string }
   answers: Record<string, ApplyAnswerValue>
+  profileOverrides: ProfileOverrides
 }
 
 export type PreviousApplication = {
@@ -99,6 +154,7 @@ type WpApplyContext = {
   previous_application?: PreviousApplication | null
   tour_id?: number
   features?: { drafts?: boolean; tour_multi_apply?: boolean }
+  profile?: WpProfileFields | null
 }
 
 type WpDraft = {
@@ -107,6 +163,7 @@ type WpDraft = {
   updated_at?: string
   fields?: { selected_category?: string; application_message?: string; setup_notes?: string }
   answers?: Record<string, ApplyAnswerValue>
+  profile_overrides?: WpProfileFields | unknown[]
 }
 
 type WpApplyResult = {
@@ -165,6 +222,7 @@ export function mapApplyContext(opportunityId: number, data: WpApplyContext): Ap
     previousApplication: data.previous_application ?? null,
     tourId: data.tour_id ? Number(data.tour_id) : null,
     features: { drafts: Boolean(data.features?.drafts), tourMultiApply: Boolean(data.features?.tour_multi_apply) },
+    profile: data.profile ? { businessName: "", products: "", setupNeeds: "", contactEmail: "", contactPhone: "", ...mapProfileFields(data.profile) } : null,
   }
 }
 
@@ -180,6 +238,8 @@ export function mapDraft(draft: WpDraft | null | undefined): ApplyDraft | null {
       setupNotes: draft.fields?.setup_notes ?? "",
     },
     answers: draft.answers ?? {},
+    // PHP encodes an empty overrides map as [].
+    profileOverrides: Array.isArray(draft.profile_overrides) ? {} : mapProfileFields(draft.profile_overrides),
   }
 }
 
@@ -233,6 +293,7 @@ export async function submitApplication(
     setupNotes?: string
     acceptedTerms: boolean
     answers?: Record<string, ApplyAnswerValue>
+    profileOverrides?: ProfileOverrides
     idempotencyKey?: string
   },
   auth?: WpAuth,
@@ -261,6 +322,7 @@ export async function submitApplication(
       setup_notes: input.setupNotes ?? "",
       accepted_terms: input.acceptedTerms,
       answers: input.answers ?? {},
+      profile_overrides: profileOverridesBody(input.profileOverrides),
       client: "app",
       source: "app",
     },
@@ -289,6 +351,8 @@ export type DraftInput = {
   message: string
   setupNotes: string
   answers: Record<string, ApplyAnswerValue>
+  /** Changed fields only; see changedProfileFields. */
+  profileOverrides: ProfileOverrides
 }
 
 /** Autosave; pass the last revision seen. A 409 `lnkup_draft_conflict` carries the newer draft in `data.draft`. */
@@ -306,6 +370,7 @@ export async function saveApplyDraft(
       step: "review",
       fields: { selected_category: input.selectedCategory, application_message: input.message, setup_notes: input.setupNotes },
       answers: input.answers,
+      profile_overrides: profileOverridesBody(input.profileOverrides),
       revision,
       client: "app",
     },
@@ -329,9 +394,109 @@ export async function submitApplyDraft(
   return mapApplyResult(data)
 }
 
+/**
+ * Full open draft for an opportunity. Apply context omits profile overrides from its draft, and
+ * autosave replaces them wholesale, so the apply screen must read them here before saving.
+ */
+export async function fetchApplyDraft(opportunityId: number, auth?: WpAuth): Promise<ApplyDraft | null> {
+  if (!isLiveApiEnabled() || !auth) return null
+  const data = await wpFetchJson<{ draft?: WpDraft | null }>(`/applications/drafts/${opportunityId}`, { auth })
+  return mapDraft(data.draft)
+}
+
 export async function discardApplyDraft(opportunityId: number, auth?: WpAuth): Promise<void> {
   if (!isLiveApiEnabled() || !auth) return
   await wpFetchJson(`/applications/drafts/${opportunityId}`, { method: "DELETE", auth })
+}
+
+/** Resume card for an unfinished application (`GET /applications/drafts`). */
+export type ApplyDraftCard = {
+  id: number
+  opportunityId: number
+  eventName: string
+  boothName: string
+  eventDate?: string
+  location: string
+  deadline?: string
+  updatedAt?: string
+  progressPercent: number
+  canSubmit: boolean
+  priceChanged: boolean
+}
+
+type WpDraftCard = {
+  id?: number
+  opportunity_id?: number
+  event_name?: string
+  opportunity_title?: string
+  event_date?: string
+  location_label?: string
+  deadline?: string
+  updated_at?: string
+  progress_percent?: number
+  can_submit?: boolean
+  price?: { changed?: boolean }
+}
+
+export function mapDraftCards(data: { items?: WpDraftCard[] } | null | undefined): ApplyDraftCard[] {
+  const items = Array.isArray(data?.items) ? data.items : []
+  return items
+    .filter((item) => item.id && item.opportunity_id)
+    .map((item) => ({
+      id: Number(item.id),
+      opportunityId: Number(item.opportunity_id),
+      eventName: item.event_name || item.opportunity_title || "Event",
+      boothName: item.opportunity_title && item.opportunity_title !== item.event_name ? item.opportunity_title : "",
+      eventDate: formatShortDate(item.event_date),
+      location: item.location_label ?? "",
+      deadline: formatShortDate(item.deadline),
+      updatedAt: formatShortDate(item.updated_at),
+      progressPercent: Math.max(0, Math.min(100, Number(item.progress_percent ?? 0))),
+      canSubmit: item.can_submit !== false,
+      priceChanged: Boolean(item.price?.changed),
+    }))
+}
+
+export async function fetchApplyDrafts(auth?: WpAuth): Promise<ApplyDraftCard[]> {
+  if (!isLiveApiEnabled() || !auth) return []
+  const data = await wpFetchJson<{ items?: WpDraftCard[] }>("/applications/drafts", { auth })
+  return mapDraftCards(data)
+}
+
+/* ------------------------------------------------------------------ */
+/* Price estimate (LNKup_Fee_Engine via REST; never computed here)     */
+/* ------------------------------------------------------------------ */
+
+export type PriceQuote = {
+  currency: string
+  lines: Array<{ key: string; label: string; amount: number }>
+  total: number
+  note: string
+}
+
+type WpPriceQuote = {
+  currency?: string
+  lines?: Array<{ key?: string; label?: string; amount?: number }>
+  total?: number
+  note?: string
+}
+
+export function mapPriceQuote(data: WpPriceQuote): PriceQuote | null {
+  const lines = (Array.isArray(data.lines) ? data.lines : [])
+    .filter((line) => line.key && line.label)
+    .map((line) => ({ key: String(line.key), label: String(line.label), amount: Number(line.amount ?? 0) || 0 }))
+  const total = Number(data.total)
+  if (!lines.length || !Number.isFinite(total)) return null
+  return { currency: data.currency || "USD", lines, total, note: data.note ?? "" }
+}
+
+export async function fetchPriceQuote(opportunityId: number, category: string, auth?: WpAuth): Promise<PriceQuote | null> {
+  if (!isLiveApiEnabled() || !auth) return null
+  const data = await wpFetchJson<WpPriceQuote>(`/applications/price-quote/${opportunityId}`, {
+    auth,
+    query: category ? { category } : undefined,
+  })
+  return mapPriceQuote(data)
 }
 
 /* ------------------------------------------------------------------ */

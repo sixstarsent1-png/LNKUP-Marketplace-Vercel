@@ -6,10 +6,13 @@ import { RequestCard } from "@/components/request-card"
 import { ScreenList } from "@/components/screen"
 import { InlineBanner } from "@/components/ui/banner"
 import { FilterChipRow, type ChipOption } from "@/components/ui/chip"
+import { DraftResumeList } from "@/components/vendor/draft-resume-list"
+import { discardApplyDraft, fetchApplyDrafts, type ApplyDraftCard } from "@/lib/api/apply"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import { fetchVendorRequests, type VendorRequest } from "@/lib/api/vendor-requests"
 import { formatMoney } from "@/lib/api/vendor-wallet"
 import { useAuth } from "@/lib/auth/auth-context"
+import { confirmAction, showToast } from "@/lib/feedback/feedback"
 import { lifecycleOf, vendorLifecycleCounts } from "@/lib/vendor/vendor-stage"
 
 type FilterKey = "all" | "action" | "review" | "confirmed" | "past"
@@ -85,6 +88,8 @@ export default function VendorBookingsScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<AppErrorShape | null>(null)
   const [items, setItems] = useState<VendorRequest[]>([])
+  const [drafts, setDrafts] = useState<ApplyDraftCard[]>([])
+  const [discardingId, setDiscardingId] = useState<number | null>(null)
   const hasLoadedOnce = useRef(false)
   const didFocusLoad = useRef(false)
 
@@ -97,6 +102,10 @@ export default function VendorBookingsScreen() {
       if (mode === "refresh") setRefreshing(true)
       else if (!hasLoadedOnce.current) setInitialLoad(true)
       setError(null)
+      // Drafts are secondary: if they fail to load, the section stays hidden rather than blocking bookings.
+      void fetchApplyDrafts(auth)
+        .then(setDrafts)
+        .catch(() => undefined)
       try {
         const result = await fetchVendorRequests(auth, { force: mode === "refresh" })
         setItems(result.items)
@@ -117,6 +126,35 @@ export default function VendorBookingsScreen() {
       didFocusLoad.current = true
       void load(firstFocus ? "initial" : "focus")
     }, [load]),
+  )
+
+  const handleResumeDraft = useCallback((draft: ApplyDraftCard) => {
+    router.push(`/apply/${draft.opportunityId}` as Href)
+  }, [])
+
+  const handleDiscardDraft = useCallback(
+    async (draft: ApplyDraftCard) => {
+      if (discardingId) return
+      const confirmed = await confirmAction({
+        title: "Discard this application?",
+        message: "Your answers for this booth will be deleted. You can start again while applications are open.",
+        confirmLabel: "Discard",
+        cancelLabel: "Keep it",
+        destructive: true,
+      })
+      if (!confirmed) return
+      setDiscardingId(draft.id)
+      try {
+        await discardApplyDraft(draft.opportunityId, auth)
+        setDrafts((current) => current.filter((d) => d.id !== draft.id))
+        showToast("Application discarded.", "success")
+      } catch (err) {
+        showToast(appErrorFromWp(err).message, "error")
+      } finally {
+        setDiscardingId(null)
+      }
+    },
+    [auth, discardingId],
   )
 
   const counts = useMemo(() => vendorLifecycleCounts(items), [items])
@@ -171,6 +209,13 @@ export default function VendorBookingsScreen() {
       }}
       listHeader={
         <>
+          <DraftResumeList
+            drafts={drafts}
+            discardingId={discardingId}
+            onResume={handleResumeDraft}
+            onDiscard={(draft) => void handleDiscardDraft(draft)}
+          />
+
           <FilterChipRow options={filters} value={filter} onChange={setFilter} />
 
           {filter === "all" && counts.action > 0 ? (
@@ -198,7 +243,10 @@ export default function VendorBookingsScreen() {
             <ErrorPanel title={error.title} message={error.message} onAction={() => void load("refresh")} />
           ) : null}
 
-          {!showFullLoader && !(error && items.length === 0) && visible.length === 0 ? (
+          {!showFullLoader &&
+          !(error && items.length === 0) &&
+          visible.length === 0 &&
+          !(filter === "all" && drafts.length > 0) ? (
             <EmptyPanel
               icon={
                 filter === "action"
