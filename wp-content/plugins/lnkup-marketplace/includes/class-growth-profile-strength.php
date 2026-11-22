@@ -24,17 +24,23 @@ class LNKup_Growth_Profile_Strength {
 	 * @return array<string, mixed>
 	 */
 	public static function calculate( int $profile_id ): array {
-		$user_id = $profile_id ? (int) get_post_meta( $profile_id, '_lnkup_owner_user_id', true ) : 0;
+		$user_id  = $profile_id ? (int) get_post_meta( $profile_id, '_lnkup_owner_user_id', true ) : 0;
 		$sections = self::build_sections( $profile_id, $user_id );
+		$weights  = class_exists( 'LNKup_Passport_Settings' ) ? LNKup_Passport_Settings::strength_weights() : array();
+		$total_w  = array_sum( $weights );
 
-		$score              = 0;
+		$score              = 0.0;
 		$completed_sections = 0;
 		$total_sections     = count( $sections );
 		$missing_items      = array();
 		$recommended        = array();
 
-		foreach ( $sections as $section ) {
-			$score += (int) ( $section['points_earned'] ?? 0 );
+		foreach ( $sections as $i => $section ) {
+			$key    = (string) $section['key'];
+			$max    = max( 1, (int) $section['max_points'] );
+			$weight = $total_w > 0 ? ( (int) ( $weights[ $key ] ?? 0 ) * 100 / $total_w ) : $max;
+			$score += ( (int) $section['points_earned'] / $max ) * $weight;
+			$sections[ $i ]['weight'] = round( $weight, 1 );
 			if ( ! empty( $section['complete'] ) ) {
 				++$completed_sections;
 			}
@@ -48,7 +54,7 @@ class LNKup_Growth_Profile_Strength {
 			}
 		}
 
-		$score = min( 100, max( 0, $score ) );
+		$score = (int) round( min( 100, max( 0, $score ) ) );
 		usort(
 			$recommended,
 			function ( $a, $b ) {
@@ -71,6 +77,12 @@ class LNKup_Growth_Profile_Strength {
 				$recommended
 			) ),
 			'sections'            => $sections,
+			'related'             => array(
+				self::section_documents( $user_id ),
+				self::section_trust_reputation( $profile_id, $user_id ),
+			),
+			'weights'             => $weights,
+			'method'              => __( 'Completeness of your business profile only. Verification, documents and reviews are shown separately and never lower this score.', 'lnkup-marketplace' ),
 			'profile_id'          => $profile_id,
 		);
 	}
@@ -157,8 +169,6 @@ class LNKup_Growth_Profile_Strength {
 			self::section_markets_served( $profile_id ),
 			self::section_setup_requirements( $profile_id ),
 			self::section_photos_proof( $profile_id ),
-			self::section_documents( $user_id ),
-			self::section_trust_reputation( $profile_id, $user_id ),
 			self::section_booking_preferences( $profile_id ),
 		);
 	}
@@ -288,11 +298,8 @@ class LNKup_Growth_Profile_Strength {
 		}
 
 		$checks = array(
-			array( 'key' => 'contact_email', 'meta' => '_lnkup_contact_email', 'pts' => 3, 'label' => __( 'Add contact email', 'lnkup-marketplace' ) ),
-			array( 'key' => 'contact_phone', 'meta' => '_lnkup_contact_phone', 'pts' => 3, 'label' => __( 'Add contact phone', 'lnkup-marketplace' ) ),
-			array( 'key' => 'website', 'meta' => '_lnkup_website', 'pts' => 2, 'label' => __( 'Add website', 'lnkup-marketplace' ) ),
-			array( 'key' => 'instagram', 'meta' => '_lnkup_instagram', 'pts' => 1, 'label' => __( 'Add Instagram', 'lnkup-marketplace' ) ),
-			array( 'key' => 'tiktok', 'meta' => '_lnkup_tiktok', 'pts' => 1, 'label' => __( 'Add TikTok', 'lnkup-marketplace' ) ),
+			array( 'key' => 'contact_email', 'meta' => '_lnkup_contact_email', 'pts' => 4, 'label' => __( 'Add contact email', 'lnkup-marketplace' ) ),
+			array( 'key' => 'contact_phone', 'meta' => '_lnkup_contact_phone', 'pts' => 4, 'label' => __( 'Add contact phone', 'lnkup-marketplace' ) ),
 		);
 
 		foreach ( $checks as $check ) {
@@ -306,6 +313,17 @@ class LNKup_Growth_Profile_Strength {
 			} else {
 				$missing[] = $check['label'];
 			}
+		}
+
+		// Any one web or social presence completes this part; skipping optional networks is never penalized.
+		foreach ( array( '_lnkup_website', '_lnkup_instagram', '_lnkup_tiktok', '_lnkup_facebook' ) as $meta ) {
+			if ( '' !== (string) get_post_meta( $profile_id, $meta, true ) ) {
+				$earned += 2;
+				break;
+			}
+		}
+		if ( $earned < 10 && $earned >= 8 ) {
+			$missing[] = __( 'Optional: add a website or social link', 'lnkup-marketplace' );
 		}
 
 		if ( $earned < $max ) {

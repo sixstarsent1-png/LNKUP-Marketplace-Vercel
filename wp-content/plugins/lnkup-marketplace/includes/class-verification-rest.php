@@ -385,10 +385,24 @@ class LNKup_Verification_REST {
 		if ( 'vendor_profile' === $action ) {
 			$profile_id = absint( $params['profile_id'] ?? 0 );
 			$status     = sanitize_key( (string) ( $params['status'] ?? '' ) );
-			if ( ! $profile_id || ! in_array( $status, array( 'approved', 'rejected', 'pending' ), true ) ) {
+			$decisions  = array( 'approved' => 'verified', 'rejected' => 'rejected', 'pending' => 'pending', 'info_required' => 'info_required', 'revoked' => 'revoked' );
+			if ( ! $profile_id || ! isset( $decisions[ $status ] ) || 'lnkup_vendor_profile' !== get_post_type( $profile_id ) ) {
 				return new WP_Error( 'invalid', __( 'Invalid vendor verification payload.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 			}
-			update_post_meta( $profile_id, '_lnkup_verification_status', $status );
+			$type     = sanitize_key( (string) ( $params['type'] ?? 'business_identity' ) );
+			$recorded = LNKup_Verification_Records::decide(
+				$profile_id,
+				in_array( $type, LNKup_Verification_Records::TYPES, true ) ? $type : 'business_identity',
+				$decisions[ $status ],
+				array(
+					'reason'     => $reason ? $reason : $notes,
+					'expires_at' => sanitize_text_field( (string) ( $params['expires_at'] ?? '' ) ),
+					'authority'  => sanitize_text_field( (string) ( $params['authority'] ?? 'LNKup' ) ),
+				)
+			);
+			if ( is_wp_error( $recorded ) ) {
+				return $recorded;
+			}
 			if ( $notes ) {
 				update_post_meta( $profile_id, '_lnkup_verification_admin_notes', $notes );
 			}
@@ -440,7 +454,10 @@ class LNKup_Verification_REST {
 			if ( ! $doc || 'lnkup_document' !== $doc->post_type ) {
 				return new WP_Error( 'not_found', __( 'Document not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 			}
-			update_post_meta( $doc_id, '_lnkup_verification_status', $status );
+			if ( 'rejected' === $status && '' === trim( $reason . $notes ) ) {
+				return new WP_Error( 'reason_required', __( 'Tell the vendor why the document was not approved.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+			}
+			LNKup_Documents::set_review_status( $doc_id, $status, $reason ? $reason : $notes );
 			if ( $notes ) {
 				update_post_meta( $doc_id, '_lnkup_admin_notes', $notes );
 			}

@@ -103,6 +103,9 @@ class LNKup_Activator {
 		if ( class_exists( 'LNKup_Inbox_Tables' ) ) {
 			LNKup_Inbox_Tables::create_tables();
 		}
+		if ( class_exists( 'LNKup_Org_Growth_Tables' ) ) {
+			LNKup_Org_Growth_Tables::create_tables();
+		}
 	}
 
 	/**
@@ -193,6 +196,9 @@ class LNKup_Activator {
 	public static function deactivate() {
 		LNKup_Marketplace_Cron::unschedule();
 		LNKup_Financial_Cron::unschedule();
+		wp_clear_scheduled_hook( 'lnkup_documents_expire' );
+		wp_clear_scheduled_hook( 'lnkup_waitlist_offers_expire' );
+		wp_clear_scheduled_hook( 'lnkup_pass_tokens_backfill' );
 		if ( class_exists( 'LNKup_External_Events_Cron' ) ) {
 			wp_clear_scheduled_hook( LNKup_External_Events_Cron::HOOK );
 			LNKup_External_Events_Cron::unschedule_sync();
@@ -264,6 +270,16 @@ class LNKup_Activator {
 				'title'    => 'Become a City Connector',
 				'template' => 'page-templates/connector-interest.php',
 				'content'  => '[lnkup_connector_interest_form]',
+			),
+			'affiliate-program'  => array(
+				'title'    => 'Affiliate Program',
+				'template' => 'page-templates/partner-program.php',
+				'content'  => '[lnkup_partner_application program="affiliate"]',
+			),
+			'partner-with-lnkup' => array(
+				'title'    => 'Partner With LNKup',
+				'template' => 'page-templates/partner-program.php',
+				'content'  => '[lnkup_partner_application program="strategic_partner"]',
 			),
 			'claim-event'        => array(
 				'title'    => 'Claim Event',
@@ -366,6 +382,14 @@ class LNKup_Activator {
 			'connector-interest' => array(
 				'template' => 'page-templates/connector-interest.php',
 				'content'  => '[lnkup_connector_interest_form]',
+			),
+			'affiliate-program'  => array(
+				'template' => 'page-templates/partner-program.php',
+				'content'  => '[lnkup_partner_application program="affiliate"]',
+			),
+			'partner-with-lnkup' => array(
+				'template' => 'page-templates/partner-program.php',
+				'content'  => '[lnkup_partner_application program="strategic_partner"]',
 			),
 			'organizers' => array(
 				'template' => 'page-templates/public-storefront.php',

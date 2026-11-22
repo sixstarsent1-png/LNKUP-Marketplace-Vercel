@@ -28,7 +28,7 @@ class LNKup_Referral_Credits {
 		}
 		if ( class_exists( 'LNKup_Connector' ) ) {
 			$row = LNKup_Connector::resolve_code( $code );
-			if ( $row && LNKup_Connector::PROGRAM === ( $row['program'] ?? '' ) ) {
+			if ( $row && LNKup_Connector::is_account_program( (string) ( $row['program'] ?? '' ) ) ) {
 				return;
 			}
 		}
@@ -106,7 +106,7 @@ class LNKup_Referral_Credits {
 		}
 		if ( class_exists( 'LNKup_Connector' ) ) {
 			$row = LNKup_Connector::resolve_code( $ref_code );
-			if ( $row && LNKup_Connector::PROGRAM === ( $row['program'] ?? '' ) ) {
+			if ( $row && LNKup_Connector::is_account_program( (string) ( $row['program'] ?? '' ) ) ) {
 				return;
 			}
 		}
@@ -130,7 +130,8 @@ class LNKup_Referral_Credits {
 		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$referral = $wpdb->get_row(
-			$wpdb->prepare( "SELECT * FROM {$ref_table} WHERE referred_user_id = %d LIMIT 1", $vendor_id ),
+			// Connector and organizer-recruit referrals share this table and pay through their own programs.
+			$wpdb->prepare( "SELECT * FROM {$ref_table} WHERE referred_user_id = %d AND program = 'vendor_referral' LIMIT 1", $vendor_id ),
 			ARRAY_A
 		);
 		if ( ! $referral || 'converted' === ( $referral['status'] ?? '' ) ) {
@@ -147,14 +148,27 @@ class LNKup_Referral_Credits {
 		if ( $paid_count > 1 ) {
 			return;
 		}
+		if ( class_exists( 'LNKup_Attribution_Arbiter' ) && ! LNKup_Attribution_Arbiter::allows( (int) $referral['id'], (int) $payment_id ) ) {
+			return;
+		}
 		self::issue_reward( (int) $referral['referrer_user_id'], 'first_invoice_paid', (int) $referral['id'], $payment_id );
+		self::mark_converted( (int) $referral['id'] );
+	}
+
+	/**
+	 * Mark a vendor referral converted after its one-time credit.
+	 *
+	 * @param int $referral_id Referral row ID.
+	 */
+	public static function mark_converted( $referral_id ) {
+		global $wpdb;
 		$wpdb->update(
-			$ref_table,
+			LNKup_Treasury_Tables::referrals_table(),
 			array(
 				'status'       => 'converted',
 				'converted_at' => current_time( 'mysql' ),
 			),
-			array( 'id' => (int) $referral['id'] )
+			array( 'id' => absint( $referral_id ) )
 		);
 	}
 
@@ -223,17 +237,28 @@ class LNKup_Referral_Credits {
 			}
 		}
 		$now = current_time( 'mysql' );
-		$wpdb->insert(
-			$table,
-			array(
-				'referral_id' => absint( $referral_id ),
-				'user_id'     => absint( $user_id ),
-				'event_type'  => sanitize_key( $event_type ),
-				'amount'      => $amount,
-				'status'      => 'available',
-				'created_at'  => $now,
-			)
+		$row = array(
+			'referral_id' => absint( $referral_id ),
+			'user_id'     => absint( $user_id ),
+			'event_type'  => sanitize_key( $event_type ),
+			'amount'      => $amount,
+			'status'      => 'available',
+			'created_at'  => $now,
 		);
+		if ( class_exists( 'LNKup_Partner_Tables' ) && LNKup_Partner_Tables::ready() ) {
+			$rule = LNKup_Commission_Rules::active_rule( LNKup_Partner_Programs::VENDOR_REFERRAL );
+			$row += array(
+				'program'         => LNKup_Partner_Programs::VENDOR_REFERRAL,
+				'payment_id'      => absint( $payment_id ),
+				'reward_status'   => 'paid',
+				'paid_at'         => $now,
+				'rule_id'         => $rule ? (int) $rule['id'] : 0,
+				'rule_version'    => $rule ? (int) $rule['version'] : 0,
+				'basis'           => 'fixed',
+				'idempotency_key' => LNKup_Partner_Tables::reward_key( LNKup_Partner_Programs::VENDOR_REFERRAL, absint( $user_id ), absint( $referral_id ), absint( $payment_id ), (string) $event_type ),
+			);
+		}
+		$wpdb->insert( $table, $row );
 		$reward_id = (int) $wpdb->insert_id;
 		if ( class_exists( 'LNKup_Credits' ) && $reward_id ) {
 			LNKup_Credits::grant( $user_id, $amount, 'referral', 'referral_reward', $reward_id );

@@ -1546,16 +1546,7 @@ class LNKup_Notifications {
 		}
 
 		$vendor = get_userdata( $vendor_id );
-		$profiles = get_posts(
-			array(
-				'post_type'      => 'lnkup_vendor_profile',
-				'post_status'    => 'publish',
-				'posts_per_page' => 1,
-				'meta_key'       => '_lnkup_vendor_user_id',
-				'meta_value'     => $vendor_id,
-				'fields'         => 'ids',
-			)
-		);
+		$profiles = array_values( array_filter( array( (int) lnkup_get_vendor_profile_id( (int) $vendor_id ) ) ) );
 		$business = ! empty( $profiles[0] ) ? get_the_title( (int) $profiles[0] ) : ( $vendor ? $vendor->display_name : '' );
 
 		$title = (string) ( $event['title'] ?? __( 'External event', 'lnkup-marketplace' ) );
@@ -1703,8 +1694,9 @@ class LNKup_Notifications {
 	 * @param string $title    Event title.
 	 * @param string $deadline Deadline date.
 	 * @param string $window   Reminder window label.
+	 * @param int    $opportunity_id Opportunity ID (lets Communications re-check it before sending).
 	 */
-	public static function send_favorite_deadline_reminder( $user_id, $title, $deadline, $window = '48h' ) {
+	public static function send_favorite_deadline_reminder( $user_id, $title, $deadline, $window = '48h', $opportunity_id = 0 ) {
 		if ( self::delegated( 'favorite_deadline_reminder', func_get_args() ) ) {
 			return true;
 		}
@@ -2126,16 +2118,7 @@ class LNKup_Notifications {
 		}
 
 		$vendor = get_userdata( $vendor_id );
-		$profiles = get_posts(
-			array(
-				'post_type'      => 'lnkup_vendor_profile',
-				'post_status'    => 'publish',
-				'posts_per_page' => 1,
-				'meta_key'       => '_lnkup_vendor_user_id',
-				'meta_value'     => $vendor_id,
-				'fields'         => 'ids',
-			)
-		);
+		$profiles = array_values( array_filter( array( (int) lnkup_get_vendor_profile_id( (int) $vendor_id ) ) ) );
 		$business = ! empty( $profiles[0] ) ? get_the_title( (int) $profiles[0] ) : ( $vendor ? $vendor->display_name : '' );
 
 		$subject = sprintf(

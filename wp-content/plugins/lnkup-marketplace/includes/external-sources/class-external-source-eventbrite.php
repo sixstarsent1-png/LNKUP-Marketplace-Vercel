@@ -549,7 +549,7 @@ class LNKup_External_Source_Eventbrite implements LNKup_External_Source_Provider
 	public static function fetch_event_html( string $url ) {
 		$last_error = null;
 		for ( $attempt = 0; $attempt < 2; $attempt++ ) {
-			$response = wp_remote_get(
+			$response = wp_safe_remote_get(
 				$url,
 				array(
 					'timeout'     => 12,

@@ -38,6 +38,12 @@ class LNKup_Verification_Admin {
 		?>
 		<div class="wrap" data-testid="lnkup-admin-verification">
 			<h1><?php esc_html_e( 'Trust & Verification', 'lnkup-marketplace' ); ?></h1>
+			<?php
+			$lnkup_error = isset( $_GET['lnkup_error'] ) ? sanitize_text_field( wp_unslash( $_GET['lnkup_error'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( $lnkup_error ) :
+				?>
+				<div class="notice notice-error"><p><?php echo esc_html( $lnkup_error ); ?></p></div>
+			<?php endif; ?>
 			<nav class="nav-tab-wrapper">
 				<a href="<?php echo esc_url( admin_url( 'admin.php?page=lnkup-verification&tab=documents' ) ); ?>" class="nav-tab <?php echo 'documents' === $tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Document Queue', 'lnkup-marketplace' ); ?></a>
 				<a href="<?php echo esc_url( admin_url( 'admin.php?page=lnkup-verification&tab=vendors' ) ); ?>" class="nav-tab <?php echo 'vendors' === $tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Vendor Profiles', 'lnkup-marketplace' ); ?></a>
@@ -112,6 +118,7 @@ class LNKup_Verification_Admin {
 								<input type="hidden" name="action" value="lnkup_verify_document" />
 								<input type="hidden" name="document_id" value="<?php echo esc_attr( (string) $doc->ID ); ?>" />
 								<input type="hidden" name="status" value="rejected" />
+								<input type="text" name="reason" required placeholder="<?php esc_attr_e( 'Reason shown to vendor', 'lnkup-marketplace' ); ?>" />
 								<button type="submit" class="button"><?php esc_html_e( 'Reject', 'lnkup-marketplace' ); ?></button>
 							</form>
 						</td>
@@ -136,7 +143,26 @@ class LNKup_Verification_Admin {
 			$args['s'] = $search;
 		}
 		$profiles = get_posts( $args );
+		$queue    = class_exists( 'LNKup_Verification_Records' ) ? LNKup_Verification_Records::queue( 25 ) : array();
+		$types    = class_exists( 'LNKup_Verification_Records' ) ? LNKup_Verification_Records::type_labels() : array();
 		?>
+		<?php if ( $queue ) : ?>
+			<h2><?php esc_html_e( 'Awaiting review', 'lnkup-marketplace' ); ?></h2>
+			<table class="widefat striped" data-testid="lnkup-verification-records-queue">
+				<thead><tr><th><?php esc_html_e( 'Vendor', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'Type', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'Status', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'Submitted', 'lnkup-marketplace' ); ?></th><th><?php esc_html_e( 'Note', 'lnkup-marketplace' ); ?></th></tr></thead>
+				<tbody>
+				<?php foreach ( $queue as $row ) : ?>
+					<tr>
+						<td><a href="<?php echo esc_url( admin_url( 'admin.php?page=lnkup-passport&tab=vendor&profile_id=' . (int) $row['vendor_profile_id'] ) ); ?>"><?php echo esc_html( get_the_title( (int) $row['vendor_profile_id'] ) ); ?></a></td>
+						<td><?php echo esc_html( $types[ $row['type'] ] ?? $row['type'] ); ?></td>
+						<td><?php echo esc_html( $row['status'] ); ?></td>
+						<td><?php echo esc_html( $row['created_at'] ); ?></td>
+						<td><?php echo esc_html( wp_trim_words( (string) $row['reason'], 16 ) ); ?></td>
+					</tr>
+				<?php endforeach; ?>
+				</tbody>
+			</table>
+		<?php endif; ?>
 		<form method="get">
 			<input type="hidden" name="page" value="lnkup-verification" />
 			<input type="hidden" name="tab" value="vendors" />
@@ -175,11 +201,15 @@ class LNKup_Verification_Admin {
 							<input type="hidden" name="action" value="lnkup_verify_vendor_profile" />
 							<input type="hidden" name="profile_id" value="<?php echo esc_attr( (string) $profile->ID ); ?>" />
 							<select name="status">
-								<option value="approved"><?php esc_html_e( 'Approve', 'lnkup-marketplace' ); ?></option>
+								<option value="approved"><?php esc_html_e( 'Verify business identity', 'lnkup-marketplace' ); ?></option>
+								<option value="info_required"><?php esc_html_e( 'Request more information', 'lnkup-marketplace' ); ?></option>
 								<option value="pending"><?php esc_html_e( 'Pending', 'lnkup-marketplace' ); ?></option>
 								<option value="rejected"><?php esc_html_e( 'Reject', 'lnkup-marketplace' ); ?></option>
+								<option value="revoked"><?php esc_html_e( 'Revoke', 'lnkup-marketplace' ); ?></option>
 							</select>
-							<input type="text" name="notes" placeholder="<?php esc_attr_e( 'Internal notes', 'lnkup-marketplace' ); ?>" class="regular-text" />
+							<label><?php esc_html_e( 'Recheck by', 'lnkup-marketplace' ); ?> <input type="date" name="expires_at" /></label>
+							<input type="text" name="notes" placeholder="<?php esc_attr_e( 'Reason (required to reject, request info, or revoke)', 'lnkup-marketplace' ); ?>" class="regular-text" />
+							<a href="<?php echo esc_url( admin_url( 'admin.php?page=lnkup-passport&tab=vendor&profile_id=' . $profile->ID ) ); ?>"><?php esc_html_e( 'History', 'lnkup-marketplace' ); ?></a>
 							<button type="submit" class="button button-primary"><?php esc_html_e( 'Update', 'lnkup-marketplace' ); ?></button>
 						</form>
 					</td>
@@ -245,8 +275,12 @@ class LNKup_Verification_Admin {
 		check_admin_referer( 'lnkup_verify_document' );
 		$doc_id = absint( $_POST['document_id'] ?? 0 );
 		$status = sanitize_key( (string) ( $_POST['status'] ?? '' ) );
+		$reason = sanitize_textarea_field( wp_unslash( (string) ( $_POST['reason'] ?? '' ) ) );
 		if ( $doc_id && in_array( $status, array( 'approved', 'rejected', 'pending' ), true ) ) {
-			update_post_meta( $doc_id, '_lnkup_verification_status', $status );
+			LNKup_Documents::set_review_status( $doc_id, $status, $reason );
+			if ( class_exists( 'LNKup_Vendor_Reputation' ) ) {
+				LNKup_Vendor_Reputation::log_activity( 'document_reviewed', (int) get_post_meta( $doc_id, '_lnkup_vendor_profile_id', true ), array( 'payload' => array( 'document_id' => $doc_id, 'status' => $status ) ) );
+			}
 			$profile_id = (int) get_post_meta( $doc_id, '_lnkup_vendor_profile_id', true );
 			if ( $profile_id && class_exists( 'LNKup_Verification' ) ) {
 				LNKup_Verification::refresh_vendor( $profile_id );
@@ -263,17 +297,26 @@ class LNKup_Verification_Admin {
 		check_admin_referer( 'lnkup_verify_vendor_profile' );
 		$profile_id = absint( $_POST['profile_id'] ?? 0 );
 		$status     = sanitize_key( (string) ( $_POST['status'] ?? '' ) );
-		$notes      = sanitize_textarea_field( (string) ( $_POST['notes'] ?? '' ) );
-		if ( $profile_id && in_array( $status, array( 'approved', 'rejected', 'pending' ), true ) ) {
-			update_post_meta( $profile_id, '_lnkup_verification_status', $status );
-			if ( $notes ) {
+		$notes      = sanitize_textarea_field( wp_unslash( (string) ( $_POST['notes'] ?? '' ) ) );
+		$expires    = sanitize_text_field( wp_unslash( (string) ( $_POST['expires_at'] ?? '' ) ) );
+		$decisions  = array( 'approved' => 'verified', 'rejected' => 'rejected', 'pending' => 'pending', 'info_required' => 'info_required', 'revoked' => 'revoked' );
+		$error      = '';
+		if ( $profile_id && isset( $decisions[ $status ] ) ) {
+			$recorded = LNKup_Verification_Records::decide( $profile_id, 'business_identity', $decisions[ $status ], array( 'reason' => $notes, 'expires_at' => $expires ) );
+			if ( is_wp_error( $recorded ) ) {
+				$error = $recorded->get_error_message();
+			} elseif ( $notes ) {
 				update_post_meta( $profile_id, '_lnkup_verification_admin_notes', $notes );
 			}
 			if ( class_exists( 'LNKup_Verification' ) ) {
 				LNKup_Verification::refresh_vendor( $profile_id );
 			}
 		}
-		wp_safe_redirect( admin_url( 'admin.php?page=lnkup-verification&tab=vendors&updated=1' ) );
+		$url = admin_url( 'admin.php?page=lnkup-verification&tab=vendors&updated=1' );
+		if ( $error ) {
+			$url = add_query_arg( 'lnkup_error', rawurlencode( $error ), $url );
+		}
+		wp_safe_redirect( $url );
 		exit;
 	}
 

@@ -66,40 +66,41 @@ class LNKup_Booths {
 		if ( $id && (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$table} WHERE id = %d", $id ) ) !== $event_id ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			return new WP_Error( 'not_found', __( 'Booth not found for this event.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}
-		if ( ! empty( $data['application_id'] ) && ! LNKup_Capabilities::application_in_event( $data['application_id'], $event_id ) ) {
+		$app_id = absint( $data['application_id'] ?? 0 );
+		if ( $app_id && ! LNKup_Capabilities::application_in_event( $app_id, $event_id ) ) {
 			return new WP_Error( 'wrong_event', __( 'That vendor is not booked for this event.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
 		}
-		$row   = array(
-			'event_id'       => absint( $event_id ),
-			'booth_number'   => sanitize_text_field( $data['booth_number'] ?? '' ),
-			'booth_type'     => sanitize_key( $data['booth_type'] ?? 'standard' ),
-			'booth_size'     => sanitize_text_field( $data['booth_size'] ?? '' ),
-			'pos_x'          => (float) ( $data['pos_x'] ?? 0 ),
-			'pos_y'          => (float) ( $data['pos_y'] ?? 0 ),
-			'has_power'      => ! empty( $data['has_power'] ) ? 1 : 0,
-			'has_water'      => ! empty( $data['has_water'] ) ? 1 : 0,
-			'application_id' => absint( $data['application_id'] ?? 0 ),
-			'notes'          => sanitize_textarea_field( $data['notes'] ?? '' ),
-			'updated_at'     => current_time( 'mysql' ),
+		// Assignment is never written here: editing a booth keeps its vendor, and assigning
+		// goes through assign() so the lock, booking check and one-booth-per-vendor rule apply.
+		$row = array(
+			'event_id'     => absint( $event_id ),
+			'booth_number' => sanitize_text_field( $data['booth_number'] ?? '' ),
+			'booth_type'   => sanitize_key( $data['booth_type'] ?? 'standard' ),
+			'booth_size'   => sanitize_text_field( $data['booth_size'] ?? '' ),
+			'pos_x'        => (float) ( $data['pos_x'] ?? 0 ),
+			'pos_y'        => (float) ( $data['pos_y'] ?? 0 ),
+			'has_power'    => ! empty( $data['has_power'] ) ? 1 : 0,
+			'has_water'    => ! empty( $data['has_water'] ) ? 1 : 0,
+			'notes'        => sanitize_textarea_field( $data['notes'] ?? '' ),
+			'updated_at'   => current_time( 'mysql' ),
 		);
 		if ( $id ) {
-			$wpdb->update( $table, $row, array( 'id' => $id, 'event_id' => $event_id ), null, array( '%d', '%d' ) );
+			$wpdb->update( $table, $row, array( 'id' => $id, 'event_id' => $event_id ), null, array( '%d', '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$booth_id = $id;
 		} else {
-			$row['created_at'] = current_time( 'mysql' );
-			$wpdb->insert( $table, $row );
+			$row['application_id'] = 0;
+			$row['created_at']     = current_time( 'mysql' );
+			$wpdb->insert( $table, $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$booth_id = (int) $wpdb->insert_id;
+			if ( ! $booth_id ) {
+				return new WP_Error( 'booth_exists', __( 'A booth with that number already exists for this event.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+			}
 		}
-		if ( ! empty( $row['application_id'] ) ) {
-			self::sync_packet( $row['application_id'], $row['booth_number'] );
-			LNKup_Operations_Log::log(
-				$event_id,
-				'booth_assigned',
-				array(
-					'application_id' => $row['application_id'],
-					'payload'        => array( 'booth_number' => $row['booth_number'] ),
-				)
-			);
+		if ( $app_id ) {
+			$assigned = self::assign( $booth_id, $app_id, $event_id );
+			if ( is_wp_error( $assigned ) ) {
+				return $assigned;
+			}
 		}
 		return $booth_id;
 	}

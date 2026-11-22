@@ -127,6 +127,12 @@ function lnkup_seo_public_canonical() {
 	if ( class_exists( 'LNKup_Market_Pages' ) && LNKup_Market_Pages::is_market_request() ) {
 		return LNKup_Market_Pages::market_url( LNKup_Market_Pages::current_slug() );
 	}
+	if ( class_exists( 'LNKup_Passport_Public' ) ) {
+		$vendor_slug = LNKup_Passport_Public::current_slug();
+		if ( '' !== $vendor_slug && LNKup_Vendor_Reputation::resolve_public_profile( $vendor_slug ) ) {
+			return LNKup_Passport_Public::url_for_slug( $vendor_slug );
+		}
+	}
 	$event_id = isset( $_GET['event'] ) ? absint( wp_unslash( $_GET['event'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	if ( $event_id > 0 && ( is_page() || is_singular() ) ) {
 		$event = get_post( $event_id );
@@ -396,14 +402,13 @@ function lnkup_seo_get_context_copy() {
 		}
 	}
 
-	if ( is_page( 'vendors' ) && ! empty( $_GET['vendor'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$slug = sanitize_text_field( wp_unslash( $_GET['vendor'] ) );
-		$profile_id = class_exists( 'LNKup_Vendor_Reputation' ) ? LNKup_Vendor_Reputation::resolve_profile( $slug ) : 0;
+	$vendor_slug = class_exists( 'LNKup_Passport_Public' ) ? LNKup_Passport_Public::current_slug() : '';
+	if ( '' !== $vendor_slug ) {
+		$profile_id = LNKup_Vendor_Reputation::resolve_public_profile( $vendor_slug );
 		if ( $profile_id ) {
 			$data = LNKup_Vendor_CRM_Profile::get_public( $profile_id );
 			if ( $data ) {
 				$location = trim( ( $data['city'] ?? '' ) . ( ! empty( $data['state'] ) ? ', ' . $data['state'] : '' ) );
-				$score    = (int) ( $data['reputation']['score'] ?? 0 );
 				return array(
 					'title'       => sprintf(
 						/* translators: 1: business name, 2: location */
@@ -413,10 +418,9 @@ function lnkup_seo_get_context_copy() {
 					),
 					'description' => wp_trim_words(
 						$data['description'] ?: sprintf(
-							/* translators: 1: business name, 2: score */
-							__( 'Book %1$s on LNKup. LNKup Score %2$d/100. View reviews, event history, and reliability on the vendor marketplace.', 'lnkup-marketplace' ),
-							$data['business_name'],
-							$score
+							/* translators: %s: business name */
+							__( 'Book %s on LNKup. View their portfolio, verified event history, and organizer reviews on the vendor marketplace.', 'lnkup-marketplace' ),
+							$data['business_name']
 						),
 						28,
 						'…'
@@ -565,9 +569,9 @@ class LNKup_SEO {
 				}
 			}
 		}
-		if ( '' === $chosen && is_page( 'vendors' ) && ! empty( $_GET['vendor'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$slug       = sanitize_text_field( wp_unslash( $_GET['vendor'] ) );
-			$profile_id = class_exists( 'LNKup_Vendor_Reputation' ) ? LNKup_Vendor_Reputation::resolve_profile( $slug ) : 0;
+		$vendor_slug = class_exists( 'LNKup_Passport_Public' ) ? LNKup_Passport_Public::current_slug() : '';
+		if ( '' === $chosen && '' !== $vendor_slug ) {
+			$profile_id = LNKup_Vendor_Reputation::resolve_public_profile( $vendor_slug );
 			if ( $profile_id ) {
 				$chosen = lnkup_seo_raster_attachment_url( (int) get_post_meta( $profile_id, '_lnkup_cover_image_id', true ) );
 				if ( '' === $chosen ) {

@@ -41,11 +41,12 @@ class LNKup_Connector_Tracking {
 		if ( ! $row || ! empty( $row[ $column ] ) ) {
 			return;
 		}
-		$wpdb->update(
-			$table,
-			array( $column => current_time( 'mysql' ) ),
-			array( 'id' => absint( $referral_id ) )
-		);
+		// Conditional write: only the request that sets the milestone first announces it.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET {$column} = %s WHERE id = %d AND {$column} IS NULL", current_time( 'mysql' ), absint( $referral_id ) ) );
+		if ( 1 === (int) $updated && in_array( $column, array( 'first_event_at', 'first_payment_at' ), true ) ) {
+			do_action( 'lnkup_partner_referral_milestone', absint( $referral_id ), $column );
+		}
 	}
 
 	/**

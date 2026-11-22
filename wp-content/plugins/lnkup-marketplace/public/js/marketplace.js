@@ -639,12 +639,14 @@
     var messageEl = form.querySelector('[name="message"]');
     var setupEl = form.querySelector('[name="setup_notes"]');
     var termsEl = form.querySelector('[name="accepted_terms"]');
+    var inviteEl = form.querySelector('[name="invite_token"]');
     var payload = {
       opportunity_id: parseInt(form.getAttribute('data-opportunity-id') || (oppInput ? oppInput.value : '0'), 10),
       selected_category: categoryEl ? categoryEl.value : '',
       application_message: messageEl ? messageEl.value : '',
       setup_notes: setupEl ? setupEl.value : '',
-      accepted_terms: !!(termsEl && termsEl.checked)
+      accepted_terms: !!(termsEl && termsEl.checked),
+      invite_token: inviteEl ? inviteEl.value : ''
     };
 
     if (restBase) {

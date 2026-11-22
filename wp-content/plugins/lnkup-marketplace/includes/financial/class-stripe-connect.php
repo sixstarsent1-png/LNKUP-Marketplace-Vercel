@@ -323,6 +323,11 @@ class LNKup_Stripe_Connect {
 
 		if ( $existing ) {
 			$wpdb->update( $table, $row, array( 'id' => (int) $existing['id'] ) );
+			$old_acct = (string) ( $existing['stripe_account_id'] ?? '' );
+			$new_acct = (string) ( $row['stripe_account_id'] ?? $old_acct );
+			if ( '' !== $old_acct && '' !== $new_acct && $old_acct !== $new_acct ) {
+				do_action( 'lnkup_connect_account_changed', absint( $user_id ), sanitize_key( $role ), $old_acct, $new_acct );
+			}
 			return (int) $existing['id'];
 		}
 		$row['created_at'] = current_time( 'mysql' );

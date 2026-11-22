@@ -3,7 +3,7 @@
   var base = ajax.connectorRestUrl || '';
   var nonce = ajax.restNonce || '';
   var API_ERROR = 'We couldn\'t load this section. Try refreshing or contact support.';
-  var VIEWS = ['home', 'start', 'referrals', 'earnings', 'resources', 'profile', 'ranks', 'studio'];
+  var VIEWS = ['home', 'start', 'referrals', 'leads', 'cities', 'earnings', 'resources', 'profile', 'ranks', 'studio'];
   var ALIASES = {
     guide: 'resources',
     links: 'start',
@@ -40,7 +40,8 @@
     approved: 'Approved',
     paid: 'Paid',
     reversed: 'Reversed',
-    expired: 'Expired'
+    expired: 'Expired',
+    on_hold: 'Under review'
   };
   var STATUS_HELP = {
     estimated: 'Projected from booth GMV. Not payable until a booking completes and LNKup approves it.',
@@ -50,7 +51,8 @@
     approved: 'Approved and payable. Not paid until LNKup marks it paid.',
     paid: 'Marked paid by LNKup.',
     reversed: 'Removed after a refund or chargeback.',
-    expired: 'Outside the introductory term for that organizer.'
+    expired: 'Outside the introductory term for that organizer.',
+    on_hold: 'LNKup is reviewing this reward. It is not payable until the review is resolved.'
   };
   var STUDIO_PLATFORMS = [
     { id: 'instagram', label: 'Instagram', placeholder: 'https://www.instagram.com/reel/...', hint: 'Paste an Instagram Reel, post, or Story link.' },
@@ -244,9 +246,24 @@
     }
   }
 
+  function allowedViews() {
+    var root = rootEl();
+    var raw = root && root.getAttribute('data-views');
+    return raw ? raw.split(',') : VIEWS;
+  }
+
+  function program() {
+    var root = rootEl();
+    return (root && root.getAttribute('data-program')) || 'city_connector';
+  }
+
+  function isCityConnector() {
+    return program() === 'city_connector';
+  }
+
   function normalizeView(view) {
     view = ALIASES[view] || view;
-    return VIEWS.indexOf(view) !== -1 ? view : 'home';
+    return allowedViews().indexOf(view) !== -1 ? view : 'home';
   }
 
   function viewHref(view) {
@@ -268,7 +285,9 @@
     terms = terms || {};
     var pct = terms.share_percent != null ? terms.share_percent : 10;
     var months = terms.term_months != null ? terms.term_months : 12;
-    var line = 'You receive ' + pct + '% of qualifying booth bookings for ' + months + ' months.';
+    var line = terms.basis_label
+      ? 'You receive ' + terms.basis_label + ' for ' + months + ' months.'
+      : 'You receive ' + pct + '% of qualifying booth bookings for ' + months + ' months.';
     if (parseFloat(terms.share_cap) > 0) {
       line += ' Cap ' + currency(terms.share_cap) + ' per transaction.';
     }
@@ -603,7 +622,20 @@
 
   function renderBadge(terms) {
     terms = terms || {};
+    if (terms.terms_pending) {
+      return '<span class="lnkup-connector-badge">Commission terms pending</span>';
+    }
     return '<span class="lnkup-connector-badge">' + escapeHtml((terms.share_percent || 10) + '% for ' + (terms.term_months || 12) + ' months') + '</span>';
+  }
+
+  function renderTermsPending() {
+    return (
+      '<section class="lnkup-connector-card" data-testid="lnkup-connector-terms-pending">' +
+      '<h3>How You Get Paid</h3>' +
+      '<p>Your referrals are tracked. Commission terms are shared when your agreement is finalized.</p>' +
+      '<p class="lnkup-muted">Until terms are published, nothing is earned or owed. LNKup only pays on verified activity under approved terms. There is no base payment or guaranteed income.</p>' +
+      '</section>'
+    );
   }
 
   function cityLabel(connector) {
@@ -619,25 +651,29 @@
     var terms = (data && data.terms) || {};
     var onboarding = (data && data.onboarding) || {};
     var city = cityLabel(connector);
+    var city_program = isCityConnector();
     var title = compact
       ? (city ? 'Grow LNKup in ' + city : 'Grow LNKup in your city')
       : 'Build LNKup in Your City';
+    if (!city_program) {
+      title = data.organization ? data.organization + ' × LNKup' : 'Refer organizers to LNKup';
+    }
     var avatar = connector.avatar_url
       ? '<img class="lnkup-connector-avatar" src="' + escapeHtml(connector.avatar_url) + '" alt="" width="48" height="48" />'
       : '<span class="lnkup-connector-avatar lnkup-connector-avatar--fallback" aria-hidden="true">' + escapeHtml(connector.initials || 'CC') + '</span>';
     return (
       '<section class="lnkup-connector-hero' + (compact ? ' lnkup-connector-hero--compact' : '') + '" data-testid="lnkup-connector-get-started">' +
-      '<p class="lnkup-connector-kicker">Founding City Partner</p>' +
+      '<p class="lnkup-connector-kicker">' + escapeHtml(city_program ? 'Founding City Partner' : (data.program_label || 'LNKup Partner')) + '</p>' +
       '<div class="lnkup-connector-hero__identity">' + avatar +
       '<div><h2 class="lnkup-connector-hero__title">' + escapeHtml(title) + '</h2>' +
-      '<p class="lnkup-connector-hero__name">' + escapeHtml(connector.display_name || 'City Connector') + '</p></div></div>' +
+      '<p class="lnkup-connector-hero__name">' + escapeHtml(connector.display_name || (city_program ? 'City Connector' : 'Partner')) + '</p></div></div>' +
       (compact ? '' : '<p class="lnkup-connector-hero__lead">Connect local event organizers with LNKup, help create more opportunities for vendors and earn from the activity you generate.</p>') +
       '<div class="lnkup-connector-hero__meta">' +
       '<span>' + escapeHtml(programStatus(connector.status)) + '</span>' +
       (data.code ? '<span>Code ' + escapeHtml(data.code) + '</span>' : '') +
       renderBadge(terms) +
       '</div>' +
-      '<p class="lnkup-muted">Onboarding progress: ' + escapeHtml(onboarding.progress || 0) + '%</p>' +
+      (city_program ? '<p class="lnkup-muted">Onboarding progress: ' + escapeHtml(onboarding.progress || 0) + '%</p>' : '') +
       '<div class="lnkup-connector-hero__actions">' +
       '<button type="button" class="lnkup-btn lnkup-btn--primary" data-connector-share data-testid="lnkup-connector-copy-organizer">Share Your Link</button>' +
       '<a class="lnkup-btn lnkup-btn--outline" href="' + escapeHtml(viewHref('earnings')) + '" data-view="earnings">View Earnings</a>' +
@@ -962,11 +998,11 @@
       '</div>';
   }
 
-  function renderHowPaid(terms) {
+  function renderHowPaid(terms, example) {
     terms = terms || {};
     var hold = terms.hold_days != null ? terms.hold_days : 30;
     var pct = terms.share_percent != null ? terms.share_percent : 10;
-    var one = 250 * (pct / 100);
+    var one = example && example.per_booking != null ? parseFloat(example.per_booking) || 0 : 250 * (pct / 100);
     return (
       '<section class="lnkup-connector-card" id="how-you-get-paid">' +
       '<h3>How You Get Paid</h3>' +
@@ -1041,7 +1077,7 @@
       html += '<tr>' +
         '<td data-label="Organizer">' + escapeHtml(row.related_name || '—') + '</td>' +
         '<td data-label="Event">' + escapeHtml(milestoneLabel(row.event_type)) + '</td>' +
-        '<td data-label="Amount">' + escapeHtml(currency(row.amount)) + '</td>' +
+        '<td data-label="Amount">' + escapeHtml(currency(row.net_amount != null ? row.net_amount : row.amount)) + '</td>' +
         '<td data-label="Status">' + escapeHtml(statusLabel(row.display_status || row.reward_status)) + '</td>' +
         '<td data-label="Date">' + escapeHtml(row.created_at) + '</td></tr>';
     });
@@ -1312,6 +1348,171 @@
       '<p class="lnkup-connector-interest-status" data-profile-status></p>' +
       '</form></section>'
     );
+  }
+
+  function renderLeadForm(data) {
+    var left = Math.max(0, (data.daily_limit || 0) - (data.submitted_today || 0));
+    return (
+      '<section class="lnkup-connector-card" data-testid="lnkup-connector-lead-form-card">' +
+      '<h3>Submit an organizer lead</h3>' +
+      '<p class="lnkup-muted">Introduce an independent organizer you know. LNKup checks for existing accounts and duplicates first. A lead is not an acquired organizer until they register, publish an event and complete a paid booking.</p>' +
+      '<form class="lnkup-connector-profile" data-testid="lnkup-connector-lead-form" novalidate>' +
+      '<label>Organizer or business name<input name="name" required maxlength="191" /></label>' +
+      '<label>Public website<input name="website" type="url" placeholder="https://" /></label>' +
+      '<label>Instagram<input name="instagram" placeholder="@handle" /></label>' +
+      '<label>Business email<input name="email" type="email" /></label>' +
+      '<label>City<input name="city" /></label>' +
+      '<label>State<input name="state" maxlength="2" /></label>' +
+      '<label>Event type<input name="event_type" placeholder="Market, festival, pop-up…" /></label>' +
+      '<label>Event or application link<input name="application_url" type="url" placeholder="https://" /></label>' +
+      '<label>Why they are a fit<textarea name="reason" rows="3"></textarea></label>' +
+      '<label>How you know them<input name="source" placeholder="Worked their market in 2026" /></label>' +
+      '<button type="submit" class="lnkup-btn lnkup-btn--primary"' + (left ? '' : ' disabled') + '>Submit lead</button>' +
+      '<p class="lnkup-muted">' + escapeHtml(left) + ' of ' + escapeHtml(data.daily_limit || 0) + ' submissions left today.</p>' +
+      '<p class="lnkup-connector-interest-status" data-lead-status role="status" aria-live="polite"></p>' +
+      '</form></section>'
+    );
+  }
+
+  function renderLeadList(data) {
+    var items = data.items || [];
+    var html = '<section class="lnkup-connector-card" data-testid="lnkup-connector-leads"><h3>My organizer leads</h3>';
+    if (!items.length) {
+      return html + '<div class="lnkup-empty-state lnkup-empty-state--compact"><p>No leads yet.</p><p class="lnkup-muted">Leads you submit or that LNKup assigns to you will appear here with their pipeline stage.</p></div></section>';
+    }
+    html += '<div class="lnkup-table-wrap lnkup-connector-table-wrap"><table class="lnkup-table"><thead><tr><th>Organizer</th><th>City</th><th>Stage</th><th>Submitted</th></tr></thead><tbody>';
+    items.forEach(function (lead) {
+      var stage = lead.outcome_label ? lead.stage_label + ' · ' + lead.outcome_label : lead.stage_label;
+      html += '<tr>' +
+        '<td data-label="Organizer">' + escapeHtml(lead.name) + '</td>' +
+        '<td data-label="City">' + escapeHtml([lead.city, lead.state].filter(Boolean).join(', ') || '—') + '</td>' +
+        '<td data-label="Stage">' + escapeHtml(stage || '—') + '</td>' +
+        '<td data-label="Submitted">' + escapeHtml(lead.submitted_at) + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    var pages = Math.ceil((data.total || 0) / (data.per_page || 20));
+    if (pages > 1) {
+      html += '<div class="lnkup-connector-pager">' +
+        '<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" data-lead-page="' + (data.page - 1) + '"' + (data.page <= 1 ? ' disabled' : '') + '>Previous</button>' +
+        ' <span class="lnkup-muted">Page ' + escapeHtml(data.page) + ' of ' + escapeHtml(pages) + '</span> ' +
+        '<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" data-lead-page="' + (data.page + 1) + '"' + (data.page >= pages ? ' disabled' : '') + '>Next</button>' +
+        '</div>';
+    }
+    return html + '</section>';
+  }
+
+  function renderLeads(data) {
+    data = data || {};
+    if (data.enabled === false) {
+      return '<section class="lnkup-connector-card"><h3>Organizer Leads</h3><div class="lnkup-empty-state lnkup-empty-state--compact"><p>Lead submission is not open right now.</p><p class="lnkup-muted">Keep sharing your referral link. LNKup will let you know when lead submission opens.</p></div></section>';
+    }
+    return renderLeadForm(data) + '<div data-lead-list>' + renderLeadList(data) + '</div>';
+  }
+
+  function renderCities(data) {
+    data = data || {};
+    var items = data.items || [];
+    var home = [data.city, data.state].filter(Boolean).join(', ');
+    var html = '<section class="lnkup-connector-card" data-testid="lnkup-connector-cities"><h3>My Cities</h3>' +
+      '<p class="lnkup-muted">Markets LNKup asked you to focus on. You can still refer organizers anywhere — referrals outside these cities count the same.</p>';
+    if (home) {
+      html += '<p><strong>Home market:</strong> ' + escapeHtml(home) + '</p>';
+    }
+    if (!items.length) {
+      return html + '<div class="lnkup-empty-state lnkup-empty-state--compact"><p>No territories assigned yet.</p><p class="lnkup-muted">Your LNKup partner manager will assign cities, metros or states as your market grows.</p></div></section>';
+    }
+    var labels = { city: 'City', metro: 'Metro area', state: 'State', region: 'Region' };
+    html += '<ul class="lnkup-connector-steps">';
+    items.forEach(function (t) {
+      html += '<li><strong>' + escapeHtml(labels[t.scope_type] || t.scope_type) + ':</strong> ' + escapeHtml(t.value) + '</li>';
+    });
+    return html + '</ul></section>';
+  }
+
+  function bindLeads(panel) {
+    var form = panel.querySelector('[data-testid="lnkup-connector-lead-form"]');
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var status = form.querySelector('[data-lead-status]');
+        var btn = form.querySelector('[type="submit"]');
+        var payload = {};
+        new FormData(form).forEach(function (val, key) {
+          payload[key] = String(val).trim();
+        });
+        if (!payload.name) {
+          status.textContent = 'Add the organizer or business name.';
+          status.className = 'lnkup-connector-interest-status is-error';
+          return;
+        }
+        if (!payload.website && !payload.instagram && !payload.email) {
+          status.textContent = 'Add a public website, Instagram or business email so LNKup can verify the organizer.';
+          status.className = 'lnkup-connector-interest-status is-error';
+          return;
+        }
+        if (btn) {
+          btn.disabled = true;
+        }
+        fetch(base + '/connector/leads', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(function (r) {
+          var ct = r.headers.get('content-type') || '';
+          if (ct.indexOf('application/json') === -1) {
+            throw new Error(API_ERROR);
+          }
+          return r.json().then(function (body) {
+            if (!r.ok) {
+              throw new Error(body.message || API_ERROR);
+            }
+            return body;
+          });
+        }).then(function (res) {
+          status.textContent = res.message || 'Lead submitted.';
+          status.className = 'lnkup-connector-interest-status ' + (res.status === 'submitted' ? 'is-success' : 'is-error');
+          if (res.status === 'submitted') {
+            form.reset();
+            loadLeadPage(panel, 1);
+          }
+          announce(status.textContent);
+        }).catch(function (err) {
+          console.error('LNKup connector lead error:', err);
+          status.textContent = err && err.message ? err.message : API_ERROR;
+          status.className = 'lnkup-connector-interest-status is-error';
+        }).finally(function () {
+          if (btn) {
+            btn.disabled = false;
+          }
+        });
+      });
+    }
+    if (panel.dataset.leadPagerBound) {
+      return;
+    }
+    panel.dataset.leadPagerBound = '1';
+    panel.addEventListener('click', function (e) {
+      var pager = e.target.closest('[data-lead-page]');
+      if (!pager || pager.disabled) {
+        return;
+      }
+      loadLeadPage(panel, parseInt(pager.getAttribute('data-lead-page'), 10) || 1);
+    });
+  }
+
+  function loadLeadPage(panel, page) {
+    var mount = panel.querySelector('[data-lead-list]');
+    if (!mount) {
+      return;
+    }
+    mount.innerHTML = '<div class="lnkup-skeleton lnkup-skeleton--card"></div>';
+    safeFetch('/connector/leads?page=' + encodeURIComponent(page)).then(function (data) {
+      mount.innerHTML = renderLeadList(data);
+    }).catch(function (err) {
+      console.error('LNKup connector leads error:', err);
+      mount.innerHTML = '<div class="lnkup-empty-state lnkup-empty-state--compact"><p>' + escapeHtml(API_ERROR) + '</p></div>';
+    });
   }
 
   function rankName(key) {
@@ -1844,11 +2045,14 @@
         var referrals = pair[2] || {};
         var stats = data.stats || {};
         rememberLinks(data.links, data.terms);
+        var city_program = isCityConnector();
         panel.innerHTML = '<div class="lnkup-connector-panel">' +
           renderHero(data, true) +
-          renderRankCard(data.rank) +
-          renderNextAction(data.next_action) +
-          '<section class="lnkup-connector-card"><div class="lnkup-connector-card__head"><h3>Overview</h3><a class="lnkup-connector-card__link" href="' + escapeHtml(viewHref('start')) + '" data-view="start">Get Started</a></div>' +
+          (city_program && data.rank ? renderRankCard(data.rank) : '') +
+          (city_program ? renderNextAction(data.next_action) : '') +
+          (data.terms && data.terms.terms_pending ? renderTermsPending() : '') +
+          '<section class="lnkup-connector-card"><div class="lnkup-connector-card__head"><h3>Overview</h3>' +
+          (city_program ? '<a class="lnkup-connector-card__link" href="' + escapeHtml(viewHref('start')) + '" data-view="start">Get Started</a>' : '') + '</div>' +
           renderBalances(data.earnings) +
           '<div class="lnkup-connector-kpis">' +
           kpi('Organizers', stats.organizer_signups) +
@@ -1860,7 +2064,9 @@
           renderActivity(referrals.activity) +
           renderSticky() +
           '</div>';
-        maybeCelebrate(data.rank);
+        if (city_program) {
+          maybeCelebrate(data.rank);
+        }
       });
     } else if (view === 'start') {
       promise = Promise.all([
@@ -1892,12 +2098,21 @@
           refs._cards = cards;
         }
       });
+    } else if (view === 'leads') {
+      promise = safeFetch('/connector/leads').then(function (data) {
+        panel.innerHTML = '<div class="lnkup-connector-panel">' + renderLeads(data) + renderSticky() + '</div>';
+        bindLeads(panel);
+      });
+    } else if (view === 'cities') {
+      promise = safeFetch('/connector/territories').then(function (data) {
+        panel.innerHTML = '<div class="lnkup-connector-panel">' + renderCities(data) + '</div>';
+      });
     } else if (view === 'earnings') {
       promise = safeFetch('/connector/earnings').then(function (data) {
         rememberLinks(null, data.terms);
+        var pending = !!(data.terms && data.terms.terms_pending);
         panel.innerHTML = '<div class="lnkup-connector-panel">' +
-          renderHowPaid(data.terms) +
-          renderCalculator() +
+          (pending ? renderTermsPending() : renderHowPaid(data.terms, data.example) + renderCalculator()) +
           '<section class="lnkup-connector-card"><h3>Balances</h3>' + renderBalances(data.balances) +
           '<p><strong>Next payout:</strong> ' + escapeHtml(data.next_payout || 'After LNKup approval') + '</p>' +
           '<a class="lnkup-btn lnkup-btn--outline" href="' + escapeHtml(viewHref('profile')) + '" data-view="profile">Add payout details</a>' +

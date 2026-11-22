@@ -4,14 +4,20 @@
   var nonce = ajax.restNonce || '';
 
   var REVIEW_CATEGORIES = [
-    ['professionalism', 'Professionalism'],
-    ['communication', 'Communication'],
-    ['setup_readiness', 'Setup readiness'],
-    ['arrival_time', 'Arrival time'],
-    ['quality', 'Product/service quality'],
-    ['cleanliness', 'Cleanliness'],
-    ['engagement', 'Customer engagement'],
-    ['would_book_again', 'Would book again']
+    ['communication', 'Communication — responsive and clear during prep'],
+    ['professionalism', 'Professionalism — followed event procedures'],
+    ['preparedness', 'Preparedness — ready for the agreed setup'],
+    ['event_coordination', 'Event coordination — how smoothly coordination went']
+  ];
+
+  var POSITIVE_TAGS = [
+    ['on_time', 'On time'],
+    ['great_setup', 'Great setup'],
+    ['responsive', 'Responsive'],
+    ['followed_guidelines', 'Followed guidelines'],
+    ['easy_to_work_with', 'Easy to work with'],
+    ['crowd_favorite', 'Crowd favorite'],
+    ['professional_presentation', 'Professional presentation']
   ];
 
   /**
@@ -57,9 +63,11 @@
       '<label>Overall rating</label>' +
       '<div class="lnkup-rep-modal__stars-input" id="lnkup-rep-overall-stars"></div>' +
       '<div class="lnkup-rep-modal__cats" id="lnkup-rep-category-ratings"></div>' +
+      '<fieldset class="lnkup-rep-modal__tags" id="lnkup-rep-positive-tags"><legend>What went well (optional)</legend></fieldset>' +
       '<div class="lnkup-form-row"><label for="lnkup-rep-public-text">Public review</label>' +
-      '<textarea id="lnkup-rep-public-text" name="public_text" rows="3"></textarea></div>' +
-      '<div class="lnkup-form-row"><label for="lnkup-rep-private-note">Private note (vendor cannot see)</label>' +
+      '<textarea id="lnkup-rep-public-text" name="public_text" rows="3" maxlength="2000" placeholder="Describe the working relationship. Avoid personal details or traits unrelated to the event."></textarea></div>' +
+      '<p class="lnkup-muted">Reviews must reflect this booking only. Personal attacks, private information or discriminatory content will be removed.</p>' +
+      '<div class="lnkup-form-row"><label for="lnkup-rep-private-note">Private note (only you and LNKup staff can see; never published)</label>' +
       '<textarea id="lnkup-rep-private-note" name="private_note" rows="2"></textarea></div>' +
       '<label><input type="checkbox" id="lnkup-rep-late-arrival" name="late_arrival" /> Late arrival</label><br />' +
       '<label><input type="checkbox" id="lnkup-rep-issue-flagged" name="issue_flagged" /> Flag issue</label>' +
@@ -103,6 +111,19 @@
       catsWrap.appendChild(row);
     });
 
+    var tagsWrap = document.getElementById('lnkup-rep-positive-tags');
+    POSITIVE_TAGS.forEach(function (pair) {
+      var label = document.createElement('label');
+      label.className = 'lnkup-checkbox';
+      var input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = pair[0];
+      input.setAttribute('data-tag', pair[0]);
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(' ' + pair[1]));
+      tagsWrap.appendChild(label);
+    });
+
     document.getElementById('lnkup-rep-review-form').addEventListener('submit', function (e) {
       e.preventDefault();
       submitReview(modal);
@@ -132,6 +153,9 @@
     });
     document.getElementById('lnkup-rep-category-ratings').querySelectorAll('select').forEach(function (s) {
       s.value = '';
+    });
+    document.getElementById('lnkup-rep-positive-tags').querySelectorAll('input').forEach(function (i) {
+      i.checked = false;
     });
 
     repFetch('/applications/' + appId + '/review-eligibility').then(function (res) {
@@ -171,6 +195,9 @@
         application_id: parseInt(appId, 10),
         overall_rating: overall,
         category_ratings: categoryRatings,
+        positive_tags: Array.prototype.map.call(document.querySelectorAll('#lnkup-rep-positive-tags input:checked'), function (i) {
+          return i.value;
+        }),
         public_text: document.getElementById('lnkup-rep-public-text').value,
         private_note: document.getElementById('lnkup-rep-private-note').value,
         late_arrival: document.getElementById('lnkup-rep-late-arrival').checked,
@@ -189,15 +216,15 @@
    * Report a review (vendor).
    */
   function reportReview(reviewId) {
-    var reason = prompt('Why are you reporting this review?');
+    var reason = prompt('What is inaccurate or inappropriate about this review? (at least 10 characters)');
     if (!reason) {
       return;
     }
     repFetch('/reviews/' + reviewId + '/report', {
       method: 'POST',
-      body: { reason: reason }
+      body: { reason: reason, reason_code: 'other' }
     }).then(function () {
-      alert('Report submitted. Our team will review it.');
+      alert('Report submitted. The review stays visible while our team checks it against our review standards.');
     }).catch(function (err) {
       alert((err && err.message) ? err.message : 'Could not submit report.');
     });

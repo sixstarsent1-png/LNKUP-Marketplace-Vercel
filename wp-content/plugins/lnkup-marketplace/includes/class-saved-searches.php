@@ -565,8 +565,17 @@ class LNKup_Saved_Searches {
 	 *
 	 * @param string|null $frequency Filter by frequency.
 	 */
-	public static function get_alert_candidates( $frequency = null ) {
-		$vendors = get_users( array( 'role' => 'lnkup_vendor', 'fields' => 'ID' ) );
+	public static function get_alert_candidates( $frequency = null, $user_ids = null ) {
+		if ( null === $user_ids ) {
+			$user_ids = array();
+			$page     = 1;
+			do {
+				$batch    = self::alert_user_ids( $page, 500 );
+				$user_ids = array_merge( $user_ids, $batch['ids'] );
+				++$page;
+			} while ( $batch['has_more'] );
+		}
+		$vendors = array_map( 'intval', (array) $user_ids );
 		$out     = array();
 
 		foreach ( $vendors as $user_id ) {
@@ -585,6 +594,35 @@ class LNKup_Saved_Searches {
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * One page of vendor IDs that have saved searches (never scans every vendor).
+	 *
+	 * @param int $page     1-based page.
+	 * @param int $per_page Page size.
+	 * @return array{ids:int[],has_more:bool}
+	 */
+	public static function alert_user_ids( $page = 1, $per_page = 200 ) {
+		$per_page = max( 1, (int) $per_page );
+		$query    = new WP_User_Query(
+			array(
+				'role__in'    => array( 'lnkup_vendor' ),
+				'meta_key'    => self::META_KEY, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_compare'=> 'EXISTS',
+				'fields'      => 'ID',
+				'orderby'     => 'ID',
+				'order'       => 'ASC',
+				'number'      => $per_page + 1,
+				'offset'      => ( max( 1, (int) $page ) - 1 ) * $per_page,
+				'count_total' => false,
+			)
+		);
+		$ids = array_map( 'intval', (array) $query->get_results() );
+		return array(
+			'ids'      => array_slice( $ids, 0, $per_page ),
+			'has_more' => count( $ids ) > $per_page,
+		);
 	}
 
 	/**

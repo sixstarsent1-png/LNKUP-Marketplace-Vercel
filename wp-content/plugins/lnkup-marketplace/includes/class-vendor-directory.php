@@ -43,15 +43,26 @@ class LNKup_Vendor_Directory {
 				'state'    => $args['state'] ?? '',
 				'category' => $args['category'] ?? '',
 				'verified' => ! empty( $args['verified'] ) ? true : '',
+				'organizer_id' => (int) $organizer_id,
+				'sort'     => sanitize_key( (string) ( $args['sort'] ?? 'score' ) ),
 			)
 		);
 
-		$items = array();
+		$items      = array();
+		$vendor_ids = array();
 		foreach ( $query['posts'] as $post ) {
-			$profile = LNKup_Vendor_CRM_Profile::get( $post->ID, $organizer_id );
-			if ( $profile ) {
-				$items[] = lnkup_normalize_vendor_card( $profile );
+			$vendor_ids[] = (int) get_post_meta( $post->ID, '_lnkup_owner_user_id', true );
+		}
+		LNKup_Organizer_CRM::prime_relationships( (int) $organizer_id, $vendor_ids );
+		try {
+			foreach ( $query['posts'] as $post ) {
+				$profile = LNKup_Vendor_CRM_Profile::get( $post->ID, $organizer_id );
+				if ( $profile ) {
+					$items[] = lnkup_normalize_vendor_card( $profile );
+				}
 			}
+		} finally {
+			LNKup_Organizer_CRM::end_relationship_batch();
 		}
 		$items = self::sort_items( $items, $args );
 
@@ -281,10 +292,10 @@ class LNKup_Vendor_Directory {
 			return ob_get_clean();
 		}
 		if ( 'table' === $view ) {
-			$html = '<table class="lnkup-table lnkup-crm-table"><thead><tr><th>Vendor</th><th>Category</th><th>Score</th><th>Events</th><th></th></tr></thead><tbody>';
+			$html = '<table class="lnkup-table lnkup-crm-table"><thead><tr><th>' . esc_html__( 'Vendor', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Category', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Organizer feedback', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Confirmed events', 'lnkup-marketplace' ) . '</th><th></th></tr></thead><tbody>';
 			foreach ( $items as $p ) {
 				$url = add_query_arg( 'vendor', $p['profile_id'], lnkup_page_url_helper( 'organizer-dashboard' ) );
-				$html .= '<tr><td>' . esc_html( $p['business_name'] ) . '</td><td>' . esc_html( implode( ', ', $p['category'] ) ) . '</td><td>' . esc_html( (string) $p['vendor_score'] ) . '</td><td>' . esc_html( (string) $p['completed_events'] ) . '</td><td><a class="lnkup-btn lnkup-btn--sm" href="' . esc_url( $url ) . '">View</a></td></tr>';
+				$html .= '<tr><td>' . esc_html( $p['business_name'] ) . '</td><td>' . esc_html( implode( ', ', $p['category'] ) ) . '</td><td>' . esc_html( (string) ( $p['indicators']['organizer_feedback']['label'] ?? '' ) ) . '</td><td>' . esc_html( (string) ( $p['indicators']['experience']['confirmed_events'] ?? $p['completed_events'] ) ) . '</td><td><a class="lnkup-btn lnkup-btn--sm" href="' . esc_url( $url ) . '">' . esc_html__( 'View', 'lnkup-marketplace' ) . '</a></td></tr>';
 			}
 			return $html . '</tbody></table>';
 		}
@@ -292,7 +303,7 @@ class LNKup_Vendor_Directory {
 			$html = '<ul class="lnkup-crm-compact">';
 			foreach ( $items as $p ) {
 				$url = add_query_arg( 'vendor', $p['profile_id'], lnkup_page_url_helper( 'organizer-dashboard' ) );
-				$html .= '<li><a href="' . esc_url( $url ) . '">' . esc_html( $p['business_name'] ) . '</a> <span class="lnkup-muted">' . esc_html( (string) $p['vendor_score'] ) . '</span></li>';
+				$html .= '<li><a href="' . esc_url( $url ) . '">' . esc_html( $p['business_name'] ) . '</a> <span class="lnkup-muted">' . esc_html( (string) ( $p['indicators']['experience']['label'] ?? '' ) ) . '</span></li>';
 			}
 			return $html . '</ul>';
 		}
@@ -313,9 +324,10 @@ class LNKup_Vendor_Directory {
 			function ( $a, $b ) use ( $sort ) {
 				switch ( $sort ) {
 					case 'rating':
-						return ( $b['avg_rating'] ?? 0 ) <=> ( $a['avg_rating'] ?? 0 );
+						// Only averages that meet the review minimum rank; others sort as neutral, never below.
+						return (float) ( $b['indicators']['organizer_feedback']['average'] ?? 0 ) <=> (float) ( $a['indicators']['organizer_feedback']['average'] ?? 0 );
 					case 'completed':
-						return ( $b['reliability']['completed_events'] ?? $b['completed_events'] ?? 0 ) <=> ( $a['reliability']['completed_events'] ?? $a['completed_events'] ?? 0 );
+						return ( $b['indicators']['experience']['confirmed_events'] ?? $b['completed_events'] ?? 0 ) <=> ( $a['indicators']['experience']['confirmed_events'] ?? $a['completed_events'] ?? 0 );
 					case 'reliable':
 						return ( $b['vendor_score'] ?? 0 ) <=> ( $a['vendor_score'] ?? 0 );
 					case 'risk':
@@ -470,6 +482,9 @@ class LNKup_Vendor_Directory {
 	 * @return string[][]
 	 */
 	public static function contact_rows_for_platform( $category = '' ) {
+		if ( ! LNKup_Capabilities::user_has_manage_all() && ! current_user_can( 'manage_options' ) ) {
+			return array();
+		}
 		$category = sanitize_text_field( (string) $category );
 		$args     = array(
 			'post_type'      => 'lnkup_vendor_profile',

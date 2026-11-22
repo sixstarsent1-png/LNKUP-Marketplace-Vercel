@@ -386,9 +386,13 @@ class LNKup_External_Events_REST {
 		}
 		$result = LNKup_External_Events::claim( $id, get_current_user_id(), $token );
 		if ( is_wp_error( $result ) ) {
-			return new WP_Error( $result->get_error_code(), $result->get_error_message(), array( 'status' => 400 ) );
+			$data   = $result->get_error_data();
+			$status = is_array( $data ) && ! empty( $data['status'] ) ? (int) $data['status'] : 400;
+			return new WP_Error( $result->get_error_code(), $result->get_error_message(), array( 'status' => $status ) );
 		}
-		$result['message'] = lnkup_copy( 'organizer_claim_success' );
+		if ( empty( $result['pending_review'] ) ) {
+			$result['message'] = lnkup_copy( 'organizer_claim_success' );
+		}
 		return rest_ensure_response( $result );
 	}
 

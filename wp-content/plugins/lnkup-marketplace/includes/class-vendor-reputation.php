@@ -16,6 +16,34 @@ class LNKup_Vendor_Reputation {
 		add_action( 'lnkup_application_status_changed', array( __CLASS__, 'on_application_status' ), 20, 3 );
 		add_action( 'lnkup_vendor_review_submitted', array( __CLASS__, 'on_review_submitted' ), 10, 2 );
 		add_action( 'lnkup_reputation_score_changed', array( __CLASS__, 'maybe_snapshot' ), 10, 2 );
+		add_action( self::REFRESH_HOOK, array( __CLASS__, 'refresh' ) );
+	}
+
+	const REFRESH_HOOK = 'lnkup_reputation_refresh_profile';
+
+	/**
+	 * Whether an ID is a vendor profile post.
+	 *
+	 * @param int $profile_id Post ID.
+	 */
+	public static function is_vendor_profile( $profile_id ) {
+		$profile_id = absint( $profile_id );
+		return $profile_id && 'lnkup_vendor_profile' === get_post_type( $profile_id );
+	}
+
+	/**
+	 * Queue a background refresh (deduplicated by WP-Cron).
+	 *
+	 * @param int $profile_id Vendor profile post ID.
+	 */
+	public static function queue_refresh( $profile_id ) {
+		$profile_id = absint( $profile_id );
+		if ( ! self::is_vendor_profile( $profile_id ) ) {
+			return;
+		}
+		if ( ! wp_next_scheduled( self::REFRESH_HOOK, array( $profile_id ) ) ) {
+			wp_schedule_single_event( time() + 5, self::REFRESH_HOOK, array( $profile_id ) );
+		}
 	}
 
 	/**
@@ -25,7 +53,7 @@ class LNKup_Vendor_Reputation {
 	 */
 	public static function refresh( $profile_id ) {
 		$profile_id = absint( $profile_id );
-		if ( ! $profile_id ) {
+		if ( ! self::is_vendor_profile( $profile_id ) ) {
 			return null;
 		}
 
@@ -70,9 +98,14 @@ class LNKup_Vendor_Reputation {
 	 */
 	public static function get( $profile_id ) {
 		$profile_id = absint( $profile_id );
-		$updated    = get_post_meta( $profile_id, '_lnkup_reputation_updated_at', true );
+		if ( ! self::is_vendor_profile( $profile_id ) ) {
+			return null;
+		}
+		$updated = get_post_meta( $profile_id, '_lnkup_reputation_updated_at', true );
 		if ( ! $updated ) {
-			return self::refresh( $profile_id );
+			// Reads never write: compute in the background and serve a neutral state now.
+			self::queue_refresh( $profile_id );
+			return self::neutral( $profile_id );
 		}
 		$breakdown = json_decode( get_post_meta( $profile_id, '_lnkup_reputation_breakdown', true ) ?: '{}', true );
 		return array(
@@ -85,6 +118,28 @@ class LNKup_Vendor_Reputation {
 			'metrics'      => LNKup_Reliability_Metrics::get( $profile_id ),
 			'badges'       => class_exists( 'LNKup_Vendor_Badges' ) ? LNKup_Vendor_Badges::get_active( $profile_id ) : array(),
 			'public_slug'  => get_post_meta( $profile_id, '_lnkup_public_slug', true ),
+			'updated_at'   => $updated,
+		);
+	}
+
+	/**
+	 * Neutral reputation for profiles not yet computed.
+	 *
+	 * @param int $profile_id Profile ID.
+	 */
+	public static function neutral( $profile_id ) {
+		return array(
+			'score'        => 0,
+			'label'        => LNKup_Reputation_Score::LABEL_NEW,
+			'avg_rating'   => 0.0,
+			'review_count' => 0,
+			'breakdown'    => array(),
+			'is_new'       => true,
+			'metrics'      => LNKup_Reliability_Metrics::get( $profile_id ),
+			'badges'       => class_exists( 'LNKup_Vendor_Badges' ) ? LNKup_Vendor_Badges::get_active( $profile_id ) : array(),
+			'public_slug'  => (string) get_post_meta( $profile_id, '_lnkup_public_slug', true ),
+			'updated_at'   => '',
+			'pending'      => true,
 		);
 	}
 
@@ -154,7 +209,58 @@ class LNKup_Vendor_Reputation {
 	}
 
 	/**
-	 * Resolve profile by slug or ID.
+	 * Resolve a public Passport by slug only. Numeric IDs, drafts and private profiles never resolve.
+	 *
+	 * @param string $slug Public slug.
+	 */
+	public static function resolve_public_profile( $slug ) {
+		$slug = sanitize_title( (string) $slug );
+		if ( '' === $slug ) {
+			return 0;
+		}
+		$posts = get_posts(
+			array(
+				'post_type'      => 'lnkup_vendor_profile',
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				'meta_key'       => '_lnkup_public_slug', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => $slug, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+			)
+		);
+		$profile_id = $posts ? (int) $posts[0] : 0;
+		if ( ! $profile_id || ! LNKup_Passport_Privacy::is_public( $profile_id ) ) {
+			return 0;
+		}
+		return $profile_id;
+	}
+
+	/**
+	 * Public slug lookup that also lets the owner (or staff) preview a private Passport.
+	 *
+	 * @param string $slug    Public slug.
+	 * @param int    $user_id Viewer user ID.
+	 * @return array{profile_id:int,is_preview:bool}
+	 */
+	public static function resolve_viewable_profile( $slug, $user_id = 0 ) {
+		$profile_id = self::resolve_public_profile( $slug );
+		if ( $profile_id ) {
+			return array( 'profile_id' => $profile_id, 'is_preview' => false );
+		}
+		$user_id = absint( $user_id );
+		if ( ! $user_id || is_numeric( $slug ) ) {
+			return array( 'profile_id' => 0, 'is_preview' => false );
+		}
+		$candidate = self::resolve_profile( $slug );
+		if ( $candidate && ( (int) get_post_meta( $candidate, '_lnkup_owner_user_id', true ) === $user_id || LNKup_Capabilities::user_has_manage_all( $user_id ) ) ) {
+			return array( 'profile_id' => $candidate, 'is_preview' => true );
+		}
+		return array( 'profile_id' => 0, 'is_preview' => false );
+	}
+
+	/**
+	 * Resolve profile by slug or ID (authenticated/internal contexts only).
 	 *
 	 * @param string $slug_or_id Slug or numeric ID.
 	 */

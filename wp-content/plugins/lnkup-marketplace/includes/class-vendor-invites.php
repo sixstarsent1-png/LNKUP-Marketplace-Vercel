@@ -37,6 +37,10 @@ class LNKup_Vendor_Invites {
 				array( 'status' => 409, 'invite_id' => $existing )
 			);
 		}
+		$guard = self::cold_invite_guard( $organizer_id, $vendor_id );
+		if ( is_wp_error( $guard ) ) {
+			return $guard;
+		}
 		if ( ! LNKup_Capabilities::organizer_can_manage_vendor( $organizer_id, $vendor_id ) ) {
 			LNKup_Organizer_CRM::ensure_relationship( $organizer_id, $vendor_id );
 		}
@@ -66,8 +70,11 @@ class LNKup_Vendor_Invites {
 		if ( ! empty( $args['message'] ) ) {
 			update_post_meta( $invite_id, '_lnkup_invite_message', sanitize_textarea_field( $args['message'] ) );
 		}
+		update_post_meta( $invite_id, '_lnkup_invite_source', sanitize_key( $args['source'] ?? 'manual' ) );
 		$link = add_query_arg( 'invite', $token, lnkup_page_url_helper( 'opportunities' ) );
-		LNKup_Notifications::send_vendor_invite( $invite_id, $link );
+		if ( empty( $args['silent'] ) ) {
+			LNKup_Notifications::send_vendor_invite( $invite_id, $link );
+		}
 		self::add_vendor_notice( $vendor_id, $invite_id );
 		LNKup_Organizer_CRM::log_activity(
 			'invite_sent',
@@ -78,12 +85,108 @@ class LNKup_Vendor_Invites {
 				'payload'        => array( 'invite_id' => $invite_id, 'type' => $type ),
 			)
 		);
+		do_action( 'lnkup_vendor_invite_created', $invite_id, $organizer_id, $vendor_id, $event_id, $opp_id );
 		return array(
 			'invite_id' => $invite_id,
 			'token'     => $token,
 			'link'      => $link,
 			'expires'   => $expires,
 		);
+	}
+
+	/**
+	 * Invite a vendor to specific stops of the organizer's tour or series. One independent invite per stop;
+	 * approvals, pricing and bookings stay per event.
+	 *
+	 * @param int   $organizer_id   Organizer user ID.
+	 * @param int   $vendor_id      Vendor user ID.
+	 * @param int   $tour_id        Tour post ID.
+	 * @param int[] $stop_event_ids Event IDs (stops) to invite to; empty = all upcoming stops.
+	 * @param array $args           message, source.
+	 * @return array{created:array,skipped:array}|WP_Error
+	 */
+	public static function create_for_tour( $organizer_id, $vendor_id, $tour_id, $stop_event_ids = array(), $args = array() ) {
+		$tour_id = absint( $tour_id );
+		if ( 'lnkup_tour' !== get_post_type( $tour_id ) ) {
+			return new WP_Error( 'invalid_tour', __( 'That tour no longer exists.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		if ( (int) get_post_meta( $tour_id, '_lnkup_organizer_user_id', true ) !== (int) $organizer_id && ! LNKup_Capabilities::user_has_manage_all( $organizer_id ) ) {
+			return new WP_Error( 'forbidden', __( 'You can only invite vendors to your own tours.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+		$stops = get_posts(
+			array(
+				'post_type'      => 'lnkup_event',
+				'post_status'    => 'any',
+				'posts_per_page' => 60,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_key'       => '_lnkup_tour_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => $tour_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+		$wanted  = array_filter( array_map( 'absint', (array) $stop_event_ids ) );
+		$created = array();
+		$skipped = array();
+		// One grouped tour message (communications) instead of one email per stop, when that flow is on.
+		$grouped = class_exists( 'LNKup_Comms_Settings' ) && LNKup_Comms_Settings::enabled( 'flow_passport' );
+		foreach ( $stops as $event_id ) {
+			$event_id = (int) $event_id;
+			if ( $wanted && ! in_array( $event_id, $wanted, true ) ) {
+				continue;
+			}
+			$date = (string) get_post_meta( $event_id, '_lnkup_event_date', true );
+			if ( $date && strtotime( $date ) < strtotime( 'today' ) ) {
+				$skipped[] = array( 'event_id' => $event_id, 'reason' => __( 'This stop has already happened.', 'lnkup-marketplace' ) );
+				continue;
+			}
+			$result = self::create( $organizer_id, $vendor_id, array_merge( $args, array( 'event_id' => $event_id, 'type' => 'apply', 'source' => 'tour_invite', 'silent' => $grouped ) ) );
+			if ( is_wp_error( $result ) ) {
+				$skipped[] = array( 'event_id' => $event_id, 'reason' => $result->get_error_message() );
+				if ( 'invite_rate_limited' === $result->get_error_code() || 'invite_not_allowed' === $result->get_error_code() ) {
+					break;
+				}
+				continue;
+			}
+			update_post_meta( (int) $result['invite_id'], '_lnkup_tour_id', $tour_id );
+			$created[] = array( 'event_id' => $event_id, 'invite_id' => (int) $result['invite_id'] );
+		}
+		if ( $created ) {
+			do_action( 'lnkup_vendor_invited_to_tour', $tour_id, (int) $vendor_id, (int) $organizer_id, wp_list_pluck( $created, 'event_id' ) );
+		}
+		return array( 'created' => $created, 'skipped' => $skipped );
+	}
+
+	/**
+	 * Anti-spam guard for invites to vendors the organizer has no booking history with:
+	 * respects the vendor's invite/discovery settings and platform-wide frequency caps.
+	 *
+	 * @param int $organizer_id Organizer user ID.
+	 * @param int $vendor_id    Vendor user ID.
+	 * @return true|WP_Error
+	 */
+	private static function cold_invite_guard( $organizer_id, $vendor_id ) {
+		if ( ! class_exists( 'LNKup_Recruitment' ) || LNKup_Capabilities::user_has_manage_all( $organizer_id ) ) {
+			return true;
+		}
+		$profile_id = (int) lnkup_get_vendor_profile_id( $vendor_id );
+		if ( $profile_id && LNKup_Capabilities::organizer_can_view_vendor_contact( $organizer_id, $profile_id ) ) {
+			return true;
+		}
+		if ( $profile_id ) {
+			if ( '0' === (string) get_post_meta( $profile_id, '_lnkup_discoverable', true ) ) {
+				return new WP_Error( 'invite_not_allowed', __( 'This vendor is not available for invites.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+			}
+			if ( '0' === (string) get_post_meta( $profile_id, '_lnkup_accept_invites', true ) ) {
+				return new WP_Error( 'invite_not_allowed', __( 'This vendor is not accepting invites right now.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+			}
+		}
+		if ( LNKup_Recruitment::invites_to_vendor_since( $vendor_id, 7 * DAY_IN_SECONDS ) >= LNKup_Match_Settings::vendor_weekly_invite_cap() ) {
+			return new WP_Error( 'invite_rate_limited', __( 'This vendor has received several invites this week. Try again later.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
+		}
+		if ( LNKup_Recruitment::invites_from_organizer_since( $organizer_id, DAY_IN_SECONDS ) >= LNKup_Match_Settings::organizer_daily_invite_cap() ) {
+			return new WP_Error( 'invite_rate_limited', __( "You've reached today's invite limit. Try again tomorrow.", 'lnkup-marketplace' ), array( 'status' => 429 ) );
+		}
+		return true;
 	}
 
 	/**
@@ -240,6 +343,7 @@ class LNKup_Vendor_Invites {
 		}
 		$status = $accept ? self::STATUS_ACCEPTED : self::STATUS_DECLINED;
 		update_post_meta( $invite->ID, '_lnkup_status', $status );
+		do_action( 'lnkup_vendor_invite_status_changed', $invite->ID, $status );
 		LNKup_Organizer_CRM::log_activity(
 			$accept ? 'invite_accepted' : 'invite_declined',
 			$organizer_id,
@@ -367,7 +471,7 @@ class LNKup_Vendor_Invites {
 				FROM {$wpdb->posts} p
 				INNER JOIN {$wpdb->postmeta} e ON e.post_id = p.ID AND e.meta_key = '_lnkup_event_id' AND e.meta_value = %s
 				LEFT JOIN {$wpdb->postmeta} s ON s.post_id = p.ID AND s.meta_key = '_lnkup_application_status'
-				WHERE p.post_type = 'lnkup_application' AND p.post_status NOT IN ('trash', 'auto-draft')
+				WHERE p.post_type = 'lnkup_application' AND p.post_status NOT IN ('trash', 'auto-draft', 'lnkup_app_draft')
 				GROUP BY s.meta_value",
 				(string) $event_id
 			),
@@ -413,6 +517,7 @@ class LNKup_Vendor_Invites {
 		$invite = self::get_by_token( $token );
 		if ( $invite && self::STATUS_SENT === get_post_meta( $invite->ID, '_lnkup_status', true ) ) {
 			update_post_meta( $invite->ID, '_lnkup_status', self::STATUS_OPENED );
+			do_action( 'lnkup_vendor_invite_status_changed', $invite->ID, self::STATUS_OPENED );
 		}
 	}
 
