@@ -19,7 +19,7 @@ get_header();
 				<?php lnkup_theme_section_kicker( '02 / APPLY', __( 'Interest form', 'lnkup-theme' ) ); ?>
 				<h2 class="lnkup-heading lnkup-heading--section"><?php esc_html_e( 'Tell us about your city', 'lnkup-theme' ); ?></h2>
 				<p class="lnkup-muted"><?php esc_html_e( 'We review every application. If you know vendors, organizers, or both, we want to hear from you.', 'lnkup-theme' ); ?></p>
-				<p class="lnkup-muted"><?php esc_html_e( 'You receive 10% commission on the booking for 12 months.', 'lnkup-theme' ); ?></p>
+				<?php echo do_shortcode( '[lnkup_partner_program_terms program="city_connector"]' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 				<div class="lnkup-connector-panel">
 					<?php echo do_shortcode( '[lnkup_connector_interest_form show_heading="0"]' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 				</div>

@@ -26,6 +26,7 @@ export type WpOpportunityItem = {
   trending_score?: number
   is_open?: boolean
   application_status?: string
+  can_apply_again?: boolean
   indoor?: boolean
   outdoor?: boolean
   power_available?: boolean

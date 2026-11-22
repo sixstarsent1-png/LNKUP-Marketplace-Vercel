@@ -20,7 +20,7 @@ class LNKup_Connector_Ranks {
 	 */
 	public static function init() {
 		add_action( 'lnkup_marketplace_daily', array( __CLASS__, 'recalculate_all' ), 40 );
-		add_action( 'lnkup_refund_completed', array( __CLASS__, 'on_refund_completed' ), 25, 1 );
+		// Refund and chargeback reversals arrive through LNKup_Referral_Reversals for every refund path.
 	}
 
 	/**
@@ -434,6 +434,9 @@ class LNKup_Connector_Ranks {
 			return 0;
 		}
 		$connector = LNKup_Connector::get( $connector_id );
+		if ( $connector && LNKup_Connector::PROGRAM !== LNKup_Connector::program_of( $connector ) ) {
+			return 0;
+		}
 		if ( ! $connector ) {
 			return 0;
 		}
@@ -623,7 +626,7 @@ class LNKup_Connector_Ranks {
 	 */
 	public static function recalculate( $connector_id, $source = 'manual' ) {
 		$connector = LNKup_Connector::get( $connector_id );
-		if ( ! $connector ) {
+		if ( ! $connector || LNKup_Connector::PROGRAM !== LNKup_Connector::program_of( $connector ) ) {
 			return self::empty_dto();
 		}
 		if ( ! self::enabled() ) {
@@ -731,6 +734,9 @@ class LNKup_Connector_Ranks {
 			return 0;
 		}
 		if ( 'city_connector' === $rank_key ) {
+			return 0;
+		}
+		if ( LNKup_Connector::PROGRAM !== LNKup_Connector::program_of( LNKup_Connector::get( $connector_id ) ) ) {
 			return 0;
 		}
 		$key = self::bonus_key( $connector_id, $rank_key );

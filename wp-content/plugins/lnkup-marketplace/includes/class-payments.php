@@ -41,8 +41,16 @@ class LNKup_Payments {
 				'meta_key'       => '_lnkup_application_id',
 				'meta_value'     => $app_id,
 				'fields'         => 'ids',
+				'orderby'        => 'ID',
+				'order'          => 'DESC',
 			)
 		);
+		// A payment voided by an earlier rejection/withdrawal can never be collected; a re-approved
+		// booking gets a fresh payment row instead of sitting in payment_required forever (B-5).
+		if ( $existing && '' !== (string) get_post_meta( (int) $existing[0], '_lnkup_voided_at', true ) ) {
+			LNKup_Financial_Audit::log( 'payment_replaced_after_void', 'payment', (int) $existing[0], array( 'application_id' => (int) $app_id ) );
+			$existing = array();
+		}
 		if ( $existing ) {
 			$payment_id = (int) $existing[0];
 			$app_id_int = (int) $app_id;
@@ -59,13 +67,8 @@ class LNKup_Payments {
 		$vendor_fee   = (float) get_post_meta( $opp_id, '_lnkup_vendor_fee', true );
 		$organizer_id = (int) get_post_meta( $app_id, '_lnkup_organizer_user_id', true );
 		$event_id     = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
-		$category     = '';
 		$vendor_user  = (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true );
-		$profile_id   = (int) lnkup_get_vendor_profile_id( $vendor_user );
-		if ( $profile_id ) {
-			$terms = wp_get_post_terms( $profile_id, 'lnkup_vendor_category', array( 'fields' => 'slugs' ) );
-			$category = is_array( $terms ) && $terms ? $terms[0] : '';
-		}
+		$category     = self::fee_category_for_application( (int) $app_id, $vendor_user );
 		$fees = LNKup_Fee_Engine::calculate( array(
 			'vendor_fee'   => $vendor_fee,
 			'organizer_id' => $organizer_id,
@@ -78,8 +81,13 @@ class LNKup_Payments {
 				'post_title'  => sprintf( __( 'Payment for Application #%d', 'lnkup-marketplace' ), $app_id ),
 				'post_type'   => 'lnkup_payment',
 				'post_status' => 'publish',
-			)
+			),
+			true
 		);
+		if ( is_wp_error( $payment_id ) || ! $payment_id ) {
+			LNKup_Financial_Audit::log( 'payment_create_failed', 'application', (int) $app_id, array( 'error' => is_wp_error( $payment_id ) ? $payment_id->get_error_message() : 'insert_failed' ) );
+			return 0;
+		}
 
 		update_post_meta( $payment_id, '_lnkup_application_id', $app_id );
 		update_post_meta( $payment_id, '_lnkup_vendor_user_id', (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true ) );
@@ -243,7 +251,22 @@ class LNKup_Payments {
 
 		$app_id = (int) get_post_meta( $payment_id, '_lnkup_application_id', true );
 		if ( $app_id ) {
-			LNKup_Applications::transition( $app_id, 'paid' );
+			$booked = LNKup_Applications::transition( $app_id, 'paid', array( 'source' => 'payment' ) );
+			if ( is_wp_error( $booked ) ) {
+				// Money landed after the booking closed (rejected / withdrawn / expired). Keep the
+				// vendor un-booked and surface it for an admin refund decision (B-7).
+				update_post_meta( $payment_id, '_lnkup_needs_review', 'paid_after_close' );
+				LNKup_Financial_Audit::log(
+					'paid_after_close',
+					'payment',
+					$payment_id,
+					array(
+						'application_id'     => $app_id,
+						'application_status' => (string) get_post_meta( $app_id, '_lnkup_application_status', true ),
+					)
+				);
+				do_action( 'lnkup_payment_needs_review', $payment_id, 'paid_after_close' );
+			}
 		}
 
 		LNKup_Notifications::send_organizer_vendor_paid( $payment_id );
@@ -284,6 +307,9 @@ class LNKup_Payments {
 				'posts_per_page' => 1,
 				'meta_key'       => '_lnkup_application_id',
 				'meta_value'     => $app_id,
+				// Newest first: a re-approved booking replaces its voided payment row.
+				'orderby'        => 'ID',
+				'order'          => 'DESC',
 			)
 		);
 		return $posts[0] ?? null;
@@ -311,42 +337,76 @@ class LNKup_Payments {
 	 * @return bool True when fees were refreshed.
 	 */
 	public static function refresh_pending_fees( $payment_id ) {
-		$payment_id = absint( $payment_id );
-		if ( ! $payment_id || 'lnkup_payment' !== get_post_type( $payment_id ) ) {
+		$fees = self::pending_fee_preview( $payment_id );
+		if ( null === $fees ) {
 			return false;
 		}
-		if ( 'pending' !== get_post_meta( $payment_id, '_lnkup_payment_status', true ) ) {
-			return false;
-		}
-
-		$vendor_fee   = (float) get_post_meta( $payment_id, '_lnkup_vendor_spot_fee', true );
-		$organizer_id = (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true );
-		$event_id     = (int) get_post_meta( $payment_id, '_lnkup_event_id', true );
-		$discount     = (float) get_post_meta( $payment_id, '_lnkup_discount_amount', true );
-		$category     = '';
-		$vendor_user  = (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true );
-		$profile_id   = (int) lnkup_get_vendor_profile_id( $vendor_user );
-		if ( $profile_id ) {
-			$terms = wp_get_post_terms( $profile_id, 'lnkup_vendor_category', array( 'fields' => 'slugs' ) );
-			$category = is_array( $terms ) && $terms ? $terms[0] : '';
-		}
-
-		$fees = LNKup_Fee_Engine::calculate(
-			array(
-				'vendor_fee'   => $vendor_fee,
-				'organizer_id' => $organizer_id,
-				'event_id'     => $event_id,
-				'category'     => $category,
-				'discount'     => $discount,
-				// _lnkup_total_amount stays gross of credit; stored_amount_due() subtracts credit once.
-				'credit'       => 0,
-			)
-		);
 		self::apply_fee_breakdown_to_payment( $payment_id, $fees );
 		if ( class_exists( 'LNKup_Transactions' ) ) {
 			LNKup_Transactions::sync_extended_fields( $payment_id );
 		}
 		return true;
+	}
+
+	/**
+	 * Fee breakdown a pending payment would have under current settings, without writing anything.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 * @return array|null Fee engine breakdown, or null when the payment is not pending.
+	 */
+	public static function pending_fee_preview( $payment_id ) {
+		$payment_id = absint( $payment_id );
+		if ( ! $payment_id || 'lnkup_payment' !== get_post_type( $payment_id ) ) {
+			return null;
+		}
+		if ( 'pending' !== get_post_meta( $payment_id, '_lnkup_payment_status', true ) ) {
+			return null;
+		}
+		return LNKup_Fee_Engine::calculate(
+			array(
+				'vendor_fee'     => (float) get_post_meta( $payment_id, '_lnkup_vendor_spot_fee', true ),
+				'organizer_id'   => (int) get_post_meta( $payment_id, '_lnkup_organizer_user_id', true ),
+				'event_id'       => (int) get_post_meta( $payment_id, '_lnkup_event_id', true ),
+				'category'       => self::fee_category_for_payment( $payment_id ),
+				'discount'       => (float) get_post_meta( $payment_id, '_lnkup_discount_amount', true ),
+				'payment_method' => (string) get_post_meta( $payment_id, '_lnkup_payment_method', true ) ?: 'card',
+				// _lnkup_total_amount stays gross of credit; stored_amount_due() subtracts credit once.
+				'credit'         => 0,
+			)
+		);
+	}
+
+	/**
+	 * Category slug used for scoped fee rules: the category chosen on the application,
+	 * falling back to the vendor profile's first category.
+	 *
+	 * @param int $payment_id Payment post ID.
+	 */
+	public static function fee_category_for_payment( $payment_id ) {
+		return self::fee_category_for_application(
+			(int) get_post_meta( $payment_id, '_lnkup_application_id', true ),
+			(int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true )
+		);
+	}
+
+	/**
+	 * @param int $app_id      Application ID.
+	 * @param int $vendor_user Vendor user ID.
+	 */
+	public static function fee_category_for_application( $app_id, $vendor_user ) {
+		if ( $app_id ) {
+			$chosen = (string) get_post_meta( $app_id, '_lnkup_selected_category', true );
+			if ( '' !== $chosen ) {
+				$term = get_term_by( 'name', $chosen, 'lnkup_vendor_category' );
+				return $term && ! is_wp_error( $term ) ? $term->slug : sanitize_title( $chosen );
+			}
+		}
+		$profile_id  = (int) lnkup_get_vendor_profile_id( $vendor_user );
+		if ( $profile_id ) {
+			$terms = wp_get_post_terms( $profile_id, 'lnkup_vendor_category', array( 'fields' => 'slugs' ) );
+			return is_array( $terms ) && $terms ? (string) $terms[0] : '';
+		}
+		return '';
 	}
 
 	/**

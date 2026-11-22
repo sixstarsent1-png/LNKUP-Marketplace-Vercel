@@ -316,12 +316,7 @@ class LNKup_Verification {
 		$not_applicable = array_values( array_diff( $all_types, array_merge( $required_slugs, $suggested_slugs ) ) );
 
 		$doc_map = class_exists( 'LNKup_Documents' ) ? LNKup_Documents::document_types() : array();
-		$vendor_docs = $vendor_id && class_exists( 'LNKup_Documents' ) ? LNKup_Documents::get_for_vendor( $vendor_id ) : array();
-		$by_type = array();
-		foreach ( $vendor_docs as $doc ) {
-			$type = (string) get_post_meta( $doc->ID, '_lnkup_document_type', true );
-			$by_type[ $type ] = $doc;
-		}
+		$by_type = $vendor_id && class_exists( 'LNKup_Documents' ) ? LNKup_Documents::current_by_type( $vendor_id ) : array();
 
 		$format_doc = function ( string $slug, bool $is_required ) use ( $doc_map, $by_type ): array {
 			$doc    = $by_type[ $slug ] ?? null;
@@ -330,7 +325,9 @@ class LNKup_Verification {
 				$ver = (string) get_post_meta( $doc->ID, '_lnkup_verification_status', true );
 				if ( 'approved' === $ver ) {
 					$exp = get_post_meta( $doc->ID, '_lnkup_expiration_date', true );
-					if ( $exp && strtotime( (string) $exp ) < strtotime( '+30 days' ) ) {
+					if ( LNKup_Documents::is_expired( (string) $exp ) ) {
+						$status = 'expired';
+					} elseif ( $exp && strtotime( (string) $exp ) < strtotime( '+30 days' ) ) {
 						$status = 'expiring';
 					} else {
 						$status = 'approved';
@@ -552,7 +549,7 @@ class LNKup_Verification {
 		if ( $score >= self::PROFILE_COMPLETE_THRESHOLD ) {
 			return true;
 		}
-		$core_keys = array( 'business_basics', 'contact', 'category', 'markets', 'setup', 'photos' );
+		$core_keys = array( 'business_basics', 'contact_socials', 'markets_served', 'setup_requirements', 'photos_proof' );
 		$sections  = (array) ( $strength['sections'] ?? array() );
 		$by_key    = array();
 		foreach ( $sections as $section ) {
@@ -575,7 +572,8 @@ class LNKup_Verification {
 		}
 		foreach ( $required as $item ) {
 			$status = $item['status'] ?? '';
-			if ( ! in_array( $status, array( 'approved', 'pending', 'expiring' ), true ) ) {
+			// Reviewed and unexpired only: pending uploads and expired documents are not "ready".
+			if ( ! in_array( $status, array( 'approved', 'expiring' ), true ) ) {
 				return false;
 			}
 		}
@@ -613,8 +611,10 @@ class LNKup_Verification {
 				'post_type'      => 'lnkup_vendor_flag',
 				'posts_per_page' => 20,
 				'fields'         => 'ids',
-				'meta_key'       => '_lnkup_vendor_user_id',
-				'meta_value'     => $vendor_id,
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_vendor_user_id', 'value' => $vendor_id ),
+					array( 'key' => '_lnkup_admin_confirmed', 'value' => '1' ),
+				),
 			)
 		);
 		foreach ( $flags as $flag_id ) {

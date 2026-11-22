@@ -92,7 +92,8 @@ class LNKup_Vendor_Readiness {
 		$docs = LNKup_Documents::get_for_vendor( $vendor_id );
 		$approved_types = array();
 		foreach ( $docs as $doc ) {
-			if ( 'approved' === get_post_meta( $doc->ID, '_lnkup_verification_status', true ) ) {
+			if ( 'approved' === get_post_meta( $doc->ID, '_lnkup_verification_status', true )
+				&& ! LNKup_Documents::is_expired( (string) get_post_meta( $doc->ID, '_lnkup_expiration_date', true ) ) ) {
 				$approved_types[] = get_post_meta( $doc->ID, '_lnkup_document_type', true );
 			}
 		}
@@ -361,19 +362,51 @@ class LNKup_Vendor_Readiness {
 		} ) );
 	}
 
+	/** @var array<int, array>|null Per-request checklist memo; null when no read batch is open. */
+	private static $batch = null;
+
+	/**
+	 * Start memoizing checklist() for a read-only request (roster, operations snapshot).
+	 * Must be paired with end_batch(); write paths should never open a batch.
+	 */
+	public static function begin_batch() {
+		if ( null === self::$batch ) {
+			self::$batch = array();
+		}
+	}
+
+	public static function end_batch() {
+		self::$batch = null;
+	}
+
 	/**
 	 * Detailed readiness checklist with weighted percent score.
 	 *
 	 * @param int $app_id Application ID.
 	 */
 	public static function checklist( $app_id ) {
-		$app_id    = absint( $app_id );
+		$app_id = absint( $app_id );
+		if ( null !== self::$batch && isset( self::$batch[ $app_id ] ) ) {
+			return self::$batch[ $app_id ];
+		}
+		$result = self::build_checklist( $app_id );
+		if ( null !== self::$batch ) {
+			self::$batch[ $app_id ] = $result;
+		}
+		return $result;
+	}
+
+	/**
+	 * @param int $app_id Application ID.
+	 */
+	private static function build_checklist( $app_id ) {
 		$vendor_id = (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true );
 		$status    = get_post_meta( $app_id, '_lnkup_application_status', true );
 		$docs      = LNKup_Documents::get_for_vendor( $vendor_id );
 		$approved_types = array();
 		foreach ( $docs as $doc ) {
-			if ( 'approved' === get_post_meta( $doc->ID, '_lnkup_verification_status', true ) ) {
+			if ( 'approved' === get_post_meta( $doc->ID, '_lnkup_verification_status', true )
+				&& ! LNKup_Documents::is_expired( (string) get_post_meta( $doc->ID, '_lnkup_expiration_date', true ) ) ) {
 				$approved_types[] = get_post_meta( $doc->ID, '_lnkup_document_type', true );
 			}
 		}

@@ -185,7 +185,7 @@ export default function OrganizerMoreScreen() {
               />
             ))}
           </ListGroup>
-          {section.title === "Notifications" ? <PushPreferencesCard /> : null}
+          {section.title === "Notifications" ? <PushPreferencesCard settingsHref="/(organizer)/notification-settings" /> : null}
         </View>
       ))}
 

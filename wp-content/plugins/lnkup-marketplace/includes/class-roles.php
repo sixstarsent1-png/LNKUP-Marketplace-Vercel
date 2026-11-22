@@ -43,6 +43,7 @@ class LNKup_Roles {
 		add_role( 'lnkup_vendor', __( 'Vendor', 'lnkup-marketplace' ), $vendor_caps );
 		add_role( 'lnkup_organizer', __( 'Organizer', 'lnkup-marketplace' ), $organizer_caps );
 		add_role( 'lnkup_connector', __( 'City Connector', 'lnkup-marketplace' ), self::connector_capabilities() );
+		add_role( 'lnkup_partner', __( 'LNKup Partner', 'lnkup-marketplace' ), self::connector_capabilities() );
 		add_role( 'lnkup_admin', __( 'LNKup Admin', 'lnkup-marketplace' ), $admin_caps );
 
 		$admin = get_role( 'administrator' );
@@ -121,6 +122,7 @@ class LNKup_Roles {
 			'lnkup_view_own_financials' => true,
 			'lnkup_manage_marketplace_financials' => true,
 			'lnkup_manage_marketplace_growth' => true,
+			'lnkup_manage_organizer_growth' => true,
 			'lnkup_manage_promo_codes' => true,
 			'lnkup_manage_own_events' => true,
 			'lnkup_manage_own_opportunities' => true,
@@ -134,10 +136,14 @@ class LNKup_Roles {
 	 * Merge vendor/organizer capabilities into existing roles (idempotent upgrade).
 	 */
 	public static function sync_role_capabilities() {
+		if ( ! get_role( 'lnkup_partner' ) ) {
+			add_role( 'lnkup_partner', __( 'LNKup Partner', 'lnkup-marketplace' ), self::connector_capabilities() );
+		}
 		$map = array(
 			'lnkup_vendor'    => self::vendor_capabilities(),
 			'lnkup_organizer' => self::organizer_capabilities(),
 			'lnkup_connector' => self::connector_capabilities(),
+			'lnkup_partner'   => self::connector_capabilities(),
 			'lnkup_admin'     => self::admin_capabilities(),
 		);
 		foreach ( $map as $role_slug => $caps ) {
@@ -200,7 +206,7 @@ class LNKup_Roles {
 	}
 
 	/**
-	 * Check if user is an active City Connector.
+	 * Check if user holds an active partner account (City Connector, affiliate or strategic partner).
 	 *
 	 * @param int $user_id User ID.
 	 */
@@ -210,7 +216,7 @@ class LNKup_Roles {
 			return true;
 		}
 		$user = get_userdata( $user_id );
-		if ( ! $user || ! in_array( 'lnkup_connector', (array) $user->roles, true ) ) {
+		if ( ! $user || ! array_intersect( array( 'lnkup_connector', 'lnkup_partner' ), (array) $user->roles ) ) {
 			return false;
 		}
 		if ( class_exists( 'LNKup_Connector' ) ) {

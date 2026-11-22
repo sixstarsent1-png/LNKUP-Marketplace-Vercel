@@ -17,6 +17,28 @@ class LNKup_Applications {
 	 * @param string $message        Application message.
 	 * @return int|WP_Error
 	 */
+	/**
+	 * Re-apply policy hooks: material changes to an opportunity re-open it for declined vendors.
+	 */
+	public static function init() {
+		add_action( 'updated_post_meta', array( __CLASS__, 'on_meta_changed' ), 10, 3 );
+		add_action( 'added_post_meta', array( __CLASS__, 'on_meta_changed' ), 10, 3 );
+		add_action( 'set_object_terms', array( __CLASS__, 'on_terms_changed' ), 10, 6 );
+		add_action( 'lnkup_application_withdrawn', array( __CLASS__, 'on_withdrawn' ), 5 );
+	}
+
+	/**
+	 * Keep the index's legacy application counter in step when a vendor withdraws.
+	 *
+	 * @param int $app_id Application ID.
+	 */
+	public static function on_withdrawn( $app_id ) {
+		$opp_id = (int) get_post_meta( (int) $app_id, '_lnkup_opportunity_id', true );
+		if ( $opp_id ) {
+			LNKup_Marketplace_Index::decrement_applications( $opp_id );
+		}
+	}
+
 	public static function submit( $opportunity_id, $user_id, $message = '' ) {
 		return self::submit_with_profile(
 			$user_id,
@@ -35,7 +57,7 @@ class LNKup_Applications {
 	 * @param int $user_id        Vendor user ID (0 when logged out).
 	 * @return array|WP_Error
 	 */
-	public static function build_apply_context( $opportunity_id, $user_id = 0 ) {
+	public static function build_apply_context( $opportunity_id, $user_id = 0, $invite_token = '' ) {
 		$opportunity_id = absint( $opportunity_id );
 		$user_id        = $user_id ?: (int) get_current_user_id();
 
@@ -50,7 +72,12 @@ class LNKup_Applications {
 		$required_docs = lnkup_get_opportunity_required_documents( $opportunity_id );
 		$doc_labels    = LNKup_Documents::document_types();
 
-		$eligibility = self::evaluate_eligibility( $opportunity_id, $user_id, $card );
+		$eligibility = self::evaluate_eligibility( $opportunity_id, $user_id, $card, (string) $invite_token );
+
+		// Invite-only slot details stay private to invited vendors, owners and admins.
+		if ( 'invite_only' === $eligibility['block_reason'] || ( ! $user_id && get_post_meta( $opportunity_id, '_lnkup_invite_only', true ) && '' === (string) $invite_token ) ) {
+			return new WP_Error( 'lnkup_invite_only', __( 'This booth is invite-only.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
 
 		$profile     = null;
 		$strength    = array();
@@ -87,6 +114,23 @@ class LNKup_Applications {
 		}
 
 		$button_state = self::button_state_from_eligibility( $eligibility );
+		$settings     = lnkup_get_settings();
+		$draft        = null;
+		if ( $user_id && class_exists( 'LNKup_Application_Drafts' ) ) {
+			$open = LNKup_Application_Drafts::get_for_opportunity( $user_id, $opportunity_id );
+			if ( $open ) {
+				$draft = array_intersect_key( $open, array_flip( array( 'id', 'revision', 'step', 'updated_at', 'fields', 'answers', 'document_ids', 'price' ) ) );
+			}
+		}
+		$tour_id   = (int) get_post_meta( (int) get_post_meta( $opportunity_id, '_lnkup_event_id', true ), '_lnkup_tour_id', true );
+		$questions = LNKup_Application_Questions::get_for_opportunity( $opportunity_id );
+		$own_docs  = array();
+		if ( $user_id && in_array( 'file', wp_list_pluck( $questions, 'type' ), true ) && class_exists( 'LNKup_Documents' ) ) {
+			foreach ( LNKup_Documents::get_for_vendor( $user_id ) as $doc ) {
+				$type       = (string) get_post_meta( $doc->ID, '_lnkup_document_type', true );
+				$own_docs[] = array( 'id' => (int) $doc->ID, 'label' => (string) ( $doc_labels[ $type ] ?? $doc->post_title ) );
+			}
+		}
 
 		return array(
 			'opportunity'   => array_merge(
@@ -113,6 +157,20 @@ class LNKup_Applications {
 			'categories'    => $categories,
 			'default_category' => $default_cat,
 			'button_state'  => $button_state,
+			'questions'     => $questions,
+			'vendor_documents' => $own_docs,
+			'documents_required_to_apply' => LNKup_Application_Questions::documents_gate( $opportunity_id ),
+			'reusable_documents' => ( $user_id && $eligibility['profile_id'] && class_exists( 'LNKup_Document_Vault' ) && $required_docs )
+				? LNKup_Document_Vault::find_reusable( (int) $eligibility['profile_id'], $opportunity_id )
+				: null,
+			'document_sharing' => class_exists( 'LNKup_Passport_Settings' ) && LNKup_Passport_Settings::enabled( 'document_vault_sharing' ),
+			'draft'         => $draft,
+			'previous_application' => $eligibility['previous_application'] ?? null,
+			'tour_id'       => $tour_id,
+			'features'      => array(
+				'drafts'           => ! empty( $settings['apply_wizard_enabled'] ),
+				'tour_multi_apply' => class_exists( 'LNKup_Application_Groups' ) && LNKup_Application_Groups::enabled(),
+			),
 		);
 	}
 
@@ -158,8 +216,18 @@ class LNKup_Applications {
 			return new WP_Error( 'not_vendor', __( 'Vendor access required to apply.', 'lnkup-marketplace' ) );
 		}
 
-		$card        = lnkup_get_opportunity_card_data( $opportunity_id );
-		$eligibility = self::evaluate_eligibility( $opportunity_id, $vendor_user_id, $card );
+		// Idempotent retries (network retry, double tap, multi-stop resubmit) return the original application.
+		$idempotency_key = isset( $args['idempotency_key'] ) ? substr( preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) $args['idempotency_key'] ), 0, 64 ) : '';
+		if ( '' !== $idempotency_key ) {
+			$prior = self::find_by_idempotency_key( $vendor_user_id, $opportunity_id, $idempotency_key );
+			if ( $prior ) {
+				return $prior;
+			}
+		}
+
+		$invite_token = isset( $args['invite_token'] ) ? sanitize_text_field( (string) $args['invite_token'] ) : '';
+		$card         = lnkup_get_opportunity_card_data( $opportunity_id );
+		$eligibility  = self::evaluate_eligibility( $opportunity_id, $vendor_user_id, $card, $invite_token );
 
 		if ( ! $eligibility['can_apply'] ) {
 			$code = $eligibility['block_reason'] ?: 'blocked';
@@ -186,7 +254,7 @@ class LNKup_Applications {
 		}
 
 		$profile_id = (int) $eligibility['profile_id'];
-		$context    = self::build_apply_context( $opportunity_id, $vendor_user_id );
+		$context    = self::build_apply_context( $opportunity_id, $vendor_user_id, $invite_token );
 		if ( is_wp_error( $context ) ) {
 			return $context;
 		}
@@ -195,6 +263,19 @@ class LNKup_Applications {
 		if ( $allowed_cats && ! in_array( $category, $allowed_cats, true ) ) {
 			return new WP_Error( 'invalid_category', __( 'Please select a valid category for this opportunity.', 'lnkup-marketplace' ) );
 		}
+
+		$answers = LNKup_Application_Questions::validate_answers( $opportunity_id, is_array( $args['answers'] ?? null ) ? $args['answers'] : array(), $vendor_user_id, true );
+		if ( is_wp_error( $answers ) ) {
+			return $answers;
+		}
+		if ( LNKup_Application_Questions::documents_gate( $opportunity_id ) ) {
+			foreach ( (array) ( $context['documents'] ?? array() ) as $doc_row ) {
+				if ( in_array( $doc_row['status'] ?? 'missing', array( 'missing', 'expired' ), true ) ) {
+					return new WP_Error( 'lnkup_documents_required', __( 'This organizer needs your required documents before you apply.', 'lnkup-marketplace' ), array( 'status' => 422, 'document' => (string) ( $doc_row['type'] ?? '' ) ) );
+				}
+			}
+		}
+		$document_ids = LNKup_Application_Questions::owned_document_ids( (array) ( $args['document_ids'] ?? array() ), $vendor_user_id );
 
 		$opp       = get_post( $opportunity_id );
 		$event_id  = (int) get_post_meta( $opportunity_id, '_lnkup_event_id', true );
@@ -222,6 +303,10 @@ class LNKup_Applications {
 		}
 
 		$profile_dto  = $context['profile'] ?? array();
+		// "This application only" edits from the wizard: applied to the frozen snapshot, never to the profile.
+		foreach ( self::sanitize_profile_overrides( (array) ( $args['profile_overrides'] ?? array() ) ) as $field => $value ) {
+			$profile_dto[ $field ] = $value;
+		}
 		$documents    = $context['documents'] ?? array();
 		$docs_missing = false;
 		foreach ( $documents as $doc_row ) {
@@ -242,9 +327,47 @@ class LNKup_Applications {
 		if ( $setup_notes ) {
 			update_post_meta( $app_id, '_lnkup_setup_notes', $setup_notes );
 		}
-		update_post_meta( $app_id, '_lnkup_profile_snapshot', wp_json_encode( $profile_dto ) );
-		update_post_meta( $app_id, '_lnkup_documents_snapshot', wp_json_encode( $documents ) );
+		update_post_meta( $app_id, '_lnkup_profile_snapshot', LNKup_Meta::json_for_meta( $profile_dto ) );
+		update_post_meta( $app_id, '_lnkup_documents_snapshot', LNKup_Meta::json_for_meta( $documents ) );
 		update_post_meta( $app_id, '_lnkup_documents_missing', $docs_missing );
+		if ( $answers ) {
+			update_post_meta( $app_id, '_lnkup_application_answers', LNKup_Meta::json_for_meta( $answers ) );
+		}
+		if ( $document_ids ) {
+			update_post_meta( $app_id, '_lnkup_document_ids', $document_ids );
+		}
+		if ( '' !== $idempotency_key ) {
+			update_post_meta( $app_id, '_lnkup_idempotency_key', $idempotency_key );
+		}
+		if ( ! empty( $args['group_id'] ) ) {
+			update_post_meta( $app_id, '_lnkup_submission_group_id', sanitize_key( (string) $args['group_id'] ) );
+		}
+		if ( ! empty( $args['draft_id'] ) ) {
+			update_post_meta( $app_id, '_lnkup_draft_id', absint( $args['draft_id'] ) );
+		}
+		if ( ! empty( $args['started_at'] ) ) {
+			update_post_meta( $app_id, '_lnkup_started_at', sanitize_text_field( (string) $args['started_at'] ) );
+		}
+		if ( ! empty( $args['client'] ) ) {
+			update_post_meta( $app_id, '_lnkup_submitted_client', sanitize_key( (string) $args['client'] ) );
+		}
+		if ( '' !== $invite_token && self::invite_token_valid_for( $invite_token, $opportunity_id, $vendor_user_id ) ) {
+			$invite = LNKup_Vendor_Invites::get_by_token( $invite_token );
+			if ( $invite ) {
+				update_post_meta( $app_id, '_lnkup_invite_id', (int) $invite->ID );
+			}
+		}
+		self::record_history( $app_id, '', 'submitted', array( 'source' => (string) ( $args['source'] ?? 'web' ) ) );
+
+		// Document Vault: share only what the vendor explicitly consented to, for this application only.
+		if ( ! empty( $args['share_consent'] ) && ! empty( $args['share_document_ids'] ) && class_exists( 'LNKup_Document_Vault' ) && LNKup_Passport_Settings::enabled( 'document_vault_sharing' ) ) {
+			$required_types = lnkup_get_opportunity_required_documents( $opportunity_id );
+			foreach ( array_slice( array_map( 'absint', (array) $args['share_document_ids'] ), 0, 10 ) as $share_doc_id ) {
+				if ( in_array( (string) get_post_meta( $share_doc_id, '_lnkup_document_type', true ), $required_types, true ) ) {
+					LNKup_Document_Vault::share( $profile_id, $share_doc_id, (int) $app_id, $vendor_user_id );
+				}
+			}
+		}
 
 		LNKup_Notifications::send_application_submitted( $app_id );
 		LNKup_Marketplace_Index::increment_applications( $opportunity_id );
@@ -259,9 +382,10 @@ class LNKup_Applications {
 	 * @param int        $opportunity_id Opportunity ID.
 	 * @param int        $user_id        User ID.
 	 * @param array|null $card           Optional card data.
+	 * @param string     $invite_token   Optional invite link token.
 	 * @return array<string, mixed>
 	 */
-	private static function evaluate_eligibility( $opportunity_id, $user_id, $card = null ) {
+	public static function evaluate_eligibility( $opportunity_id, $user_id, $card = null, $invite_token = '' ) {
 		$result = array(
 			'can_apply'                    => false,
 			'block_reason'                 => '',
@@ -287,23 +411,23 @@ class LNKup_Applications {
 		}
 		$result['profile_id'] = $profile_id;
 
-		$existing = get_posts(
-			array(
-				'post_type'      => 'lnkup_application',
-				'posts_per_page' => 1,
-				'meta_query'     => array(
-					'relation' => 'AND',
-					array( 'key' => '_lnkup_opportunity_id', 'value' => $opportunity_id ),
-					array( 'key' => '_lnkup_vendor_user_id', 'value' => $user_id ),
-				),
-				'post_status'    => 'any',
-			)
-		);
+		$existing = self::find_active_application( $opportunity_id, $user_id );
 		if ( $existing ) {
 			$result['block_reason']                = 'duplicate';
-			$result['existing_application_id']     = (int) $existing[0]->ID;
-			$result['existing_application_status'] = (string) get_post_meta( $existing[0]->ID, '_lnkup_application_status', true );
+			$result['existing_application_id']     = (int) $existing;
+			$result['existing_application_status'] = (string) get_post_meta( $existing, '_lnkup_application_status', true );
 			return $result;
+		}
+
+		$previous = self::reapply_state( $opportunity_id, $user_id );
+		if ( $previous ) {
+			$result['previous_application'] = $previous;
+			if ( 'blocked' === $previous['reapply'] ) {
+				$result['block_reason']                = 'previously_declined';
+				$result['existing_application_id']     = (int) $previous['id'];
+				$result['existing_application_status'] = (string) $previous['status'];
+				return $result;
+			}
 		}
 
 		$opp = get_post( $opportunity_id );
@@ -319,9 +443,23 @@ class LNKup_Applications {
 		}
 
 		$event_id = (int) get_post_meta( $opportunity_id, '_lnkup_event_id', true );
+		if ( $event_id && in_array( (string) get_post_meta( $event_id, '_lnkup_event_status', true ), array( 'cancelled', 'canceled', 'postponed' ), true ) ) {
+			$result['block_reason'] = 'closed';
+			return $result;
+		}
+
 		if ( $event_id && class_exists( 'LNKup_Event_Authenticity' ) && ! LNKup_Event_Authenticity::is_bookable( $event_id ) ) {
 			$result['block_reason']  = 'closed';
 			$result['closed_reason'] = 'authenticity_pending';
+			return $result;
+		}
+
+		// Invite-only slots need an invite for this vendor, or a valid invite link token (B-15).
+		if ( get_post_meta( $opportunity_id, '_lnkup_invite_only', true )
+			&& ! LNKup_Capabilities::user_has_manage_all( $user_id )
+			&& ! lnkup_vendor_can_discover_opportunity( $user_id, $opportunity_id )
+			&& ! self::invite_token_valid_for( $invite_token, $opportunity_id, $user_id ) ) {
+			$result['block_reason'] = 'invite_only';
 			return $result;
 		}
 
@@ -330,10 +468,9 @@ class LNKup_Applications {
 		}
 
 		if ( empty( $card['is_open'] ) ) {
-			$deadline = $card['deadline'] ?? '';
-			if ( $deadline && strtotime( $deadline ) < strtotime( 'today' ) ) {
+			if ( lnkup_deadline_passed( $card['deadline'] ?? '' ) ) {
 				$result['block_reason'] = 'deadline';
-			} elseif ( (int) ( $card['spots_remaining'] ?? 0 ) <= 0 ) {
+			} elseif ( empty( $card['spots_unlimited'] ) && (int) ( $card['spots_remaining'] ?? 0 ) <= 0 ) {
 				$result['block_reason'] = 'full';
 			} else {
 				$result['block_reason'] = 'closed';
@@ -343,6 +480,302 @@ class LNKup_Applications {
 
 		$result['can_apply'] = true;
 		return $result;
+	}
+
+	/**
+	 * Snapshot fields a vendor may override for one application without touching their profile.
+	 */
+	const PROFILE_OVERRIDE_FIELDS = array( 'business_name', 'products', 'setup_needs', 'contact_email', 'contact_phone' );
+
+	/**
+	 * @param array $raw Raw overrides.
+	 * @return array<string, string>
+	 */
+	public static function sanitize_profile_overrides( array $raw ) {
+		$out = array();
+		foreach ( self::PROFILE_OVERRIDE_FIELDS as $field ) {
+			if ( ! isset( $raw[ $field ] ) || ! is_scalar( $raw[ $field ] ) ) {
+				continue;
+			}
+			$value = 'contact_email' === $field ? sanitize_email( (string) $raw[ $field ] ) : sanitize_textarea_field( (string) $raw[ $field ] );
+			if ( '' !== $value ) {
+				$out[ $field ] = mb_substr( $value, 0, 2000 );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Application already created for this vendor + opportunity by the same idempotency key.
+	 *
+	 * @param int    $vendor_user_id Vendor.
+	 * @param int    $opportunity_id Opportunity.
+	 * @param string $key            Idempotency key.
+	 * @return int Application ID or 0.
+	 */
+	public static function find_by_idempotency_key( $vendor_user_id, $opportunity_id, $key ) {
+		$ids = get_posts(
+			array(
+				'post_type'      => 'lnkup_application',
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_query'     => array(
+					array( 'key' => '_lnkup_idempotency_key', 'value' => (string) $key ),
+					array( 'key' => '_lnkup_vendor_user_id', 'value' => (int) $vendor_user_id ),
+					array( 'key' => '_lnkup_opportunity_id', 'value' => (int) $opportunity_id ),
+				),
+			)
+		);
+		return $ids ? (int) $ids[0] : 0;
+	}
+
+	/**
+	 * Statuses that count as an existing application for duplicate checks. Rejected and
+	 * cancelled (withdrawn / expired) applications do not block re-applying (B-16).
+	 */
+	const ACTIVE_STATUSES = array( 'submitted', 'under_review', 'info_requested', 'approved', 'payment_required', 'paid', 'waitlisted', 'completed' );
+
+	/**
+	 * Newest active (non-draft, non-closed) application for a vendor + opportunity.
+	 *
+	 * @param int $opportunity_id Opportunity ID.
+	 * @param int $user_id        Vendor user ID.
+	 * @return int Application ID or 0.
+	 */
+	public static function find_active_application( $opportunity_id, $user_id ) {
+		$ids = get_posts(
+			array(
+				'post_type'      => 'lnkup_application',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'orderby'        => 'ID',
+				'order'          => 'DESC',
+				'no_found_rows'  => true,
+				'post_status'    => 'any',
+				'meta_query'     => array(
+					'relation' => 'AND',
+					array( 'key' => '_lnkup_opportunity_id', 'value' => (int) $opportunity_id ),
+					array( 'key' => '_lnkup_vendor_user_id', 'value' => (int) $user_id ),
+					array(
+						'relation' => 'OR',
+						array( 'key' => '_lnkup_application_status', 'value' => self::ACTIVE_STATUSES, 'compare' => 'IN' ),
+						array( 'key' => '_lnkup_application_status', 'compare' => 'NOT EXISTS' ),
+					),
+				),
+			)
+		);
+		return $ids ? (int) $ids[0] : 0;
+	}
+
+	const REAPPLY_ALLOWED_META = '_lnkup_reapply_allowed_at';
+	const MATERIAL_CHANGE_META = '_lnkup_material_changed_at';
+
+	/** Opportunity / event fields whose change re-opens applications for declined vendors. */
+	const MATERIAL_OPPORTUNITY_META = array( '_lnkup_vendor_fee', '_lnkup_application_deadline' );
+	const MATERIAL_EVENT_META       = array( '_lnkup_event_date' );
+
+	/**
+	 * Newest closed (rejected or cancelled) application for a vendor + opportunity, or 0.
+	 *
+	 * @param int $opportunity_id Opportunity ID.
+	 * @param int $user_id        Vendor user ID.
+	 */
+	public static function find_latest_closed_application( $opportunity_id, $user_id ) {
+		$ids = get_posts(
+			array(
+				'post_type'      => 'lnkup_application',
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'orderby'        => 'ID',
+				'order'          => 'DESC',
+				'no_found_rows'  => true,
+				'meta_query'     => array(
+					array( 'key' => '_lnkup_opportunity_id', 'value' => (int) $opportunity_id ),
+					array( 'key' => '_lnkup_vendor_user_id', 'value' => (int) $user_id ),
+					array( 'key' => '_lnkup_application_status', 'value' => array( 'rejected', 'cancelled' ), 'compare' => 'IN' ),
+				),
+			)
+		);
+		return $ids ? (int) $ids[0] : 0;
+	}
+
+	/**
+	 * Whether a vendor may apply again after an earlier application closed.
+	 *
+	 * Withdrawn / expired applications can always re-apply. A declined (rejected) application
+	 * blocks re-applying until the organizer allows it, invites the vendor again, or the
+	 * opportunity materially changes (fee, deadline, categories, event date).
+	 *
+	 * @param int $opportunity_id Opportunity ID.
+	 * @param int $user_id        Vendor user ID.
+	 * @return array{id:int,status:string,reapply:string,reason:string}|null Null when there is no closed application.
+	 */
+	public static function reapply_state( $opportunity_id, $user_id ) {
+		$app_id = self::find_latest_closed_application( $opportunity_id, $user_id );
+		if ( ! $app_id ) {
+			return null;
+		}
+		$status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+		$state  = array( 'id' => $app_id, 'status' => $status, 'reapply' => 'allowed', 'reason' => '' );
+		if ( 'rejected' !== $status ) {
+			$state['reason'] = sanitize_key( (string) get_post_meta( $app_id, '_lnkup_cancellation_reason', true ) ) ?: 'cancelled';
+			return $state;
+		}
+		$declined_at = (string) get_post_meta( $app_id, '_lnkup_decided_at', true ) ?: (string) get_post_field( 'post_modified', $app_id );
+		if ( '' !== (string) get_post_meta( $app_id, self::REAPPLY_ALLOWED_META, true ) ) {
+			$state['reason'] = 'organizer_allowed';
+			return $state;
+		}
+		if ( self::invited_since( $opportunity_id, $user_id, $declined_at ) ) {
+			$state['reason'] = 'invited_again';
+			return $state;
+		}
+		if ( self::materially_changed_since( $opportunity_id, $declined_at ) ) {
+			$state['reason'] = 'opportunity_changed';
+			return $state;
+		}
+		$state['reapply'] = 'blocked';
+		$state['reason']  = 'declined';
+		return $state;
+	}
+
+	/**
+	 * Organizer invited this vendor to this opportunity after a given local time.
+	 */
+	private static function invited_since( $opportunity_id, $user_id, $since ) {
+		if ( '' === (string) $since ) {
+			return false;
+		}
+		$ids = get_posts(
+			array(
+				'post_type'      => 'lnkup_vendor_invite',
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'date_query'     => array( array( 'after' => (string) $since, 'inclusive' => false, 'column' => 'post_date' ) ),
+				'meta_query'     => array(
+					array( 'key' => '_lnkup_vendor_user_id', 'value' => (int) $user_id ),
+					array( 'key' => '_lnkup_opportunity_id', 'value' => (int) $opportunity_id ),
+				),
+			)
+		);
+		return (bool) $ids;
+	}
+
+	/**
+	 * Opportunity (or its event) had a material change after a given local time.
+	 */
+	private static function materially_changed_since( $opportunity_id, $since ) {
+		if ( '' === (string) $since ) {
+			return false;
+		}
+		$event_id = (int) get_post_meta( $opportunity_id, '_lnkup_event_id', true );
+		foreach ( array( (int) $opportunity_id, $event_id ) as $post_id ) {
+			$changed = $post_id ? (string) get_post_meta( $post_id, self::MATERIAL_CHANGE_META, true ) : '';
+			if ( '' !== $changed && strtotime( $changed ) > strtotime( (string) $since ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Stamp a material change when a fee, deadline or event date changes.
+	 *
+	 * @param int    $meta_id   Meta ID.
+	 * @param int    $object_id Post ID.
+	 * @param string $meta_key  Meta key.
+	 */
+	public static function on_meta_changed( $meta_id, $object_id, $meta_key ) {
+		unset( $meta_id );
+		$type = get_post_type( (int) $object_id );
+		if ( ( 'lnkup_opportunity' === $type && in_array( $meta_key, self::MATERIAL_OPPORTUNITY_META, true ) )
+			|| ( 'lnkup_event' === $type && in_array( $meta_key, self::MATERIAL_EVENT_META, true ) ) ) {
+			update_post_meta( (int) $object_id, self::MATERIAL_CHANGE_META, current_time( 'mysql' ) );
+		}
+	}
+
+	/**
+	 * Stamp a material change when an opportunity's vendor categories change.
+	 *
+	 * @param int    $object_id  Post ID.
+	 * @param array  $terms      Terms.
+	 * @param array  $tt_ids     New term taxonomy IDs.
+	 * @param string $taxonomy   Taxonomy.
+	 * @param bool   $append     Append mode.
+	 * @param array  $old_tt_ids Previous term taxonomy IDs.
+	 */
+	public static function on_terms_changed( $object_id, $terms, $tt_ids, $taxonomy, $append, $old_tt_ids ) {
+		unset( $terms, $append );
+		if ( 'lnkup_vendor_category' !== $taxonomy || 'lnkup_opportunity' !== get_post_type( (int) $object_id ) || ! $old_tt_ids ) {
+			return;
+		}
+		$new = array_map( 'intval', (array) $tt_ids );
+		$old = array_map( 'intval', (array) $old_tt_ids );
+		sort( $new );
+		sort( $old );
+		if ( $new !== $old ) {
+			update_post_meta( (int) $object_id, self::MATERIAL_CHANGE_META, current_time( 'mysql' ) );
+		}
+	}
+
+	/**
+	 * Organizer lets a declined vendor apply again to the same opportunity.
+	 *
+	 * @param int $app_id  Rejected application.
+	 * @param int $user_id Acting organizer.
+	 * @return true|WP_Error
+	 */
+	public static function allow_reapply( $app_id, $user_id ) {
+		if ( 'rejected' !== (string) get_post_meta( $app_id, '_lnkup_application_status', true ) ) {
+			return new WP_Error( 'lnkup_not_declined', __( 'Only declined applications can be re-opened for the vendor.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+		update_post_meta( $app_id, self::REAPPLY_ALLOWED_META, current_time( 'mysql' ) );
+		update_post_meta( $app_id, '_lnkup_reapply_allowed_by', (int) $user_id );
+		if ( class_exists( 'LNKup_Organizer_CRM' ) ) {
+			LNKup_Organizer_CRM::log_activity(
+				'reapply_allowed',
+				(int) get_post_meta( $app_id, '_lnkup_organizer_user_id', true ),
+				(int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true ),
+				array( 'application_id' => (int) $app_id, 'event_id' => (int) get_post_meta( $app_id, '_lnkup_event_id', true ), 'actor_user_id' => (int) $user_id )
+			);
+		}
+		do_action( 'lnkup_application_reapply_allowed', (int) $app_id, (int) $user_id );
+		return true;
+	}
+
+	/**
+	 * Whether an invite link token grants this vendor access to an invite-only opportunity.
+	 *
+	 * @param string $token          Invite token from the apply link.
+	 * @param int    $opportunity_id Opportunity ID.
+	 * @param int    $user_id        Vendor user ID.
+	 */
+	public static function invite_token_valid_for( $token, $opportunity_id, $user_id ) {
+		$token = (string) $token;
+		if ( '' === $token || ! class_exists( 'LNKup_Vendor_Invites' ) ) {
+			return false;
+		}
+		$invite = LNKup_Vendor_Invites::get_by_token( $token );
+		if ( ! $invite || ! hash_equals( (string) get_post_meta( $invite->ID, '_lnkup_token', true ), $token ) ) {
+			return false;
+		}
+		if ( (int) get_post_meta( $invite->ID, '_lnkup_opportunity_id', true ) !== (int) $opportunity_id ) {
+			return false;
+		}
+		$invited_user = (int) get_post_meta( $invite->ID, '_lnkup_vendor_user_id', true );
+		if ( $invited_user && $invited_user !== (int) $user_id ) {
+			return false;
+		}
+		if ( in_array( (string) get_post_meta( $invite->ID, '_lnkup_status', true ), array( LNKup_Vendor_Invites::STATUS_EXPIRED, LNKup_Vendor_Invites::STATUS_DECLINED ), true ) ) {
+			return false;
+		}
+		$expires = (string) get_post_meta( $invite->ID, '_lnkup_expires_at', true );
+		return ! ( $expires && strtotime( $expires ) < time() );
 	}
 
 	/**
@@ -358,14 +791,7 @@ class LNKup_Applications {
 			$doc_labels = LNKup_Documents::document_types();
 		}
 
-		$docs    = LNKup_Documents::get_for_vendor( $user_id );
-		$by_type = array();
-		foreach ( $docs as $doc ) {
-			$type = get_post_meta( $doc->ID, '_lnkup_document_type', true );
-			if ( ! isset( $by_type[ $type ] ) ) {
-				$by_type[ $type ] = $doc;
-			}
-		}
+		$by_type = LNKup_Documents::current_by_type( (int) $user_id );
 
 		$rows = array();
 		foreach ( $required_docs as $type ) {
@@ -388,10 +814,11 @@ class LNKup_Applications {
 			}
 
 			$rows[] = array(
-				'type'   => $type,
-				'label'  => $label,
-				'status' => $status,
-				'doc_id' => $doc ? (int) $doc->ID : 0,
+				'type'    => $type,
+				'label'   => $label,
+				'status'  => $status,
+				'doc_id'  => $doc ? (int) $doc->ID : 0,
+				'version' => $doc ? max( 1, (int) get_post_meta( $doc->ID, '_lnkup_version', true ) ) : 0,
 			);
 		}
 
@@ -569,6 +996,8 @@ class LNKup_Applications {
 			'logged_out' => 'login',
 			'no_profile' => 'create_profile',
 			'duplicate'  => 'already_applied',
+			'previously_declined' => 'declined',
+			'invite_only' => 'invite_only',
 			'deadline'   => 'closed',
 			'full'       => 'full',
 			'closed'     => 'closed',
@@ -591,10 +1020,14 @@ class LNKup_Applications {
 				return lnkup_copy( 'apply_no_profile' );
 			case 'duplicate':
 				return lnkup_copy( 'apply_already_applied' );
+			case 'previously_declined':
+				return __( 'This organizer declined your earlier application. You can apply again if they invite you or change this opportunity.', 'lnkup-marketplace' );
 			case 'deadline':
 				return __( 'The application deadline for this opportunity has passed.', 'lnkup-marketplace' );
 			case 'full':
 				return __( 'No spots remaining for this opportunity.', 'lnkup-marketplace' );
+			case 'invite_only':
+				return __( 'This booth is invite-only. Use the invite link the organizer sent you.', 'lnkup-marketplace' );
 			case 'closed':
 				return __( 'This opportunity is not open for applications.', 'lnkup-marketplace' );
 			default:
@@ -692,10 +1125,15 @@ class LNKup_Applications {
 	 * @param array  $extra  Extra data.
 	 */
 	public static function transition( $app_id, $status, $extra = array() ) {
+		$app_id = absint( $app_id );
+		if ( ! $app_id || 'lnkup_application' !== get_post_type( $app_id ) || LNKup_Application_Drafts::POST_STATUS === get_post_status( $app_id ) ) {
+			return new WP_Error( 'lnkup_not_found', __( 'Application not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
 		$status = LNKup_Security::sanitize_application_status( $status );
 		$prev   = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
 
-		if ( ! self::can_transition( $prev, $status ) ) {
+		$offer_return = self::$allow_offer_return && 'payment_required' === $prev && 'waitlisted' === $status;
+		if ( ! $offer_return && ! self::can_transition( $prev, $status ) ) {
 			return new WP_Error(
 				'invalid_transition',
 				__( 'This application can no longer be changed that way.', 'lnkup-marketplace' ),
@@ -711,7 +1149,7 @@ class LNKup_Applications {
 			$opp_id   = (int) get_post_meta( $app_id, '_lnkup_opportunity_id', true );
 			$reserved = LNKup_Opportunity_Inventory::with_lock(
 				$opp_id,
-				static function () use ( $app_id, $opp_id ) {
+				static function () use ( $app_id, $opp_id, $prev, $extra ) {
 					if ( ! LNKup_Opportunity_Inventory::has_room( $opp_id, $app_id ) ) {
 						return new WP_Error(
 							'opportunity_full',
@@ -722,8 +1160,19 @@ class LNKup_Applications {
 					update_post_meta( $app_id, '_lnkup_application_status', 'approved' );
 					update_post_meta( $app_id, '_lnkup_approved_at', current_time( 'mysql' ) );
 					$payment_id = LNKup_Payments::create_from_application( $app_id );
+					if ( ! $payment_id || is_wp_error( $payment_id ) ) {
+						// Never leave a booking waiting on a payment that does not exist (B-6).
+						update_post_meta( $app_id, '_lnkup_application_status', $prev );
+						delete_post_meta( $app_id, '_lnkup_approved_at' );
+						return new WP_Error(
+							'lnkup_payment_create_failed',
+							__( 'We could not set up payment for this booking. Please try approving again.', 'lnkup-marketplace' ),
+							array( 'status' => 503 )
+						);
+					}
+					self::record_history( $app_id, $prev, 'approved', $extra );
 					update_post_meta( $app_id, '_lnkup_application_status', 'payment_required' );
-					update_post_meta( $app_id, '_lnkup_payment_due_at', gmdate( 'Y-m-d H:i:s', strtotime( '+7 days' ) ) );
+					update_post_meta( $app_id, '_lnkup_payment_due_at', self::payment_due_from_extra( $extra ) );
 					return (int) $payment_id;
 				}
 			);
@@ -731,8 +1180,32 @@ class LNKup_Applications {
 				return $reserved;
 			}
 			$payment_id = $reserved;
+			update_post_meta( $app_id, '_lnkup_decided_at', current_time( 'mysql' ) );
+			self::record_history( $app_id, 'approved', 'payment_required', array() );
+		} elseif ( 'paid' === $status && ! in_array( $prev, LNKup_Opportunity_Inventory::HOLD_STATUSES, true ) ) {
+			// Money for an application that is not holding a spot (e.g. a waitlist offer that
+			// expired): only book it if the slot still has room, otherwise mark_paid() flags it.
+			$opp_id = (int) get_post_meta( $app_id, '_lnkup_opportunity_id', true );
+			$booked = LNKup_Opportunity_Inventory::with_lock(
+				$opp_id,
+				static function () use ( $app_id, $opp_id, $prev, $extra ) {
+					if ( ! LNKup_Opportunity_Inventory::has_room( $opp_id, $app_id ) ) {
+						return new WP_Error( 'opportunity_full', __( 'This vendor slot filled before the payment arrived.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+					}
+					update_post_meta( $app_id, '_lnkup_application_status', 'paid' );
+					self::record_history( $app_id, $prev, 'paid', $extra );
+					return true;
+				}
+			);
+			if ( is_wp_error( $booked ) ) {
+				return $booked;
+			}
 		} else {
 			update_post_meta( $app_id, '_lnkup_application_status', $status );
+			if ( in_array( $status, array( 'rejected', 'waitlisted' ), true ) ) {
+				update_post_meta( $app_id, '_lnkup_decided_at', current_time( 'mysql' ) );
+			}
+			self::record_history( $app_id, $prev, $status, $extra );
 		}
 
 		if ( 'approved' === $status ) {
@@ -748,6 +1221,9 @@ class LNKup_Applications {
 			LNKup_Notifications::send_application_rejected( $app_id );
 		} elseif ( 'cancelled' === $status ) {
 			self::void_pending_payment( $app_id, (string) ( $extra['reason'] ?? 'cancelled' ) );
+			if ( 'paid' === $prev ) {
+				LNKup_Packets::lock_for_application( $app_id );
+			}
 		} elseif ( 'waitlisted' === $status ) {
 			LNKup_Notifications::send_application_waitlisted( $app_id );
 		} elseif ( 'paid' === $status ) {
@@ -773,35 +1249,178 @@ class LNKup_Applications {
 	}
 
 	/**
+	 * Payment deadline for a new approval: a caller-supplied UTC deadline between one hour and
+	 * 30 days out (waitlist offers), otherwise the standard seven days.
+	 *
+	 * @param array $extra Transition extras.
+	 */
+	private static function payment_due_from_extra( $extra ) {
+		$requested = is_array( $extra ) ? (string) ( $extra['payment_due_at'] ?? '' ) : '';
+		$ts        = '' !== $requested ? strtotime( $requested . ' UTC' ) : false;
+		if ( $ts && $ts >= time() + HOUR_IN_SECONDS && $ts <= time() + 30 * DAY_IN_SECONDS ) {
+			return gmdate( 'Y-m-d H:i:s', $ts );
+		}
+		return gmdate( 'Y-m-d H:i:s', strtotime( '+7 days' ) );
+	}
+
+	/** Set only by return_to_waitlist(); never reachable from request input. */
+	private static $allow_offer_return = false;
+
+	/**
+	 * Put an unpaid waitlist offer back on the waitlist (offer expired or withdrawn).
+	 *
+	 * This is the only path from payment_required to waitlisted; the normal TRANSITIONS
+	 * table does not allow it, so organizer actions cannot use it. The pending payment is
+	 * voided first so the old checkout link cannot still be paid.
+	 *
+	 * @param int    $app_id Application ID.
+	 * @param string $reason offer_expired|offer_revoked.
+	 * @return true|WP_Error
+	 */
+	public static function return_to_waitlist( $app_id, $reason ) {
+		$app_id = absint( $app_id );
+		$reason = in_array( $reason, array( 'offer_expired', 'offer_revoked' ), true ) ? $reason : 'offer_expired';
+		if ( 'payment_required' !== (string) get_post_meta( $app_id, '_lnkup_application_status', true ) ) {
+			return new WP_Error( 'invalid_transition', __( 'This application is no longer waiting on payment.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+		self::void_pending_payment( $app_id, $reason );
+		self::$allow_offer_return = true;
+		try {
+			$result = self::transition( $app_id, 'waitlisted', array( 'reason' => $reason, 'source' => 'waitlist_offer' ) );
+		} finally {
+			self::$allow_offer_return = false;
+		}
+		if ( true === $result ) {
+			delete_post_meta( $app_id, '_lnkup_payment_due_at' );
+		}
+		return $result;
+	}
+
+	/**
+	 * Statuses a vendor may withdraw from. Paid bookings need a refund instead.
+	 */
+	const WITHDRAWABLE = array( 'submitted', 'under_review', 'info_requested', 'waitlisted', 'approved', 'payment_required' );
+
+	/**
+	 * Vendor withdraws their own unpaid application.
+	 *
+	 * @param int $app_id  Application ID.
+	 * @param int $user_id Acting vendor.
+	 * @return true|WP_Error
+	 */
+	public static function withdraw( $app_id, $user_id ) {
+		$app_id  = absint( $app_id );
+		$user_id = absint( $user_id );
+		if ( 'lnkup_application' !== get_post_type( $app_id ) || ! LNKup_Capabilities::vendor_owns_application( $app_id, $user_id ) ) {
+			return new WP_Error( 'lnkup_forbidden', __( 'You cannot change this application.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+		$status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+		if ( ! in_array( $status, self::WITHDRAWABLE, true ) ) {
+			return new WP_Error( 'lnkup_cannot_withdraw', __( 'This application can no longer be withdrawn. Contact the organizer about a refund.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+		$payment = class_exists( 'LNKup_Payments' ) ? LNKup_Payments::get_for_application( $app_id ) : null;
+		if ( $payment && in_array( (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true ), array( 'processing', 'paid', 'partially_paid' ), true ) ) {
+			return new WP_Error( 'lnkup_cannot_withdraw', __( 'A payment is already in progress for this application.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+		update_post_meta( $app_id, '_lnkup_cancellation_reason', 'withdrawn' );
+		$result = self::transition( $app_id, 'cancelled', array( 'reason' => 'withdrawn' ) );
+		if ( is_wp_error( $result ) ) {
+			delete_post_meta( $app_id, '_lnkup_cancellation_reason' );
+			return $result;
+		}
+		update_post_meta( $app_id, '_lnkup_withdrawn_at', current_time( 'mysql' ) );
+		do_action( 'lnkup_application_withdrawn', $app_id, $status );
+		return true;
+	}
+
+	/**
 	 * Stop an unpaid payment from being collected after its application leaves the booking flow.
 	 * Paid payments are never touched here — refunds go through the Financial Service.
 	 *
 	 * @param int    $app_id Application ID.
 	 * @param string $reason Audit reason.
 	 */
-	private static function void_pending_payment( $app_id, $reason ) {
+	public static function void_pending_payment( $app_id, $reason ) {
 		$payment = LNKup_Payments::get_for_application( $app_id );
-		if ( ! $payment || ! in_array( (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true ), array( 'pending', 'failed' ), true ) ) {
+		if ( ! $payment ) {
+			return;
+		}
+		$pay_status = (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true );
+		$provider   = LNKup_Payment_Provider::get_instance();
+		if ( 'processing' === $pay_status ) {
+			// Bank payments in flight cannot be voided here; if the money lands it is flagged for
+			// admin review instead of rebooking the vendor (B-7).
+			update_post_meta( $payment->ID, '_lnkup_closed_while_processing', sanitize_key( $reason ) );
+			if ( $provider instanceof LNKup_Stripe_Provider ) {
+				$provider->cancel_open_charges( $payment->ID );
+			}
+			LNKup_Financial_Audit::log( 'payment_closed_while_processing', 'payment', $payment->ID, array( 'reason' => sanitize_key( $reason ), 'application_id' => (int) $app_id ) );
+			return;
+		}
+		if ( ! in_array( $pay_status, array( 'pending', 'failed' ), true ) || '' !== (string) get_post_meta( $payment->ID, '_lnkup_voided_at', true ) ) {
 			return;
 		}
 		update_post_meta( $payment->ID, '_lnkup_payment_status', 'failed' );
 		update_post_meta( $payment->ID, '_lnkup_voided_at', current_time( 'mysql' ) );
 		update_post_meta( $payment->ID, '_lnkup_voided_reason', sanitize_key( $reason ) );
 		// Close the payment link too, so an already-open checkout cannot still be paid.
-		$provider = LNKup_Payment_Provider::get_instance();
 		if ( $provider instanceof LNKup_Stripe_Provider ) {
 			$provider->cancel_open_charges( $payment->ID );
 		}
+		if ( class_exists( 'LNKup_Credits' ) && method_exists( 'LNKup_Credits', 'restore_for_payment' ) ) {
+			LNKup_Credits::restore_for_payment( $payment->ID, 'payment_voided' );
+		}
+		LNKup_Invoices::mark_void_for_application( $app_id, $reason );
 		if ( class_exists( 'LNKup_Financial_Audit' ) ) {
 			LNKup_Financial_Audit::log( 'payment_voided', 'payment', $payment->ID, array( 'reason' => sanitize_key( $reason ), 'application_id' => (int) $app_id ) );
 		}
 	}
 
+	const HISTORY_META = '_lnkup_status_history';
+
+	/**
+	 * Append one status change to the application's timeline (capped at 100 entries).
+	 *
+	 * @param int    $app_id Application ID.
+	 * @param string $from   Previous status.
+	 * @param string $to     New status.
+	 * @param array  $extra  Transition extras (reason, source).
+	 */
+	public static function record_history( $app_id, $from, $to, $extra = array() ) {
+		if ( (string) $from === (string) $to ) {
+			return;
+		}
+		$history   = get_post_meta( $app_id, self::HISTORY_META, true );
+		$history   = is_array( $history ) ? $history : array();
+		$history[] = array(
+			'from'   => (string) $from,
+			'to'     => (string) $to,
+			'at'     => current_time( 'mysql' ),
+			'by'     => (int) get_current_user_id(),
+			'reason' => isset( $extra['reason'] ) ? sanitize_key( (string) $extra['reason'] ) : '',
+			'source' => isset( $extra['source'] ) ? sanitize_key( (string) $extra['source'] ) : '',
+		);
+		update_post_meta( $app_id, self::HISTORY_META, array_slice( $history, -100 ) );
+	}
+
+	/**
+	 * Status timeline, oldest first.
+	 *
+	 * @param int $app_id Application ID.
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function status_history( $app_id ) {
+		$history = get_post_meta( absint( $app_id ), self::HISTORY_META, true );
+		return is_array( $history ) ? array_values( $history ) : array();
+	}
+
 	/**
 	 * Source statuses each target status may be reached from.
 	 *
-	 * `paid` is reachable from any open state because it reflects money already
-	 * collected and confirmed by the Financial Service; it never moves backwards.
+	 * `paid` is reachable from open states because it reflects money already collected and
+	 * confirmed by the Financial Service; it never moves backwards. It is NOT reachable from
+	 * `rejected` or `cancelled`: money landing after a booking closed is flagged for admin review
+	 * instead of rebooking the vendor without an inventory check (B-7).
 	 */
 	const TRANSITIONS = array(
 		'under_review'     => array( '', 'submitted', 'waitlisted', 'rejected', 'info_requested' ),
@@ -810,10 +1429,10 @@ class LNKup_Applications {
 		'waitlisted'       => array( '', 'submitted', 'under_review', 'info_requested' ),
 		'rejected'         => array( '', 'submitted', 'under_review', 'waitlisted', 'approved', 'payment_required', 'info_requested' ),
 		'payment_required' => array( 'approved' ),
-		'paid'             => array( '', 'submitted', 'under_review', 'waitlisted', 'approved', 'payment_required', 'rejected', 'cancelled' ),
+		'paid'             => array( '', 'submitted', 'under_review', 'waitlisted', 'approved', 'payment_required' ),
 		'completed'        => array( 'paid' ),
-		'cancelled'        => array( '', 'submitted', 'under_review', 'waitlisted', 'approved', 'payment_required', 'paid', 'info_requested' ),
-		'submitted'        => array( '' ),
+		'cancelled'        => array( '', 'draft', 'submitted', 'under_review', 'waitlisted', 'approved', 'payment_required', 'paid', 'info_requested' ),
+		'submitted'        => array( '', 'draft' ),
 	);
 
 	const INFO_HISTORY_META = '_lnkup_info_requests';
@@ -997,6 +1616,9 @@ class LNKup_Applications {
 		);
 
 		$payload = is_array( $extra ) ? $extra : array();
+		if ( 'allow_reapply' === $action ) {
+			return self::allow_reapply( $app_id, $user_id );
+		}
 		if ( 'request_info' === $action ) {
 			$entry = self::request_info( $app_id, (string) ( $payload['info_message'] ?? '' ), (array) ( $payload['info_documents'] ?? array() ), $user_id );
 			return is_wp_error( $entry ) ? $entry : true;

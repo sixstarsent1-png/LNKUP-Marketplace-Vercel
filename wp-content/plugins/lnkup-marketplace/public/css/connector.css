@@ -343,6 +343,14 @@
   color: #b42318;
 }
 
+.lnkup-connector-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
 .lnkup-connector-hero {
   padding: 1.5rem 1.35rem;
   border-radius: 12px;

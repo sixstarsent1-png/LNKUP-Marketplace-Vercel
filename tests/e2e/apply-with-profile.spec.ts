@@ -45,6 +45,32 @@ test.describe('Apply with Profile', () => {
       await expect(page.getByTestId('lnkup-apply-submit')).toHaveCount(0);
     });
 
+    test('price estimate comes from the server, not the browser', async ({ page }) => {
+      test.skip(!multiSlotOpportunity, 'Run scripts/e2e/seed.php');
+      await page.goto('/opportunities/');
+      const res = await page.evaluate(async (opp) => {
+        const w = window as unknown as { lnkupAjax?: { applicationsRestUrl?: string; restNonce?: string } };
+        const r = await fetch(`${w.lnkupAjax?.applicationsRestUrl}/price-quote/${opp}`, {
+          credentials: 'same-origin',
+          headers: { 'X-WP-Nonce': w.lnkupAjax?.restNonce ?? '' },
+        });
+        return { status: r.status, body: await r.json() };
+      }, multiSlotOpportunity);
+      expect(res.status).toBe(200);
+      expect(res.body.is_estimate).toBe(true);
+      expect(Array.isArray(res.body.lines)).toBe(true);
+    });
+
+    test('vendor Requests view offers Withdraw on open requests', async ({ page }) => {
+      await page.goto('/vendor-dashboard/?view=applications');
+      const cards = page.getByTestId('lnkup-vendor-request-card');
+      await expect(cards.first()).toBeVisible();
+      const withdraw = page.getByTestId('lnkup-vendor-withdraw');
+      if ((await withdraw.count()) > 0) {
+        await expect(withdraw.first()).toHaveText(/withdraw/i);
+      }
+    });
+
     test('mobile apply modal fits the viewport', async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await openApplyModal(page, multiSlotOpportunity);

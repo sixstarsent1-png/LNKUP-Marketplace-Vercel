@@ -328,6 +328,12 @@ export const MOCK_APPLY_CONTEXT: ApplyContext = {
   organizerName: "CultureWave Events",
   excerpt:
     "Outdoor night market with food, retail, and dessert vendors at Camp North End.",
+  questions: [],
+  vendorDocuments: [],
+  draft: null,
+  previousApplication: null,
+  tourId: null,
+  features: { drafts: false, tourMultiApply: false },
 }
 
 const MOCK_CONNECT_SETUP_REQUIRED: OrganizerConnectState = {

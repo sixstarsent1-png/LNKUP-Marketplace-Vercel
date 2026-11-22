@@ -1,6 +1,6 @@
 # Trust, Safety & Security Audit (Stage 1)
 
-**Date:** 2026-11-22 · **Plugin:** `lnkup-marketplace` Trust schema v1 (`lnkup_trust_db_version`, independent of `LNKUP_VERSION`) · **Scope:** WordPress plugin (system of record). The mobile app and Next.js BFF are consumers and were not audited here.
+**Date:** 2026-11-22 · **Plugin:** `lnkup-marketplace` 12.29.x working tree (Trust schema v1, `lnkup_trust_db_version`) · **Scope:** WordPress plugin (system of record). The mobile app and Next.js BFF are consumers and were not audited here.
 
 This audit was produced by reading the code. It is not a penetration test. Items are labelled **Confirmed** (read the code path end to end) or **Sampled** (pattern checked across files, representative handlers read). Severity uses critical / high / medium / low.
 

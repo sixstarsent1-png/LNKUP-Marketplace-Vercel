@@ -3,7 +3,7 @@
  * Plugin Name: LNKup Marketplace
  * Plugin URI: https://lnkup.com
  * Description: Custom marketplace functionality for LNKup — vendor opportunities, applications, payments, and event management.
- * Version: 12.23.1
+ * Version: 12.32.0
  * Author: LNKup
  * Author URI: https://lnkup.com
  * License: GPL v2 or later
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'LNKUP_VERSION', '12.23.1' );
+define( 'LNKUP_VERSION', '12.32.0' );
 define( 'LNKUP_PLUGIN_FILE', __FILE__ );
 define( 'LNKUP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LNKUP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -69,10 +69,14 @@ $lnkup_core_files = array(
 	'includes/class-taxonomies.php',
 	'includes/class-meta.php',
 	'includes/class-capabilities.php',
+	'includes/class-feature-flags.php',
 	'includes/class-activator.php',
 	'includes/class-applications.php',
 	'includes/class-opportunity-inventory.php',
 	'includes/class-apply-with-profile-view.php',
+	'includes/class-application-questions.php',
+	'includes/class-application-drafts.php',
+	'includes/class-application-groups.php',
 	'includes/class-applications-rest.php',
 	'includes/class-payments.php',
 	'includes/class-packets.php',
@@ -94,6 +98,8 @@ $lnkup_core_files = array(
 	'includes/class-inbox-tables.php',
 	'includes/class-inbox-service.php',
 	'includes/class-inbox-rest.php',
+	'includes/class-lifecycle-hooks.php',
+	'includes/class-event-status.php',
 	'includes/class-mobile-auth.php',
 	'includes/class-auth-rest.php',
 	'includes/class-account-deletion.php',
@@ -101,6 +107,9 @@ $lnkup_core_files = array(
 	'includes/class-organizer-onboarding.php',
 	'includes/class-organizer-launch-rest.php',
 	'includes/class-organizer-launch-checklist.php',
+	'includes/class-organizer-activation.php',
+	'includes/class-public-embed.php',
+	'includes/class-organizer-setups.php',
 	'includes/class-vendor-getting-started.php',
 	'includes/class-app-promo.php',
 	'includes/class-knowledge-base.php',
@@ -201,6 +210,11 @@ $lnkup_core_files = array(
 	'admin/class-reputation-admin.php',
 	'admin/class-verification-admin.php',
 	'includes/class-operations-tables.php',
+	'includes/class-organizer-os-tables.php',
+	'includes/class-pass-tokens.php',
+	'includes/class-application-review.php',
+	'includes/class-waitlist-offers.php',
+	'includes/class-application-review-rest.php',
 	'includes/class-operations-log.php',
 	'includes/class-event-lifecycle.php',
 	'includes/class-event-operations.php',
@@ -285,6 +299,7 @@ $lnkup_core_files = array(
 	'includes/trust/class-event-claims.php',
 	'includes/trust/class-organizer-verification.php',
 	'includes/trust/class-org-teams.php',
+	'includes/class-org-workspace.php',
 	'includes/trust/class-trust-rest.php',
 	'admin/class-trust-safety-admin.php',
 	'includes/class-growth-tables.php',
@@ -313,6 +328,71 @@ $lnkup_core_files = array(
 	'includes/class-weather-rest.php',
 	'includes/class-weather-cron.php',
 	'includes/class-weather-render.php',
+	'includes/matching/class-match-tables.php',
+	'includes/matching/class-match-settings.php',
+	'includes/matching/class-match-engine.php',
+	'includes/matching/class-match-categories.php',
+	'includes/matching/class-match-vendor-index.php',
+	'includes/matching/class-match-service.php',
+	'includes/matching/class-match-cron.php',
+	'includes/matching/class-match-rest.php',
+	'includes/matching/class-recruitment.php',
+	'includes/matching/class-recruitment-rest.php',
+	'includes/matching/class-tours.php',
+	'includes/matching/class-tours-rest.php',
+	'includes/portfolio/class-portfolio-tables.php',
+	'includes/portfolio/class-portfolio-audit.php',
+	'includes/portfolio/class-portfolio-config.php',
+	'includes/portfolio/class-portfolio-brands.php',
+	'includes/portfolio/class-portfolio-templates.php',
+	'includes/portfolio/class-portfolio-tours.php',
+	'includes/portfolio/class-portfolio-recurrence.php',
+	'includes/portfolio/class-portfolio-jobs.php',
+	'includes/portfolio/class-portfolio-reporting.php',
+	'includes/portfolio/class-portfolio-interest.php',
+	'includes/portfolio/class-portfolio-public.php',
+	'includes/portfolio/class-portfolio-rest.php',
+	'admin/class-match-admin.php',
+	'includes/passport/class-passport-settings.php',
+	'includes/passport/class-passport-tables.php',
+	'includes/passport/class-passport-privacy.php',
+	'includes/passport/class-passport-public.php',
+	'includes/passport/class-document-migration.php',
+	'includes/passport/class-verification-records.php',
+	'includes/passport/class-document-vault.php',
+	'includes/passport/class-participation-history.php',
+	'includes/passport/class-reputation-summary.php',
+	'includes/passport/class-passport-projection.php',
+	'includes/passport/class-passport-rest.php',
+	'includes/passport/class-passport.php',
+	'admin/class-passport-admin.php',
+	'includes/organizer-growth/class-org-growth-tables.php',
+	'includes/organizer-growth/class-org-growth.php',
+	'includes/organizer-growth/class-org-lead-pipeline.php',
+	'includes/organizer-growth/class-org-lead-dedupe.php',
+	'includes/organizer-growth/class-contact-suppression.php',
+	'includes/organizer-growth/class-org-leads.php',
+	'includes/organizer-growth/class-org-lead-scoring.php',
+	'includes/organizer-growth/class-org-lead-lifecycle.php',
+	'includes/organizer-growth/class-org-lead-tasks.php',
+	'includes/organizer-growth/class-org-lead-import.php',
+	'includes/organizer-growth/class-org-growth-metrics.php',
+	'includes/organizer-growth/class-org-growth-spend.php',
+	'includes/organizer-growth/class-org-growth-analytics.php',
+	'includes/organizer-growth/class-org-outreach.php',
+	'includes/organizer-growth/class-org-growth-rest.php',
+	'admin/class-organizer-growth-admin.php',
+	'includes/partnerships/class-partner-tables.php',
+	'includes/partnerships/class-partner-programs.php',
+	'includes/partnerships/class-commission-rules.php',
+	'includes/partnerships/class-partner-reviews.php',
+	'includes/partnerships/class-attribution-arbiter.php',
+	'includes/partnerships/class-partnerships.php',
+	'includes/partnerships/class-partner-organizations.php',
+	'includes/partnerships/class-partner-applications.php',
+	'includes/partnerships/class-partner-public.php',
+	'includes/partnerships/class-partnerships-rest.php',
+	'admin/class-partnerships-admin.php',
 );
 
 foreach ( $lnkup_core_files as $file ) {
@@ -347,6 +427,9 @@ function lnkup_marketplace_init() {
 	LNKup_Connector_Admin::init();
 	LNKup_Marketplace_REST::init();
 	LNKup_Applications_REST::init();
+	LNKup_Application_Drafts::init();
+	LNKup_Application_Groups::init();
+	LNKup_Applications::init();
 	LNKup_Documents_REST::init();
 	LNKup_Vendor_Profile_REST::init();
 	LNKup_Organizer_Profile_REST::init();
@@ -355,6 +438,8 @@ function lnkup_marketplace_init() {
 	LNKup_Push_REST::init();
 	LNKup_App_Promo::init();
 	LNKup_Inbox_REST::init();
+	LNKup_Lifecycle_Hooks::init();
+	LNKup_Event_Status::init();
 	LNKup_Mobile_Auth::init();
 	LNKup_Auth_REST::init();
 	LNKup_Account_Deletion::init();
@@ -362,6 +447,9 @@ function lnkup_marketplace_init() {
 	LNKup_Organizer_CRM::init();
 	LNKup_Organizer_CRM_REST::init();
 	LNKup_Organizer_Launch_REST::init();
+	LNKup_Organizer_Activation::init();
+	LNKup_Public_Embed::init();
+	LNKup_Organizer_Setups::init();
 	LNKup_Organizer_CRM_Admin::init();
 	LNKup_Vendor_Reputation::init();
 	LNKup_Reputation_REST::init();
@@ -371,6 +459,11 @@ function lnkup_marketplace_init() {
 	LNKup_Verification_Admin::init();
 	LNKup_Event_Lifecycle::init();
 	LNKup_Operations_REST::init();
+	LNKup_Organizer_OS_Tables::init();
+	LNKup_Pass_Tokens::init();
+	LNKup_Application_Review::init();
+	LNKup_Application_Review_REST::init();
+	LNKup_Waitlist_Offers::init();
 	LNKup_Operations_Admin::init();
 	LNKup_Intelligence_Cron::init();
 	LNKup_Intelligence_REST::init();
@@ -383,6 +476,7 @@ function lnkup_marketplace_init() {
 	LNKup_Financial_Connect_Admin::init();
 	LNKup_Financial_Reconciliation_Admin::init();
 	LNKup_Trust::init();
+	LNKup_Org_Workspace::init();
 	LNKup_Trust_Safety_Admin::init();
 	LNKup_Financial_Service::init();
 	LNKup_Invoices::init();
@@ -391,12 +485,32 @@ function lnkup_marketplace_init() {
 	LNKup_Growth_Admin::init();
 	LNKup_Weather_REST::init();
 	LNKup_Weather_Cron::init();
+	LNKup_Match_Categories::init();
+	LNKup_Match_Vendor_Index::init();
+	LNKup_Match_Cron::init();
+	LNKup_Match_REST::init();
+	LNKup_Recruitment::init();
+	LNKup_Recruitment_REST::init();
+	LNKup_Tours::init();
+	LNKup_Tours_REST::init();
+	LNKup_Portfolio_Tables::maybe_upgrade();
+	LNKup_Portfolio_Jobs::init();
+	LNKup_Portfolio_Public::init();
+	LNKup_Portfolio_REST::init();
+	LNKup_Match_Admin::init();
+	LNKup_Passport::init();
 	LNKup_Shortcodes::init();
 	LNKup_Registration::init();
 	LNKup_Outreach_Tables::maybe_upgrade();
 	LNKup_Outreach::init();
 	LNKup_Outreach_Cron::init();
 	LNKup_Outreach_Admin::init();
+	LNKup_Org_Growth::init();
+	LNKup_Organizer_Growth_Admin::init();
+	LNKup_Partnerships::init();
+	LNKup_Partnerships_REST::init();
+	LNKup_Partner_Public::init();
+	LNKup_Partnerships_Admin::init();
 	LNKup_External_Events::init();
 	LNKup_External_Events_REST::init();
 	LNKup_External_Events_Admin::init();
@@ -446,7 +560,10 @@ function lnkup_maybe_upgrade_db() {
 		array( 'LNKup_Connector_Tables', 'create_tables' ),
 		array( 'LNKup_Push_Tables', 'create_tables' ),
 		array( 'LNKup_Inbox_Tables', 'create_tables' ),
+		array( 'LNKup_Match_Tables', 'create_tables' ),
+		array( 'LNKup_Org_Growth_Tables', 'create_tables' ),
 		array( 'LNKup_Trust_Tables', 'create_tables' ),
+		array( 'LNKup_Passport_Tables', 'create_tables' ),
 	);
 
 	foreach ( $creators as $creator ) {
@@ -476,6 +593,11 @@ function lnkup_maybe_upgrade_db() {
 	LNKup_Growth_Cron::schedule();
 	LNKup_Weather_Cron::schedule();
 	LNKup_External_Events_Cron::schedule();
+	LNKup_Match_Cron::schedule();
+
+	// Taxonomies are registered after this hook; seeding runs later on init.
+	update_option( 'lnkup_match_seed_pending', LNKUP_VERSION, false );
+	LNKup_Match_Cron::queue_full_rebuild();
 
 	if ( get_option( 'lnkup_taxonomy_seed_version' ) !== LNKUP_VERSION ) {
 		try {
@@ -743,6 +865,37 @@ function lnkup_get_settings() {
 		'google_search_templates'                 => '',
 		'google_search_daily_budget'              => 100,
 		'google_search_queries_per_run'           => 10,
+		'matching_enabled'                        => false,
+		'matching_vendor_discovery_enabled'       => false,
+		'matching_organizer_discovery_enabled'    => false,
+		'matching_tours_enabled'                  => false,
+		'apply_wizard_enabled'                    => false,
+		'tour_multi_apply_enabled'                => false,
+		'portfolio_os_enabled'                    => false,
+		'portfolio_os_user_ids'                   => '',
+		'application_review_v2_enabled'           => false,
+		'waitlist_offers_enabled'                 => false,
+		'match_weight_category'                   => 30,
+		'match_weight_geo'                        => 25,
+		'match_weight_requirements'               => 20,
+		'match_weight_preferences'                => 10,
+		'match_weight_dates'                      => 10,
+		'match_weight_signals'                    => 5,
+		'match_min_score'                         => 40,
+		'match_invite_vendor_weekly_cap'          => 5,
+		'match_invite_org_daily_cap'              => 100,
+		'match_invite_batch_max'                  => 50,
+		'organizer_growth_enabled'                => false,
+		'organizer_growth_outreach_enabled'       => false,
+		'org_growth_house_organizer_ids'          => '',
+		'org_growth_outreach_dedupe_days'         => 14,
+		'org_growth_campaign_daily_cap'           => 50,
+		'org_growth_approval_threshold'           => 25,
+		'org_growth_contact_stale_days'           => 180,
+		'org_growth_sender_name'                  => '',
+		'org_growth_sender_postal_address'        => '',
+		'org_growth_import_max_rows'              => 5000,
+		'org_growth_activation_paid_bookings'     => 3,
 		'trust_claim_review_mode'                 => 'log',
 		'trust_publish_gate'                      => false,
 		'trust_auto_promote_claims'               => false,

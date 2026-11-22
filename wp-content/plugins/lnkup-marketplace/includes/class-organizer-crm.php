@@ -80,6 +80,10 @@ class LNKup_Organizer_CRM {
 	 */
 	public static function get_relationship( $organizer_id, $vendor_id ) {
 		global $wpdb;
+		$key = absint( $organizer_id ) . ':' . absint( $vendor_id );
+		if ( null !== self::$rel_batch && array_key_exists( $key, self::$rel_batch ) ) {
+			return self::$rel_batch[ $key ];
+		}
 		$table = LNKup_Organizer_CRM_Tables::rel_table();
 		return $wpdb->get_row(
 			$wpdb->prepare(
@@ -89,6 +93,40 @@ class LNKup_Organizer_CRM {
 			),
 			ARRAY_A
 		);
+	}
+
+	/** @var array<string, array|null>|null Relationship rows primed for a read-only listing. */
+	private static $rel_batch = null;
+
+	/**
+	 * Load relationship rows for many vendors in one query (read-only listings only).
+	 * Pair with end_relationship_batch() before any write in the same request.
+	 *
+	 * @param int   $organizer_id Organizer user ID.
+	 * @param int[] $vendor_ids   Vendor user IDs.
+	 */
+	public static function prime_relationships( $organizer_id, array $vendor_ids ) {
+		global $wpdb;
+		$organizer_id = absint( $organizer_id );
+		$vendor_ids   = array_values( array_unique( array_filter( array_map( 'absint', $vendor_ids ) ) ) );
+		self::$rel_batch = is_array( self::$rel_batch ) ? self::$rel_batch : array();
+		if ( ! $organizer_id || ! $vendor_ids ) {
+			return;
+		}
+		foreach ( $vendor_ids as $vendor_id ) {
+			self::$rel_batch[ $organizer_id . ':' . $vendor_id ] = null;
+		}
+		$table        = LNKup_Organizer_CRM_Tables::rel_table();
+		$placeholders = implode( ',', array_fill( 0, count( $vendor_ids ), '%d' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE organizer_user_id = %d AND vendor_user_id IN ({$placeholders})", array_merge( array( $organizer_id ), $vendor_ids ) ), ARRAY_A );
+		foreach ( (array) $rows as $row ) {
+			self::$rel_batch[ $organizer_id . ':' . (int) $row['vendor_user_id'] ] = $row;
+		}
+	}
+
+	public static function end_relationship_batch() {
+		self::$rel_batch = null;
 	}
 
 	/**

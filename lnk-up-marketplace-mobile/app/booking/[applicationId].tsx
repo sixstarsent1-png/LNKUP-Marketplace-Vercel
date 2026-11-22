@@ -13,11 +13,12 @@ import { StickyActionBar } from "@/components/ui/sticky-action-bar"
 import { Surface } from "@/components/ui/surface"
 import { DisplayTitle, Meta, SectionTitle } from "@/components/ui/typography"
 import { BookingTimelineView } from "@/components/vendor/booking-timeline-view"
+import { canWithdraw, withdrawApplication } from "@/lib/api/apply"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import { fetchVendorRequests, invalidateVendorRequests, type VendorRequest } from "@/lib/api/vendor-requests"
 import { formatMoney } from "@/lib/api/vendor-wallet"
 import { useAuth } from "@/lib/auth/auth-context"
-import { showToast } from "@/lib/feedback/feedback"
+import { confirmAction, showToast } from "@/lib/feedback/feedback"
 import { bookingTimeline } from "@/lib/vendor/booking-timeline"
 import { spacing, typeScale } from "@/lib/theme"
 
@@ -32,7 +33,10 @@ function primaryActionFor(request: VendorRequest): PrimaryAction | null {
   if (request.status === "paid" || request.status === "completed") {
     return { label: "Open event pass", icon: "ticket-outline", href: `/pass/${request.id}` as Href }
   }
-  if ((request.status === "rejected" || request.status === "cancelled") && request.opportunityId) {
+  if (request.status === "cancelled" && request.opportunityId) {
+    return { label: "Apply again", icon: "search-outline", href: `/apply/${request.opportunityId}` as Href }
+  }
+  if (request.status === "rejected" && request.opportunityId) {
     return { label: "Find similar events", icon: "search-outline", href: "/(vendor)/find" as Href }
   }
   return null
@@ -75,6 +79,29 @@ export default function BookingDetailScreen() {
 
   const timeline = useMemo(() => (request ? bookingTimeline(request) : []), [request])
   const action = request ? primaryActionFor(request) : null
+  const [withdrawing, setWithdrawing] = useState(false)
+
+  async function handleWithdraw() {
+    if (!request || withdrawing) return
+    const confirmed = await confirmAction({
+      title: "Withdraw this application?",
+      message: "The organizer won't review it. You can apply again later while applications are open.",
+      confirmLabel: "Withdraw",
+      cancelLabel: "Keep it",
+      destructive: true,
+    })
+    if (!confirmed) return
+    setWithdrawing(true)
+    try {
+      await withdrawApplication(request.id, auth)
+      showToast("Application withdrawn.", "success")
+      void load(true)
+    } catch (err) {
+      showToast(appErrorFromWp(err).message, "error")
+    } finally {
+      setWithdrawing(false)
+    }
+  }
 
   if (!isAuthenticated) {
     return <Redirect href={{ pathname: "/login", params: { returnTo: `/booking/${id}` } }} />
@@ -161,6 +188,17 @@ export default function BookingDetailScreen() {
               />
             ) : null}
           </ListGroup>
+
+          {canWithdraw(request.status, request.paymentStatus) ? (
+            <Button
+              label="Withdraw application"
+              variant="ghost"
+              loading={withdrawing}
+              loadingLabel="Withdrawing…"
+              onPress={() => void handleWithdraw()}
+              testID="booking-withdraw"
+            />
+          ) : null}
         </>
       ) : null}
     </Screen>

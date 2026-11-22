@@ -17,8 +17,12 @@ class LNKup_Apply_With_Profile_View {
 	 * @param int $opportunity_id Opportunity ID.
 	 */
 	public static function render( int $opportunity_id ): string {
-		$context = LNKup_Applications::build_apply_context( $opportunity_id );
+		$invite_token = isset( $_GET['invite'] ) ? sanitize_text_field( wp_unslash( $_GET['invite'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$context      = LNKup_Applications::build_apply_context( $opportunity_id, 0, $invite_token );
 		if ( is_wp_error( $context ) ) {
+			if ( 'lnkup_invite_only' === $context->get_error_code() ) {
+				return '<div class="lnkup-apply-profile__state lnkup-apply-profile__state--blocked" data-testid="lnkup-apply-invite-only"><p>' . esc_html( $context->get_error_message() ) . '</p></div>';
+			}
 			return '';
 		}
 
@@ -90,6 +94,11 @@ class LNKup_Apply_With_Profile_View {
 					<?php endif; ?>
 					<a href="<?php echo esc_url( $apps_url ); ?>" class="lnkup-btn lnkup-btn--outline"><?php esc_html_e( 'View requests', 'lnkup-marketplace' ); ?></a>
 				</div>
+			<?php elseif ( 'previously_declined' === $eligibility['block_reason'] ) : ?>
+				<div class="lnkup-apply-profile__state lnkup-apply-profile__state--declined" data-testid="lnkup-apply-declined">
+					<p><?php esc_html_e( 'This organizer declined your earlier application. You can apply again if they invite you or change this opportunity.', 'lnkup-marketplace' ); ?></p>
+					<a href="<?php echo esc_url( $apps_url ); ?>" class="lnkup-btn lnkup-btn--outline"><?php esc_html_e( 'View requests', 'lnkup-marketplace' ); ?></a>
+				</div>
 			<?php elseif ( ! $eligibility['can_apply'] ) : ?>
 				<div class="lnkup-apply-profile__state lnkup-apply-profile__state--blocked">
 					<?php
@@ -103,7 +112,11 @@ class LNKup_Apply_With_Profile_View {
 					?>
 					<p class="lnkup-alert lnkup-alert--error"><?php echo esc_html( $block_msg ); ?></p>
 				</div>
+			<?php elseif ( self::wizard_enabled() ) : ?>
+				<?php self::render_reapply_note( $eligibility ); ?>
+				<?php self::render_wizard( $opportunity_id, $context, $invite_token, $docs_url, $profile_url ); ?>
 			<?php else : ?>
+				<?php self::render_reapply_note( $eligibility ); ?>
 				<?php self::render_progress( $documents ); ?>
 				<?php if ( $warnings ) : ?>
 					<div class="lnkup-apply-warnings" role="status">
@@ -149,6 +162,9 @@ class LNKup_Apply_With_Profile_View {
 					<?php wp_nonce_field( 'lnkup_apply', 'lnkup_nonce' ); ?>
 					<input type="hidden" name="action" value="lnkup_apply" />
 					<input type="hidden" name="opportunity_id" value="<?php echo esc_attr( (string) $opportunity_id ); ?>" />
+					<?php if ( '' !== $invite_token ) : ?>
+						<input type="hidden" name="invite_token" value="<?php echo esc_attr( $invite_token ); ?>" />
+					<?php endif; ?>
 
 					<?php if ( $categories ) : ?>
 						<div class="lnkup-form-row">
@@ -208,6 +224,303 @@ class LNKup_Apply_With_Profile_View {
 	}
 
 	/**
+	 * Short note when the vendor is applying again after an earlier application closed.
+	 *
+	 * @param array $eligibility Eligibility from LNKup_Applications::evaluate_eligibility().
+	 */
+	private static function render_reapply_note( array $eligibility ) {
+		$previous = $eligibility['previous_application'] ?? null;
+		if ( ! is_array( $previous ) || 'allowed' !== ( $previous['reapply'] ?? '' ) ) {
+			return;
+		}
+		$messages = array(
+			'organizer_allowed'   => __( 'The organizer re-opened this booth for you. You can apply again.', 'lnkup-marketplace' ),
+			'invited_again'       => __( 'The organizer invited you again. You can apply again.', 'lnkup-marketplace' ),
+			'opportunity_changed' => __( 'This booth changed since your last application. You can apply again.', 'lnkup-marketplace' ),
+		);
+		$text = $messages[ $previous['reason'] ?? '' ] ?? __( 'You withdrew an earlier application for this booth. You can apply again.', 'lnkup-marketplace' );
+		echo '<p class="lnkup-alert lnkup-alert--info" data-testid="lnkup-apply-reapply-note">' . esc_html( $text ) . '</p>';
+	}
+
+	/**
+	 * Whether the step-based wizard (autosave, resume, questions, estimate) is on.
+	 */
+	public static function wizard_enabled(): bool {
+		return ! empty( lnkup_get_settings()['apply_wizard_enabled'] );
+	}
+
+	/**
+	 * Step-based application form backed by a server-side draft.
+	 *
+	 * Steps: opportunity → business → questions → documents → review. Applications without
+	 * organizer questions or required documents collapse to a single step.
+	 *
+	 * @param int                  $opportunity_id Opportunity.
+	 * @param array<string, mixed> $context        Apply context.
+	 * @param string               $invite_token   Invite token.
+	 * @param string               $docs_url       Documents page.
+	 * @param string               $profile_url    Profile page.
+	 */
+	private static function render_wizard( int $opportunity_id, array $context, string $invite_token, string $docs_url, string $profile_url ): void {
+		$user_id    = get_current_user_id();
+		$questions  = LNKup_Application_Questions::get_for_opportunity( $opportunity_id );
+		$documents  = (array) $context['documents'];
+		$profile    = (array) ( $context['profile'] ?? array() );
+		$categories = (array) $context['categories'];
+		$draft      = LNKup_Application_Drafts::get_for_opportunity( $user_id, $opportunity_id );
+		$fields     = (array) ( $draft['fields'] ?? array() );
+		$answers    = (array) ( $draft['answers'] ?? array() );
+		$overrides  = (array) ( $draft['profile_overrides'] ?? array() );
+		$attached   = array_map( 'intval', (array) ( $draft['document_ids'] ?? array() ) );
+		$category   = (string) ( $fields['selected_category'] ?? '' ) ?: (string) $context['default_category'];
+		$single     = ! $questions && ! $documents;
+		$steps      = $single ? array( 'opportunity' ) : array_values( array_filter( array( 'opportunity', 'business', 'questions', $documents ? 'documents' : '', 'review' ) ) );
+		$labels     = array(
+			'opportunity' => __( 'Booth', 'lnkup-marketplace' ),
+			'business'    => __( 'Your business', 'lnkup-marketplace' ),
+			'questions'   => __( 'Questions', 'lnkup-marketplace' ),
+			'documents'   => __( 'Documents', 'lnkup-marketplace' ),
+			'review'      => __( 'Review', 'lnkup-marketplace' ),
+		);
+		$start      = $draft && in_array( $draft['step'], $steps, true ) ? $draft['step'] : 'opportunity';
+		$vendor_docs = class_exists( 'LNKup_Documents' ) ? LNKup_Documents::get_for_vendor( $user_id ) : array();
+		$doc_types   = class_exists( 'LNKup_Documents' ) ? LNKup_Documents::document_types() : array();
+		$config      = array(
+			'opportunityId' => $opportunity_id,
+			'steps'         => $steps,
+			'start'         => $start,
+			'revision'      => $draft ? (int) $draft['revision'] : null,
+			'hasDraft'      => (bool) $draft,
+			'priceChanged'  => $draft ? (bool) $draft['price']['changed'] : false,
+			'inviteToken'   => $invite_token,
+		);
+		$step_attr = static function ( string $step ) use ( $single, $start ): string {
+			$hidden = ! $single && $step !== $start;
+			return ' data-wizard-step="' . esc_attr( $step ) . '"' . ( $hidden ? ' hidden' : '' );
+		};
+		$field_id  = static function ( string $name ) use ( $opportunity_id ): string {
+			return 'lnkup-aw-' . $opportunity_id . '-' . sanitize_html_class( $name );
+		};
+		?>
+		<?php if ( $draft ) : ?>
+			<div class="lnkup-alert lnkup-alert--info lnkup-apply-wizard__resume" data-testid="lnkup-apply-wizard-resume">
+				<p><strong><?php esc_html_e( 'Continue your application', 'lnkup-marketplace' ); ?></strong>
+				<?php
+				$saved_ts = $draft['updated_at'] ? strtotime( $draft['updated_at'] ) : false;
+				if ( $saved_ts ) {
+					/* translators: %s: relative time */
+					echo ' · ' . esc_html( sprintf( __( 'saved %s ago', 'lnkup-marketplace' ), human_time_diff( $saved_ts, current_time( 'timestamp' ) ) ) );
+				}
+				?>
+				</p>
+			</div>
+		<?php endif; ?>
+		<form class="lnkup-form lnkup-apply-wizard" novalidate
+			data-opportunity-id="<?php echo esc_attr( (string) $opportunity_id ); ?>"
+			data-wizard-config="<?php echo esc_attr( (string) wp_json_encode( $config ) ); ?>"
+			data-single-step="<?php echo $single ? '1' : '0'; ?>"
+			data-testid="lnkup-apply-wizard">
+			<p class="lnkup-apply-wizard__save" role="status" aria-live="polite" data-wizard-save-status data-testid="lnkup-apply-wizard-save-status"></p>
+
+			<?php if ( ! $single ) : ?>
+				<ol class="lnkup-apply-steps" aria-label="<?php esc_attr_e( 'Application progress', 'lnkup-marketplace' ); ?>" data-wizard-progress>
+					<?php foreach ( $steps as $index => $step ) : ?>
+						<li class="lnkup-apply-steps__item" data-wizard-progress-step="<?php echo esc_attr( $step ); ?>">
+							<span class="lnkup-apply-steps__num" aria-hidden="true"><?php echo esc_html( (string) ( $index + 1 ) ); ?></span>
+							<span class="lnkup-apply-steps__label"><?php echo esc_html( $labels[ $step ] ); ?></span>
+						</li>
+					<?php endforeach; ?>
+				</ol>
+			<?php endif; ?>
+
+			<section class="lnkup-apply-wizard__step"<?php echo $step_attr( 'opportunity' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+				<?php if ( $categories ) : ?>
+					<div class="lnkup-form-row">
+						<label for="<?php echo esc_attr( $field_id( 'category' ) ); ?>"><?php echo esc_html( lnkup_copy( 'apply_category_label' ) ); ?> <span aria-hidden="true">*</span></label>
+						<select id="<?php echo esc_attr( $field_id( 'category' ) ); ?>" name="selected_category" required>
+							<?php foreach ( $categories as $cat ) : ?>
+								<option value="<?php echo esc_attr( $cat ); ?>" <?php selected( $category, $cat ); ?>><?php echo esc_html( $cat ); ?></option>
+							<?php endforeach; ?>
+						</select>
+					</div>
+				<?php else : ?>
+					<input type="hidden" name="selected_category" value="<?php echo esc_attr( $category ?: 'General' ); ?>" />
+				<?php endif; ?>
+				<div class="lnkup-apply-wizard__quote lnkup-card" data-wizard-quote aria-live="polite" data-testid="lnkup-apply-wizard-quote">
+					<p class="lnkup-muted"><?php esc_html_e( 'Loading price estimate…', 'lnkup-marketplace' ); ?></p>
+				</div>
+				<?php if ( $single ) : ?>
+					<?php self::render_profile_snapshot( $profile ?: null, (array) ( $context['strength'] ?? array() ) ); ?>
+					<?php self::render_text_fields( $fields, $field_id ); ?>
+				<?php endif; ?>
+			</section>
+
+			<?php if ( ! $single ) : ?>
+				<section class="lnkup-apply-wizard__step"<?php echo $step_attr( 'business' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+					<?php self::render_profile_snapshot( $profile ?: null, (array) ( $context['strength'] ?? array() ) ); ?>
+					<details class="lnkup-apply-wizard__overrides"<?php echo $overrides ? ' open' : ''; ?>>
+						<summary><?php esc_html_e( 'Change details for this application', 'lnkup-marketplace' ); ?></summary>
+						<p class="lnkup-muted"><?php esc_html_e( 'Changes here apply to this application only unless you also update your profile.', 'lnkup-marketplace' ); ?></p>
+						<?php
+						$override_fields = array(
+							'business_name' => array( __( 'Business name', 'lnkup-marketplace' ), 'text', true ),
+							'contact_email' => array( __( 'Contact email', 'lnkup-marketplace' ), 'email', true ),
+							'contact_phone' => array( __( 'Contact phone', 'lnkup-marketplace' ), 'tel', true ),
+							'products'      => array( __( 'What you will sell or offer', 'lnkup-marketplace' ), 'textarea', false ),
+							'setup_needs'   => array( __( 'Setup needs', 'lnkup-marketplace' ), 'textarea', false ),
+						);
+						foreach ( $override_fields as $key => $spec ) :
+							$value = (string) ( $overrides[ $key ] ?? ( $profile[ $key ] ?? '' ) );
+							$id    = $field_id( 'ov-' . $key );
+							?>
+							<div class="lnkup-form-row">
+								<label for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $spec[0] ); ?></label>
+								<?php if ( 'textarea' === $spec[1] ) : ?>
+									<textarea id="<?php echo esc_attr( $id ); ?>" name="overrides[<?php echo esc_attr( $key ); ?>]" rows="2" data-profile-value="<?php echo esc_attr( (string) ( $profile[ $key ] ?? '' ) ); ?>"><?php echo esc_textarea( $value ); ?></textarea>
+								<?php else : ?>
+									<input id="<?php echo esc_attr( $id ); ?>" type="<?php echo esc_attr( $spec[1] ); ?>" name="overrides[<?php echo esc_attr( $key ); ?>]" value="<?php echo esc_attr( $value ); ?>" data-profile-value="<?php echo esc_attr( (string) ( $profile[ $key ] ?? '' ) ); ?>" autocomplete="<?php echo esc_attr( 'contact_email' === $key ? 'email' : ( 'contact_phone' === $key ? 'tel' : 'organization' ) ); ?>" />
+								<?php endif; ?>
+								<?php if ( $spec[2] ) : ?>
+									<label class="lnkup-checkbox lnkup-apply-wizard__update-profile">
+										<input type="checkbox" name="update_profile[<?php echo esc_attr( $key ); ?>]" value="1" />
+										<span><?php esc_html_e( 'Also update my profile', 'lnkup-marketplace' ); ?></span>
+									</label>
+								<?php endif; ?>
+							</div>
+						<?php endforeach; ?>
+						<p class="lnkup-muted"><a href="<?php echo esc_url( $profile_url ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Edit your full profile', 'lnkup-marketplace' ); ?></a></p>
+					</details>
+				</section>
+
+				<section class="lnkup-apply-wizard__step"<?php echo $step_attr( 'questions' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+					<?php self::render_questions( $questions, $answers, $field_id, $vendor_docs, $doc_types ); ?>
+					<?php self::render_text_fields( $fields, $field_id ); ?>
+				</section>
+
+				<?php if ( $documents ) : ?>
+					<section class="lnkup-apply-wizard__step"<?php echo $step_attr( 'documents' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+						<?php self::render_documents( $documents, $docs_url ); ?>
+						<?php if ( LNKup_Application_Questions::documents_gate( $opportunity_id ) ) : ?>
+							<p class="lnkup-alert lnkup-alert--warning"><?php esc_html_e( 'This organizer needs these documents before you can submit.', 'lnkup-marketplace' ); ?></p>
+						<?php endif; ?>
+						<?php if ( $vendor_docs ) : ?>
+							<fieldset class="lnkup-apply-wizard__attach">
+								<legend><?php esc_html_e( 'Share documents with this organizer', 'lnkup-marketplace' ); ?></legend>
+								<?php foreach ( $vendor_docs as $doc ) : ?>
+									<?php $type = (string) get_post_meta( $doc->ID, '_lnkup_document_type', true ); ?>
+									<label class="lnkup-checkbox">
+										<input type="checkbox" name="document_ids[]" value="<?php echo esc_attr( (string) $doc->ID ); ?>" <?php checked( in_array( (int) $doc->ID, $attached, true ) ); ?> />
+										<span><?php echo esc_html( $doc_types[ $type ] ?? ( $doc->post_title ?: ucwords( str_replace( '_', ' ', $type ) ) ) ); ?></span>
+									</label>
+								<?php endforeach; ?>
+							</fieldset>
+						<?php endif; ?>
+						<?php self::render_vault_reuse( (array) ( $context['reusable_documents'] ?? array() ), ! empty( $context['document_sharing'] ) ); ?>
+					</section>
+				<?php endif; ?>
+
+				<section class="lnkup-apply-wizard__step"<?php echo $step_attr( 'review' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+					<h3 class="lnkup-apply-wizard__review-title"><?php esc_html_e( 'Review your application', 'lnkup-marketplace' ); ?></h3>
+					<dl class="lnkup-apply-wizard__review" data-wizard-review data-testid="lnkup-apply-wizard-review"></dl>
+				</section>
+			<?php endif; ?>
+
+			<div class="lnkup-apply-wizard__final"<?php echo ( $single || 'review' === $start ) ? '' : ' hidden'; ?> data-wizard-final>
+				<div class="lnkup-form-row lnkup-form-row--checkbox">
+					<label class="lnkup-checkbox">
+						<input type="checkbox" name="accepted_terms" value="1" required />
+						<span><?php echo esc_html( lnkup_copy( 'apply_terms_label' ) ); ?></span>
+					</label>
+				</div>
+				<p class="lnkup-alert lnkup-alert--error" role="alert" data-wizard-error hidden></p>
+				<button type="submit" class="lnkup-btn lnkup-btn--primary" data-wizard-submit data-testid="lnkup-apply-submit"><?php echo esc_html( lnkup_copy( 'apply_submit' ) ); ?></button>
+			</div>
+
+			<?php if ( ! $single ) : ?>
+				<p class="lnkup-alert lnkup-alert--error" role="alert" data-wizard-step-error hidden></p>
+				<div class="lnkup-apply-wizard__nav">
+					<button type="button" class="lnkup-btn lnkup-btn--outline" data-wizard-back><?php esc_html_e( 'Back', 'lnkup-marketplace' ); ?></button>
+					<button type="button" class="lnkup-btn lnkup-btn--primary" data-wizard-next data-testid="lnkup-apply-wizard-next"><?php esc_html_e( 'Next', 'lnkup-marketplace' ); ?></button>
+				</div>
+			<?php endif; ?>
+		</form>
+		<?php
+	}
+
+	/**
+	 * Message and setup notes.
+	 *
+	 * @param array    $fields   Saved draft fields.
+	 * @param callable $field_id ID builder.
+	 */
+	private static function render_text_fields( array $fields, callable $field_id ): void {
+		?>
+		<div class="lnkup-form-row">
+			<label for="<?php echo esc_attr( $field_id( 'message' ) ); ?>"><?php echo esc_html( lnkup_copy( 'apply_message_label' ) ); ?> <span class="lnkup-muted"><?php esc_html_e( '(optional)', 'lnkup-marketplace' ); ?></span></label>
+			<textarea id="<?php echo esc_attr( $field_id( 'message' ) ); ?>" name="application_message" rows="4" maxlength="4000" placeholder="<?php esc_attr_e( 'Tell the organizer why you are a great fit…', 'lnkup-marketplace' ); ?>"><?php echo esc_textarea( (string) ( $fields['application_message'] ?? '' ) ); ?></textarea>
+		</div>
+		<div class="lnkup-form-row">
+			<label for="<?php echo esc_attr( $field_id( 'setup' ) ); ?>"><?php echo esc_html( lnkup_copy( 'apply_setup_notes_label' ) ); ?> <span class="lnkup-muted"><?php esc_html_e( '(optional)', 'lnkup-marketplace' ); ?></span></label>
+			<textarea id="<?php echo esc_attr( $field_id( 'setup' ) ); ?>" name="setup_notes" rows="2" maxlength="2000" placeholder="<?php esc_attr_e( 'Any setup details for this event…', 'lnkup-marketplace' ); ?>"><?php echo esc_textarea( (string) ( $fields['setup_notes'] ?? '' ) ); ?></textarea>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Organizer questions as form controls named answers[qid].
+	 *
+	 * @param array    $questions   Definitions.
+	 * @param array    $answers     Saved answers.
+	 * @param callable $field_id    ID builder.
+	 * @param array    $vendor_docs Vendor document posts (for file questions).
+	 * @param array    $doc_types   Document type labels.
+	 */
+	public static function render_questions( array $questions, array $answers, callable $field_id, array $vendor_docs = array(), array $doc_types = array() ): void {
+		foreach ( $questions as $q ) {
+			$id       = $field_id( 'q-' . $q['id'] );
+			$name     = 'answers[' . $q['id'] . ']';
+			$value    = $answers[ $q['id'] ] ?? '';
+			$required = ! empty( $q['required'] );
+			?>
+			<div class="lnkup-form-row" data-question-id="<?php echo esc_attr( $q['id'] ); ?>">
+				<?php if ( 'checkbox' === $q['type'] ) : ?>
+					<label class="lnkup-checkbox">
+						<input id="<?php echo esc_attr( $id ); ?>" type="checkbox" name="<?php echo esc_attr( $name ); ?>" value="1" <?php checked( ! empty( $value ) ); ?> <?php echo $required ? 'required' : ''; ?> />
+						<span><?php echo esc_html( $q['label'] ); ?><?php echo $required ? ' <span aria-hidden="true">*</span>' : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+					</label>
+				<?php else : ?>
+					<label for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $q['label'] ); ?><?php echo $required ? ' <span aria-hidden="true">*</span>' : ' <span class="lnkup-muted">' . esc_html__( '(optional)', 'lnkup-marketplace' ) . '</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></label>
+					<?php if ( 'textarea' === $q['type'] ) : ?>
+						<textarea id="<?php echo esc_attr( $id ); ?>" name="<?php echo esc_attr( $name ); ?>" rows="3" maxlength="4000" <?php echo $required ? 'required' : ''; ?>><?php echo esc_textarea( (string) $value ); ?></textarea>
+					<?php elseif ( 'select' === $q['type'] ) : ?>
+						<select id="<?php echo esc_attr( $id ); ?>" name="<?php echo esc_attr( $name ); ?>" <?php echo $required ? 'required' : ''; ?>>
+							<option value=""><?php esc_html_e( 'Choose…', 'lnkup-marketplace' ); ?></option>
+							<?php foreach ( $q['options'] as $option ) : ?>
+								<option value="<?php echo esc_attr( $option ); ?>" <?php selected( (string) $value, $option ); ?>><?php echo esc_html( $option ); ?></option>
+							<?php endforeach; ?>
+						</select>
+					<?php elseif ( 'file' === $q['type'] ) : ?>
+						<select id="<?php echo esc_attr( $id ); ?>" name="<?php echo esc_attr( $name ); ?>" <?php echo $required ? 'required' : ''; ?>>
+							<option value=""><?php echo $vendor_docs ? esc_html__( 'Choose one of your documents…', 'lnkup-marketplace' ) : esc_html__( 'Upload a document first', 'lnkup-marketplace' ); ?></option>
+							<?php foreach ( $vendor_docs as $doc ) : ?>
+								<?php $type = (string) get_post_meta( $doc->ID, '_lnkup_document_type', true ); ?>
+								<option value="<?php echo esc_attr( (string) $doc->ID ); ?>" <?php selected( (int) $value, (int) $doc->ID ); ?>><?php echo esc_html( $doc_types[ $type ] ?? $doc->post_title ); ?></option>
+							<?php endforeach; ?>
+						</select>
+					<?php else : ?>
+						<input id="<?php echo esc_attr( $id ); ?>" type="text" name="<?php echo esc_attr( $name ); ?>" value="<?php echo esc_attr( (string) $value ); ?>" maxlength="500" <?php echo $required ? 'required' : ''; ?> />
+					<?php endif; ?>
+				<?php endif; ?>
+				<?php if ( '' !== $q['help'] ) : ?>
+					<p class="lnkup-muted lnkup-form-help"><?php echo esc_html( $q['help'] ); ?></p>
+				<?php endif; ?>
+				<p class="lnkup-field-error" data-field-error hidden></p>
+			</div>
+			<?php
+		}
+	}
+
+	/**
 	 * Booth → Requirements → Confirm progress for an eligible vendor.
 	 *
 	 * @param array<int, array<string, mixed>> $documents Document rows.
@@ -260,8 +573,12 @@ class LNKup_Apply_With_Profile_View {
 			if ( 'publish' !== $slot->post_status || 'open' !== get_post_meta( $slot->ID, '_lnkup_opportunity_status', true ) ) {
 				continue;
 			}
-			$deadline = (string) get_post_meta( $slot->ID, '_lnkup_application_deadline', true );
-			if ( (int) get_post_meta( $slot->ID, '_lnkup_spots_remaining', true ) < 1 || ( $deadline && $deadline < $today ) ) {
+			$deadline  = (string) get_post_meta( $slot->ID, '_lnkup_application_deadline', true );
+			$unlimited = (int) get_post_meta( $slot->ID, '_lnkup_spots_total', true ) <= 0;
+			if ( ( ! $unlimited && (int) get_post_meta( $slot->ID, '_lnkup_spots_remaining', true ) < 1 ) || ( $deadline && $deadline < $today ) ) {
+				continue;
+			}
+			if ( get_post_meta( $slot->ID, '_lnkup_invite_only', true ) && ! lnkup_vendor_can_discover_opportunity( get_current_user_id(), (int) $slot->ID ) && (int) $slot->ID !== $opportunity_id ) {
 				continue;
 			}
 			$fee       = (float) get_post_meta( $slot->ID, '_lnkup_vendor_fee', true );
@@ -316,7 +633,9 @@ class LNKup_Apply_With_Profile_View {
 				<?php if ( ! empty( $opp['deadline_label'] ) ) : ?>
 					<li><?php printf( esc_html__( 'Deadline: %s', 'lnkup-marketplace' ), esc_html( $opp['deadline_label'] ) ); ?></li>
 				<?php endif; ?>
-				<?php if ( isset( $opp['spots_remaining'] ) ) : ?>
+				<?php if ( ! empty( $opp['spots_unlimited'] ) ) : ?>
+					<li><?php esc_html_e( 'Open spots', 'lnkup-marketplace' ); ?></li>
+				<?php elseif ( isset( $opp['spots_remaining'] ) ) : ?>
 					<li><?php printf( esc_html__( '%s spots remaining', 'lnkup-marketplace' ), esc_html( (string) (int) $opp['spots_remaining'] ) ); ?></li>
 				<?php endif; ?>
 			</ul>
@@ -446,6 +765,54 @@ class LNKup_Apply_With_Profile_View {
 				<?php endforeach; ?>
 			</ul>
 		</section>
+		<?php
+	}
+
+	/**
+	 * Document Vault reuse: per-requirement suggestion + explicit consent to share with this organizer.
+	 *
+	 * @param array<string, mixed> $reusable LNKup_Document_Vault::find_reusable() payload.
+	 * @param bool                 $sharing  Sharing flag on.
+	 */
+	private static function render_vault_reuse( array $reusable, bool $sharing ): void {
+		$items = (array) ( $reusable['items'] ?? array() );
+		if ( ! $items || ! $sharing ) {
+			return;
+		}
+		$labels = array(
+			'satisfies'    => __( 'Ready to share', 'lnkup-marketplace' ),
+			'needs_review' => __( 'Organizer will confirm', 'lnkup-marketplace' ),
+			'insufficient' => __( 'Not usable for this event', 'lnkup-marketplace' ),
+			'missing'      => __( 'Not in your vault', 'lnkup-marketplace' ),
+		);
+		?>
+		<fieldset class="lnkup-apply-wizard__attach lnkup-apply-vault" data-testid="lnkup-apply-vault">
+			<legend><?php esc_html_e( 'Reuse documents from your Document Vault', 'lnkup-marketplace' ); ?></legend>
+			<p class="lnkup-muted"><?php esc_html_e( 'These are suggestions. The organizer still reviews each document against this event’s requirements.', 'lnkup-marketplace' ); ?></p>
+			<?php foreach ( $items as $item ) : ?>
+				<?php $shareable = ! empty( $item['document_id'] ) && in_array( $item['result'], array( 'satisfies', 'needs_review' ), true ); ?>
+				<div class="lnkup-apply-vault__row lnkup-apply-vault__row--<?php echo esc_attr( (string) $item['result'] ); ?>">
+					<label class="lnkup-checkbox">
+						<input type="checkbox" name="share_document_ids[]" value="<?php echo esc_attr( (string) (int) $item['document_id'] ); ?>" <?php disabled( ! $shareable ); ?> <?php checked( $shareable && ! empty( $item['already_shared'] ) ); ?> />
+						<span>
+							<strong><?php echo esc_html( (string) $item['label'] ); ?></strong>
+							<?php if ( ! empty( $item['version'] ) ) : ?>
+								<?php /* translators: %d: version number */ ?>
+								· <?php echo esc_html( sprintf( __( 'version %d', 'lnkup-marketplace' ), (int) $item['version'] ) ); ?>
+							<?php endif; ?>
+							· <?php echo esc_html( $labels[ $item['result'] ] ?? (string) $item['result'] ); ?>
+						</span>
+					</label>
+					<?php foreach ( (array) $item['reasons'] as $reason ) : ?>
+						<p class="lnkup-muted"><?php echo esc_html( (string) $reason ); ?></p>
+					<?php endforeach; ?>
+				</div>
+			<?php endforeach; ?>
+			<label class="lnkup-checkbox">
+				<input type="checkbox" name="share_consent" value="1" data-testid="lnkup-apply-share-consent" />
+				<span><?php esc_html_e( 'I authorize LNKup to share the selected documents with this organizer for this event only. I can stop sharing at any time from my Document Vault.', 'lnkup-marketplace' ); ?></span>
+			</label>
+		</fieldset>
 		<?php
 	}
 }

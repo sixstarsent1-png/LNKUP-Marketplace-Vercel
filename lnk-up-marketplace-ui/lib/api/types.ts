@@ -46,12 +46,45 @@ export type WpSearchResponse = {
   has_external?: boolean
 }
 
+export type WpPreviousApplication = {
+  id: number
+  status: string
+  reapply: "allowed" | "blocked"
+  reason: string
+}
+
 export type WpApplyEligibility = {
   can_apply?: boolean
   block_reason?: string
   profile_id?: number
   existing_application_id?: number
   existing_application_status?: string
+  previous_application?: WpPreviousApplication
+}
+
+export type WpApplicationQuestion = {
+  id: string
+  label: string
+  type: "text" | "textarea" | "select" | "checkbox" | "file"
+  required: boolean
+  options: string[]
+  help: string
+}
+
+export type WpApplyDraftSummary = {
+  id: number
+  revision: number
+  step: string
+  updated_at: string
+  fields?: { selected_category?: string; application_message?: string; setup_notes?: string }
+  answers?: Record<string, unknown>
+  document_ids?: number[]
+  price?: { quoted: number; current: number; changed: boolean }
+}
+
+export type WpApplyFeatures = {
+  drafts: boolean
+  tour_multi_apply: boolean
 }
 
 export type WpButtonState = {
@@ -80,6 +113,13 @@ export type WpApplyContext = {
   default_category?: string
   button_state?: WpButtonState
   warnings?: string[]
+  questions?: WpApplicationQuestion[]
+  vendor_documents?: Array<{ id: number; label: string }>
+  documents_required_to_apply?: boolean
+  draft?: WpApplyDraftSummary | null
+  previous_application?: WpPreviousApplication | null
+  tour_id?: number
+  features?: WpApplyFeatures
 }
 
 export type WpApplyResult = {

@@ -29,7 +29,10 @@ class LNKup_Vendor_Profile_Form {
 		$terms      = get_terms( array( 'taxonomy' => 'lnkup_vendor_category', 'hide_empty' => false ) );
 		$meta       = self::meta_values( $profile_id, $profile );
 		$slug       = $profile_id ? (string) get_post_meta( $profile_id, '_lnkup_public_slug', true ) : '';
-		$preview_url = $slug ? add_query_arg( 'vendor', $slug, lnkup_page_url_helper( 'vendors' ) ) : '';
+		$preview_url = $slug && class_exists( 'LNKup_Passport_Public' ) ? LNKup_Passport_Public::url_for_slug( $slug ) : '';
+		$facebook    = $profile_id ? (string) get_post_meta( $profile_id, '_lnkup_facebook', true ) : '';
+		$capabilities = $profile_id && class_exists( 'LNKup_Passport_Projection' ) ? wp_list_pluck( LNKup_Passport_Projection::capabilities( (int) $profile_id ), 'key' ) : array();
+		$booth_types  = $profile_id && class_exists( 'LNKup_Passport_Projection' ) ? LNKup_Passport_Projection::json_list( get_post_meta( $profile_id, '_lnkup_preferred_booth_types', true ) ) : array();
 		$docs_url   = add_query_arg( 'view', 'documents', lnkup_page_url_helper( 'vendor-dashboard' ) );
 		$reviews_url = add_query_arg( 'view', 'reviews', lnkup_page_url_helper( 'vendor-dashboard' ) );
 		$compliance = LNKup_Documents::compliance_summary( $user_id );
@@ -128,7 +131,7 @@ class LNKup_Vendor_Profile_Form {
 						<?php
 					} );
 
-					self::section_form( 'contact_socials', __( 'Contact & Socials', 'lnkup-marketplace' ), $strength, $meta, function () use ( $meta ) {
+					self::section_form( 'contact_socials', __( 'Contact & Socials', 'lnkup-marketplace' ), $strength, $meta, function () use ( $meta, $facebook ) {
 						?>
 						<div class="lnkup-grid lnkup-grid--2">
 							<div class="lnkup-form-row"><label for="contact_email"><?php esc_html_e( 'Contact Email', 'lnkup-marketplace' ); ?></label><input type="email" id="contact_email" name="contact_email" value="<?php echo esc_attr( $meta['contact_email'] ); ?>" /></div>
@@ -136,7 +139,9 @@ class LNKup_Vendor_Profile_Form {
 							<div class="lnkup-form-row"><label for="website"><?php esc_html_e( 'Website', 'lnkup-marketplace' ); ?></label><input type="url" id="website" name="website" value="<?php echo esc_attr( $meta['website'] ); ?>" /></div>
 							<div class="lnkup-form-row"><label for="instagram"><?php esc_html_e( 'Instagram', 'lnkup-marketplace' ); ?></label><input type="text" id="instagram" name="instagram" value="<?php echo esc_attr( $meta['instagram'] ); ?>" /></div>
 							<div class="lnkup-form-row"><label for="tiktok"><?php esc_html_e( 'TikTok', 'lnkup-marketplace' ); ?></label><input type="text" id="tiktok" name="tiktok" value="<?php echo esc_attr( $meta['tiktok'] ); ?>" /></div>
+							<div class="lnkup-form-row"><label for="facebook"><?php esc_html_e( 'Facebook', 'lnkup-marketplace' ); ?></label><input type="text" id="facebook" name="facebook" value="<?php echo esc_attr( $facebook ); ?>" /></div>
 						</div>
+						<p class="lnkup-muted"><?php esc_html_e( 'Social links are optional. Email and phone are only shared with organizers you apply to or accept invites from.', 'lnkup-marketplace' ); ?></p>
 						<?php
 					} );
 
@@ -152,7 +157,29 @@ class LNKup_Vendor_Profile_Form {
 						<?php
 					} );
 
-					self::section_form( 'setup_requirements', __( 'Setup Requirements', 'lnkup-marketplace' ), $strength, $meta, function () use ( $meta ) {
+					self::section_form( 'setup_requirements', __( 'Setup Requirements', 'lnkup-marketplace' ), $strength, $meta, function () use ( $meta, $capabilities, $booth_types ) {
+						if ( class_exists( 'LNKup_Passport_Projection' ) ) :
+							?>
+							<input type="hidden" name="capabilities[]" value="" />
+							<?php foreach ( LNKup_Passport_Projection::capability_groups() as $group_key => $group ) : ?>
+								<fieldset class="lnkup-form-row" data-testid="lnkup-capabilities-<?php echo esc_attr( $group_key ); ?>">
+									<legend><?php echo esc_html( $group['label'] ); ?></legend>
+									<div class="lnkup-chip-select">
+										<?php foreach ( (array) $group['options'] as $cap_key => $cap_label ) : ?>
+											<label>
+												<input type="checkbox" name="capabilities[]" value="<?php echo esc_attr( $cap_key ); ?>" <?php checked( in_array( $cap_key, $capabilities, true ) ); ?> />
+												<span><?php echo esc_html( $cap_label ); ?></span>
+											</label>
+										<?php endforeach; ?>
+									</div>
+								</fieldset>
+							<?php endforeach; ?>
+							<div class="lnkup-form-row">
+								<label for="preferred_booth_types"><?php esc_html_e( 'Preferred booth types', 'lnkup-marketplace' ); ?></label>
+								<input type="text" id="preferred_booth_types" name="preferred_booth_types" value="<?php echo esc_attr( implode( ', ', $booth_types ) ); ?>" placeholder="<?php esc_attr_e( '10x10, Food truck spot, Corner booth', 'lnkup-marketplace' ); ?>" />
+							</div>
+							<?php
+						endif;
 						?>
 						<div class="lnkup-grid lnkup-grid--2">
 							<div class="lnkup-form-row"><label for="setup_type"><?php esc_html_e( 'Setup Type', 'lnkup-marketplace' ); ?></label><input type="text" id="setup_type" name="setup_type" value="<?php echo esc_attr( $meta['setup_type'] ); ?>" /></div>
@@ -206,6 +233,12 @@ class LNKup_Vendor_Profile_Form {
 						</div>
 						<?php
 					} );
+					if ( $profile_id && class_exists( 'LNKup_Match_REST' ) ) {
+						$matching = LNKup_Match_REST::preferences_payload( (int) $profile_id );
+						self::section_form( 'matching_preferences', __( 'Matching Preferences', 'lnkup-marketplace' ), $strength, $meta, function () use ( $matching ) {
+							self::matching_fields( $matching );
+						} );
+					}
 					if ( class_exists( 'LNKup_App_Promo' ) ) {
 						echo LNKup_App_Promo::render_preference_toggle(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					}
@@ -223,6 +256,92 @@ class LNKup_Vendor_Profile_Form {
 		</div>
 		<?php
 		return ob_get_clean();
+	}
+
+	/**
+	 * Matching preference fields (progressive: every field is optional).
+	 *
+	 * @param array<string, mixed> $matching LNKup_Match_REST::preferences_payload().
+	 */
+	private static function matching_fields( array $matching ): void {
+		$prefs        = $matching['preferences'];
+		$completeness = $matching['completeness'];
+		$names        = array();
+		foreach ( $matching['options']['categories'] as $option ) {
+			$names[ $option['id'] ] = $option['name'];
+		}
+		$months = array();
+		for ( $m = 1; $m <= 12; $m++ ) {
+			$months[ $m ] = date_i18n( 'M', mktime( 0, 0, 0, $m, 1 ) );
+		}
+		?>
+		<div class="lnkup-match-completeness" data-testid="lnkup-match-completeness">
+			<p><strong><?php echo esc_html( sprintf( __( 'Matching profile %d%% complete', 'lnkup-marketplace' ), (int) $completeness['score'] ) ); ?></strong></p>
+			<div class="lnkup-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<?php echo esc_attr( (string) (int) $completeness['score'] ); ?>"><span style="width:<?php echo esc_attr( (string) (int) $completeness['score'] ); ?>%"></span></div>
+			<?php if ( $completeness['missing'] ) : ?>
+				<ul class="lnkup-muted lnkup-match-completeness__missing">
+					<?php foreach ( $completeness['missing'] as $item ) : ?>
+						<li><?php echo esc_html( $item['label'] ); ?></li>
+					<?php endforeach; ?>
+				</ul>
+			<?php endif; ?>
+			<p class="lnkup-muted"><?php esc_html_e( 'Everything here is optional. The more you share, the better your event recommendations. Your exact location is never shown to organizers.', 'lnkup-marketplace' ); ?></p>
+		</div>
+		<div class="lnkup-grid lnkup-grid--2">
+			<div class="lnkup-form-row">
+				<label for="match_primary_category"><?php esc_html_e( 'Primary category', 'lnkup-marketplace' ); ?></label>
+				<select id="match_primary_category" name="match_prefs[primary_category]">
+					<option value="0"><?php esc_html_e( 'Select…', 'lnkup-marketplace' ); ?></option>
+					<?php foreach ( $prefs['categories'] as $term_id ) : ?>
+						<option value="<?php echo esc_attr( (string) $term_id ); ?>" <?php selected( (int) $prefs['primary_category'], (int) $term_id ); ?>><?php echo esc_html( $names[ $term_id ] ?? '' ); ?></option>
+					<?php endforeach; ?>
+				</select>
+				<?php if ( ! $prefs['categories'] ) : ?>
+					<p class="lnkup-muted"><?php esc_html_e( 'Choose your vendor categories in Business Basics first.', 'lnkup-marketplace' ); ?></p>
+				<?php endif; ?>
+			</div>
+			<div class="lnkup-form-row">
+				<label for="match_zip"><?php esc_html_e( 'ZIP code (optional)', 'lnkup-marketplace' ); ?></label>
+				<input type="text" id="match_zip" name="match_prefs[zip]" maxlength="10" inputmode="numeric" value="<?php echo esc_attr( $prefs['zip'] ); ?>" />
+			</div>
+			<div class="lnkup-form-row lnkup-form-row--checkbox">
+				<input type="hidden" name="match_prefs[travel_national]" value="0" />
+				<label><input type="checkbox" name="match_prefs[travel_national]" value="1" <?php checked( $prefs['travel_national'] ); ?> /> <?php esc_html_e( 'I travel nationally for the right event', 'lnkup-marketplace' ); ?></label>
+			</div>
+		</div>
+		<div class="lnkup-form-row">
+			<label><?php esc_html_e( 'Event types you like', 'lnkup-marketplace' ); ?></label>
+			<input type="hidden" name="match_prefs[event_types]" value="" />
+			<div class="lnkup-chip-select">
+				<?php foreach ( $matching['options']['event_types'] as $type ) : ?>
+					<label>
+						<input type="checkbox" name="match_prefs[event_types][]" value="<?php echo esc_attr( (string) $type['id'] ); ?>" <?php checked( in_array( $type['name'], $prefs['event_types'], true ) ); ?> />
+						<span><?php echo esc_html( $type['name'] ); ?></span>
+					</label>
+				<?php endforeach; ?>
+			</div>
+		</div>
+		<div class="lnkup-form-row">
+			<label><?php esc_html_e( 'Months you are available', 'lnkup-marketplace' ); ?></label>
+			<input type="hidden" name="match_prefs[available_months]" value="" />
+			<div class="lnkup-chip-select">
+				<?php foreach ( $months as $num => $label ) : ?>
+					<label>
+						<input type="checkbox" name="match_prefs[available_months][]" value="<?php echo esc_attr( (string) $num ); ?>" <?php checked( in_array( $num, array_map( 'intval', $prefs['available_months'] ), true ) ); ?> />
+						<span><?php echo esc_html( $label ); ?></span>
+					</label>
+				<?php endforeach; ?>
+			</div>
+		</div>
+		<fieldset class="lnkup-form-row">
+			<legend><?php esc_html_e( 'Discovery & invites', 'lnkup-marketplace' ); ?></legend>
+			<input type="hidden" name="match_prefs[discoverable]" value="0" />
+			<label class="lnkup-form-row--checkbox"><input type="checkbox" name="match_prefs[discoverable]" value="1" data-testid="lnkup-match-discoverable" <?php checked( $prefs['discoverable'] ); ?> /> <?php esc_html_e( 'Let organizers find my business in vendor search', 'lnkup-marketplace' ); ?></label>
+			<input type="hidden" name="match_prefs[accept_invites]" value="0" />
+			<label class="lnkup-form-row--checkbox"><input type="checkbox" name="match_prefs[accept_invites]" value="1" <?php checked( $prefs['accept_invites'] ); ?> /> <?php esc_html_e( 'Organizers I have not worked with can invite me to apply', 'lnkup-marketplace' ); ?></label>
+			<p class="lnkup-muted"><?php esc_html_e( 'Organizers only see your public profile (name, logo, categories, city, description, photos). Your email, phone, documents, applications and payments stay private until you apply to their event or accept their invite.', 'lnkup-marketplace' ); ?></p>
+		</fieldset>
+		<?php
 	}
 
 	/**
@@ -440,7 +559,8 @@ class LNKup_Vendor_Profile_Form {
 	 * @return array<string, mixed>
 	 */
 	private static function find_section( array $strength, string $key ): array {
-		foreach ( (array) ( $strength['sections'] ?? array() ) as $section ) {
+		$all = array_merge( (array) ( $strength['sections'] ?? array() ), (array) ( $strength['related'] ?? array() ) );
+		foreach ( $all as $section ) {
 			if ( ( $section['key'] ?? '' ) === $key ) {
 				return $section;
 			}

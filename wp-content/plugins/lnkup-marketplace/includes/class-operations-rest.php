@@ -89,6 +89,15 @@ class LNKup_Operations_REST {
 			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'send_broadcast' ), 'permission_callback' => self::event_cap( 'broadcast' ) ),
 		) );
 
+		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/broadcasts/preview', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'preview_broadcast' ),
+			'permission_callback' => self::event_cap( 'broadcast' ),
+			'args'                => array(
+				'audience' => array( 'type' => 'string', 'default' => 'all', 'sanitize_callback' => 'sanitize_key' ),
+			),
+		) );
+
 		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/staff', array(
 			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_staff' ), 'permission_callback' => $view ),
 			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'assign_staff' ), 'permission_callback' => self::event_cap( 'manage_staff' ) ),
@@ -286,11 +295,35 @@ class LNKup_Operations_REST {
 		return true;
 	}
 
+	const SCAN_RATE_LIMIT  = 120;
+	const SCAN_RATE_WINDOW = 300;
+
 	/**
-	 * QR scan resolves the event inside the eligibility check.
+	 * QR scans must name the event being worked, and the actor must be able to check vendors in there.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
 	 */
-	public static function scan_permission() {
-		return is_user_logged_in();
+	public static function scan_permission( WP_REST_Request $request ) {
+		$body     = $request->get_json_params() ?: $request->get_params();
+		$event_id = absint( $body['event_id'] ?? 0 );
+		if ( ! is_user_logged_in() ) {
+			return new WP_Error( 'rest_forbidden', __( 'Sign in to continue.', 'lnkup-marketplace' ), array( 'status' => 401 ) );
+		}
+		if ( ! $event_id ) {
+			return new WP_Error( 'event_required', __( 'Open check-in from an event before scanning.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$allowed = self::check_event_cap( $event_id, 'check_in' );
+		if ( is_wp_error( $allowed ) ) {
+			return $allowed;
+		}
+		$key   = 'lnkup_qr_scan_' . get_current_user_id();
+		$count = (int) get_transient( $key );
+		if ( $count >= self::SCAN_RATE_LIMIT ) {
+			return new WP_Error( 'rate_limited', __( 'Too many scans in a short time. Wait a moment and try again.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
+		}
+		set_transient( $key, $count + 1, self::SCAN_RATE_WINDOW );
+		return true;
 	}
 
 	private static function organizer_for_app( WP_REST_Request $request ) {
@@ -446,6 +479,19 @@ class LNKup_Operations_REST {
 		return rest_ensure_response( $result );
 	}
 
+	public static function preview_broadcast( WP_REST_Request $request ) {
+		$audience = (string) $request['audience'];
+		if ( ! isset( LNKup_Broadcasts::audience_presets()[ $audience ] ) ) {
+			return new WP_Error( 'invalid_audience', __( 'Choose who should receive this message.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		return rest_ensure_response(
+			array(
+				'audience'        => $audience,
+				'recipient_count' => count( LNKup_Broadcasts::resolve_audience( absint( $request['id'] ), $audience ) ),
+			)
+		);
+	}
+
 	public static function get_staff( WP_REST_Request $request ) {
 		return rest_ensure_response( array( 'items' => LNKup_Event_Staff::get_for_event( absint( $request['id'] ) ) ) );
 	}
@@ -513,6 +559,10 @@ class LNKup_Operations_REST {
 		$result = LNKup_Checkins::scan_qr( $body['token'] ?? '', absint( $body['event_id'] ?? 0 ) );
 		if ( is_wp_error( $result ) ) {
 			return $result;
+		}
+		if ( empty( $result['success'] ) && 'wrong_event' === (string) ( $result['reason'] ?? '' ) ) {
+			// Same answer as an unknown token, so passes for other events cannot be probed from here.
+			return new WP_Error( 'not_found', __( 'This pass is not valid for this event.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}
 		$app_id = absint( $result['application_id'] ?? 0 );
 		if ( $app_id && ! empty( $result['success'] ) ) {

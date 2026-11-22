@@ -46,6 +46,8 @@ export async function wpFetchJson<T>(
     body?: unknown
     auth?: WpAuth
     namespace?: "lnkup" | "wp"
+    /** Extra request headers (e.g. Idempotency-Key); Accept, Content-Type and Authorization always win. */
+    headers?: Record<string, string>
   } = {},
 ): Promise<T> {
   const namespace = options.namespace ?? "lnkup"
@@ -61,6 +63,7 @@ export async function wpFetchJson<T>(
   }
 
   const headers: Record<string, string> = {
+    ...(options.headers ?? {}),
     Accept: "application/json",
   }
 

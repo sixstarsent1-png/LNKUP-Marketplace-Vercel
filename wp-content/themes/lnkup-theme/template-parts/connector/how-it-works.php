@@ -5,6 +5,9 @@
  * @package LNKup_Theme
  */
 
+$lnkup_terms = class_exists( 'LNKup_Partner_Public' ) ? LNKup_Partner_Public::terms_copy( 'city_connector' ) : array( 'lines' => array() );
+$lnkup_earn  = $lnkup_terms['lines'][0] ?? __( 'Commission is earned on verified bookings under the published program terms.', 'lnkup-theme' );
+
 $steps = array(
 	array(
 		'num'   => '01',
@@ -24,7 +27,7 @@ $steps = array(
 	array(
 		'num'   => '04',
 		'title' => __( 'You earn on the booking', 'lnkup-theme' ),
-		'body'  => __( 'You receive 10% commission on the booking for 12 months.', 'lnkup-theme' ),
+		'body'  => $lnkup_earn,
 	),
 );
 ?>

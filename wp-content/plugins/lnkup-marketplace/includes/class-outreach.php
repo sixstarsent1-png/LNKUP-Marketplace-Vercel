@@ -75,7 +75,7 @@ class LNKup_Outreach {
 		}
 
 		$source = sanitize_key( $args['source'] ?? 'admin' );
-		if ( ! in_array( $source, array( 'admin', 'organizer', 'accounts' ), true ) ) {
+		if ( ! in_array( $source, array( 'admin', 'organizer', 'accounts', 'growth' ), true ) ) {
 			$source = 'admin';
 		}
 
@@ -100,6 +100,11 @@ class LNKup_Outreach {
 				return new WP_Error( 'forbidden', __( 'You do not own this event.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 			}
 			$role = 'lnkup_vendor';
+		} elseif ( 'growth' === $source ) {
+			if ( ! class_exists( 'LNKup_Org_Growth' ) || ! LNKup_Org_Growth::current_user_can_manage() ) {
+				return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+			}
+			$role = 'lnkup_organizer';
 		} elseif ( ! LNKup_Capabilities::user_has_manage_all() && ! current_user_can( 'manage_options' ) ) {
 			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 		}
@@ -290,6 +295,12 @@ class LNKup_Outreach {
 		if ( (int) $campaign['total'] <= 0 ) {
 			return new WP_Error( 'empty', __( 'Add at least one recipient before sending.', 'lnkup-marketplace' ) );
 		}
+		if ( 'growth' === ( $campaign['source'] ?? '' ) ) {
+			$allowed = class_exists( 'LNKup_Org_Outreach' ) ? LNKup_Org_Outreach::can_queue( $campaign ) : new WP_Error( 'forbidden', __( 'Organizer outreach is unavailable.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+			if ( is_wp_error( $allowed ) ) {
+				return $allowed;
+			}
+		}
 
 		self::update_campaign( $campaign_id, array( 'status' => self::STATUS_QUEUED ) );
 		LNKup_Outreach_Cron::schedule_processing();
@@ -339,6 +350,16 @@ class LNKup_Outreach {
 			return 0;
 		}
 
+		if ( 'growth' === ( $campaign['source'] ?? '' ) ) {
+			$blocked = ! class_exists( 'LNKup_Org_Outreach' ) || is_wp_error( LNKup_Org_Outreach::can_queue( $campaign ) );
+			if ( $blocked || LNKup_Org_Outreach::cap_reached( $campaign ) ) {
+				// Leave it queued for tomorrow (cap) or until outreach is re-enabled; let other campaigns run.
+				self::update_campaign( $campaign_id, array( 'status' => self::STATUS_QUEUED ) );
+				LNKup_Outreach_Cron::schedule_next_hour();
+				return 0;
+			}
+		}
+
 		self::update_campaign( $campaign_id, array( 'status' => self::STATUS_PROCESSING ) );
 
 		if ( $rate_enabled && null === $limit ) {
@@ -377,7 +398,13 @@ class LNKup_Outreach {
 
 		$processed     = 0;
 		$rate_stopped  = false;
+		$is_growth = 'growth' === ( $campaign['source'] ?? '' );
 		foreach ( $rows as $row ) {
+			if ( $is_growth && LNKup_Org_Outreach::cap_reached( $campaign ) ) {
+				LNKup_Outreach_Cron::schedule_next_hour();
+				$rate_stopped = true;
+				break;
+			}
 			if ( $rate_enabled ) {
 				$limited = self::is_rate_limited();
 				if ( 'day' === $limited ) {
@@ -431,6 +458,25 @@ class LNKup_Outreach {
 
 		if ( 'accounts' === ( $campaign['source'] ?? '' ) ) {
 			return self::send_account_email( $row, $campaign );
+		}
+
+		if ( 'growth' === ( $campaign['source'] ?? '' ) ) {
+			return class_exists( 'LNKup_Org_Outreach' ) && LNKup_Org_Outreach::send_recipient( $row, $campaign );
+		}
+
+		$suppressed = class_exists( 'LNKup_Contact_Suppression' ) ? LNKup_Contact_Suppression::check_email( (string) $row['email'] ) : '';
+		if ( '' !== $suppressed && 'invalid_email' !== $suppressed ) {
+			$wpdb->update(
+				$table,
+				array(
+					'status'        => 'suppressed',
+					'error_message' => __( 'Recipient unsubscribed or asked not to be contacted.', 'lnkup-marketplace' ),
+				),
+				array( 'id' => (int) $row['id'] ),
+				array( '%s', '%s' ),
+				array( '%d' )
+			);
+			return false;
 		}
 
 		$user = get_user_by( 'email', $row['email'] );

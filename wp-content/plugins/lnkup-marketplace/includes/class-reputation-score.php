@@ -147,13 +147,20 @@ class LNKup_Reputation_Score {
 	 * @param int $vendor_id Vendor user ID.
 	 */
 	private static function platform_flag_count( $vendor_id ) {
+		if ( ! $vendor_id ) {
+			return 0;
+		}
+		// Organizer flags are private notes until staff confirm them; only confirmed flags affect the internal score.
 		$flags = get_posts(
 			array(
 				'post_type'      => 'lnkup_vendor_flag',
 				'posts_per_page' => -1,
 				'fields'         => 'ids',
-				'meta_key'       => '_lnkup_vendor_user_id',
-				'meta_value'     => $vendor_id,
+				'no_found_rows'  => true,
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_vendor_user_id', 'value' => $vendor_id ),
+					array( 'key' => '_lnkup_admin_confirmed', 'value' => '1' ),
+				),
 			)
 		);
 		return count( $flags );

@@ -85,6 +85,7 @@ class LNKup_Marketplace_Index {
 			featured_image_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			load_in_time varchar(50) NOT NULL DEFAULT '',
 			required_documents text,
+			tour_id bigint(20) unsigned NOT NULL DEFAULT 0,
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
 			PRIMARY KEY (opportunity_id),
@@ -93,6 +94,8 @@ class LNKup_Marketplace_Index {
 			KEY city_state (city, state),
 			KEY event_date (event_date),
 			KEY trending_score (trending_score),
+			KEY tour_id (tour_id),
+			KEY geo (lat, lng),
 			FULLTEXT KEY search_ft (title, city, state, venue_name, search_blob)
 		) {$charset};";
 
@@ -104,6 +107,15 @@ class LNKup_Marketplace_Index {
 	 * Rebuild entire index.
 	 */
 	public static function rebuild_all() {
+		// Daily cron, the admin button and the deferred upgrade must not truncate under each other.
+		$count = LNKup_Financial_Service::with_lock( 'marketplace_index_rebuild', array( __CLASS__, 'rebuild_all_locked' ), 0 );
+		return is_wp_error( $count ) ? 0 : $count;
+	}
+
+	/**
+	 * Rebuild body; caller holds the marketplace_index_rebuild lock.
+	 */
+	public static function rebuild_all_locked() {
 		global $wpdb;
 		$table = self::table_name();
 		$wpdb->query( "TRUNCATE TABLE {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -188,6 +200,20 @@ class LNKup_Marketplace_Index {
 	public static function delete_row( $opportunity_id ) {
 		global $wpdb;
 		$wpdb->delete( self::table_name(), array( 'opportunity_id' => $opportunity_id ), array( '%d' ) );
+		do_action( 'lnkup_marketplace_index_changed', (int) $opportunity_id, 'removed' );
+	}
+
+	/**
+	 * Tour ID for an event when the tour is published, else 0.
+	 *
+	 * @param int $event_id Event ID.
+	 */
+	private static function published_tour_id( $event_id ) {
+		$tour_id = (int) get_post_meta( $event_id, '_lnkup_tour_id', true );
+		if ( ! $tour_id || 'lnkup_tour' !== get_post_type( $tour_id ) || 'publish' !== get_post_status( $tour_id ) ) {
+			return 0;
+		}
+		return $tour_id;
 	}
 
 	/**
@@ -309,22 +335,63 @@ class LNKup_Marketplace_Index {
 				?: (int) get_post_meta( $event_id, '_lnkup_featured_image_id', true ),
 			'load_in_time'        => (string) get_post_meta( $opportunity_id, '_lnkup_load_in_time', true ),
 			'required_documents'  => self::normalize_required_documents( get_post_meta( $opportunity_id, '_lnkup_required_documents', true ) ),
+			'tour_id'             => self::published_tour_id( $event_id ),
 			'created_at'          => $opp->post_date,
 			'updated_at'          => current_time( 'mysql' ),
 		);
 
-		global $wpdb;
-		$table = self::table_name();
-		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT opportunity_id FROM {$table} WHERE opportunity_id = %d", $opportunity_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		self::upsert_row( $row );
 
-		if ( $exists ) {
-			$wpdb->update( $table, $row, array( 'opportunity_id' => $opportunity_id ) );
-		} else {
-			$wpdb->insert( $table, $row );
+		if ( ! self::$quiet ) {
+			do_action( 'lnkup_marketplace_index_changed', (int) $opportunity_id, 'synced' );
 		}
 
 		return true;
 	}
+
+	/**
+	 * Insert or update one index row in a single statement, so concurrent syncs (cron, saves,
+	 * rebuilds) never collide on the primary key.
+	 *
+	 * @param array<string, mixed> $row Column => value; must include opportunity_id.
+	 */
+	private static function upsert_row( array $row ) {
+		global $wpdb;
+		$table        = self::table_name();
+		$columns      = array();
+		$placeholders = array();
+		$values       = array();
+		$updates      = array();
+		foreach ( $row as $column => $value ) {
+			$column    = preg_replace( '/[^a-z0-9_]/', '', (string) $column );
+			$columns[] = "`{$column}`";
+			if ( null === $value ) {
+				$placeholders[] = 'NULL';
+			} elseif ( is_int( $value ) ) {
+				$placeholders[] = '%d';
+				$values[]       = $value;
+			} elseif ( is_float( $value ) ) {
+				$placeholders[] = '%f';
+				$values[]       = $value;
+			} else {
+				$placeholders[] = '%s';
+				$values[]       = (string) $value;
+			}
+			if ( 'opportunity_id' !== $column && 'created_at' !== $column ) {
+				$updates[] = "`{$column}` = VALUES(`{$column}`)";
+			}
+		}
+		$sql = "INSERT INTO {$table} (" . implode( ', ', $columns ) . ') VALUES (' . implode( ', ', $placeholders ) . ') ON DUPLICATE KEY UPDATE ' . implode( ', ', $updates );
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( $values ? $wpdb->prepare( $sql, $values ) : $sql );
+	}
+
+	/**
+	 * When true, sync_opportunity() skips the change action (counter-only updates).
+	 *
+	 * @var bool
+	 */
+	private static $quiet = false;
 
 	/**
 	 * Increment view count.
@@ -334,7 +401,9 @@ class LNKup_Marketplace_Index {
 	public static function increment_view( $opportunity_id ) {
 		$count = (int) get_post_meta( $opportunity_id, '_lnkup_view_count', true );
 		update_post_meta( $opportunity_id, '_lnkup_view_count', $count + 1 );
+		self::$quiet = true;
 		self::sync_opportunity( $opportunity_id );
+		self::$quiet = false;
 	}
 
 	/**
@@ -345,6 +414,17 @@ class LNKup_Marketplace_Index {
 	public static function increment_applications( $opportunity_id ) {
 		$count = (int) get_post_meta( $opportunity_id, '_lnkup_application_count', true );
 		update_post_meta( $opportunity_id, '_lnkup_application_count', $count + 1 );
+		self::sync_opportunity( $opportunity_id );
+	}
+
+	/**
+	 * Decrement application count after a withdrawal (never below zero).
+	 *
+	 * @param int $opportunity_id Opportunity ID.
+	 */
+	public static function decrement_applications( $opportunity_id ) {
+		$count = (int) get_post_meta( $opportunity_id, '_lnkup_application_count', true );
+		update_post_meta( $opportunity_id, '_lnkup_application_count', max( 0, $count - 1 ) );
 		self::sync_opportunity( $opportunity_id );
 	}
 

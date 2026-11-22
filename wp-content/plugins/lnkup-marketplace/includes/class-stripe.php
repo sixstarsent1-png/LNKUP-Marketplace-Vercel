@@ -70,7 +70,9 @@ class LNKup_Stripe {
 			wp_die( esc_html__( 'Invalid payment.', 'lnkup-marketplace' ), 404 );
 		}
 		$vendor_id = (int) get_post_meta( $payment_id, '_lnkup_vendor_user_id', true );
-		if ( ! LNKup_Capabilities::user_has_manage_all() && get_current_user_id() !== $vendor_id ) {
+		// Vendors may self-simulate only when a developer explicitly opted in via the constant.
+		$vendor_self_sim = defined( 'LNKUP_ALLOW_PAYMENT_SIMULATION' ) && LNKUP_ALLOW_PAYMENT_SIMULATION && get_current_user_id() === $vendor_id;
+		if ( ! LNKup_Capabilities::user_has_manage_all() && ! current_user_can( 'manage_options' ) && ! $vendor_self_sim ) {
 			wp_die( esc_html__( 'Permission denied.', 'lnkup-marketplace' ), 403 );
 		}
 		LNKup_Financial_Service::finalize_payment( $payment_id, 'sim_' . wp_generate_password( 12, false ) );

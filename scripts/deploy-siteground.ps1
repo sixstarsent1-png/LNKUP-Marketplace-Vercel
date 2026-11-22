@@ -1,4 +1,4 @@
-# One-off laptop deploy of LNKup plugin + theme to SiteGround WordPress.
+# One-off laptop deploy of LNKup plugins (lnkup-marketplace, lnkup-communications) + theme to SiteGround WordPress.
 # Reads credentials from environment only. Never commit secrets.
 #
 # Required:
@@ -36,9 +36,13 @@ if (-not (Test-Path $key)) {
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $pluginSrc = Join-Path $root "wp-content\plugins\lnkup-marketplace"
 $themeSrc = Join-Path $root "wp-content\themes\lnkup-theme"
+$commsSrc = Join-Path $root "wp-content\plugins\lnkup-communications"
 
 if (-not (Test-Path $pluginSrc)) {
   throw "Plugin folder missing: $pluginSrc"
+}
+if (-not (Test-Path $commsSrc)) {
+  throw "Communications plugin folder missing: $commsSrc"
 }
 if (-not (Test-Path $themeSrc)) {
   throw "Theme folder missing: $themeSrc"
@@ -66,14 +70,23 @@ if ($rsync) {
     -e "ssh -p $port -i `"$key`" -o IdentitiesOnly=yes" `
     "$themeSrc/" "${sshTarget}:${wpRoot}/wp-content/themes/lnkup-theme/"
   if ($LASTEXITCODE -ne 0) { throw "Theme rsync failed" }
+
+  # lib/action-scheduler is bundled in the repo (no composer step), so it must not be excluded.
+  Write-Host "Rsync communications plugin..."
+  & rsync -az --delete --exclude node_modules --exclude .git --exclude tests `
+    -e "ssh -p $port -i `"$key`" -o IdentitiesOnly=yes" `
+    "$commsSrc/" "${sshTarget}:${wpRoot}/wp-content/plugins/lnkup-communications/"
+  if ($LASTEXITCODE -ne 0) { throw "Communications plugin rsync failed" }
 } else {
   Write-Host "rsync not found; using scp (does not delete leftover remote files)."
   $scpArgs = @("-P", $port, "-i", $key, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", "-r")
-  & ssh @sshArgs $sshTarget "mkdir -p '$wpRoot/wp-content/plugins/lnkup-marketplace' '$wpRoot/wp-content/themes/lnkup-theme'"
+  & ssh @sshArgs $sshTarget "mkdir -p '$wpRoot/wp-content/plugins/lnkup-marketplace' '$wpRoot/wp-content/themes/lnkup-theme' '$wpRoot/wp-content/plugins/lnkup-communications'"
   & scp @scpArgs "$pluginSrc\*" "${sshTarget}:${wpRoot}/wp-content/plugins/lnkup-marketplace/"
   if ($LASTEXITCODE -ne 0) { throw "Plugin scp failed" }
   & scp @scpArgs "$themeSrc\*" "${sshTarget}:${wpRoot}/wp-content/themes/lnkup-theme/"
   if ($LASTEXITCODE -ne 0) { throw "Theme scp failed" }
+  & scp @scpArgs "$commsSrc\*" "${sshTarget}:${wpRoot}/wp-content/plugins/lnkup-communications/"
+  if ($LASTEXITCODE -ne 0) { throw "Communications plugin scp failed" }
 }
 
 Write-Host "composer install --no-dev on server..."

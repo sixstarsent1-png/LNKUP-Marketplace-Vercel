@@ -34,7 +34,39 @@ class LNKup_Vendor_Badges {
 			'preferred_vendor'       => array( 'label' => __( 'Preferred Vendor', 'lnkup-marketplace' ), 'auto' => true ),
 			'lnkup_approved'         => array( 'label' => __( 'LNKup Approved', 'lnkup-marketplace' ), 'auto' => false ),
 			'rising_vendor'          => array( 'label' => __( 'Rising Vendor', 'lnkup-marketplace' ), 'auto' => true ),
+			'first_confirmed_event'  => array( 'label' => __( 'First Confirmed Event', 'lnkup-marketplace' ), 'auto' => true, 'achievement' => true, 'rule' => __( 'Completed one event with check-in or confirmed attendance.', 'lnkup-marketplace' ) ),
+			'first_check_in'         => array( 'label' => __( 'First Verified Check-In', 'lnkup-marketplace' ), 'auto' => true, 'achievement' => true, 'rule' => __( 'Checked in at an LNKup event.', 'lnkup-marketplace' ) ),
+			'confirmed_5'            => array( 'label' => __( 'Five Confirmed Events', 'lnkup-marketplace' ), 'auto' => true, 'achievement' => true, 'rule' => __( 'Five distinct events with confirmed participation.', 'lnkup-marketplace' ) ),
+			'confirmed_10'           => array( 'label' => __( 'Ten Confirmed Events', 'lnkup-marketplace' ), 'auto' => true, 'achievement' => true, 'rule' => __( 'Ten distinct events with confirmed participation.', 'lnkup-marketplace' ) ),
+			'returning_vendor'       => array( 'label' => __( 'Returning Vendor', 'lnkup-marketplace' ), 'auto' => true, 'achievement' => true, 'rule' => __( 'Confirmed participation with the same organizer at two or more events.', 'lnkup-marketplace' ) ),
+			'multi_city'             => array( 'label' => __( 'Multi-City Participant', 'lnkup-marketplace' ), 'auto' => true, 'achievement' => true, 'rule' => __( 'Confirmed participation in three or more cities.', 'lnkup-marketplace' ) ),
+			'tour_participant'       => array( 'label' => __( 'Tour Participant', 'lnkup-marketplace' ), 'auto' => true, 'achievement' => true, 'rule' => __( 'Confirmed participation at two or more stops of the same tour or series.', 'lnkup-marketplace' ) ),
+			'established_vendor'     => array( 'label' => __( 'Established Marketplace Vendor', 'lnkup-marketplace' ), 'auto' => true, 'achievement' => true, 'rule' => __( 'Ten or more confirmed events with at least three organizers over at least six months.', 'lnkup-marketplace' ) ),
 		);
+	}
+
+	/**
+	 * Earned achievements (participation-backed badges only) for the Passport.
+	 *
+	 * @param int $profile_id Profile ID.
+	 * @return array<int,array<string,string>>
+	 */
+	public static function get_achievements( $profile_id ) {
+		$catalog = self::catalog();
+		$out     = array();
+		foreach ( self::get_active( $profile_id ) as $badge ) {
+			$def = $catalog[ $badge['slug'] ] ?? array();
+			if ( empty( $def['achievement'] ) ) {
+				continue;
+			}
+			$out[] = array(
+				'slug'      => $badge['slug'],
+				'label'     => $badge['label'],
+				'rule'      => (string) ( $def['rule'] ?? '' ),
+				'earned_at' => $badge['earned_at'],
+			);
+		}
+		return $out;
 	}
 
 	/**
@@ -143,11 +175,13 @@ class LNKup_Vendor_Badges {
 	public static function revoke( $profile_id, $slug, $user_id = 0 ) {
 		global $wpdb;
 		$table = LNKup_Reputation_Tables::badge_table();
-		$wpdb->update(
+		// $user_id -1 marks an automatic revocation (revoked_by 0) so the badge can be re-earned even when staff triggered the refresh.
+		$revoker = -1 === (int) $user_id ? 0 : ( $user_id ?: get_current_user_id() );
+		$changed = $wpdb->update(
 			$table,
 			array(
 				'revoked_at' => current_time( 'mysql' ),
-				'revoked_by' => $user_id ?: get_current_user_id(),
+				'revoked_by' => $revoker,
 			),
 			array(
 				'vendor_profile_id' => absint( $profile_id ),
@@ -157,11 +191,23 @@ class LNKup_Vendor_Badges {
 			array( '%s', '%d' ),
 			array( '%d', '%s', '%s' )
 		);
-		LNKup_Vendor_Reputation::log_activity(
-			'badge_revoked',
-			$profile_id,
-			array( 'payload' => array( 'badge' => $slug ) )
-		);
+		if ( $changed ) {
+			LNKup_Vendor_Reputation::log_activity(
+				'badge_revoked',
+				$profile_id,
+				array( 'payload' => array( 'badge' => $slug, 'auto' => 0 === $revoker ) )
+			);
+		}
+	}
+
+	/**
+	 * Automatic revocation (never blocks re-earning).
+	 *
+	 * @param int    $profile_id Profile ID.
+	 * @param string $slug       Badge slug.
+	 */
+	private static function auto_revoke( $profile_id, $slug ) {
+		static::revoke( $profile_id, $slug, -1 );
 	}
 
 	/**
@@ -176,7 +222,7 @@ class LNKup_Vendor_Badges {
 		if ( $verified ) {
 			self::award( $profile_id, 'verified_vendor' );
 		} else {
-			self::revoke( $profile_id, 'verified_vendor' );
+			self::auto_revoke( $profile_id, 'verified_vendor' );
 		}
 
 		self::sync_doc_badges( $profile_id, $vendor_id );
@@ -199,7 +245,7 @@ class LNKup_Vendor_Badges {
 			if ( (int) ( $strength['score'] ?? 0 ) >= 70 ) {
 				self::award( $profile_id, 'profile_complete' );
 			} else {
-				self::revoke( $profile_id, 'profile_complete' );
+				self::auto_revoke( $profile_id, 'profile_complete' );
 			}
 		}
 
@@ -207,7 +253,8 @@ class LNKup_Vendor_Badges {
 			$doc_items = LNKup_Verification::get_required_verification_items_for_vendor( $profile_id, array() );
 			$all_ready = true;
 			foreach ( (array) ( $doc_items['required'] ?? array() ) as $doc ) {
-				if ( ! in_array( $doc['status'] ?? '', array( 'approved', 'pending', 'expiring' ), true ) ) {
+				// Only reviewed, unexpired documents count; pending uploads are not "ready".
+				if ( ! in_array( $doc['status'] ?? '', array( 'approved', 'expiring' ), true ) ) {
 					$all_ready = false;
 					break;
 				}
@@ -215,30 +262,34 @@ class LNKup_Vendor_Badges {
 			if ( $all_ready ) {
 				self::award( $profile_id, 'documents_ready' );
 			} else {
-				self::revoke( $profile_id, 'documents_ready' );
+				self::auto_revoke( $profile_id, 'documents_ready' );
 			}
 		}
 
 		if ( $metrics['completed_events'] >= 3 && (float) ( $metrics['avg_organizer_rating'] ?? 0 ) >= 4.0 && 0 === (int) ( $metrics['no_show_count'] ?? 0 ) ) {
 			self::award( $profile_id, 'reliable_vendor' );
 		} else {
-			self::revoke( $profile_id, 'reliable_vendor' );
+			self::auto_revoke( $profile_id, 'reliable_vendor' );
 		}
 
-		if ( $metrics['response_rate'] >= 90 ) {
+		if ( ! empty( $metrics['response_rate_known'] ) && $metrics['response_rate'] >= 90 ) {
 			self::award( $profile_id, 'fast_responder' );
+		} else {
+			self::auto_revoke( $profile_id, 'fast_responder' );
 		}
+
+		self::evaluate_achievements( (int) $profile_id );
 
 		if ( $metrics['completed_events'] >= 5 && 0 === $metrics['no_show_count'] ) {
 			self::award( $profile_id, 'no_no_shows' );
 		} elseif ( $metrics['no_show_count'] > 0 ) {
-			self::revoke( $profile_id, 'no_no_shows' );
+			self::auto_revoke( $profile_id, 'no_no_shows' );
 		}
 
 		if ( $summary['avg'] >= 4.5 && $summary['count'] >= 5 ) {
 			self::award( $profile_id, 'top_rated' );
 		} else {
-			self::revoke( $profile_id, 'top_rated' );
+			self::auto_revoke( $profile_id, 'top_rated' );
 		}
 
 		if ( $metrics['completed_events'] < 5 && $summary['count'] >= 3 && $summary['avg'] >= 4.0 ) {
@@ -263,12 +314,7 @@ class LNKup_Vendor_Badges {
 	 */
 	private static function sync_doc_badges( $profile_id, $vendor_id ) {
 		$catalog = self::catalog();
-		$docs    = LNKup_Documents::get_for_vendor( $vendor_id );
-		$by_type = array();
-		foreach ( $docs as $doc ) {
-			$type = get_post_meta( $doc->ID, '_lnkup_document_type', true );
-			$by_type[ $type ] = $doc;
-		}
+		$by_type = LNKup_Documents::current_by_type( (int) $vendor_id );
 		foreach ( $catalog as $slug => $def ) {
 			if ( empty( $def['doc'] ) ) {
 				continue;
@@ -278,7 +324,36 @@ class LNKup_Vendor_Badges {
 				$exp = get_post_meta( $by_type[ $doc_type ]->ID, '_lnkup_expiration_date', true );
 				self::award( $profile_id, $slug, 'auto', $exp ?: null );
 			} else {
-				self::revoke( $profile_id, $slug );
+				self::auto_revoke( $profile_id, $slug );
+			}
+		}
+	}
+
+	/**
+	 * Participation achievements from evidence-backed history only (never self-reported).
+	 *
+	 * @param int $profile_id Profile ID.
+	 */
+	private static function evaluate_achievements( int $profile_id ) {
+		if ( ! class_exists( 'LNKup_Participation_History' ) ) {
+			return;
+		}
+		$stats = LNKup_Participation_History::stats( $profile_id );
+		$rules = array(
+			'first_confirmed_event' => $stats['confirmed_events'] >= 1,
+			'first_check_in'        => $stats['checked_in_events'] >= 1,
+			'confirmed_5'           => $stats['confirmed_events'] >= 5,
+			'confirmed_10'          => $stats['confirmed_events'] >= 10,
+			'returning_vendor'      => $stats['repeat_organizers'] >= 1,
+			'multi_city'            => $stats['distinct_cities'] >= 3,
+			'tour_participant'      => $stats['max_stops_in_one_tour'] >= 2,
+			'established_vendor'    => $stats['confirmed_events'] >= 10 && $stats['distinct_organizers'] >= 3 && $stats['active_span_days'] >= 180,
+		);
+		foreach ( $rules as $slug => $earned ) {
+			if ( $earned ) {
+				self::award( $profile_id, $slug );
+			} else {
+				self::auto_revoke( $profile_id, $slug );
 			}
 		}
 	}

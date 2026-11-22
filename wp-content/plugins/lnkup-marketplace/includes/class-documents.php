@@ -24,6 +24,80 @@ class LNKup_Documents {
 		add_filter( 'ajax_query_attachments_args', array( __CLASS__, 'exclude_private_from_media_rest' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'block_private_attachment_page' ) );
 		add_action( 'admin_init', array( __CLASS__, 'maybe_backfill_private_flags' ) );
+		add_action( self::EXPIRY_CRON, array( __CLASS__, 'mark_expired_documents' ) );
+		add_action( 'updated_post_meta', array( __CLASS__, 'on_expiration_date_updated' ), 10, 4 );
+		add_action( 'init', array( __CLASS__, 'schedule_expiry_cron' ), 20 );
+	}
+
+	const EXPIRY_CRON       = 'lnkup_documents_expire';
+	const EXPIRED_AT_META   = '_lnkup_expired_at';
+	const EXPIRY_BATCH_SIZE = 200;
+
+	/**
+	 * Whether an expiration date (Y-m-d or any strtotime-able value) is before today.
+	 *
+	 * @param string $expires Expiration date meta value.
+	 */
+	public static function is_expired( $expires ) {
+		$expires = trim( (string) $expires );
+		if ( '' === $expires ) {
+			return false;
+		}
+		$ts = strtotime( $expires );
+		return false !== $ts && $ts < strtotime( 'today' );
+	}
+
+	public static function schedule_expiry_cron() {
+		if ( ! wp_next_scheduled( self::EXPIRY_CRON ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::EXPIRY_CRON );
+		}
+	}
+
+	/**
+	 * Daily: stamp approved documents whose expiration date has passed and announce them once.
+	 *
+	 * The verification status is left as reviewed; expiry is derived from the date everywhere it
+	 * is read, so a renewed date un-expires the document without another review.
+	 */
+	public static function mark_expired_documents() {
+		$docs = get_posts(
+			array(
+				'post_type'      => 'lnkup_document',
+				'post_status'    => 'any',
+				'posts_per_page' => self::EXPIRY_BATCH_SIZE,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_verification_status', 'value' => 'approved' ),
+					array( 'key' => '_lnkup_expiration_date', 'value' => gmdate( 'Y-m-d', strtotime( 'today' ) ), 'compare' => '<', 'type' => 'DATE' ),
+					array( 'key' => '_lnkup_expiration_date', 'value' => '', 'compare' => '!=' ),
+					array( 'key' => self::EXPIRED_AT_META, 'compare' => 'NOT EXISTS' ),
+				),
+			)
+		);
+		foreach ( $docs as $doc_id ) {
+			if ( ! self::is_expired( (string) get_post_meta( $doc_id, '_lnkup_expiration_date', true ) ) ) {
+				continue;
+			}
+			update_post_meta( $doc_id, self::EXPIRED_AT_META, current_time( 'mysql' ) );
+			do_action( 'lnkup_document_expired', (int) $doc_id, (int) get_post_meta( $doc_id, '_lnkup_vendor_user_id', true ) );
+		}
+		return count( $docs );
+	}
+
+	/**
+	 * A new expiration date re-arms the expiry notice.
+	 *
+	 * @param int    $meta_id    Meta ID.
+	 * @param int    $object_id  Post ID.
+	 * @param string $meta_key   Meta key.
+	 * @param mixed  $meta_value New value.
+	 */
+	public static function on_expiration_date_updated( $meta_id, $object_id, $meta_key, $meta_value ) {
+		unset( $meta_id );
+		if ( '_lnkup_expiration_date' === $meta_key && 'lnkup_document' === get_post_type( $object_id ) && ! self::is_expired( (string) $meta_value ) ) {
+			delete_post_meta( $object_id, self::EXPIRED_AT_META );
+		}
 	}
 
 	/**
@@ -201,13 +275,29 @@ class LNKup_Documents {
 	 * @param int   $user_id    User ID.
 	 * @param string $type      Document type.
 	 */
-	public static function upload( $file, $user_id, $type, $expiration = '' ) {
+	public static function upload( $file, $user_id, $type, $expiration = '', $args = array() ) {
 		if ( empty( $file['tmp_name'] ) || UPLOAD_ERR_OK !== (int) ( $file['error'] ?? UPLOAD_ERR_OK ) ) {
 			return new WP_Error( 'no_file', __( 'No file uploaded.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 		$type = sanitize_key( (string) $type );
 		if ( ! array_key_exists( $type, self::document_types() ) ) {
 			return new WP_Error( 'invalid_type', __( 'Choose a document type.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$expiration = self::normalize_expiration( (string) $expiration );
+		if ( is_wp_error( $expiration ) ) {
+			return $expiration;
+		}
+		if ( class_exists( 'LNKup_Trust' ) && ! LNKup_Trust::rate_limit( 'doc_upload_' . (int) $user_id, self::UPLOADS_PER_HOUR, HOUR_IN_SECONDS ) ) {
+			return new WP_Error( 'rate_limited', __( 'Too many uploads in the last hour. Try again later.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
+		}
+		$replaces = absint( $args['replaces'] ?? 0 );
+		if ( $replaces ) {
+			if ( 'lnkup_document' !== get_post_type( $replaces ) || (int) get_post_meta( $replaces, '_lnkup_vendor_user_id', true ) !== (int) $user_id ) {
+				return new WP_Error( 'invalid_replace', __( 'You can only replace your own documents.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+			}
+			if ( (string) get_post_meta( $replaces, '_lnkup_document_type', true ) !== $type ) {
+				return new WP_Error( 'type_mismatch', __( 'A new version must be the same document type.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+			}
 		}
 		if ( (int) ( $file['size'] ?? 0 ) > self::MAX_UPLOAD_BYTES ) {
 			return new WP_Error( 'file_too_large', __( 'Documents must be under 10 MB.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
@@ -255,13 +345,161 @@ class LNKup_Documents {
 		update_post_meta( $doc_id, '_lnkup_vendor_profile_id', $profile_id );
 		update_post_meta( $doc_id, '_lnkup_document_type', sanitize_text_field( $type ) );
 		update_post_meta( $doc_id, '_lnkup_attachment_id', $attachment_id );
-		update_post_meta( $doc_id, '_lnkup_expiration_date', sanitize_text_field( $expiration ) );
+		update_post_meta( $doc_id, '_lnkup_expiration_date', $expiration );
 		update_post_meta( $doc_id, '_lnkup_verification_status', 'pending' );
+		update_post_meta( $doc_id, '_lnkup_display_name', sanitize_text_field( (string) ( $args['display_name'] ?? '' ) ) );
+		foreach ( array( 'insured_name' => '_lnkup_insured_name', 'coverage_amount' => '_lnkup_coverage_amount' ) as $field => $meta ) {
+			if ( isset( $args[ $field ] ) && '' !== (string) $args[ $field ] ) {
+				update_post_meta( $doc_id, $meta, 'coverage_amount' === $field ? (string) max( 0, (float) $args[ $field ] ) : sanitize_text_field( (string) $args[ $field ] ) );
+			}
+		}
+
+		$group_id = $replaces ? ( (int) get_post_meta( $replaces, '_lnkup_document_group_id', true ) ?: $replaces ) : (int) $doc_id;
+		update_post_meta( $doc_id, '_lnkup_document_group_id', $group_id );
+		if ( $replaces ) {
+			update_post_meta( $replaces, '_lnkup_superseded_by', (int) $doc_id );
+			update_post_meta( $doc_id, '_lnkup_version', max( 1, (int) get_post_meta( $replaces, '_lnkup_version', true ) ) + 1 );
+		} else {
+			update_post_meta( $doc_id, '_lnkup_version', 1 );
+		}
 
 		LNKup_Notifications::send_document_pending_admin( $doc_id );
 		do_action( 'lnkup_document_uploaded', (int) $doc_id, (int) $user_id );
+		if ( $replaces ) {
+			do_action( 'lnkup_document_replaced', (int) $doc_id, (int) $replaces, (int) $user_id );
+		}
 
 		return $doc_id;
+	}
+
+	const UPLOADS_PER_HOUR = 30;
+
+	/**
+	 * Validate an optional expiration date and normalize it to Y-m-d.
+	 *
+	 * @param string $raw Raw input.
+	 * @return string|WP_Error
+	 */
+	public static function normalize_expiration( string $raw ) {
+		$raw = trim( sanitize_text_field( $raw ) );
+		if ( '' === $raw ) {
+			return '';
+		}
+		$date = DateTime::createFromFormat( '!Y-m-d', $raw );
+		if ( ! $date || $date->format( 'Y-m-d' ) !== $raw ) {
+			$ts = strtotime( $raw );
+			if ( false === $ts ) {
+				return new WP_Error( 'invalid_expiration', __( 'Enter the expiration date as YYYY-MM-DD.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+			}
+			$raw = gmdate( 'Y-m-d', $ts );
+		}
+		$year = (int) substr( $raw, 0, 4 );
+		if ( $year < 2000 || $year > 2100 ) {
+			return new WP_Error( 'invalid_expiration', __( 'That expiration date does not look right.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		return $raw;
+	}
+
+	/**
+	 * Newest current (non-superseded) document per type for a vendor.
+	 *
+	 * @param int $user_id Vendor user ID.
+	 * @return array<string,WP_Post>
+	 */
+	public static function current_by_type( int $user_id ): array {
+		$by_type = array();
+		foreach ( self::get_for_vendor( $user_id ) as $doc ) {
+			if ( get_post_meta( $doc->ID, '_lnkup_superseded_by', true ) ) {
+				continue;
+			}
+			$type = (string) get_post_meta( $doc->ID, '_lnkup_document_type', true );
+			if ( ! isset( $by_type[ $type ] ) ) {
+				$by_type[ $type ] = $doc;
+			}
+		}
+		return $by_type;
+	}
+
+	/**
+	 * Effective status of one document: missing|pending|rejected|expired|expiring|approved.
+	 *
+	 * @param int $doc_id   Document ID.
+	 * @param int $on_ts    Evaluate expiry against this timestamp (e.g. event date); default today.
+	 */
+	public static function effective_status( int $doc_id, int $on_ts = 0 ): string {
+		if ( ! $doc_id ) {
+			return 'missing';
+		}
+		$ver = (string) get_post_meta( $doc_id, '_lnkup_verification_status', true );
+		if ( 'rejected' === $ver ) {
+			return 'rejected';
+		}
+		if ( ! in_array( $ver, array( 'approved', 'verified' ), true ) ) {
+			return 'pending';
+		}
+		$exp = (string) get_post_meta( $doc_id, '_lnkup_expiration_date', true );
+		if ( '' === $exp ) {
+			return 'approved';
+		}
+		$exp_ts = strtotime( $exp );
+		if ( false === $exp_ts ) {
+			return 'approved';
+		}
+		$on_ts = $on_ts ?: strtotime( 'today' );
+		if ( $exp_ts < $on_ts ) {
+			return 'expired';
+		}
+		return $exp_ts < strtotime( '+30 days', $on_ts ) ? 'expiring' : 'approved';
+	}
+
+	/**
+	 * Record a reviewer decision on a document (keeps reason; never deletes the file).
+	 *
+	 * @param int    $doc_id   Document ID.
+	 * @param string $status   approved|rejected|pending.
+	 * @param string $reason   Rejection reason / note.
+	 * @param int    $reviewer Reviewer user ID.
+	 */
+	public static function set_review_status( int $doc_id, string $status, string $reason = '', int $reviewer = 0 ): bool {
+		if ( 'lnkup_document' !== get_post_type( $doc_id ) || ! in_array( $status, array( 'approved', 'rejected', 'pending' ), true ) ) {
+			return false;
+		}
+		$reviewer = $reviewer ?: get_current_user_id();
+		// Reason first: the status meta change fires lnkup_document_status_changed (lifecycle hooks), whose listeners read it.
+		if ( 'rejected' === $status ) {
+			update_post_meta( $doc_id, '_lnkup_rejection_reason', sanitize_textarea_field( $reason ) );
+			update_post_meta( $doc_id, '_lnkup_admin_notes', sanitize_textarea_field( $reason ) );
+		} else {
+			delete_post_meta( $doc_id, '_lnkup_rejection_reason' );
+		}
+		update_post_meta( $doc_id, '_lnkup_reviewed_by', $reviewer );
+		update_post_meta( $doc_id, '_lnkup_reviewed_at', current_time( 'mysql' ) );
+		update_post_meta( $doc_id, '_lnkup_verification_status', $status );
+		$history   = json_decode( (string) get_post_meta( $doc_id, '_lnkup_review_history', true ) ?: '[]', true );
+		$history   = is_array( $history ) ? $history : array();
+		$history[] = array(
+			'status' => $status,
+			'reason' => sanitize_textarea_field( $reason ),
+			'by'     => $reviewer,
+			'at'     => current_time( 'mysql' ),
+		);
+		update_post_meta( $doc_id, '_lnkup_review_history', wp_json_encode( array_slice( $history, -30 ) ) );
+		do_action( 'lnkup_document_reviewed', $doc_id, $status, $reviewer, $reason );
+		return true;
+	}
+
+	/**
+	 * Safe Content-Disposition header value for a document download.
+	 *
+	 * @param int    $doc_id Document ID.
+	 * @param string $file   Absolute file path.
+	 */
+	public static function download_filename( int $doc_id, string $file ): string {
+		$type = (string) get_post_meta( $doc_id, '_lnkup_document_type', true );
+		$ext  = strtolower( (string) pathinfo( $file, PATHINFO_EXTENSION ) );
+		$ext  = in_array( $ext, array( 'pdf', 'jpg', 'jpeg', 'png' ), true ) ? $ext : 'bin';
+		$name = sanitize_file_name( ( $type ? $type : 'document' ) . '-' . $doc_id . '.' . $ext );
+		return 'attachment; filename="' . str_replace( array( '"', "\r", "\n" ), '', $name ) . '"';
 	}
 
 	/**
@@ -294,15 +532,7 @@ class LNKup_Documents {
 			'sales_tax_certificate',
 		);
 		$types      = self::document_types();
-		$docs       = self::get_for_vendor( $user_id );
-		$by_type    = array();
-
-		foreach ( $docs as $doc ) {
-			$type = get_post_meta( $doc->ID, '_lnkup_document_type', true );
-			if ( ! isset( $by_type[ $type ] ) ) {
-				$by_type[ $type ] = $doc;
-			}
-		}
+		$by_type    = self::current_by_type( (int) $user_id );
 
 		$verified = 0;
 		$attention = 0;
@@ -319,7 +549,10 @@ class LNKup_Documents {
 				$ver_status = get_post_meta( $doc->ID, '_lnkup_verification_status', true );
 				$expires    = get_post_meta( $doc->ID, '_lnkup_expiration_date', true );
 				if ( 'approved' === $ver_status ) {
-					if ( $expires && strtotime( $expires ) <= strtotime( '+30 days' ) ) {
+					if ( self::is_expired( (string) $expires ) ) {
+						$status = 'expired';
+						$attention++;
+					} elseif ( $expires && strtotime( $expires ) <= strtotime( '+30 days' ) ) {
 						$status = 'expiring';
 						$attention++;
 					} else {
@@ -327,7 +560,7 @@ class LNKup_Documents {
 						$verified++;
 					}
 				} else {
-					$status = 'pending';
+					$status = 'rejected' === $ver_status ? 'rejected' : 'pending';
 					$attention++;
 				}
 			} else {
@@ -403,8 +636,10 @@ class LNKup_Documents {
 		}
 
 		$mime = get_post_mime_type( $attachment_id );
-		header( 'Content-Type: ' . $mime );
-		header( 'Content-Disposition: attachment; filename="' . basename( $file ) . '"' );
+		header( 'Content-Type: ' . ( $mime ? $mime : 'application/octet-stream' ) );
+		header( 'Content-Disposition: ' . self::download_filename( (int) $doc_id, (string) $file ) );
+		header( 'X-Content-Type-Options: nosniff' );
+		nocache_headers();
 		readfile( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_readfile
 		exit;
 	}

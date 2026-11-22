@@ -1422,7 +1422,7 @@ class LNKup_Financial_Service {
 			return (bool) LNKUP_ALLOW_PAYMENT_SIMULATION;
 		}
 		$settings = lnkup_get_settings();
-		if ( empty( $settings['test_mode'] ) ) {
+		if ( empty( $settings['test_mode'] ) || ! ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ) {
 			return false;
 		}
 		$provider = self::provider();
@@ -1627,21 +1627,21 @@ class LNKup_Financial_Service {
 		}
 
 		if ( is_wp_error( $event ) ) {
-			// Any signing secret configured ⇒ never accept unsigned payloads (even in test_mode).
-			// Dev-only: unsigned JSON allowed only when no secret AND test_mode is on.
-			if ( ! empty( $secrets ) || empty( $settings['test_mode'] ) ) {
-				return new WP_REST_Response( array( 'error' => $event->get_error_message() ), 400 );
-			}
-			$event = json_decode( $payload, true );
+			// Unsigned payloads are never accepted, including in test mode.
+			return new WP_REST_Response( array( 'error' => $event->get_error_message() ), 400 );
 		}
 
-		if ( ! is_array( $event ) || empty( $event['type'] ) ) {
+		if ( ! is_array( $event ) || empty( $event['type'] ) || empty( $event['id'] ) ) {
 			return new WP_REST_Response( array( 'received' => true ), 200 );
 		}
 
 		$log_id = LNKup_Stripe_Webhooks::log_event( $event );
 		if ( LNKup_Stripe_Webhooks::is_event_processed( $log_id ) ) {
 			return new WP_REST_Response( array( 'received' => true, 'duplicate' => true ), 200 );
+		}
+		// Atomic claim: a concurrent delivery of the same event must not process it twice.
+		if ( $log_id && ! LNKup_Stripe_Webhooks::claim_event( $log_id ) ) {
+			return new WP_REST_Response( array( 'received' => true, 'duplicate' => true, 'in_flight' => true ), 200 );
 		}
 		$result = LNKup_Stripe_Webhooks::process_event( $event, $log_id );
 		if ( is_wp_error( $result ) ) {

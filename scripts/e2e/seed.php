@@ -364,7 +364,56 @@ if ( $app_free ) {
 	}
 }
 
+// Booking & Application OS: wizard + multi-stop flags (local only), a fresh slot for draft specs,
+// and a three-stop tour. Vendor B's applications and drafts on these slots reset every run.
+$apply_settings = get_option( 'lnkup_settings', array() );
+$apply_settings = is_array( $apply_settings ) ? $apply_settings : array();
+$apply_settings['apply_wizard_enabled']     = true;
+$apply_settings['tour_multi_apply_enabled'] = true;
+$apply_settings['matching_enabled']         = true;
+$apply_settings['matching_tours_enabled']   = true;
+update_option( 'lnkup_settings', $apply_settings );
+
+list( $event_draft, $draft_opps ) = lnkup_e2e_event( 'apply-os-draft', $org_a, 'E2E Draft Resume Fair', array( 'booth' => array( 'title' => 'Draft Booth', 'spots' => 20, 'fee' => 120 ) ), 50 );
+$tour_id = lnkup_e2e_post( 'tour:apply-os', array( 'post_type' => 'lnkup_tour', 'post_title' => 'E2E Southern Tour' ), array( '_lnkup_organizer_user_id' => $org_a, '_lnkup_tour_type' => 'tour' ) );
+$tour_opps = array();
+foreach ( array( 'houston' => 55, 'atlanta' => 62, 'nashville' => 69 ) as $stop_key => $days ) {
+	list( $stop_event, $stop_opps ) = lnkup_e2e_event( "tour-{$stop_key}", $org_a, 'E2E Tour ' . ucfirst( $stop_key ), array( 'booth' => array( 'title' => 'Tour Booth', 'spots' => 20, 'fee' => 200 ) ), $days );
+	update_post_meta( $stop_event, '_lnkup_tour_id', $tour_id );
+	update_post_meta( $stop_event, '_lnkup_city', ucfirst( $stop_key ) );
+	LNKup_Marketplace_Index::sync_opportunity( $stop_opps['booth'] );
+	$tour_opps[] = (int) $stop_opps['booth'];
+}
+foreach ( array_merge( array( (int) $draft_opps['booth'] ), $tour_opps ) as $reset_opp ) {
+	$reset = get_posts(
+		array(
+			'post_type'      => 'lnkup_application',
+			'post_status'    => array( 'publish', 'lnkup_app_draft' ),
+			'posts_per_page' => -1,
+			'fields'         => 'ids',
+			'meta_query'     => array(
+				'relation' => 'OR',
+				array( 'key' => '_lnkup_opportunity_id', 'value' => $reset_opp ),
+				array( 'key' => '_lnkup_draft_opportunity_id', 'value' => $reset_opp ),
+			),
+		)
+	);
+	foreach ( $reset as $reset_id ) {
+		$reset_pay = LNKup_Payments::get_for_application( $reset_id );
+		if ( $reset_pay ) {
+			wp_delete_post( $reset_pay->ID, true );
+		}
+		wp_delete_post( $reset_id, true );
+	}
+	LNKup_Opportunity_Inventory::recompute( $reset_opp );
+}
+foreach ( get_posts( array( 'post_type' => 'lnkup_application', 'post_status' => 'lnkup_app_draft', 'posts_per_page' => -1, 'fields' => 'ids', 'meta_key' => '_lnkup_draft_tour_id', 'meta_value' => $tour_id ) ) as $tour_draft ) {
+	wp_delete_post( $tour_draft, true );
+}
+
 $env = array(
+	'PLAYWRIGHT_DRAFT_OPPORTUNITY_ID'       => $draft_opps['booth'],
+	'PLAYWRIGHT_TOUR_ID'                    => $tour_id,
 	'PLAYWRIGHT_BASE_URL'                   => home_url(),
 	'PLAYWRIGHT_PASSWORD'                   => LNKUP_E2E_PASSWORD,
 	'PLAYWRIGHT_VENDOR_USER'                => 'e2e_vendor_a',
