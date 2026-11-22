@@ -18,6 +18,19 @@ Architecture: [PHASE_27_VENDOR_PASSPORT.md](PHASE_27_VENDOR_PASSPORT.md) · Rele
 - **New tables:** `lnkup_vendor_verification`, `lnkup_document_share`, `lnkup_review_index`. Admin: LNKup → Vendor Passport & Trust.
 - **Clients:** Expo `/(vendor)/passport` + organizer Passport panel + Documents shares; Next.js review responses and indicator-based public mapper.
 
+### Organizer Onboarding v2 — guided setup (no schema change; no plugin version bump)
+
+Architecture: SYSTEM_OVERVIEW §9.21. Off by default: `organizer_onboarding_v2_enabled` (LNKup → Settings → "Organizer guided setup (v2)").
+
+- **One onboarding model:** `LNKup_Organizer_Onboarding_Flow` stores only the organizer's choices (user meta `_lnkup_onboarding_state`: formats, current step, skipped steps, dismissed, started/completed). Step status always comes from `LNKup_Organizer_Activation`. Steps: account → organization → format → first event → payouts → share. Format and payouts can be skipped.
+- **REST:** `GET/PATCH lnkup/v1/organizer/onboarding` (404 when the flag is off; writes are self-only).
+- **Signup:** organizer signup asks for organization name, city/state and an optional category (web form, `/auth/register`, Expo). These fields are required only on the web form with the flag on, but are saved whenever they are sent. New organizers land on **Get started**, and organizers with unfinished setup or draft events/tours are sent back there at login.
+- **Get started:** format cards route tours/series/recurring to Tours & Series when Portfolio OS is on (otherwise to Create Event with a note), a resume-drafts card, cover/Instagram/TikTok/service cities/category on the organization step, inline payout status with a "Finish payout setup" link, tour public links and an invite CTA in Share, and "Setup complete" copy. `?view=start&step=` focuses a step.
+- **Cleanup:** with the flag on, the Overview no longer shows the old checklist (the Get started banner remains). The legacy organizer welcome/tour modal (`lnkup_organizer_welcome_seen`) was removed. `LNKup_Activation_Emails` skips the organizer daily drip whenever the Comms `flow_onboarding` or `flow_activation` flow is on, and skips the organizer welcome when `flow_onboarding` is on.
+- **Growth/Comms:** lead activity `onboarding_format_selected` / `onboarding_completed`. Comms `organizer_onboarding_step` messages stop once guided setup is complete or dismissed.
+- **Apps:** the Next.js `/api/organizer/onboarding` BFF reads and writes WP state (falls back to its cookie when the flag is off). Expo shows a **Continue setup** card on organizer home.
+- **Tests:** `scripts/e2e/php/organizer-onboarding-flow-test.php`, Connect "verifying" case in `organizer-activation-test.php`, `tests/e2e/organizer-onboarding.spec.ts` (seed: `scripts/e2e/seed-onboarding.php`).
+
 ### Organizer Portfolio OS — tours, recurring series, templates (portfolio schema 1; no plugin version bump)
 
 Architecture: SYSTEM_OVERVIEW §9.24. Off by default: `portfolio_os_enabled` (everyone) or `portfolio_os_user_ids` (early-access organizer IDs) under LNKup → Settings → Vendor applications.

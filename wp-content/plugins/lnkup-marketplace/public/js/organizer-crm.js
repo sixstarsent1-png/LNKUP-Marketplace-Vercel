@@ -1483,50 +1483,6 @@
     }).then(function (r) { return r.json(); });
   }
 
-  function closeOrganizerWelcome(markSeen) {
-    var modal = document.getElementById('lnkup-organizer-welcome-modal');
-    if (modal) {
-      modal.hidden = true;
-    }
-    document.body.classList.remove('lnkup-modal-open');
-    if (markSeen) {
-      postOrganizerAjax('lnkup_organizer_welcome_seen').catch(function () { /* ignore */ });
-    }
-    maybeStartOrganizerTourAfterWelcome();
-  }
-
-  function openOrganizerWelcome() {
-    var modal = document.getElementById('lnkup-organizer-welcome-modal');
-    if (!modal) {
-      return;
-    }
-    modal.hidden = false;
-    document.body.classList.add('lnkup-modal-open');
-  }
-
-  function initOrganizerWelcome() {
-    var modal = document.getElementById('lnkup-organizer-welcome-modal');
-    if (!modal) {
-      return;
-    }
-    openOrganizerWelcome();
-    modal.addEventListener('click', function (e) {
-      if (e.target.closest('[data-organizer-welcome-start]')) {
-        e.preventDefault();
-        closeOrganizerWelcome(true);
-        var checklist = document.getElementById('lnkup-launch-checklist');
-        if (checklist && checklist.scrollIntoView) {
-          checklist.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        return;
-      }
-      if (e.target.closest('[data-organizer-welcome-skip]') || e.target.closest('[data-organizer-welcome-close]')) {
-        e.preventDefault();
-        closeOrganizerWelcome(true);
-      }
-    });
-  }
-
   function initOrganizerTutorialDismiss() {
     document.addEventListener('click', function (e) {
       var dismissBtn = e.target.closest('[data-organizer-tutorial-dismiss]');
@@ -1539,7 +1495,6 @@
         if (checklist) {
           checklist.hidden = true;
         }
-        closeOrganizerWelcome(false);
       }).catch(function () { /* ignore */ });
     });
   }
@@ -1558,119 +1513,6 @@
         window.location.href = target;
       });
     });
-  }
-
-  function postTourAjax(action, role) {
-    var body = new FormData();
-    body.append('action', action);
-    body.append('lnkup_nonce', ajax.nonce || '');
-    body.append('role', role || 'organizer');
-    return fetch(ajax.url || '/wp-admin/admin-ajax.php', {
-      method: 'POST',
-      credentials: 'same-origin',
-      body: body
-    }).then(function (r) { return r.json(); });
-  }
-
-  function initOrganizerDashboardTour() {
-    var modal = document.getElementById('lnkup-organizer-tour-modal');
-    if (!modal) {
-      return;
-    }
-    var role = 'organizer';
-    var slides = modal.querySelectorAll('[data-tour-slide]');
-    var index = 0;
-    var progress = modal.querySelector('[data-tour-progress]');
-    var backBtn = modal.querySelector('[data-tour-back]');
-    var nextBtn = modal.querySelector('[data-tour-next]');
-    var doneBtn = modal.querySelector('[data-tour-done]');
-
-    function renderProgress() {
-      if (!progress) return;
-      var dots = '';
-      for (var i = 0; i < slides.length; i++) {
-        dots += '<span class="lnkup-tour__dot' + (i === index ? ' is-active' : '') + '"></span>';
-      }
-      progress.innerHTML = dots;
-    }
-
-    function showSlide(i) {
-      index = Math.max(0, Math.min(i, slides.length - 1));
-      slides.forEach(function (slide, si) {
-        slide.hidden = si !== index;
-      });
-      if (backBtn) backBtn.hidden = index === 0;
-      var last = index >= slides.length - 1;
-      if (nextBtn) nextBtn.hidden = last;
-      if (doneBtn) doneBtn.hidden = !last;
-      renderProgress();
-    }
-
-    function openTour() {
-      modal.hidden = false;
-      document.body.classList.add('lnkup-modal-open');
-      showSlide(0);
-    }
-
-    function closeTour(markSeen) {
-      modal.hidden = true;
-      document.body.classList.remove('lnkup-modal-open');
-      if (markSeen) {
-        postTourAjax('lnkup_dashboard_tour_seen', role).catch(function () { /* ignore */ });
-        modal.setAttribute('data-tour-auto-open', '0');
-      }
-    }
-
-    modal.addEventListener('click', function (e) {
-      if (e.target.closest('[data-tour-skip]')) {
-        e.preventDefault();
-        closeTour(true);
-        return;
-      }
-      if (e.target.closest('[data-tour-back]')) {
-        e.preventDefault();
-        showSlide(index - 1);
-        return;
-      }
-      if (e.target.closest('[data-tour-next]')) {
-        e.preventDefault();
-        showSlide(index + 1);
-        return;
-      }
-      if (e.target.closest('[data-tour-done]')) {
-        e.preventDefault();
-        closeTour(true);
-      }
-    });
-
-    document.addEventListener('click', function (e) {
-      var replay = e.target.closest('[data-kb-replay-tour]');
-      if (!replay || replay.getAttribute('data-kb-role') !== 'organizer') {
-        return;
-      }
-      e.preventDefault();
-      postTourAjax('lnkup_reset_dashboard_tour', 'organizer').then(function () {
-        modal.setAttribute('data-tour-auto-open', '1');
-        openTour();
-      }).catch(function () {
-        openTour();
-      });
-    });
-
-    window.lnkupOpenOrganizerTour = openTour;
-
-    var welcome = document.getElementById('lnkup-organizer-welcome-modal');
-    var shouldAuto = modal.getAttribute('data-tour-auto-open') === '1';
-    if (shouldAuto && (!welcome || welcome.hidden)) {
-      openTour();
-    }
-  }
-
-  function maybeStartOrganizerTourAfterWelcome() {
-    var tour = document.getElementById('lnkup-organizer-tour-modal');
-    if (tour && tour.getAttribute('data-tour-auto-open') === '1' && window.lnkupOpenOrganizerTour) {
-      window.lnkupOpenOrganizerTour();
-    }
   }
 
   /**
@@ -1713,10 +1555,8 @@
     if (document.getElementById('lnkup-organizer-crm')) {
       loadWidgets();
       initLaunchChecklistToggle();
-      initOrganizerWelcome();
       initOrganizerTutorialDismiss();
       initKnowledgeBaseReset();
-      initOrganizerDashboardTour();
       if (window.LNKupUI && typeof LNKupUI.animateKpiCards === 'function') {
         LNKupUI.animateKpiCards(document.getElementById('lnkup-crm-stats'));
       }

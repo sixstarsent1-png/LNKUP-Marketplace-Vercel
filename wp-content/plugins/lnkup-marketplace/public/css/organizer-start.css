@@ -262,3 +262,84 @@
 		flex-direction: column;
 	}
 }
+
+/* Guided setup v2: format cards, resume card, payout status, focused step. */
+.lnkup-start__formats fieldset {
+	display: grid;
+	gap: 0.625rem;
+	margin: 0.75rem 0;
+	padding: 0;
+	border: 0;
+}
+
+.lnkup-start__format {
+	display: grid;
+	gap: 0.25rem;
+	padding: 0.875rem 1rem 0.875rem 2.5rem;
+	position: relative;
+	border: 1px solid var(--lnkup-border, #e5e5e5);
+	border-radius: 0.875rem;
+	background: #fff;
+	cursor: pointer;
+}
+
+.lnkup-start__format input {
+	position: absolute;
+	left: 1rem;
+	top: 1.05rem;
+}
+
+.lnkup-start__format.is-selected,
+.lnkup-start__format:focus-within {
+	border-color: #0a0a0a;
+	box-shadow: 0 0 0 3px var(--lnkup-lime, #b3ee55);
+}
+
+.lnkup-start__resume {
+	margin: 1rem 0;
+	padding: 1rem;
+	border: 1px solid #d9f99d;
+	border-radius: 1rem;
+	background: #f7fee7;
+}
+
+.lnkup-start__resume h3 {
+	margin: 0 0 0.5rem;
+	font-size: 1rem;
+}
+
+.lnkup-start__resume ul {
+	display: grid;
+	gap: 0.5rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.lnkup-start__resume li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+.lnkup-start__payout {
+	display: grid;
+	gap: 0.5rem;
+	margin-top: 0.75rem;
+}
+
+.lnkup-start__payout p {
+	margin: 0;
+}
+
+.lnkup-start__stage.is-focused {
+	box-shadow: 0 0 0 3px var(--lnkup-lime, #b3ee55);
+}
+
+@media (min-width: 720px) {
+	.lnkup-start__formats fieldset {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}

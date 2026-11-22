@@ -109,6 +109,7 @@ $lnkup_core_files = array(
 	'includes/class-organizer-launch-rest.php',
 	'includes/class-organizer-launch-checklist.php',
 	'includes/class-organizer-activation.php',
+	'includes/class-organizer-onboarding-flow.php',
 	'includes/class-public-embed.php',
 	'includes/class-organizer-setups.php',
 	'includes/class-vendor-getting-started.php',
@@ -449,6 +450,7 @@ function lnkup_marketplace_init() {
 	LNKup_Organizer_CRM_REST::init();
 	LNKup_Organizer_Launch_REST::init();
 	LNKup_Organizer_Activation::init();
+	LNKup_Organizer_Onboarding_Flow::init();
 	LNKup_Public_Embed::init();
 	LNKup_Organizer_Setups::init();
 	LNKup_Organizer_CRM_Admin::init();
@@ -873,6 +875,7 @@ function lnkup_get_settings() {
 		'apply_wizard_enabled'                    => false,
 		'tour_multi_apply_enabled'                => false,
 		'portfolio_os_enabled'                    => false,
+		'organizer_onboarding_v2_enabled'         => false,
 		'portfolio_os_user_ids'                   => '',
 		'application_review_v2_enabled'           => false,
 		'waitlist_offers_enabled'                 => false,

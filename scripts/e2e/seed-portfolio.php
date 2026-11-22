@@ -17,10 +17,12 @@ if ( ! $organizer ) {
 LNKup_Portfolio_Tables::maybe_upgrade();
 $settings = get_option( 'lnkup_settings', array() );
 $settings = is_array( $settings ) ? $settings : array();
+$allow    = array_filter( array_map( 'absint', explode( ',', (string) ( $settings['portfolio_os_user_ids'] ?? '' ) ) ) );
+$allow[]  = (int) $organizer->ID;
 $settings['portfolio_os_enabled']     = false;
-$settings['portfolio_os_user_ids']    = (string) (int) $organizer->ID;
+$settings['portfolio_os_user_ids']    = implode( ',', array_unique( $allow ) );
 $settings['matching_enabled']         = true;
 $settings['matching_tours_enabled']   = true;
 $settings['tour_multi_apply_enabled'] = true;
 update_option( 'lnkup_settings', $settings, false );
-echo 'Portfolio OS enabled for e2e_org_a (#' . (int) $organizer->ID . ") only.\n";
+echo 'Portfolio OS enabled for e2e_org_a (#' . (int) $organizer->ID . ") via allowlist.\n";

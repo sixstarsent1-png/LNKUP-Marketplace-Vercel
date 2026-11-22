@@ -25,6 +25,16 @@ class LNKup_Feature_Flags {
 	const ORG_TEAMS          = 'trust_org_teams';
 	const PORTFOLIO          = 'portfolio_os_enabled';
 	const PORTFOLIO_USERS    = 'portfolio_os_user_ids';
+	const ONBOARDING_V2      = 'organizer_onboarding_v2_enabled';
+
+	/**
+	 * Organizer onboarding v2: progressive signup fields, Get started routing by event format,
+	 * resumable server-side state and the /organizer/onboarding REST contract. Global only:
+	 * signup happens before there is a user to put in a rollout cohort.
+	 */
+	public static function onboarding_v2() {
+		return self::enabled( self::ONBOARDING_V2 );
+	}
 
 	/**
 	 * @param string $key Settings key.
