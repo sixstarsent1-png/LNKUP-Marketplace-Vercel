@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { buildOrganizerQueueBucketsFromRequests } from "@/lib/api/organizer-crm"
 import { isLiveApiEnabled } from "@/lib/api/config"
-import { mapOrganizerRequestList } from "@/lib/api/organizer-requests"
+import { mapOrganizerRequestList, type WpOrganizerApplicationItem } from "@/lib/api/organizer-requests"
 import { mapOrganizerReputationPreview } from "@/lib/api/vendor-reputation"
 import { wpFetchJson } from "@/lib/api/wp-fetch"
 import { authRequiredResponse, toErrorResponse } from "@/lib/api/normalize-wp-error"
@@ -45,7 +45,7 @@ export async function GET() {
     }
 
     const auth = toWpAuth(session)
-    const data = await wpFetchJson<{ items?: unknown[]; total?: number }>("/applications/organizer", { auth })
+    const data = await wpFetchJson<{ items?: WpOrganizerApplicationItem[]; total?: number }>("/applications/organizer", { auth })
     let items = mapOrganizerRequestList(data)
 
     if (isLiveApiEnabled()) {

@@ -392,15 +392,14 @@ export function OrganizerVendorProfileDrawer({
               <>
                 <Separator />
                 <Button
-                  asChild
                   variant="outline"
                   className="w-full"
                   data-testid="organizer-drawer-crm-link"
+                  nativeButton={false}
+                  render={<a href={profile.wordpressCrmUrl} target="_blank" rel="noopener noreferrer" />}
                 >
-                  <a href={profile.wordpressCrmUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="size-4" />
-                    Open in LNKup CRM
-                  </a>
+                  <ExternalLink className="size-4" />
+                  Open in LNKup CRM
                 </Button>
               </>
             )}

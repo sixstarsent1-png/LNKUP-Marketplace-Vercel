@@ -262,6 +262,8 @@ export type WpSavedSearchItem = {
   last_checked_at?: string
   new_match_count?: number
   is_paused?: boolean
+  status?: "active" | "paused" | "deleted" | string
+  next_digest_at?: string
   filter_summary?: Array<{ key?: string; value?: string; label?: string }>
 }
 

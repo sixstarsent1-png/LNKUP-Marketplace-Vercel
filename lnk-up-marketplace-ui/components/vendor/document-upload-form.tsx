@@ -91,7 +91,7 @@ export function DocumentUploadForm({ uploading, error, onUpload }: DocumentUploa
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="document-type">Document type</Label>
-        <Select value={documentType} onValueChange={setDocumentType}>
+        <Select value={documentType} onValueChange={(value) => setDocumentType(value ?? "")}>
           <SelectTrigger id="document-type" className="w-full">
             <SelectValue placeholder="Select type" />
           </SelectTrigger>

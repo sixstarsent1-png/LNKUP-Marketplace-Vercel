@@ -169,6 +169,12 @@ export function mapVendorWalletSummary(
   }
 }
 
+function eventNameOf(item: Record<string, unknown>): string | undefined {
+  if (item.event_name) return String(item.event_name)
+  const event = item.event as { title?: unknown } | null | undefined
+  return event?.title ? String(event.title) : undefined
+}
+
 export function mapVendorActivityItem(item: Record<string, unknown>, index: number): VendorFinancialActivityItem {
   const typeRaw = String(item.type ?? item.activity_type ?? item.kind ?? "unknown").toLowerCase()
   let type: VendorFinancialActivityItem["type"] = "unknown"
@@ -186,11 +192,7 @@ export function mapVendorActivityItem(item: Record<string, unknown>, index: numb
     status = statusRaw as VendorFinancialActivityItem["status"]
   }
 
-  const eventName = item.event_name
-    ? String(item.event_name)
-    : item.event?.title
-      ? String((item.event as { title?: string }).title)
-      : undefined
+  const eventName = eventNameOf(item)
 
   let label = String(item.label ?? item.title ?? item.description ?? "Activity")
   if (!item.label && !item.title) {
@@ -247,7 +249,7 @@ export function mapVendorInvoiceOrReceipt(
     id,
     type,
     number: item.number ? String(item.number) : item.invoice_number ? String(item.invoice_number) : undefined,
-    eventName: item.event_name ? String(item.event_name) : item.event?.title ? String((item.event as { title?: string }).title) : undefined,
+    eventName: eventNameOf(item),
     amount: typeof item.amount === "number" ? item.amount : Number(item.amount ?? item.total ?? 0) || undefined,
     currency: String(item.currency ?? "USD"),
     status,
@@ -419,7 +421,6 @@ export function mockVendorWallet(): VendorWalletResponse {
       eventImage: r.eventImage,
       eventDate: r.date,
       city: r.city,
-      state: r.state,
       status: mockStatusToNormalized(r.status),
       vendorFee: r.vendorFee,
       amountDue: r.vendorFee,

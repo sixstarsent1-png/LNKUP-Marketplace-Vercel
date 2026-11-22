@@ -7,6 +7,8 @@ import { getSession, toWpAuth } from "@/lib/auth/session"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
+type VendorProfileIntel = NonNullable<Parameters<typeof mapOrganizerVendorProfile>[2]>
+
 export async function GET(request: Request, context: RouteContext) {
   try {
     const session = await getSession()
@@ -21,23 +23,13 @@ export async function GET(request: Request, context: RouteContext) {
 
     const profile = await wpFetchJson<Record<string, unknown>>(`/crm/vendors/${id}`, { auth })
 
-    let intel:
-      | {
-          message?: string
-          readiness_label?: string
-          readiness?: unknown
-          flags?: unknown[]
-        }
-      | undefined
+    let intel: VendorProfileIntel | undefined
     if (applicationId) {
       try {
-        const intelData = await wpFetchJson<{
-          message?: string
-          readiness_label?: string
-          readiness?: unknown
-          flags?: unknown[]
-          profile?: { flags?: unknown[] }
-        }>(`/crm/applications/${applicationId}/intel`, { auth })
+        const intelData = await wpFetchJson<VendorProfileIntel & { profile?: { flags?: unknown[] } }>(
+          `/crm/applications/${applicationId}/intel`,
+          { auth },
+        )
         intel = {
           ...intelData,
           flags: intelData.flags ?? intelData.profile?.flags,

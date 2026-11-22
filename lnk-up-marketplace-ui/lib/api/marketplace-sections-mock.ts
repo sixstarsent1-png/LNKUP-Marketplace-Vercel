@@ -32,8 +32,7 @@ export function buildMockRails(ids: MarketplaceRailId[]): MarketplaceRail[] {
         items = all.slice(1, 4)
         break
       case "most_saved":
-        items = all.filter((e) => e.saved).slice(0, 4)
-        if (items.length === 0) items = all.slice(2, 5)
+        items = all.slice(2, 5)
         break
     }
     if (items.length === 0) continue

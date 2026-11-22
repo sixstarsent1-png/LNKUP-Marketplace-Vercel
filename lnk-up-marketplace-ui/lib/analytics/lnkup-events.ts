@@ -110,7 +110,7 @@ export type LnkupAnalyticsEventName =
 export type LnkupAnalyticsEvent = {
   event: LnkupAnalyticsEventName
   source?: string
-  opportunityId?: string
+  opportunityId?: string | number
   eventId?: string
   requestId?: string
   metadata?: Record<string, string | number | boolean | null>
