@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 import { Redirect, router, useLocalSearchParams, type Href } from "expo-router"
@@ -9,10 +9,14 @@ import { BackLink } from "@/components/ui/back-link"
 import { Button } from "@/components/ui/button"
 import { FormField } from "@/components/ui/form-field"
 import { SectionTitle } from "@/components/ui/typography"
+import { ApplyProfileCard } from "@/components/apply/apply-profile-card"
 import { ApplyQuestions } from "@/components/apply/apply-questions"
 import {
+  changedProfileFields,
   DECLINED_MESSAGE,
   fetchApplyContext,
+  fetchApplyDraft,
+  fetchPriceQuote,
   newIdempotencyKey,
   reapplyNote,
   saveApplyDraft,
@@ -21,8 +25,12 @@ import {
   type ApplyAnswerValue,
   type ApplyContext,
   type DraftInput,
+  type PriceQuote,
+  type ProfileOverrideField,
+  type ProfileOverrides,
 } from "@/lib/api/apply"
 import { appErrorFromWp, WpFetchError, type AppErrorShape } from "@/lib/api/errors"
+import { formatMoney } from "@/lib/api/vendor-wallet"
 import { useAuth } from "@/lib/auth/auth-context"
 import { constrainedColumnStyle } from "@/lib/layout/use-breakpoint"
 import { safeBack } from "@/lib/navigation/safe-back"
@@ -43,6 +51,8 @@ export default function ApplyScreen() {
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null)
   const [setupNotes, setSetupNotes] = useState("")
   const [answers, setAnswers] = useState<Record<string, ApplyAnswerValue>>({})
+  const [overrides, setOverrides] = useState<ProfileOverrides>({})
+  const [quote, setQuote] = useState<PriceQuote | null>(null)
   const [invalid, setInvalid] = useState<string[]>([])
   const [priceChanged, setPriceChanged] = useState(false)
   const [blockedCode, setBlockedCode] = useState<string | null>(null)
@@ -69,6 +79,8 @@ export default function ApplyScreen() {
     setSubmittedMessage(null)
     try {
       const data = await fetchApplyContext(id, auth)
+      // A failure here fails the load: saving without the stored overrides would erase them.
+      const fullDraft = data.draft && data.features.drafts ? await fetchApplyDraft(id, auth) : null
       setContext(data)
       setCategory(data.defaultCategory ?? data.categories[0] ?? "")
       if (data.draft && data.features.drafts) {
@@ -77,6 +89,7 @@ export default function ApplyScreen() {
         setMessage(data.draft.fields.message)
         setSetupNotes(data.draft.fields.setupNotes)
         setAnswers(data.draft.answers)
+        setOverrides(fullDraft?.profileOverrides ?? {})
       }
     } catch (err) {
       setError(appErrorFromWp(err))
@@ -94,6 +107,28 @@ export default function ApplyScreen() {
       if (saveTimer.current) clearTimeout(saveTimer.current)
     },
     [],
+  )
+
+  const quoteOpportunity = context?.canApply ? context.opportunityId : 0
+  useEffect(() => {
+    if (!quoteOpportunity || !auth) return
+    let cancelled = false
+    // Fee breakdown is advisory; on failure the single fee row stays.
+    fetchPriceQuote(quoteOpportunity, category, auth)
+      .then((next) => {
+        if (!cancelled) setQuote(next)
+      })
+      .catch(() => {
+        if (!cancelled) setQuote(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [auth, category, quoteOpportunity])
+
+  const changedProfile = useMemo(
+    () => changedProfileFields(overrides, context?.profile ?? null),
+    [context?.profile, overrides],
   )
 
   const saveDraftNow = useCallback(
@@ -127,9 +162,16 @@ export default function ApplyScreen() {
       message: next.message ?? message,
       setupNotes: next.setupNotes ?? setupNotes,
       answers: next.answers ?? answers,
+      profileOverrides: next.profileOverrides ?? changedProfile,
     }
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => void saveDraftNow(input), 900)
+  }
+
+  function handleProfileChange(field: ProfileOverrideField, value: string) {
+    const next = { ...overrides, [field]: value }
+    setOverrides(next)
+    queueDraftSave({ profileOverrides: changedProfileFields(next, context?.profile ?? null) })
   }
 
   if (!isAuthenticated) {
@@ -163,7 +205,13 @@ export default function ApplyScreen() {
     try {
       let result
       if (draftsOn) {
-        const saved = await saveDraftNow({ selectedCategory: category, message, setupNotes, answers })
+        const saved = await saveDraftNow({
+          selectedCategory: category,
+          message,
+          setupNotes,
+          answers,
+          profileOverrides: changedProfile,
+        })
         if (!saved) {
           setError({ code: "unknown", title: "Couldn't save", message: "We couldn't save your application. Try again.", retryable: true })
           return
@@ -181,6 +229,7 @@ export default function ApplyScreen() {
             message,
             setupNotes,
             answers,
+            profileOverrides: changedProfile,
             acceptedTerms: true,
             idempotencyKey: idempotencyKey.current,
           },
@@ -289,10 +338,26 @@ export default function ApplyScreen() {
                   >
                     <Text style={styles.detailsLink}>View full details</Text>
                   </Pressable>
-                  <View style={styles.feeRow}>
-                    <Text style={styles.feeLabel}>Vendor fee</Text>
-                    <Text style={styles.feeValue}>{feeLabel}</Text>
-                  </View>
+                  {quote && quote.total > 0 ? (
+                    <View style={styles.quoteCard} testID="apply-price-quote">
+                      {quote.lines.map((line) => (
+                        <View key={line.key} style={styles.quoteLine}>
+                          <Text style={styles.feeLabel}>{line.label}</Text>
+                          <Text style={styles.quoteAmount}>{formatMoney(line.amount, quote.currency)}</Text>
+                        </View>
+                      ))}
+                      <View style={[styles.quoteLine, styles.quoteTotal]}>
+                        <Text style={styles.feeLabel}>Estimated total</Text>
+                        <Text style={styles.feeValue}>{formatMoney(quote.total, quote.currency)}</Text>
+                      </View>
+                      {quote.note ? <Text style={styles.quoteNote}>{quote.note}</Text> : null}
+                    </View>
+                  ) : (
+                    <View style={styles.feeRow}>
+                      <Text style={styles.feeLabel}>Vendor fee</Text>
+                      <Text style={styles.feeValue}>{feeLabel}</Text>
+                    </View>
+                  )}
                 </View>
 
                 {context.warnings.some((w) => typeof w === "string" && w.trim()) ? (
@@ -339,6 +404,16 @@ export default function ApplyScreen() {
                         message={error.message}
                         onAction={() => setError(null)}
                         actionLabel="Dismiss"
+                      />
+                    ) : null}
+
+                    {context.profile ? (
+                      <ApplyProfileCard
+                        profile={context.profile}
+                        overrides={overrides}
+                        changed={changedProfile}
+                        onChange={handleProfileChange}
+                        onEditProfile={() => router.push("/(vendor)/profile" as Href)}
                       />
                     ) : null}
 
@@ -542,6 +617,37 @@ const styles = StyleSheet.create({
     fontSize: typeScale.bodyLarge,
     fontWeight: "800",
     color: colors.black,
+  },
+  quoteCard: {
+    marginTop: spacing.md,
+    backgroundColor: colors.white,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
+  },
+  quoteLine: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  quoteAmount: {
+    fontSize: typeScale.footnote,
+    fontWeight: "700",
+    color: colors.gray700,
+  },
+  quoteTotal: {
+    borderTopWidth: 1,
+    borderTopColor: colors.gray200,
+    paddingTop: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  quoteNote: {
+    fontSize: typeScale.caption,
+    color: colors.gray500,
+    lineHeight: 16,
   },
   warningsCard: {
     backgroundColor: colors.amber50,
