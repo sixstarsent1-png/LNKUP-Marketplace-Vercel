@@ -111,6 +111,10 @@ export type RegisterPayload = {
   role: "vendor" | "organizer"
   fullName: string
   terms: boolean
+  /** Organizer basics; WordPress stores them as the organizer profile when guided setup is on. */
+  organizationName?: string
+  city?: string
+  state?: string
 }
 
 /**
@@ -126,6 +130,13 @@ export async function registerWithSitePassword(payload: RegisterPayload): Promis
       role: payload.role,
       full_name: payload.fullName.trim(),
       terms: payload.terms,
+      ...(payload.role === "organizer"
+        ? {
+            organization_name: (payload.organizationName ?? "").trim(),
+            city: (payload.city ?? "").trim(),
+            state: (payload.state ?? "").trim(),
+          }
+        : {}),
     },
   })
 

@@ -469,7 +469,8 @@ class LNKup_Comms_Context {
 				$valid = '' !== self::vendor_next_step( (int) $ctx['vendor_user_id'] )['key'];
 				break;
 			case 'organizer_onboarding_step':
-				$valid = '' !== self::organizer_next_step( (int) $ctx['organizer_user_id'] )['key'];
+				$valid = '' !== self::organizer_next_step( (int) $ctx['organizer_user_id'] )['key']
+					&& self::guided_setup_open( (int) $ctx['organizer_user_id'] );
 				break;
 			case 'organizer_activation_stage':
 				// Activation nudges: only while the stage they ask about is still incomplete.
@@ -532,6 +533,18 @@ class LNKup_Comms_Context {
 			return array( 'key' => 'first_application', 'label' => __( 'Apply to your first event', 'lnkup-communications' ), 'link' => 'vendor_find' );
 		}
 		return $none;
+	}
+
+	/**
+	 * Organizer guided setup (marketplace onboarding v2) is still open: not finished and not
+	 * dismissed. Without v2 there is no guided state, so onboarding nudges behave as before.
+	 */
+	public static function guided_setup_open( int $user_id ): bool {
+		if ( ! class_exists( 'LNKup_Organizer_Onboarding_Flow' ) || ! LNKup_Organizer_Onboarding_Flow::enabled() ) {
+			return true;
+		}
+		$flow = LNKup_Organizer_Onboarding_Flow::for_user( $user_id );
+		return ! $flow['is_complete'] && empty( $flow['state']['dismissed'] );
 	}
 
 	/**

@@ -38,7 +38,6 @@ class LNKup_Ajax {
 		add_action( 'wp_ajax_lnkup_vendor_welcome_seen', array( __CLASS__, 'handle_vendor_welcome_seen' ) );
 		add_action( 'wp_ajax_lnkup_reset_vendor_tutorial', array( __CLASS__, 'handle_reset_vendor_tutorial' ) );
 		add_action( 'wp_ajax_lnkup_dismiss_organizer_tutorial', array( __CLASS__, 'handle_dismiss_organizer_tutorial' ) );
-		add_action( 'wp_ajax_lnkup_organizer_welcome_seen', array( __CLASS__, 'handle_organizer_welcome_seen' ) );
 		add_action( 'wp_ajax_lnkup_reset_organizer_tutorial', array( __CLASS__, 'handle_reset_organizer_tutorial' ) );
 		add_action( 'wp_ajax_lnkup_dashboard_tour_seen', array( __CLASS__, 'handle_dashboard_tour_seen' ) );
 		add_action( 'wp_ajax_lnkup_reset_dashboard_tour', array( __CLASS__, 'handle_reset_dashboard_tour' ) );
@@ -977,21 +976,6 @@ class LNKup_Ajax {
 		}
 		LNKup_Organizer_Launch_Checklist::dismiss( get_current_user_id() );
 		wp_send_json_success( array( 'dismissed' => true ) );
-	}
-
-	/**
-	 * Mark organizer welcome popup as seen.
-	 */
-	public static function handle_organizer_welcome_seen() {
-		LNKup_Security::verify_nonce( 'lnkup_action' );
-		if ( ! is_user_logged_in() ) {
-			wp_send_json_error( array( 'message' => __( 'Sign in required.', 'lnkup-marketplace' ) ), 401 );
-		}
-		if ( ! class_exists( 'LNKup_Organizer_Launch_Checklist' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Checklist unavailable.', 'lnkup-marketplace' ) ), 503 );
-		}
-		LNKup_Organizer_Launch_Checklist::mark_welcome_seen( get_current_user_id() );
-		wp_send_json_success( array( 'welcome_seen' => true ) );
 	}
 
 	/**

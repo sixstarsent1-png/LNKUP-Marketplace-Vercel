@@ -2220,30 +2220,6 @@ class LNKup_Shortcodes {
 	}
 
 	/**
-	 * First-run welcome modal for organizers (parity with vendor).
-	 *
-	 * @return string
-	 */
-	private static function render_organizer_welcome_modal(): string {
-		ob_start();
-		?>
-		<div class="lnkup-modal lnkup-modal--organizer-welcome" id="lnkup-organizer-welcome-modal" data-testid="lnkup-organizer-welcome-modal" hidden>
-			<div class="lnkup-modal__backdrop" data-organizer-welcome-close="1"></div>
-			<div class="lnkup-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="lnkup-organizer-welcome-title">
-				<button type="button" class="lnkup-modal__close" data-organizer-welcome-close="1" aria-label="<?php esc_attr_e( 'Close', 'lnkup-marketplace' ); ?>">&times;</button>
-				<h2 id="lnkup-organizer-welcome-title" class="lnkup-type-title"><?php echo esc_html( lnkup_copy( 'organizer_tutorial_welcome_title' ) ); ?></h2>
-				<p class="lnkup-muted"><?php echo esc_html( lnkup_copy( 'organizer_tutorial_welcome_body' ) ); ?></p>
-				<div class="lnkup-modal__actions" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:1.25rem;">
-					<button type="button" class="lnkup-btn lnkup-btn--primary" data-organizer-welcome-start><?php echo esc_html( lnkup_copy( 'organizer_tutorial_welcome_start' ) ); ?></button>
-					<button type="button" class="lnkup-btn lnkup-btn--ghost" data-organizer-welcome-skip><?php echo esc_html( lnkup_copy( 'organizer_tutorial_welcome_skip' ) ); ?></button>
-				</div>
-			</div>
-		</div>
-		<?php
-		return (string) ob_get_clean();
-	}
-
-	/**
 	 * Priority module rows from missing-doc applications.
 	 *
 	 * @param array  $missing_docs Apps not event-ready.

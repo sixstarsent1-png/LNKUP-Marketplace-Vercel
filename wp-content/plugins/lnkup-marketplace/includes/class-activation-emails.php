@@ -43,6 +43,16 @@ class LNKup_Activation_Emails {
 	}
 
 	/**
+	 * Communications OS owns an organizer sequence, so this legacy drip stays quiet for it
+	 * (one welcome, one set of setup nudges). Vendor drips are unaffected.
+	 *
+	 * @param string $flag flow_onboarding | flow_activation.
+	 */
+	public static function comms_handles( string $flag ): bool {
+		return class_exists( 'LNKup_Comms_Settings' ) && LNKup_Comms_Settings::enabled( $flag );
+	}
+
+	/**
 	 * Daily drip for incomplete vendors/organizers (including pre-tutorial backfill).
 	 */
 	public static function run_daily(): void {
@@ -79,7 +89,7 @@ class LNKup_Activation_Emails {
 		}
 
 		$remaining = $cap - $processed;
-		if ( $remaining <= 0 ) {
+		if ( $remaining <= 0 || self::comms_handles( 'flow_onboarding' ) || self::comms_handles( 'flow_activation' ) ) {
 			return;
 		}
 
@@ -182,7 +192,7 @@ class LNKup_Activation_Emails {
 	 * @return bool
 	 */
 	public static function send_welcome_organizer( int $user_id ): bool {
-		if ( get_user_meta( $user_id, self::META_WELCOME, true ) ) {
+		if ( get_user_meta( $user_id, self::META_WELCOME, true ) || self::comms_handles( 'flow_onboarding' ) ) {
 			return false;
 		}
 		$user = get_userdata( $user_id );
