@@ -1,0 +1,52 @@
+{
+  "metrics": [
+    {
+      "tab": "Events",
+      "ms": 154,
+      "apiCalls": 1,
+      "calls": [
+        "GET /lnkup/v1/crm/events/invite-options?include_all=1"
+      ]
+    },
+    {
+      "tab": "Vendors",
+      "ms": 167,
+      "apiCalls": 0,
+      "calls": []
+    },
+    {
+      "tab": "Money",
+      "ms": 153,
+      "apiCalls": 1,
+      "calls": [
+        "GET /lnkup/v1/financial/organizer-payouts"
+      ]
+    },
+    {
+      "tab": "More",
+      "ms": 184,
+      "apiCalls": 1,
+      "calls": [
+        "GET /lnkup/v1/push/preferences"
+      ]
+    },
+    {
+      "tab": "Home",
+      "ms": 161,
+      "apiCalls": 0,
+      "calls": []
+    },
+    {
+      "tab": "Events",
+      "ms": 115,
+      "apiCalls": 0,
+      "calls": []
+    },
+    {
+      "tab": "Money",
+      "ms": 120,
+      "apiCalls": 0,
+      "calls": []
+    }
+  ]
+}

@@ -1009,6 +1009,8 @@ See also: [FINANCIAL.md](../wp-content/plugins/lnkup-marketplace/FINANCIAL.md)
 
 **Purpose:** Post-event vendor reviews, badges, reliability metrics, and public reputation profiles.
 
+> **Phase 27 (Vendor Passport & Reputation OS):** the 0–100 score is now staff-only (admin + internal ranking). Public and organizer surfaces use `LNKup_Reputation_Summary` indicators (verification, experience, organizer feedback with review minimums, document readiness). Reviews gained an atomic `lnkup_review_index`, eligibility rules, vendor responses, moderation decisions and one appeal; participation comes from `LNKup_Participation_History` (evidence-based). See [PHASE_27_VENDOR_PASSPORT.md](PHASE_27_VENDOR_PASSPORT.md).
+
 | Component | Class |
 |-----------|-------|
 | Reputation core | `LNKup_Vendor_Reputation` |
@@ -1328,6 +1330,8 @@ Helpers: `lnkup_is_marketplace_open()`, `lnkup_get_launch_goals()`, `lnkup_get_m
 
 **Purpose:** Context-aware trust levels for vendors and organizers — document requirements, badge aggregation, admin verification queue.
 
+> **Phase 27:** vendor verification decisions are append-only `lnkup_vendor_verification` records (types, provenance, expiry, revocation) mirrored to `_lnkup_verification_status`; documents are versioned, reusable per event (suggestions only) and shared with organizers only by explicit per-application consent through signed, short-lived downloads (`LNKup_Document_Vault`). Expired or pending documents never count as "ready". See [PHASE_27_VENDOR_PASSPORT.md](PHASE_27_VENDOR_PASSPORT.md).
+
 | Component | Class |
 |-----------|-------|
 | Verification service | `LNKup_Verification` |
@@ -1464,6 +1468,146 @@ Helpers: `lnkup_is_marketplace_open()`, `lnkup_get_launch_goals()`, `lnkup_get_m
 **Follow-ups:** Threshold emails at 1/3/5/10 vendor interests; open/click tracking via `?ext_track=open|click&token=`. Claim CTA → `/claim-event/?token=`.
 
 **Additional REST:** `GET external-events/dashboard`, `GET external-events/demand`, `POST external-events/import-url`, `POST external-events/organizer/import-url` (Create Event preview), `POST external-events/{id}/merge`, `GET external-events/{id}/timeline`, `GET external-events/{id}/recommendations`, `POST external-events/{id}/publish|reject|notify`.
+
+### 9.20 Organizer Acquisition OS (v12.25 — Phases 0–3)
+
+**Purpose:** Turn organizer prospects into active organizers with verified paid bookings. wp-admin → LNKup → **Organizer Growth** (`lnkup-organizer-growth`), capability `lnkup_manage_organizer_growth`, flags `organizer_growth_enabled` / `organizer_growth_outreach_enabled` (option `lnkup_org_growth_settings`, both off by default). Full audit, routes, tests and deployment notes: [ORGANIZER_ACQUISITION_AUDIT.md](ORGANIZER_ACQUISITION_AUDIT.md).
+
+| Component | Class / path |
+|-----------|----------------|
+| Tables | `LNKup_Org_Growth_Tables` — `lnkup_org_leads` (one row per organization), `_lead_events`, `_lead_accounts` (lead ↔ organizer users), `_lead_activity`, `_lead_tasks`, `_lead_tags`, `_lead_saved_views`, `_lead_imports`, `_lead_import_rows`, `_lead_milestones`, `lnkup_org_partners`, `lnkup_org_outreach_templates`, `lnkup_contact_suppression` |
+| Leads / pipeline | `LNKup_Org_Leads`, `LNKup_Org_Lead_Pipeline` (17 stages + 6 outcomes; stages from First Event Published on are milestone-only) |
+| Dedupe | `LNKup_Org_Lead_Dedupe` (email / business domain / Instagram / linked account = hard; similar name = review flag; manual merge) |
+| Import | `LNKup_Org_Lead_Import` (CSV/TSV, mapping, dry run, WP-Cron batches, rollback) |
+| Scoring | `LNKup_Org_Lead_Scoring` (explainable, weights in `lnkup_org_lead_scoring_weights`) |
+| Lifecycle | `LNKup_Org_Lead_Lifecycle` — links accounts (outreach token → referral code → verified email; domain = suggestion) and records milestones from `lnkup_event_first_live`, `lnkup_application_submitted`, `lnkup_payment_completed`, refund reversals |
+| Outreach | `LNKup_Org_Outreach` on top of `LNKup_Outreach` (campaign source `growth`), `LNKup_Contact_Suppression` |
+| Metrics | `LNKup_Org_Growth_Metrics` (house vs independent, net platform fees via `LNKup_Platform_Fees::sum_net_platform_fees()`) |
+| REST / UI | `LNKup_Org_Growth_REST` (`lnkup/v1/growth/*`), `LNKup_Organizer_Growth_Admin`, `admin/js/organizer-growth.js` |
+
+**New hooks:** `lnkup_event_first_live( $event_id, $organizer_id )` (once per event, from `_lnkup_event_status` → `live`), `lnkup_payment_refund_synced( $payment_id, $returned_cents, $is_full )` (every refund path, once per increase), `lnkup_payment_chargeback_lost( $payment_id, $amount_cents )`, `lnkup_referral_rewards_reversed( $payment_id, $ratio, $why )`. Connector rewards/ranks and organizer-recruit rewards reverse through `LNKup_Referral_Reversals`.
+
+### 9.21 Organizer Onboarding & Activation (v12.29 — Phase 4)
+
+**One activation model:** `LNKup_Organizer_Activation` (`includes/class-organizer-activation.php`) derives six stages from existing records — organization (profile meta), payouts (Stripe Connect status, done when LNKup pays out), first event (event + slot with categories, a price incl. $0, deadline), publication (a live event + share link), first applications (received → reviewed), first paid booking. Cached 2 min, flushed on event/opportunity/application/payment/profile hooks. `GET lnkup/v1/organizer/activation` (own; growth admins may pass `organizer_id`).
+
+| Consumer | How it uses the model |
+|---|---|
+| Launch checklist (`crm/launch-checklist`) | Same 9 items/shape; uses all events (live first), free booths complete, payout via activation |
+| Web **Get started** (`?view=start`) | `LNKup_Organizer_Dashboard_Views::render_start()` + `public/js/organizer-start.js`: stepper, %, missing items, next action, inline organization form, share link + embed code, saved setups, CSV import link |
+| Communications | `LNKup_Comms_Context::organizer_next_step()` → `LNKup_Organizer_Activation::comms_next_step()` (same keys) |
+| Expo home | `lib/api/organizer-home.ts` maps stages to checklist rows + `% set up`; falls back to the checklist |
+| Organizer Growth | lead drawer shows each linked account's stages; overview "where setup is stuck" |
+
+**Share & embed:** publish/create responses return `application_url` (`/opportunities/?apply={opp}`), `event_url`, `organizer_url`, `share_links` (old `find_events_url` kept). `GET lnkup/v1/public/opportunities/{id}/card` (public, rate-limited, open + live + not invite-only only) powers `public/js/embed.js` (`<div data-lnkup-apply="ID">`; link-out, no iframe).
+
+**Saved setups:** `LNKup_Organizer_Setups` (user meta `_lnkup_organizer_event_setups`, max 20) — `GET/POST organizer/setups`, `GET/DELETE organizer/setups/{id}`; create/publish with `setup_id` (web `?view=create&setup=`) swaps in the saved booth rows and application questions. `duplicate_event()` now copies application questions and the documents gate.
+
+**Import consent:** vendor CSV import refuses `send_invites` without `consent_basis` (`existing_relationship` | `public_business_contact` | `opted_in`), stored on `lnkup_crm_import_job.consent_basis`; preset `past_applicants` tags rows `past-applicant` (still prospects, never accounts).
+
+### 9.22 Organizer Management OS — Wave 1 (review workspace, team roles, waitlist offers)
+
+Audit: [ORGANIZER_MANAGEMENT_OS_AUDIT.md](ORGANIZER_MANAGEMENT_OS_AUDIT.md). Flags (all off by default, `lnkup_settings`, helper `LNKup_Feature_Flags`): `application_review_v2_enabled`, `waitlist_offers_enabled` (requires the first), plus the existing `trust_org_teams`.
+
+**Who can do what:** every check resolves per event through `LNKup_Capabilities::staff_can()`. That is the event owner, then an organization team grant (`LNKup_Org_Teams`, scope all events / one tour / one event), then per-event staff (`LNKup_Event_Staff`). No new WordPress roles exist; team roles are rows in `wp_lnkup_org_members`.
+
+| Team role | Review | Score | Decide (approve/decline/waitlist/offers) | Financials |
+|---|---|---|---|---|
+| Owner, Organization Admin | yes | yes | yes | yes |
+| Event Manager | yes | yes | yes | no |
+| Vendor Manager | yes | yes | yes | no |
+| Application Reviewer | yes | yes | no | no |
+| Finance, Operations Staff | no | no | no | Finance only |
+
+`LNKup_Capabilities::can_access_org_workspace()` admits organizers, admins and active team members to the organizer dashboard. The theme gate goes through the `lnkup_require_roles_allowed` filter. Team-only members get `LNKup_Org_Workspace` (staff home, Review, Team, and the event roster/check-in/ops pages their grants allow).
+
+```mermaid
+flowchart LR
+  queue["GET applications/review/queue"] --> scope["LNKup_Org_Teams::event_ids_for"]
+  scope --> staffcan["staff_can per event"]
+  drawer["GET applications/{id}/workspace"] --> staffcan
+  decide["POST applications/{id}/decision"] --> organizerAction["LNKup_Applications::handle_organizer_action"]
+  bulk["bulk/preview then bulk/apply"] --> organizerAction
+  offer["POST applications/{id}/waitlist-offer"] --> transition["LNKup_Applications::transition approved"]
+  organizerAction --> transition
+  transition --> lock["LNKup_Opportunity_Inventory::with_lock"]
+  expiry["cron lnkup_waitlist_offers_expire"] --> back["LNKup_Applications::return_to_waitlist"]
+  back --> voidPay["void_pending_payment"]
+```
+
+**Routes (`lnkup/v1`)**, all behind `application_review_v2_enabled`:
+
+| Route | Capability on the event |
+|---|---|
+| `GET applications/review/queue` | rows limited to events with `review_applications` |
+| `GET applications/{id}/workspace` | `review_applications` |
+| `POST applications/{id}/decision` | `manage_applications` |
+| `POST applications/{id}/score` | `score_applications` |
+| `POST applications/{id}/reviewers`, `DELETE …/reviewers/{user}` | `manage_applications` |
+| `GET\|PUT events/{id}/rubric` | read `review_applications`, write `manage_applications` |
+| `GET events/{id}/reviewers` | `manage_applications` |
+| `POST applications/bulk/preview`, `bulk/apply`, `GET bulk/jobs/{job}` | per-application `manage_applications` |
+| `GET opportunities/{id}/waitlist`, `POST …/waitlist/reorder` | `review_applications` / `manage_applications` |
+| `POST\|DELETE applications/{id}/waitlist-offer` | `manage_applications` + `waitlist_offers_enabled` |
+
+Plus `GET org/team/audit` (owner or `manage_team`) and `GET operations/events/{id}/broadcasts/preview` (`broadcast`).
+
+**Rules:**
+- Status groups are a pure mapping over canonical statuses (`LNKup_Application_Review::status_groups()`), and payment state is reported separately.
+- Scores are advisory and never change status.
+- A bulk preview token is single-use, belongs to the user who created it, and expires after 10 minutes. Each application is re-checked when the bulk action is applied.
+- A waitlist offer is an approval with a deadline (`payment_due_at` passed into `transition()`), so it holds a spot through `HOLD_STATUSES` and cannot oversell.
+- Offer expiry only releases offers whose payment is pending or failed. Payments in flight keep the spot.
+- Team activity (`application_reviewer_*`, `application_scored`, `application_bulk_decision`, `review_rubric_saved`, `waitlist_offer_*`) is written to `wp_lnkup_audit_log` with entity `org` / owner ID.
+
+**Tables** (`LNKup_Organizer_OS_Tables`, schema option `lnkup_organizer_os_schema`): `lnkup_pass_tokens` (sha256 of the upper-cased QR token → application; `LNKup_Pass_Tokens`), `lnkup_app_review_assignments`, `lnkup_review_rubrics`, `lnkup_app_reviews`, `lnkup_waitlist_offers`. All additive; turning the flags off hides the features without touching data.
+
+### 9.x Communications OS (separate plugin: `lnkup-communications`)
+
+**lnkup-communications** depends on lnkup-marketplace and owns push, email, the in-app inbox, automations, campaigns and delivery health. lnkup-marketplace stays the system of record. The communications plugin stores only communication state, in the `wp_lnkup_comms_*` tables.
+
+- **Engine:** `LNKup_Comms_Engine::dispatch()` deduplicates, authorizes, validates and stores, then Action Scheduler (group `lnkup-comms`) runs `deliver()`. Delivery re-validates canonical state and applies preferences, caps and quiet hours, then fans out to inbox, email and Expo push.
+- **Delegation:** every legacy `LNKup_Notifications::send_*` checks the `lnkup_pre_send_notification` filter first. A flow is claimed only while its flag is on, so the legacy sends resume when a flag is off or the plugin is deactivated.
+- **Lifecycle signals:**
+  - `LNKup_Lifecycle_Hooks` turns canonical status-meta writes into `lnkup_{payment|event|opportunity|document|vendor_invite}_status_changed`.
+  - Explicit hooks cover refunds, chargebacks, Connect status, payout status, check-ins, event completion, uploads and logistics changes.
+- **Financial rule:** payment messages come only from verified server outcomes. Payout and payout-setup messages are behind `fin_payout_notifications`, which stays off until reconciliation sign-off.
+- **New core features:**
+  - Vendor withdrawal (`POST /applications/{id}/withdraw`, uses the existing `cancelled` status).
+  - Organizer cancel/postpone (`POST /organizer/events/{id}/status`, `_lnkup_event_status` = `cancelled`/`postponed`). This closes slots and leaves payments to the Financial Service.
+- **References:** trigger catalog in [COMMUNICATIONS_MATRIX.md](COMMUNICATIONS_MATRIX.md); audit in [COMMUNICATIONS_AUDIT.md](COMMUNICATIONS_AUDIT.md); deployment, cron, EAS and rollback in `wp-content/plugins/lnkup-communications/README.md`.
+
+### 9.23 Organizer Acquisition Analytics & Activation Automations (Phase 7)
+
+**Spend ledger:** `LNKup_Org_Growth_Spend` on `wp_lnkup_org_growth_spend` (organizer-growth schema `1.1.0`, self-migrating via `lnkup_org_growth_schema`). Admins enter what was actually spent (date, channel = lead `source` key, amount in cents, campaign, city/state, description) by form or CSV (`date, channel, amount` required, max 1000 rows). Rows are never deleted. A void requires a reason, and adds and voids are both audited (`org_growth_spend_added` / `org_growth_spend_voided`).
+
+**Commission cost:** read-only from `wp_lnkup_referral_rewards`. It counts rewards in `approved`/`paid` status, net of `reversed_amount`, whose referral's `referred_user_id` is linked to a lead (`lnkup_org_lead_accounts`). Pending, on-hold and reversed rewards are excluded, and so are rewards for vendors who are not linked to a lead.
+
+**Analytics** (`LNKup_Org_Growth_Analytics`, cached 15 min, flushed with the growth metrics cache):
+
+| Report | Built from |
+|---|---|
+| Monthly cohorts (30/60/90-day + overall) | `registered` milestone month; active milestones only (refund-voided ones drop out) |
+| Time to publish / first paid booking / activated | median + p75 days, with sample size |
+| Conversion by dimension | source, campaign, city, state, category, connector, owner, frequency, affiliation (leads created in window) |
+| Productivity | organizations with an active paid booking: events, applications, paid bookings, net platform fees, gross |
+| Cost per acquired organizer | spend + commissions ÷ registered / activated per channel; `unavailable` (no cost records), `commissions_only`, `complete` |
+| At risk | activated, no live/upcoming event, no paid booking in 60 days; shows open-task flag |
+
+Every report filters by house (Six Stars) vs independent organizers. Spend is not split by affiliation, because spend entries are not tied to one organizer. REST (all `lnkup_manage_organizer_growth`): `GET growth/analytics`, `growth/analytics/cohorts`, `growth/analytics/at-risk`, `growth/analytics/export?section=cohorts|cac|at_risk|conversion` (CSV with formula guard, audited), `GET/POST growth/spend`, `POST growth/spend/{id}/void`, `POST growth/spend/import`. wp-admin **Organizer Growth → Analytics / Spend** tabs. The Overview shows cost cards once any cost exists.
+
+**Activation automations** (`lnkup-communications` 1.2.0, `LNKup_Comms_Auto_Activation`, flag `flow_activation` default off):
+
+| Trigger | When | Re-checked before send |
+|---|---|---|
+| `o_setup_profile` | organization stage incomplete; day 1, follow-up day 7 (registered ≤ 30 days) | `organizer_activation_stage` |
+| `o_setup_payouts` | Connect on, payouts incomplete, and a live event or approved vendor exists; day 2, follow-up after 5+ days; skipped within 3 days of `o_payout_setup` | `organizer_activation_stage` |
+| `o_publish_draft` | draft event with a slot, older than `draft_unpublished_days` (3), not past; once per event | `event_is_draft` |
+| `o_first_booking` | `lnkup_payment_completed` when the organizer's paid count is exactly 1; once ever | — |
+
+At most one daily nudge goes to an organizer per run. A shared cooldown (`activation_cooldown_days`, 3) applies across the three nudges and `o_onboarding`; the first-booking celebration is exempt. Each message stores `activation_stage`. `LNKup_Organizer_Activation::build()` records `_lnkup_activation_done_{stage}` (UTC, write-once) the first time it sees a stage complete. Comms analytics attributes a nudge when that time falls between `sent_at` and `sent_at + attribution_days`. The `o_no_applications` delay is now `no_applications_days` (5), and `o_publish_next` links to saved setups when the organizer has any.
+
+**Tests:** `scripts/e2e/php/org-growth-analytics-test.php`, `scripts/e2e/php/comms-activation-test.php`; Playwright Analytics/Spend cases in `tests/e2e/organizer-growth.spec.ts`.
 
 ---
 
@@ -2328,6 +2472,12 @@ All jobs use WordPress Cron (`wp_schedule_event`).
 | `lnkup_growth_daily` | `LNKup_Growth_Cron` | Daily | Growth snapshots, recommendation generation, benchmark updates |
 | `lnkup_weather_daily` | `LNKup_Weather_Cron` | Daily | Refresh weather snapshots for events within 14 days |
 | `lnkup_outreach_process_queue` | `LNKup_Outreach_Cron` | Single-event (reschedules) | Batch outreach emails; pauses on hourly/daily SMTP cap; auto-resumes |
+| `lnkup_match_process_queue` | `LNKup_Match_Cron` | Single-event (reschedules) | Recompute dirty vendor/opportunity matches (bounded batches); geocode vendor city centroids |
+| `lnkup_match_backfill` | `LNKup_Match_Cron` | Single-event (pages) | Rebuild vendor matching index, then queue all open opportunities |
+| `lnkup_match_daily` | `LNKup_Match_Cron` | Daily 04:30 | Prune stale match results, requeue open opportunities |
+| `lnkup_recruitment_process_job` | `LNKup_Recruitment` | Single-event per job | Send organizer-approved batch invites, revalidating each recipient |
+
+Matching & Discovery OS (v12.24.0) is documented in [MATCHING_DISCOVERY.md](MATCHING_DISCOVERY.md).
 
 **Financial reminder hooks:** `lnkup_financial_reminder` with types: `payment_reminder_7d`, `payment_reminder_3d`, `payment_reminder_24h`, `overdue_invoice`, `installment_due`, `deposit_due`, `payment_past_due`.
 
