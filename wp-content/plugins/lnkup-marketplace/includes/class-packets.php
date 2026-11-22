@@ -14,6 +14,27 @@ class LNKup_Packets {
 	 *
 	 * @param int $app_id Application ID.
 	 */
+	/**
+	 * Payment states that void an event pass even when the application still reads `paid`.
+	 */
+	const PASS_BLOCKING_PAYMENT_STATUSES = array( 'refunded', 'chargeback_lost', 'disputed' );
+
+	/**
+	 * Re-lock the packet after a full refund, lost chargeback or cancellation (B-8).
+	 *
+	 * @param int $app_id Application ID.
+	 * @return bool Whether a packet was locked.
+	 */
+	public static function lock_for_application( $app_id ) {
+		$packet = self::get_packet_for_application( $app_id );
+		if ( ! $packet ) {
+			return false;
+		}
+		update_post_meta( $packet->ID, '_lnkup_packet_locked', true );
+		do_action( 'lnkup_packet_locked', (int) $app_id, (int) $packet->ID );
+		return true;
+	}
+
 	public static function unlock_for_application( $app_id ) {
 		$packets = get_posts(
 			array(
@@ -215,7 +236,11 @@ class LNKup_Packets {
 	 * @param int $app_id Application ID.
 	 */
 	public static function is_pass_unlocked_for_application( $app_id ) {
-		$status = get_post_meta( $app_id, '_lnkup_application_status', true );
+		$status  = get_post_meta( $app_id, '_lnkup_application_status', true );
+		$pay_row = LNKup_Payments::get_for_application( $app_id );
+		if ( $pay_row && in_array( (string) get_post_meta( $pay_row->ID, '_lnkup_payment_status', true ), self::PASS_BLOCKING_PAYMENT_STATUSES, true ) ) {
+			return false;
+		}
 		if ( in_array( $status, array( 'paid', 'completed' ), true ) ) {
 			$packet = self::get_packet_for_application( $app_id );
 			if ( ! $packet ) {

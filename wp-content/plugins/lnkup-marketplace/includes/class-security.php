@@ -98,7 +98,7 @@ class LNKup_Security {
 	 */
 	public static function sanitize_application_status( $status ) {
 		$allowed = array(
-			'submitted', 'under_review', 'info_requested', 'approved', 'payment_required',
+			'draft', 'submitted', 'under_review', 'info_requested', 'approved', 'payment_required',
 			'paid', 'waitlisted', 'rejected', 'completed', 'cancelled',
 		);
 		return in_array( $status, $allowed, true ) ? $status : 'submitted';

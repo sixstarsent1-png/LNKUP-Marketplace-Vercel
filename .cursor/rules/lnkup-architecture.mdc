@@ -20,7 +20,7 @@ You are in the **LNK Marketplace** monorepo (`lnk-up-marketplace-platform`). Pro
 
 **Out of scope unless explicitly requested:** WooCommerce, attendee ticketing (Posh/Eventbrite/Universe), treating Next.js or Expo as a replacement system of record.
 
-**Platform:** WordPress 6.0+, PHP 7.4+ (plugin), PHP 8.0+ (theme). Plugin v12.1.0. ~200 REST routes under `lnkup/v1`.
+**Platform:** WordPress 6.0+, PHP 7.4+ (plugin), PHP 8.0+ (theme). Plugin v12.24.0. ~215 REST routes under `lnkup/v1`.
 
 ## What LNK Marketplace Is
 
@@ -129,6 +129,7 @@ Every dashboard panel: **loading**, **empty**, and **error** states. Hide empty 
 | Application → Payment → Packet | `LNKup_Applications`, `LNKup_Payments`, `LNKup_Packets` | shortcodes + `checkout.js` |
 | Financial OS | `LNKup_Financial_Service`, `LNKup_Fee_Engine`, `LNKup_Financial_REST` | `financial.js` |
 | Organizer CRM | `LNKup_Organizer_CRM`, `LNKup_Vendor_Directory`, `LNKup_Organizer_CRM_REST` | `organizer-crm.js` |
+| Matching & Discovery | `LNKup_Match_Engine`, `LNKup_Match_Service`, `LNKup_Match_REST`, `LNKup_Recruitment`, `LNKup_Tours` (`includes/matching/`) | `marketplace-v2.js`, `find-vendors.js` — see `docs/MATCHING_DISCOVERY.md` |
 | Vendor Reputation | `LNKup_Vendor_Reputation`, `LNKup_Reputation_REST` | reputation views |
 | Event Operations | `LNKup_Event_Operations`, `LNKup_Operations_REST` | `operations.js` |
 | Organizer Intelligence | `LNKup_Organizer_Intelligence`, `LNKup_Intelligence_REST` | `intelligence.js` |

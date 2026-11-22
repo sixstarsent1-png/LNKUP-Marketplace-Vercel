@@ -781,17 +781,17 @@
       });
       html += '</tr></thead><tbody>';
       var fields = [
-        ['Score', 'vendor_score'],
-        ['Rating', 'avg_rating'],
-        ['Reviews', 'review_count'],
+        ['Verification', function (p) { var v = p.indicators && p.indicators.verification; return v && v.is_verified ? v.label : 'Not verified yet'; }],
+        ['Organizer feedback', function (p) { return p.indicators && p.indicators.organizer_feedback ? p.indicators.organizer_feedback.label : null; }],
+        ['Confirmed events', function (p) { return p.indicators && p.indicators.experience ? p.indicators.experience.confirmed_events : p.completed_events; }],
         ['City', 'city'],
-        ['Events', 'completed_events'],
         ['Message', 'application_message']
       ];
       fields.forEach(function (pair) {
         html += '<tr><td>' + escapeHtml(pair[0]) + '</td>';
         items.forEach(function (p) {
-          html += '<td>' + escapeHtml(String(p[pair[1]] != null ? p[pair[1]] : '—')) + '</td>';
+          var value = typeof pair[1] === 'function' ? pair[1](p) : p[pair[1]];
+          html += '<td>' + escapeHtml(String(value != null ? value : '—')) + '</td>';
         });
         html += '</tr>';
       });

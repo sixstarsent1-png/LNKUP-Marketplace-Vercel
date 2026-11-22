@@ -238,6 +238,7 @@ function VendorRequestsContent() {
                           <VendorRequestCard
                             request={r}
                             onContinuePayment={handleContinuePayment}
+                            onWithdrawn={isLive ? () => void refetchRequests() : undefined}
                           />
                         </div>
                       )

@@ -28,6 +28,7 @@ $lnkup_financial_files = array(
 	'class-reserves.php',
 	'class-referral-credits.php',
 	'class-organizer-recruit-referrals.php',
+	'class-referral-reversals.php',
 	'class-sponsor-payments.php',
 	'class-subscriptions.php',
 	'class-premium-listings.php',
@@ -62,6 +63,9 @@ if ( class_exists( 'LNKup_Referral_Credits' ) ) {
 }
 if ( class_exists( 'LNKup_Organizer_Recruit_Referrals' ) ) {
 	LNKup_Organizer_Recruit_Referrals::init();
+}
+if ( class_exists( 'LNKup_Referral_Reversals' ) ) {
+	LNKup_Referral_Reversals::init();
 }
 if ( class_exists( 'LNKup_Financial_Health_Score' ) ) {
 	LNKup_Financial_Health_Score::init();

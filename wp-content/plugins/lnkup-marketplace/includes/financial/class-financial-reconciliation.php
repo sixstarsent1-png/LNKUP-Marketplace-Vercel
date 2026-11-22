@@ -547,6 +547,10 @@ class LNKup_Financial_Reconciliation {
 			}
 		}
 
+		if ( ! empty( $payment['id'] ) && class_exists( 'LNKup_Platform_Fees' ) && null !== LNKup_Platform_Fees::refunded_fee_gap( (int) $payment['id'] ) ) {
+			$issues[] = 'refunded_fee_not_recorded';
+		}
+
 		return array_values( array_unique( $issues ) );
 	}
 

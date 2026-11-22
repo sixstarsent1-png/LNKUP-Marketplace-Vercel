@@ -19,14 +19,17 @@ import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import {
   DOCUMENT_TYPE_OPTIONS,
   documentStatusLabel,
+  fetchDocumentShares,
   fetchVendorDocuments,
   MAX_DOCUMENT_UPLOAD_BYTES,
+  revokeDocumentShare,
   shareVendorDocument,
   uploadVendorDocument,
+  type DocumentShare,
   type VendorDocumentRecord,
 } from "@/lib/api/vendor-documents"
 import { useAuth } from "@/lib/auth/auth-context"
-import { showToast } from "@/lib/feedback/feedback"
+import { confirmAction, showToast } from "@/lib/feedback/feedback"
 import { formatShortDate } from "@/lib/format/date"
 import {
   canUploadDocument,
@@ -46,6 +49,7 @@ type PendingUpload = {
   uri: string
   fileName: string
   mimeType?: string
+  replacesId?: string
 }
 
 export default function VendorDocumentsScreen() {
@@ -61,8 +65,43 @@ export default function VendorDocumentsScreen() {
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null)
   const [expirationDate, setExpirationDate] = useState("")
+  const [shares, setShares] = useState<DocumentShare[]>([])
+  const [revokingId, setRevokingId] = useState<number | null>(null)
   const itemsRef = useRef<VendorDocumentRecord[]>([])
   itemsRef.current = items
+
+  const loadShares = useCallback(async () => {
+    try {
+      setShares(await fetchDocumentShares(auth))
+    } catch {
+      // Sharing may be off for this account; the vault still works.
+      setShares([])
+    }
+  }, [auth])
+
+  useEffect(() => {
+    void loadShares()
+  }, [loadShares])
+
+  async function revokeShare(share: DocumentShare) {
+    const ok = await confirmAction({
+      title: "Stop sharing?",
+      message: `${share.organizerName || "The organizer"} will no longer be able to open this ${share.documentLabel}.`,
+      confirmLabel: "Stop sharing",
+      destructive: true,
+    })
+    if (!ok) return
+    setRevokingId(share.id)
+    try {
+      await revokeDocumentShare(share.id, auth)
+      showToast("Organizer access removed.", "success")
+      await loadShares()
+    } catch (err) {
+      showToast(appErrorFromWp(err).message, "error")
+    } finally {
+      setRevokingId(null)
+    }
+  }
 
   const load = useCallback(
     async (mode: "initial" | "soft" = "initial") => {
@@ -105,12 +144,14 @@ export default function VendorDocumentsScreen() {
         return
       }
       setExpirationDate("")
+      const current = itemsRef.current.find((item) => item.type === documentType && hasFile(item))
       setPendingUpload({
         documentType,
         label,
         uri: asset.uri,
         fileName: asset.name || `${documentType}.pdf`,
         mimeType: asset.mimeType || "application/pdf",
+        replacesId: current?.id,
       })
     } catch (err) {
       setUploadMessage(appErrorFromWp(err).message)
@@ -131,6 +172,7 @@ export default function VendorDocumentsScreen() {
           fileName: pendingUpload.fileName,
           mimeType: pendingUpload.mimeType,
           expirationDate: expirationDate.trim() || undefined,
+          replacesId: pendingUpload.replacesId,
         },
         auth,
       )
@@ -249,6 +291,35 @@ export default function VendorDocumentsScreen() {
               />
             ))}
           </View>
+        </View>
+      ) : null}
+
+      {shares.some((s) => s.active) ? (
+        <View style={styles.section}>
+          <SectionHeader title="Shared with organizers" icon="share-social-outline" />
+          {shares
+            .filter((s) => s.active)
+            .map((share) => (
+              <Surface key={share.id} style={styles.shareRow}>
+                <View style={styles.flex}>
+                  <Body>
+                    {share.documentLabel} v{share.version}
+                  </Body>
+                  <Meta>
+                    {[share.organizerName, share.eventTitle, share.accessUntil ? `until ${formatShortDate(share.accessUntil)}` : ""]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </Meta>
+                </View>
+                <Button
+                  label="Stop sharing"
+                  size="sm"
+                  variant="danger"
+                  loading={revokingId === share.id}
+                  onPress={() => void revokeShare(share)}
+                />
+              </Surface>
+            ))}
         </View>
       ) : null}
 
@@ -371,6 +442,13 @@ function DocumentCard({
 }
 
 const styles = StyleSheet.create({
+  shareRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
   flex: {
     flex: 1,
   },

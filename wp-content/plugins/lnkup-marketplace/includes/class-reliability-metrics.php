@@ -40,25 +40,34 @@ class LNKup_Reliability_Metrics {
 		$cancelled        = 0;
 		$paid_count       = 0;
 		$payment_required = 0;
+		$completed_by_org = array();
 
 		foreach ( $apps as $app_id ) {
-			$status = get_post_meta( $app_id, '_lnkup_application_status', true );
-			if ( in_array( $status, array( 'paid', 'completed' ), true ) || get_post_meta( $app_id, '_lnkup_checked_in_at', true ) ) {
+			$status     = get_post_meta( $app_id, '_lnkup_application_status', true );
+			$checked_in = (bool) get_post_meta( $app_id, '_lnkup_checked_in_at', true );
+			$no_show    = (bool) get_post_meta( $app_id, '_lnkup_no_show_at', true );
+			$booked     = in_array( $status, array( 'paid', 'completed' ), true ) || $checked_in;
+			if ( $booked ) {
 				$total_bookings++;
 			}
-			if ( in_array( $status, array( 'paid', 'completed' ), true ) || get_post_meta( $app_id, '_lnkup_checked_in_at', true ) ) {
+			if ( self::is_completed_participation( (int) $app_id, (string) $status, $checked_in, $no_show ) ) {
 				$completed++;
+				$org = (int) get_post_meta( $app_id, '_lnkup_organizer_user_id', true );
+				if ( $org ) {
+					$completed_by_org[ $org ] = ( $completed_by_org[ $org ] ?? 0 ) + 1;
+				}
 			}
-			if ( get_post_meta( $app_id, '_lnkup_no_show_at', true ) ) {
+			if ( $no_show ) {
 				$no_shows++;
 			}
-			if ( get_post_meta( $app_id, '_lnkup_checked_in_at', true ) ) {
+			if ( $checked_in ) {
 				$check_ins++;
 			}
 			if ( get_post_meta( $app_id, '_lnkup_late_arrival_at', true ) ) {
 				$late++;
 			}
-			if ( get_post_meta( $app_id, '_lnkup_cancellation_at', true ) || 'rejected' === $status ) {
+			// Organizer rejections are decisions, not vendor cancellations.
+			if ( get_post_meta( $app_id, '_lnkup_cancellation_at', true ) ) {
 				$cancelled++;
 			}
 			if ( 'paid' === $status || 'completed' === $status ) {
@@ -82,27 +91,28 @@ class LNKup_Reliability_Metrics {
 
 		$review_summary = class_exists( 'LNKup_Vendor_Reviews' ) ? LNKup_Vendor_Reviews::summary_for_vendor( $profile_id ) : array( 'avg' => 0, 'count' => 0 );
 
+		// Review disputes are the vendor exercising a right to report, not misconduct; they never count here.
 		$disputes = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT COUNT(*) FROM {$wpdb->posts} p
 				INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_lnkup_vendor_user_id' AND pm.meta_value = %d
-				WHERE p.post_type = 'lnkup_dispute' AND p.post_status = 'publish'",
+				LEFT JOIN {$wpdb->postmeta} rv ON rv.post_id = p.ID AND rv.meta_key = '_lnkup_review_id'
+				WHERE p.post_type = 'lnkup_dispute' AND p.post_status = 'publish' AND rv.meta_id IS NULL",
 				$vendor_id
 			)
 		);
 
-		$rebooks = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(DISTINCT pm2.meta_value) FROM {$wpdb->posts} p
-				INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = '_lnkup_vendor_user_id' AND pm.meta_value = %d
-				INNER JOIN {$wpdb->postmeta} pm2 ON pm2.post_id = p.ID AND pm2.meta_key = '_lnkup_organizer_user_id'
-				WHERE p.post_type = 'lnkup_application' AND p.post_status = 'publish'",
-				$vendor_id
+		$organizers_worked = count( $completed_by_org );
+		$organizers_repeat = count(
+			array_filter(
+				$completed_by_org,
+				static function ( $count ) {
+					return $count >= 2;
+				}
 			)
 		);
-
-		$repeat = max( 0, $rebooks - 1 );
-		$denom  = max( 1, $total_bookings );
+		$denom = max( 1, $total_bookings );
+		$response_rate = self::invite_response_rate( $vendor_id );
 
 		return array(
 			'completed_events'          => $completed,
@@ -113,12 +123,68 @@ class LNKup_Reliability_Metrics {
 			'document_compliance_rate'  => $doc_total ? round( ( $doc_approved / $doc_total ) * 100, 1 ) : 0,
 			'avg_organizer_rating'      => $review_summary['avg'],
 			'review_count'              => $review_summary['count'],
-			'repeat_booking_rate'       => $rebooks > 1 ? round( ( $repeat / max( 1, $rebooks ) ) * 100, 1 ) : 0,
-			'response_rate'             => 100,
+			'repeat_booking_rate'       => $organizers_worked ? round( ( $organizers_repeat / $organizers_worked ) * 100, 1 ) : 0,
+			'response_rate'             => null === $response_rate ? 0 : $response_rate,
+			'response_rate_known'       => null !== $response_rate,
 			'dispute_count'             => $disputes,
 			'no_show_count'             => $no_shows,
 			'check_in_count'            => $check_ins,
+			'total_bookings'            => $total_bookings,
+			'organizers_worked_with'    => $organizers_worked,
+			'repeat_organizers'         => $organizers_repeat,
 		);
+	}
+
+	/**
+	 * Evidence-based participation: a check-in, or a paid booking for an event that has ended with no no-show recorded.
+	 *
+	 * @param int    $app_id     Application ID.
+	 * @param string $status     Application status.
+	 * @param bool   $checked_in Check-in recorded.
+	 * @param bool   $no_show    No-show recorded.
+	 */
+	public static function is_completed_participation( int $app_id, string $status, bool $checked_in, bool $no_show ): bool {
+		if ( $no_show ) {
+			return false;
+		}
+		if ( $checked_in ) {
+			return true;
+		}
+		if ( ! in_array( $status, array( 'paid', 'completed' ), true ) || get_post_meta( $app_id, '_lnkup_cancellation_at', true ) ) {
+			return false;
+		}
+		$event_id = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
+		return class_exists( 'LNKup_Vendor_Reviews' ) ? LNKup_Vendor_Reviews::event_has_ended( $event_id ) : false;
+	}
+
+	/**
+	 * Share of decided organizer invites the vendor answered (accepted or declined) instead of letting expire.
+	 * Null until at least 3 invites were decided.
+	 *
+	 * @param int $vendor_id Vendor user ID.
+	 */
+	private static function invite_response_rate( int $vendor_id ) {
+		global $wpdb;
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"SELECT st.meta_value AS status, COUNT(*) AS n FROM {$wpdb->posts} p
+				INNER JOIN {$wpdb->postmeta} v ON v.post_id = p.ID AND v.meta_key = '_lnkup_vendor_user_id' AND v.meta_value = %d
+				INNER JOIN {$wpdb->postmeta} st ON st.post_id = p.ID AND st.meta_key = '_lnkup_status'
+				WHERE p.post_type = 'lnkup_vendor_invite' AND st.meta_value IN ('accepted','declined','expired')
+				GROUP BY st.meta_value",
+				$vendor_id
+			),
+			ARRAY_A
+		);
+		$counts = array( 'accepted' => 0, 'declined' => 0, 'expired' => 0 );
+		foreach ( (array) $rows as $row ) {
+			$counts[ $row['status'] ] = (int) $row['n'];
+		}
+		$decided = array_sum( $counts );
+		if ( $decided < 3 ) {
+			return null;
+		}
+		return round( ( ( $counts['accepted'] + $counts['declined'] ) / $decided ) * 100, 1 );
 	}
 
 	/**
@@ -136,9 +202,13 @@ class LNKup_Reliability_Metrics {
 			'review_count'             => 0,
 			'repeat_booking_rate'      => 0,
 			'response_rate'            => 0,
+			'response_rate_known'      => false,
 			'dispute_count'            => 0,
 			'no_show_count'            => 0,
 			'check_in_count'           => 0,
+			'total_bookings'           => 0,
+			'organizers_worked_with'   => 0,
+			'repeat_organizers'        => 0,
 		);
 	}
 }

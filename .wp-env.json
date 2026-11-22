@@ -4,7 +4,7 @@
   "phpVersion": "8.1",
   "port": 8888,
   "testsPort": 8889,
-  "plugins": ["./wp-content/plugins/lnkup-marketplace"],
+  "plugins": ["./wp-content/plugins/lnkup-marketplace", "./wp-content/plugins/lnkup-communications"],
   "themes": ["./wp-content/themes/lnkup-theme"],
   "mappings": {
     "wp-content/lnkup-e2e": "./scripts/e2e"

@@ -23,6 +23,10 @@ class LNKup_Vendor_CRM_Profile {
 		}
 		$vendor_id = (int) get_post_meta( $profile_id, '_lnkup_owner_user_id', true );
 		$can_manage = LNKup_Capabilities::organizer_can_manage_vendor( $organizer_id, $vendor_id );
+		// System contexts (no viewer, e.g. snapshots in cron) and the profile owner see everything.
+		$can_view_contact = ! $organizer_id
+			|| (int) $organizer_id === $vendor_id
+			|| LNKup_Capabilities::organizer_can_view_vendor_contact( $organizer_id, $profile_id );
 		$rel = LNKup_Organizer_CRM::get_relationship( $organizer_id, $vendor_id );
 		$cities = json_decode( get_post_meta( $profile_id, '_lnkup_cities_served', true ) ?: '[]', true ) ?: array();
 		$states = json_decode( get_post_meta( $profile_id, '_lnkup_states_served', true ) ?: '[]', true ) ?: array();
@@ -80,7 +84,7 @@ class LNKup_Vendor_CRM_Profile {
 			}
 		}
 
-		$docs = LNKup_Documents::get_for_vendor( $vendor_id );
+		$docs = $can_view_contact ? LNKup_Documents::get_for_vendor( $vendor_id ) : array();
 		$doc_summary = array();
 		foreach ( $docs as $doc ) {
 			$doc_summary[] = array(
@@ -109,9 +113,10 @@ class LNKup_Vendor_CRM_Profile {
 			'profile_id'        => $profile_id,
 			'vendor_user_id'    => $vendor_id,
 			'business_name'     => get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: $post->post_title,
-			'owner_name'        => get_post_meta( $profile_id, '_lnkup_owner_name', true ),
-			'email'             => get_post_meta( $profile_id, '_lnkup_contact_email', true ),
-			'phone'             => get_post_meta( $profile_id, '_lnkup_contact_phone', true ),
+			'owner_name'        => $can_view_contact ? get_post_meta( $profile_id, '_lnkup_owner_name', true ) : '',
+			'email'             => $can_view_contact ? get_post_meta( $profile_id, '_lnkup_contact_email', true ) : '',
+			'phone'             => $can_view_contact ? get_post_meta( $profile_id, '_lnkup_contact_phone', true ) : '',
+			'can_view_contact'  => $can_view_contact,
 			'instagram'         => get_post_meta( $profile_id, '_lnkup_instagram', true ),
 			'website'           => get_post_meta( $profile_id, '_lnkup_website', true ),
 			'category'          => $categories,
@@ -151,6 +156,8 @@ class LNKup_Vendor_CRM_Profile {
 			'badges'            => $reputation['badges'] ?? array(),
 			'no_show_count'     => self::no_show_count( $organizer_id, $vendor_id ),
 			'no_show_risk'      => ( $metrics['no_show_rate'] ?? 0 ) > 10 ? 'high' : ( ( $metrics['no_show_rate'] ?? 0 ) > 5 ? 'medium' : 'low' ),
+			'indicators'        => class_exists( 'LNKup_Reputation_Summary' ) ? LNKup_Reputation_Summary::for_profile( (int) $profile_id, 'organizer' ) : array(),
+			'passport_url'      => class_exists( 'LNKup_Passport_Public' ) && class_exists( 'LNKup_Passport_Privacy' ) && LNKup_Passport_Privacy::is_public( (int) $profile_id ) ? LNKup_Passport_Public::url_for_profile( (int) $profile_id ) : '',
 			'profile_strength_score' => (int) ( $strength['score'] ?? 0 ),
 			'profile_strength_tier'  => (string) ( $strength['tier'] ?? '' ),
 			'cover_image'       => (int) get_post_meta( $profile_id, '_lnkup_cover_image_id', true ) ? wp_get_attachment_image_url( (int) get_post_meta( $profile_id, '_lnkup_cover_image_id', true ), 'large' ) : '',
@@ -165,62 +172,86 @@ class LNKup_Vendor_CRM_Profile {
 	 *
 	 * @param int $profile_id Profile ID.
 	 */
-	public static function get_public( $profile_id ) {
+	public static function get_public( $profile_id, $preview = false ) {
 		$profile_id = absint( $profile_id );
-		$post = get_post( $profile_id );
-		if ( ! $post || 'lnkup_vendor_profile' !== $post->post_type ) {
+		$view       = LNKup_Passport_Projection::public_view( $profile_id, (bool) $preview );
+		if ( ! $view ) {
 			return null;
 		}
-		$reputation = LNKup_Vendor_Reputation::get( $profile_id );
-		$logo_id    = (int) get_post_meta( $profile_id, '_lnkup_logo_attachment_id', true );
-		$cover_id   = (int) get_post_meta( $profile_id, '_lnkup_cover_image_id', true );
-		$gallery    = array();
-		if ( class_exists( 'LNKup_Growth_Profile_Strength' ) ) {
-			foreach ( LNKup_Growth_Profile_Strength::gallery_ids( $profile_id ) as $gid ) {
-				$url = wp_get_attachment_image_url( (int) $gid, 'large' );
-				if ( $url ) {
-					$gallery[] = $url;
-				}
-			}
+		$indicators = $view['reputation'];
+		$feedback   = $indicators['organizer_feedback'];
+		$badges     = array();
+		if ( ! empty( $indicators['verification']['is_verified'] ) ) {
+			$badges[] = array( 'slug' => 'business_identity_verified', 'label' => $indicators['verification']['label'] );
 		}
-		$cities = json_decode( get_post_meta( $profile_id, '_lnkup_cities_served', true ) ?: '[]', true ) ?: array();
-		$states = json_decode( get_post_meta( $profile_id, '_lnkup_states_served', true ) ?: '[]', true ) ?: array();
-		$verification = class_exists( 'LNKup_Verification' )
-			? LNKup_Verification::get_vendor_verification_status( $profile_id, array( 'public' => true ) )
-			: array();
-		$metrics = $reputation['metrics'] ?? ( class_exists( 'LNKup_Reliability_Metrics' ) ? LNKup_Reliability_Metrics::get( $profile_id ) : array() );
+		foreach ( (array) $indicators['achievements'] as $achievement ) {
+			$badges[] = array( 'slug' => $achievement['slug'], 'label' => $achievement['label'] );
+		}
+		foreach ( (array) $indicators['document_readiness']['current_types'] as $doc ) {
+			/* translators: %s: document label */
+			$badges[] = array( 'slug' => 'doc_' . $doc['type'], 'label' => sprintf( __( '%s on file', 'lnkup-marketplace' ), $doc['label'] ) );
+		}
+		$events = array();
+		foreach ( (array) $view['history']['items'] as $row ) {
+			$events[] = array(
+				'event_name' => $row['event_title'],
+				'date'       => $row['event_date'],
+				'city'       => $row['city'],
+				'state'      => $row['state'],
+				'verified'   => 'check_in' === $row['evidence'],
+				'rating'     => 0,
+				'tour'       => $row['tour_title'],
+			);
+		}
+		// Legacy DTO shape (mobile + web adapters) built only from the public projection; no internal score or metrics.
 		$data = array(
 			'profile_id'        => $profile_id,
-			'business_name'     => get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: $post->post_title,
-			'description'       => $post->post_content,
-			'city'              => get_post_meta( $profile_id, '_lnkup_city', true ),
-			'state'             => get_post_meta( $profile_id, '_lnkup_state', true ),
-			'categories'        => wp_get_post_terms( $profile_id, 'lnkup_vendor_category', array( 'fields' => 'names' ) ),
-			'products_services' => get_post_meta( $profile_id, '_lnkup_products_services', true ),
-			'years_in_business' => get_post_meta( $profile_id, '_lnkup_years_in_business', true ),
-			'website'           => get_post_meta( $profile_id, '_lnkup_website', true ),
-			'instagram'         => get_post_meta( $profile_id, '_lnkup_instagram', true ),
-			'tiktok'            => get_post_meta( $profile_id, '_lnkup_tiktok', true ),
-			'logo'              => $logo_id ? wp_get_attachment_image_url( $logo_id, 'medium' ) : '',
-			'cover'             => $cover_id ? wp_get_attachment_image_url( $cover_id, 'large' ) : '',
-			'gallery'           => $gallery,
-			'cities_served'     => $cities,
-			'states_served'     => $states,
-			'setup_type'        => get_post_meta( $profile_id, '_lnkup_setup_type', true ),
-			'power_needs'       => get_post_meta( $profile_id, '_lnkup_power_needed', true ),
-			'water_needs'       => get_post_meta( $profile_id, '_lnkup_water_needed', true ),
-			'tent_size'         => get_post_meta( $profile_id, '_lnkup_tent_size', true ),
-			'trailer_size'      => get_post_meta( $profile_id, '_lnkup_trailer_size', true ),
-			'verification'      => $verification,
-			'reputation'        => $reputation,
-			'metrics'           => $metrics,
-			'reviews'           => LNKup_Vendor_Reviews::get_for_vendor( $profile_id, 10 ),
-			'events'            => LNKup_Completed_Events::get_for_vendor( $profile_id, 'public' ),
-			'public_slug'       => get_post_meta( $profile_id, '_lnkup_public_slug', true ),
+			'business_name'     => $view['business_name'],
+			'description'       => $view['description'],
+			'city'              => $view['city'],
+			'state'             => $view['state'],
+			'categories'        => wp_list_pluck( $view['categories'], 'name' ),
+			'products_services' => $view['products_services'],
+			'years_in_business' => $view['years_in_business'],
+			'website'           => $view['website'],
+			'instagram'         => $view['socials']['instagram'] ?? '',
+			'tiktok'            => $view['socials']['tiktok'] ?? '',
+			'facebook'          => $view['socials']['facebook'] ?? '',
+			'logo'              => $view['logo'],
+			'cover'             => $view['cover'],
+			'gallery'           => wp_list_pluck( $view['portfolio'], 'url' ),
+			'portfolio'         => $view['portfolio'],
+			'cities_served'     => $view['cities_served'],
+			'states_served'     => $view['states_served'],
+			'setup_type'        => $view['setup']['setup_type'],
+			'power_needs'       => $view['setup']['power_needs'],
+			'water_needs'       => $view['setup']['water_needs'],
+			'tent_size'         => $view['setup']['tent_size'],
+			'trailer_size'      => $view['setup']['trailer_size'],
+			'capabilities'      => $view['capabilities'],
+			'verified'          => ! empty( $indicators['verification']['is_verified'] ),
+			'verification'      => array(
+				'badges'         => wp_list_pluck( $badges, 'label' ),
+				'public_summary' => (string) $indicators['verification']['explanation'],
+			),
+			'reputation'        => array(
+				'avg_rating'   => $feedback['display_average'] ? (float) $feedback['average'] : 0,
+				'review_count' => $feedback['display_average'] ? (int) $feedback['count'] : 0,
+				'is_new'       => (bool) $indicators['is_new_vendor'],
+				'badges'       => $badges,
+			),
+			'metrics'           => array(
+				'completed_events' => (int) $indicators['experience']['confirmed_events'],
+				'review_count'     => (int) $feedback['count'],
+			),
+			'indicators'        => $indicators,
+			'history'           => $view['history'],
+			'reviews'           => $view['reviews'],
+			'events'            => $events,
+			'public_slug'       => $view['public_slug'],
+			'public_url'        => $view['public_url'],
+			'is_preview'        => ! empty( $view['is_preview'] ),
 		);
-		if ( is_wp_error( $data['categories'] ) ) {
-			$data['categories'] = array();
-		}
 		return apply_filters( 'lnkup_vendor_profile_data', $data, 'public' );
 	}
 

@@ -343,7 +343,17 @@ class LNKup_Intelligence_REST {
 	}
 
 	public static function vendor_reliability( WP_REST_Request $request ) {
-		return rest_ensure_response( LNKup_Vendor_Reliability_Intel::for_profile( absint( $request['id'] ) ) );
+		$profile_id = absint( $request['id'] );
+		$user_id    = get_current_user_id();
+		if ( 'lnkup_vendor_profile' !== get_post_type( $profile_id ) ) {
+			return new WP_Error( 'lnkup_not_found', __( 'Vendor not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		$vendor_id = (int) get_post_meta( $profile_id, '_lnkup_owner_user_id', true );
+		if ( ! LNKup_Capabilities::organizer_can_manage_vendor( $user_id, $vendor_id )
+			&& ! LNKup_Capabilities::organizer_can_view_vendor_contact( $user_id, $profile_id ) ) {
+			return new WP_Error( 'lnkup_forbidden', __( 'Reliability details are available for vendors you work with.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+		return rest_ensure_response( LNKup_Vendor_Reliability_Intel::for_profile( $profile_id ) );
 	}
 
 	public static function application_intel( WP_REST_Request $request ) {

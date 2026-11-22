@@ -157,7 +157,7 @@ class LNKup_External_Source_Posh implements LNKup_External_Source_Provider_Inter
 	 * @return string|WP_Error
 	 */
 	public static function fetch_event_html( string $url ) {
-		$response = wp_remote_get(
+		$response = wp_safe_remote_get(
 			$url,
 			array(
 				'timeout'     => 12,

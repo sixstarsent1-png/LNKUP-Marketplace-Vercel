@@ -35,7 +35,8 @@ $lead       = $city_name
 			</span>
 			<h1 class="lnkup-heading lnkup-heading--hero"><?php echo esc_html( $title ); ?></h1>
 			<p class="lnkup-hero__lead"><?php echo esc_html( $lead ); ?></p>
-			<p class="lnkup-hero__sublead"><?php esc_html_e( 'You receive 10% commission on the booking for 12 months.', 'lnkup-theme' ); ?></p>
+			<?php $lnkup_hero_terms = class_exists( 'LNKup_Partner_Public' ) ? LNKup_Partner_Public::terms_copy( 'city_connector' ) : array( 'lines' => array() ); ?>
+			<p class="lnkup-hero__sublead"><?php echo esc_html( $lnkup_hero_terms['lines'][0] ?? __( 'Commission is earned on verified bookings under the published program terms.', 'lnkup-theme' ) ); ?></p>
 			<div class="lnkup-hero__cta">
 				<a href="#apply" class="lnkup-btn lnkup-btn--primary lnkup-btn--lg"><?php esc_html_e( 'Apply to connect', 'lnkup-theme' ); ?></a>
 				<a href="#how-it-works" class="lnkup-btn lnkup-btn--outline lnkup-btn--lg"><?php esc_html_e( 'See how it works', 'lnkup-theme' ); ?></a>

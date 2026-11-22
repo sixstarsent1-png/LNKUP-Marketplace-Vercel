@@ -67,6 +67,9 @@ export type OrganizerReview = {
     customerEngagement?: number
   }
   createdAt?: string
+  /** The reviewed vendor's single public response (never edits the review). */
+  vendorResponse?: string
+  verifiedParticipation?: boolean
   raw?: unknown
 }
 
@@ -114,9 +117,20 @@ export type OrganizerVendorReputationPreview = {
   }>
 }
 
+/** Transparent Passport indicators (lnkup/v1 reputation summary). Never includes the internal score. */
+export type PublicVendorIndicators = {
+  verification: { isVerified: boolean; label: string; explanation: string }
+  experienceLabel: string
+  feedbackLabel: string
+  documentsLabel: string
+  isNewVendor: boolean
+  newVendorNote?: string
+}
+
 export type PublicVendorReputation = {
   slug?: string
   businessName?: string
+  /** @deprecated The 0–100 score is internal to LNKup staff and is no longer returned publicly. */
   score?: number
   rating?: number
   reviewCount: number
@@ -124,6 +138,7 @@ export type PublicVendorReputation = {
   tier: VendorReputationTier
   badges: VendorReputationBadge[]
   highlights?: OrganizerReview[]
+  indicators?: PublicVendorIndicators
 }
 
 export type VendorReputationResponse = {
@@ -241,6 +256,11 @@ export function mapWpReview(item: Record<string, unknown>): OrganizerReview {
       customerEngagement: cats.engagement ?? cats.customer_engagement,
     },
     createdAt: formatDate(item.created_at as string),
+    vendorResponse:
+      item.vendor_response && typeof (item.vendor_response as Record<string, unknown>).text === "string"
+        ? String((item.vendor_response as Record<string, unknown>).text)
+        : undefined,
+    verifiedParticipation: item.verified_participation === true,
     raw: item,
   }
 }
@@ -418,11 +438,14 @@ export function mapOrganizerReputationPreview(
 export function mapPublicVendorReputation(data: Record<string, unknown>): PublicVendorReputation {
   const rep = (data.reputation ?? {}) as WpReputationBlock
   const metrics = rep.metrics ?? {}
-  const tier = mapVendorReputationTier({
-    score: rep.score,
-    label: rep.label,
-    isNew: rep.is_new,
-  })
+  const ind = (data.indicators ?? {}) as Record<string, Record<string, unknown> | boolean | string | undefined>
+  const verification = (ind.verification ?? {}) as Record<string, unknown>
+  const experience = (ind.experience ?? {}) as Record<string, unknown>
+  const feedback = (ind.organizer_feedback ?? {}) as Record<string, unknown>
+  const documents = (ind.document_readiness ?? {}) as Record<string, unknown>
+  const isNew = Boolean(ind.is_new_vendor ?? rep.is_new)
+  // No composite tier from the internal score: "new" only for genuinely new vendors, otherwise neutral.
+  const tier: VendorReputationTier = isNew ? "new" : "unknown"
 
   const badges = (rep.badges ?? []).map((b) => mapWpBadge(b, true))
   if (data.verified) badges.unshift(mapWpBadge("verified", true))
@@ -431,16 +454,30 @@ export function mapPublicVendorReputation(data: Record<string, unknown>): Public
     .slice(0, 3)
     .map((r) => mapWpReview(r as Record<string, unknown>))
 
+  const displayAverage = feedback.display_average === true
   return {
     slug: (data.public_slug as string) ?? undefined,
     businessName: data.business_name as string | undefined,
-    score: rep.score,
-    rating: rep.avg_rating,
-    reviewCount: rep.review_count ?? metrics.review_count ?? 0,
-    completedEvents: metrics.completed_events ?? 0,
+    rating: displayAverage && typeof feedback.average === "number" ? feedback.average : rep.avg_rating || undefined,
+    reviewCount: Number(feedback.count ?? rep.review_count ?? metrics.review_count ?? 0),
+    completedEvents: Number(experience.confirmed_events ?? metrics.completed_events ?? 0),
     tier,
     badges,
     highlights: reviews,
+    indicators: data.indicators
+      ? {
+          verification: {
+            isVerified: verification.is_verified === true,
+            label: String(verification.label ?? ""),
+            explanation: String(verification.explanation ?? ""),
+          },
+          experienceLabel: String(experience.label ?? ""),
+          feedbackLabel: String(feedback.label ?? ""),
+          documentsLabel: String(documents.label ?? ""),
+          isNewVendor: isNew,
+          newVendorNote: typeof ind.new_vendor_note === "string" ? ind.new_vendor_note : undefined,
+        }
+      : undefined,
   }
 }
 

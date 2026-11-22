@@ -212,6 +212,9 @@ class LNKup_Verification {
 			'organizer_id'     => $organizer_id,
 			'payout_connected' => $payout_connected,
 		);
+		if ( class_exists( 'LNKup_Organizer_Verification' ) && ( $is_public || get_current_user_id() === $organizer_id || LNKup_Capabilities::user_has_manage_all() ) ) {
+			$response['indicators'] = LNKup_Organizer_Verification::indicators( $organizer_id, $is_public );
+		}
 
 		if ( ! $is_public && LNKup_Capabilities::user_has_manage_all() ) {
 			$response['internal_notes'] = (string) get_user_meta( $organizer_id, 'lnkup_organizer_verification_notes', true );
@@ -313,12 +316,7 @@ class LNKup_Verification {
 		$not_applicable = array_values( array_diff( $all_types, array_merge( $required_slugs, $suggested_slugs ) ) );
 
 		$doc_map = class_exists( 'LNKup_Documents' ) ? LNKup_Documents::document_types() : array();
-		$vendor_docs = $vendor_id && class_exists( 'LNKup_Documents' ) ? LNKup_Documents::get_for_vendor( $vendor_id ) : array();
-		$by_type = array();
-		foreach ( $vendor_docs as $doc ) {
-			$type = (string) get_post_meta( $doc->ID, '_lnkup_document_type', true );
-			$by_type[ $type ] = $doc;
-		}
+		$by_type = $vendor_id && class_exists( 'LNKup_Documents' ) ? LNKup_Documents::current_by_type( $vendor_id ) : array();
 
 		$format_doc = function ( string $slug, bool $is_required ) use ( $doc_map, $by_type ): array {
 			$doc    = $by_type[ $slug ] ?? null;
@@ -327,7 +325,9 @@ class LNKup_Verification {
 				$ver = (string) get_post_meta( $doc->ID, '_lnkup_verification_status', true );
 				if ( 'approved' === $ver ) {
 					$exp = get_post_meta( $doc->ID, '_lnkup_expiration_date', true );
-					if ( $exp && strtotime( (string) $exp ) < strtotime( '+30 days' ) ) {
+					if ( LNKup_Documents::is_expired( (string) $exp ) ) {
+						$status = 'expired';
+					} elseif ( $exp && strtotime( (string) $exp ) < strtotime( '+30 days' ) ) {
 						$status = 'expiring';
 					} else {
 						$status = 'approved';
@@ -549,7 +549,7 @@ class LNKup_Verification {
 		if ( $score >= self::PROFILE_COMPLETE_THRESHOLD ) {
 			return true;
 		}
-		$core_keys = array( 'business_basics', 'contact', 'category', 'markets', 'setup', 'photos' );
+		$core_keys = array( 'business_basics', 'contact_socials', 'markets_served', 'setup_requirements', 'photos_proof' );
 		$sections  = (array) ( $strength['sections'] ?? array() );
 		$by_key    = array();
 		foreach ( $sections as $section ) {
@@ -572,7 +572,8 @@ class LNKup_Verification {
 		}
 		foreach ( $required as $item ) {
 			$status = $item['status'] ?? '';
-			if ( ! in_array( $status, array( 'approved', 'pending', 'expiring' ), true ) ) {
+			// Reviewed and unexpired only: pending uploads and expired documents are not "ready".
+			if ( ! in_array( $status, array( 'approved', 'expiring' ), true ) ) {
 				return false;
 			}
 		}
@@ -610,8 +611,10 @@ class LNKup_Verification {
 				'post_type'      => 'lnkup_vendor_flag',
 				'posts_per_page' => 20,
 				'fields'         => 'ids',
-				'meta_key'       => '_lnkup_vendor_user_id',
-				'meta_value'     => $vendor_id,
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_vendor_user_id', 'value' => $vendor_id ),
+					array( 'key' => '_lnkup_admin_confirmed', 'value' => '1' ),
+				),
 			)
 		);
 		foreach ( $flags as $flag_id ) {
@@ -983,7 +986,9 @@ class LNKup_Verification {
 		$payout_connected = self::is_payout_connected( $organizer_id );
 		$event_details    = self::organizer_event_details_verified( $organizer_id );
 		$has_live_opp     = self::organizer_has_live_opportunity( $organizer_id );
-		$manual_verified  = (bool) get_user_meta( $organizer_id, 'lnkup_organizer_verified', true );
+		$manual_verified  = class_exists( 'LNKup_Organizer_Verification' )
+			? LNKup_Organizer_Verification::is_verified( $organizer_id )
+			: (bool) get_user_meta( $organizer_id, 'lnkup_organizer_verified', true );
 		$verified         = $payout_connected && $event_details && $has_live_opp && $manual_verified;
 		$trusted          = $verified && self::is_trusted_organizer( $organizer_id );
 

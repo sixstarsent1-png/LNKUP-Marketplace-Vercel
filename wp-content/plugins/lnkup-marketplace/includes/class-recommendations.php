@@ -19,6 +19,13 @@ class LNKup_Recommendations {
 		$user_id = $user_id ?: get_current_user_id();
 		$limit   = absint( $limit );
 
+		if ( $user_id && class_exists( 'LNKup_Match_Settings' ) && LNKup_Match_Settings::enabled( 'matching_vendor_discovery_enabled' ) && LNKup_Roles::is_vendor( $user_id ) ) {
+			$matched = LNKup_Match_Service::vendor_recommendations( $user_id, array( 'section' => 'recommended', 'per_page' => min( 24, max( 1, $limit ) ) ) );
+			if ( ! is_wp_error( $matched ) && ! empty( $matched['items'] ) ) {
+				return array_slice( $matched['items'], 0, $limit );
+			}
+		}
+
 		global $wpdb;
 		$table = LNKup_Marketplace_Index::table_name();
 		$rows  = $wpdb->get_results( "SELECT * FROM {$table} ORDER BY trending_score DESC LIMIT 100", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared

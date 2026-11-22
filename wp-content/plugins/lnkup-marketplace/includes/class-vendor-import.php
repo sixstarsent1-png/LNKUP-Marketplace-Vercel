@@ -606,6 +606,14 @@ class LNKup_Vendor_Import {
 	 * @param array $mapping      Mapping.
 	 * @param array $options      Options.
 	 */
+	public static function consent_bases() {
+		return array(
+			'existing_relationship'   => __( 'They have worked with or applied to my events before', 'lnkup-marketplace' ),
+			'public_business_contact' => __( 'Public business contact for vendor opportunities', 'lnkup-marketplace' ),
+			'opted_in'                => __( 'They opted in to hear about my events', 'lnkup-marketplace' ),
+		);
+	}
+
 	public static function run_import( $organizer_id, $job_id, $mapping, $options = array() ) {
 		$job = self::get_job( $job_id, $organizer_id );
 		if ( ! $job ) {
@@ -625,11 +633,25 @@ class LNKup_Vendor_Import {
 				'event_id'         => 0,
 				'opportunity_id'   => 0,
 				'invite_message'   => '',
+				'consent_basis'    => '',
+				'preset'           => '',
 			)
 		);
 
 		if ( ! empty( $options['send_invites'] ) && empty( $options['confirm_invites'] ) ) {
 			return new WP_Error( 'confirm_required', __( 'Confirm invite sending before import.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+
+		// Emailing imported contacts needs a recorded reason we may contact them.
+		$consent = sanitize_key( (string) $options['consent_basis'] );
+		$options['consent_basis'] = in_array( $consent, array_keys( self::consent_bases() ), true ) ? $consent : '';
+		if ( ! empty( $options['send_invites'] ) && '' === $options['consent_basis'] ) {
+			return new WP_Error( 'consent_required', __( 'Tell us how these vendors agreed to hear from you before sending invites.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+
+		// Past applicants from another platform stay prospects; the tag keeps them separate.
+		if ( 'past_applicants' === sanitize_key( (string) $options['preset'] ) ) {
+			$options['tags'] = array_merge( (array) $options['tags'], array( 'past-applicant' ) );
 		}
 
 		$settings = lnkup_get_settings();
@@ -775,9 +797,10 @@ class LNKup_Vendor_Import {
 				'summary_json' => wp_json_encode( $summary ),
 				'mapping_json' => wp_json_encode( $mapping ),
 				'options_json' => wp_json_encode( $options ),
+				'consent_basis' => (string) $options['consent_basis'],
 			),
 			array( 'id' => $job_id ),
-			array( '%s', '%s', '%s', '%s' ),
+			array( '%s', '%s', '%s', '%s', '%s' ),
 			array( '%d' )
 		);
 

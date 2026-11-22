@@ -22,6 +22,18 @@ class LNKup_Growth_Match {
 			return self::empty_score();
 		}
 
+		if ( class_exists( 'LNKup_Match_Settings' ) && LNKup_Match_Settings::enabled() ) {
+			$explained = LNKup_Match_Service::explain_for_vendor( $user_id, $opportunity_id );
+			if ( is_wp_error( $explained ) ) {
+				return self::empty_score();
+			}
+			return array(
+				'match_score' => (int) $explained['match_score'],
+				'match_label' => (string) $explained['match_label'],
+				'reasons'     => array_slice( (array) $explained['reasons'], 0, 3 ),
+			);
+		}
+
 		global $wpdb;
 		$table = LNKup_Marketplace_Index::table_name();
 		$row   = $wpdb->get_row(

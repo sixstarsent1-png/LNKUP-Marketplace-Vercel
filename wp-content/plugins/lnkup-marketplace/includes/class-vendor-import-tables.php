@@ -33,6 +33,7 @@ class LNKup_Vendor_Import_Tables {
 				options_json longtext,
 				status varchar(24) NOT NULL DEFAULT 'uploaded',
 				summary_json longtext,
+				consent_basis varchar(32) NOT NULL DEFAULT '',
 				created_at datetime NOT NULL,
 				expires_at datetime NOT NULL,
 				PRIMARY KEY (id),

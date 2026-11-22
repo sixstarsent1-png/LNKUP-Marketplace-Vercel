@@ -96,6 +96,24 @@ function lnkup_vendor_can_discover_opportunity( $user_id, $opportunity_id ) {
 }
 
 /**
+ * Whether a date-only application deadline is in the past, using the site timezone.
+ * A deadline day stays open until the end of that day.
+ *
+ * @param string $deadline Deadline (Y-m-d or any strtotime-parsable date).
+ */
+function lnkup_deadline_passed( $deadline ) {
+	$deadline = trim( (string) $deadline );
+	if ( '' === $deadline ) {
+		return false;
+	}
+	$ts = strtotime( $deadline );
+	if ( false === $ts ) {
+		return false;
+	}
+	return gmdate( 'Y-m-d', $ts ) < current_time( 'Y-m-d' );
+}
+
+/**
  * Branded sign-up page URL.
  */
 function lnkup_registration_url() {
@@ -205,7 +223,7 @@ function lnkup_organizer_dashboard_view( $view = null ) {
 	if ( isset( $aliases[ $view ] ) ) {
 		$view = $aliases[ $view ];
 	}
-	$allowed = array( 'home', 'events', 'applications', 'financial', 'vendors', 'lists', 'invites', 'referrals', 'operations', 'intelligence', 'create', 'help', 'profile' );
+	$allowed = array( 'home', 'start', 'events', 'applications', 'financial', 'vendors', 'lists', 'invites', 'referrals', 'operations', 'intelligence', 'create', 'help', 'profile', 'team', 'tours' );
 	return in_array( $view, $allowed, true ) ? $view : 'home';
 }
 
@@ -1749,10 +1767,10 @@ function lnkup_parse_marketplace_filters( $source = null ) {
 			$args[ $key ] = array_filter( array_map( 'sanitize_text_field', explode( ',', wp_unslash( $source[ $key ] ) ) ) );
 		}
 	}
-	$num_keys = array( 'attendance_min', 'attendance_max', 'fee_min', 'fee_max', 'page', 'per_page', 'radius' );
+	$num_keys = array( 'attendance_min', 'attendance_max', 'fee_min', 'fee_max', 'page', 'per_page', 'radius', 'tour_id', 'organizer_id' );
 	foreach ( $num_keys as $key ) {
 		if ( isset( $source[ $key ] ) && '' !== $source[ $key ] ) {
-			$args[ $key ] = 'page' === $key || 'per_page' === $key || 'attendance_min' === $key || 'attendance_max' === $key || 'radius' === $key
+			$args[ $key ] = in_array( $key, array( 'page', 'per_page', 'attendance_min', 'attendance_max', 'radius', 'tour_id', 'organizer_id' ), true )
 				? absint( $source[ $key ] )
 				: (float) $source[ $key ];
 		}
@@ -1762,7 +1780,7 @@ function lnkup_parse_marketplace_filters( $source = null ) {
 		'food_truck_allowed', 'verified_organizer', 'featured_organizer',
 		'instant_approval', 'has_spots', 'show_closed', 'newly_added',
 		'closing_soon', 'almost_full', 'applications_open', 'doc_none',
-		'high_demand', 'include_external',
+		'high_demand', 'include_external', 'preferred_markets', 'previous_organizers',
 	);
 	foreach ( $bool_keys as $key ) {
 		if ( isset( $source[ $key ] ) && '' !== $source[ $key ] ) {
@@ -2264,8 +2282,10 @@ function lnkup_get_opportunity_card_data( $opportunity_id, $row = null ) {
 		}
 	}
 
-	$deadline_passed = ! empty( $item['deadline'] ) && strtotime( $item['deadline'] ) < strtotime( 'today' );
-	$no_spots        = (int) ( $item['spots_remaining'] ?? 0 ) <= 0;
+	$deadline_passed = lnkup_deadline_passed( $item['deadline'] ?? '' );
+	// Capacity 0 means unlimited (LNKup_Opportunity_Inventory::capacity()).
+	$item['spots_unlimited'] = (int) ( $item['total_spots'] ?? 0 ) <= 0;
+	$no_spots        = ! $item['spots_unlimited'] && (int) ( $item['spots_remaining'] ?? 0 ) <= 0;
 	$item['is_open'] = ! $deadline_passed && ! $no_spots;
 
 	$item['apply_url']    = add_query_arg( array( 'apply' => $opportunity_id ), lnkup_page_url_helper( 'opportunities' ) );
@@ -2287,6 +2307,7 @@ function lnkup_get_opportunity_card_data( $opportunity_id, $row = null ) {
 			$item['application_status'] = get_post_meta( $apps[0]->ID, '_lnkup_application_status', true );
 		}
 	}
+	$item['can_apply_again'] = lnkup_application_can_apply_again( (string) $item['application_status'], (int) $opportunity_id );
 
 	return $item;
 }
@@ -2334,6 +2355,9 @@ function lnkup_format_index_row( $row, $compare = false ) {
 		'view_count'        => (int) ( $row['view_count'] ?? 0 ),
 		'trending_score'    => (float) ( $row['trending_score'] ?? 0 ),
 		'badges'            => lnkup_get_opportunity_badges( $row ),
+		'listing_status'    => class_exists( 'LNKup_Event_Authenticity' ) && ! empty( $row['event_id'] )
+			? LNKup_Event_Authenticity::public_label( (int) $row['event_id'] )
+			: null,
 	);
 
 	if ( $compare ) {
@@ -2370,8 +2394,26 @@ function lnkup_format_index_row( $row, $compare = false ) {
 	$item['image_alt']              = lnkup_opportunity_card_alt( $item );
 	$statuses                       = lnkup_current_vendor_application_statuses();
 	$item['application_status']     = $statuses[ (int) $row['opportunity_id'] ] ?? '';
+	$item['can_apply_again']        = lnkup_application_can_apply_again( $item['application_status'], (int) $row['opportunity_id'] );
 
 	return $item;
+}
+
+/**
+ * Whether the current vendor may apply again after a closed application (withdrawn, or declined and re-opened).
+ *
+ * @param string $status         Latest application status for the opportunity ('' when none).
+ * @param int    $opportunity_id Opportunity ID.
+ */
+function lnkup_application_can_apply_again( $status, $opportunity_id ) {
+	if ( 'cancelled' === $status ) {
+		return true;
+	}
+	if ( 'rejected' !== $status || ! class_exists( 'LNKup_Applications' ) ) {
+		return false;
+	}
+	$state = LNKup_Applications::reapply_state( (int) $opportunity_id, get_current_user_id() );
+	return is_array( $state ) && 'allowed' === $state['reapply'];
 }
 
 /**
@@ -2467,7 +2509,16 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 		$view_url = LNKup_Organizer_Onboarding::event_public_url( $event_id );
 	}
 	$match_chip = '';
-	if ( $user_id && class_exists( 'LNKup_Growth_Match' ) && LNKup_Capabilities::can_view_growth( $user_id ) ) {
+	if ( ! empty( $opp['match']['band_label'] ) ) {
+		$first_reason = (string) ( $opp['match']['reasons'][0] ?? '' );
+		$match_chip   = '<span class="lnkup-growth-match-chip lnkup-match-chip--' . esc_attr( $opp['match']['band'] ) . '" data-testid="lnkup-match-chip">' . esc_html( $opp['match']['band_label'] ) . '</span>'
+			. ( '' !== $first_reason ? '<span class="lnkup-match-reason lnkup-muted">' . esc_html( $first_reason ) . '</span>' : '' );
+	} elseif ( $user_id && class_exists( 'LNKup_Match_Settings' ) && LNKup_Match_Settings::enabled( 'matching_vendor_discovery_enabled' ) ) {
+		$cached = LNKup_Match_Service::cached_match( $user_id, (int) $opp['opportunity_id'] );
+		if ( $cached ) {
+			$match_chip = '<span class="lnkup-growth-match-chip lnkup-match-chip--' . esc_attr( $cached['band'] ) . '" data-testid="lnkup-match-chip">' . esc_html( $cached['band_label'] ) . '</span>';
+		}
+	} elseif ( $user_id && class_exists( 'LNKup_Growth_Match' ) && LNKup_Capabilities::can_view_growth( $user_id ) ) {
 		$match = LNKup_Growth_Match::for_opportunity( $user_id, $opp['opportunity_id'] );
 		if ( ! empty( $match['match_score'] ) ) {
 			$match_chip = '<span class="lnkup-growth-match-chip">' . esc_html( $match['match_score'] ) . '% ' . esc_html( $match['match_label'] ) . '</span>';
@@ -2541,6 +2592,10 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 			<button type="button" class="lnkup-event-card__favorite<?php echo $favorited ? ' is-active' : ''; ?>" data-favorite-type="opportunities" data-favorite-id="<?php echo esc_attr( (string) $opp['opportunity_id'] ); ?>" aria-label="<?php esc_attr_e( 'Favorite', 'lnkup-marketplace' ); ?>">♥</button>
 		</div>
 		<div class="lnkup-event-card__body">
+			<?php $tour_link = class_exists( 'LNKup_Portfolio_Public' ) ? LNKup_Portfolio_Public::card_tour_link( $event_id ) : null; ?>
+			<?php if ( $tour_link ) : ?>
+				<a class="lnkup-event-card__tour" href="<?php echo esc_url( $tour_link['url'] ); ?>" data-testid="lnkup-card-tour-link"><?php echo esc_html( $tour_link['label'] ); ?></a>
+			<?php endif; ?>
 			<?php if ( ! empty( $opp['organizer_name'] ) ) : ?>
 				<div class="lnkup-event-card__organizer">
 					<span class="lnkup-event-card__avatar"><?php echo esc_html( substr( $opp['organizer_name'], 0, 1 ) ); ?></span>
@@ -2564,6 +2619,9 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 					}
 				}
 				?>
+			<?php endif; ?>
+			<?php if ( ! empty( $opp['listing_status'] ) && 'organizer_controlled' !== $opp['listing_status']['status'] ) : ?>
+				<p class="lnkup-event-card__listing-status lnkup-muted" data-testid="lnkup-opp-listing-status" title="<?php echo esc_attr( $opp['listing_status']['description'] ); ?>"><?php echo esc_html( $opp['listing_status']['label'] ); ?></p>
 			<?php endif; ?>
 			<h3><a href="<?php echo esc_url( $view_url ); ?>"><?php echo wp_kses_post( $name ); ?></a></h3>
 			<p class="lnkup-event-card__summary">
@@ -3169,6 +3227,7 @@ function lnkup_get_discoverable_vendors( $args = array() ) {
 			'category'    => '',
 			'verified'    => '',
 			'post_status' => 'publish',
+			'organizer_id' => 0,
 		)
 	);
 
@@ -3194,6 +3253,32 @@ function lnkup_get_discoverable_vendors( $args = array() ) {
 			'key'   => '_lnkup_verification_status',
 			'value' => 'approved',
 		);
+	}
+
+	// Vendors who opted out of discovery stay visible only to organizers they already work with.
+	$organizer_id = absint( $args['organizer_id'] );
+	if ( ! $organizer_id || ! LNKup_Capabilities::user_has_manage_all( $organizer_id ) ) {
+		$discoverable = array(
+			'relation' => 'OR',
+			array(
+				'key'     => '_lnkup_discoverable',
+				'compare' => 'NOT EXISTS',
+			),
+			array(
+				'key'     => '_lnkup_discoverable',
+				'value'   => '0',
+				'compare' => '!=',
+			),
+		);
+		$related = ( $organizer_id && class_exists( 'LNKup_Match_Service' ) ) ? LNKup_Match_Service::related_vendor_users( $organizer_id ) : array();
+		if ( $related ) {
+			$discoverable[] = array(
+				'key'     => '_lnkup_owner_user_id',
+				'value'   => array_map( 'strval', $related ),
+				'compare' => 'IN',
+			);
+		}
+		$query_args['meta_query'][] = $discoverable;
 	}
 
 	if ( ! empty( $args['city'] ) ) {
@@ -3236,6 +3321,24 @@ function lnkup_get_discoverable_vendors( $args = array() ) {
 			)
 		);
 		$query_args['post__in'] = $ids ? array_map( 'intval', $ids ) : array( 0 );
+	}
+
+	// Global ordering happens in SQL so sort applies across pages, not just within the current page.
+	$sort_meta = array(
+		'score'    => '_lnkup_reputation_score',
+		'reliable' => '_lnkup_reputation_score',
+		'rating'   => '_lnkup_review_count',
+	);
+	$sort = sanitize_key( (string) ( $args['sort'] ?? '' ) );
+	if ( isset( $sort_meta[ $sort ] ) ) {
+		$query_args['meta_query']['lnkup_sort'] = array(
+			'relation' => 'OR',
+			'lnkup_sort_value' => array( 'key' => $sort_meta[ $sort ], 'type' => 'NUMERIC', 'compare' => 'EXISTS' ),
+			array( 'key' => $sort_meta[ $sort ], 'compare' => 'NOT EXISTS' ),
+		);
+		$query_args['orderby'] = array( 'lnkup_sort_value' => 'DESC', 'date' => 'DESC' );
+	} elseif ( 'new' === $sort ) {
+		$query_args['orderby'] = 'date';
 	}
 
 	if ( count( $query_args['meta_query'] ) > 1 ) {

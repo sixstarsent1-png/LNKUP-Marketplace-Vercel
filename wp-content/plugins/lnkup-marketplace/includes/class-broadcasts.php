@@ -115,6 +115,12 @@ class LNKup_Broadcasts {
 				case 'checked_in':
 					$include = (bool) get_post_meta( $app->ID, '_lnkup_checked_in_at', true );
 					break;
+				case 'food_vendors':
+				case 'food_trucks':
+				case 'retail':
+					$include = in_array( $status, array( 'paid', 'completed' ), true )
+						&& array_intersect( self::category_slugs_for_application( $app->ID, $vendor_id ), self::preset_category_slugs( $preset ) );
+					break;
 				default:
 					$include = 'paid' === $status || 'completed' === $status;
 			}
@@ -122,7 +128,46 @@ class LNKup_Broadcasts {
 				$ids[] = $vendor_id;
 			}
 		}
-		return array_unique( $ids );
+		return array_values( array_unique( $ids ) );
+	}
+
+	/**
+	 * Vendor category slugs that belong to a category audience preset.
+	 *
+	 * @param string $preset Audience preset slug.
+	 * @return string[]
+	 */
+	public static function preset_category_slugs( $preset ) {
+		$map = array(
+			'food_vendors' => array( 'food-vendor', 'food-truck', 'desserts', 'dessert-vendor', 'drinks', 'beverage-vendor' ),
+			'food_trucks'  => array( 'food-truck' ),
+			'retail'       => array( 'retail', 'retail-vendor', 'clothing', 'clothing-brand', 'jewelry', 'jewelry-vendor', 'art', 'art-vendor' ),
+		);
+		return (array) apply_filters( 'lnkup_broadcast_preset_category_slugs', $map[ $preset ] ?? array(), $preset );
+	}
+
+	/**
+	 * Category slugs for one application: the category chosen on the application, else the vendor profile's.
+	 *
+	 * @param int $app_id    Application ID.
+	 * @param int $vendor_id Vendor user ID.
+	 * @return string[]
+	 */
+	private static function category_slugs_for_application( $app_id, $vendor_id ) {
+		$chosen = (string) get_post_meta( $app_id, '_lnkup_selected_category', true );
+		if ( '' !== $chosen ) {
+			$term = get_term_by( 'name', $chosen, 'lnkup_vendor_category' );
+			return array( $term && ! is_wp_error( $term ) ? $term->slug : sanitize_title( $chosen ) );
+		}
+		$profile_id = (int) get_post_meta( $app_id, '_lnkup_vendor_profile_id', true );
+		if ( ! $profile_id && $vendor_id ) {
+			$profile_id = (int) lnkup_get_vendor_profile_id( $vendor_id );
+		}
+		if ( ! $profile_id ) {
+			return array();
+		}
+		$slugs = wp_get_post_terms( $profile_id, 'lnkup_vendor_category', array( 'fields' => 'slugs' ) );
+		return is_array( $slugs ) ? $slugs : array();
 	}
 
 	/**

@@ -11,6 +11,8 @@ module.exports = {
     "^expo-router$": "<rootDir>/__tests__/mocks/expo-router.ts",
     "^expo-constants$": "<rootDir>/__tests__/mocks/expo-constants.ts",
     "^expo-secure-store$": "<rootDir>/__tests__/mocks/expo-secure-store.ts",
+    "^expo-notifications$": "<rootDir>/__tests__/mocks/expo-notifications.ts",
+    "^expo-device$": "<rootDir>/__tests__/mocks/expo-device.ts",
     "^@react-native-async-storage/async-storage$": "<rootDir>/__tests__/mocks/async-storage.ts",
     "^react-native$": "<rootDir>/__tests__/mocks/react-native.ts",
   },

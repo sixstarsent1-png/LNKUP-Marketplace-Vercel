@@ -33,7 +33,7 @@ class LNKup_Connector_Attribution {
 			return;
 		}
 		$row = LNKup_Connector::resolve_code( $code );
-		if ( ! $row || LNKup_Connector::PROGRAM !== ( $row['program'] ?? '' ) ) {
+		if ( ! $row || ! LNKup_Connector::is_account_program( (string) ( $row['program'] ?? '' ) ) ) {
 			return;
 		}
 		setcookie(
@@ -84,9 +84,10 @@ class LNKup_Connector_Attribution {
 			return;
 		}
 		$code_row = LNKup_Connector::resolve_code( $code );
-		if ( ! $code_row || LNKup_Connector::PROGRAM !== ( $code_row['program'] ?? '' ) ) {
+		if ( ! $code_row || ! LNKup_Connector::is_account_program( (string) ( $code_row['program'] ?? '' ) ) ) {
 			return;
 		}
+		$program = (string) $code_row['program'];
 		if ( (int) $code_row['user_id'] === (int) $user_id ) {
 			return;
 		}
@@ -111,7 +112,7 @@ class LNKup_Connector_Attribution {
 			update_user_meta( $user_id, '_lnkup_referred_by_user_id', (int) $code_row['user_id'] );
 			update_user_meta( $user_id, '_lnkup_referred_by_connector_id', (int) $code_row['connector_id'] );
 			update_user_meta( $user_id, '_lnkup_referral_market', (string) ( $code_row['market_slug'] ?? '' ) );
-			update_user_meta( $user_id, '_lnkup_signup_referrer_type', 'city_connector' );
+			update_user_meta( $user_id, '_lnkup_signup_referrer_type', $program );
 		}
 
 		$source_url = '';
@@ -125,7 +126,7 @@ class LNKup_Connector_Attribution {
 				'referrer_user_id' => (int) $code_row['user_id'],
 				'referred_user_id' => absint( $user_id ),
 				'referral_code_id' => (int) $code_row['id'],
-				'program'          => LNKup_Connector::PROGRAM,
+				'program'          => $program,
 				'market_slug'      => (string) ( $code_row['market_slug'] ?? '' ),
 				'target_role'      => $role,
 				'source_url'       => $source_url,

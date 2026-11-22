@@ -1,0 +1,89 @@
+/* LNKup Communications — dashboard surfaces. Black / white / lime, mobile-first. */
+.lnkup-comms {
+	--lnk-black: #0b0b0c;
+	--lnk-lime: #c8f542;
+	--lnk-muted: #5b5c63;
+	--lnk-border: #e7e7e3;
+	--lnk-error: #b42318;
+	max-width: 880px;
+	margin: 0 auto;
+	color: var(--lnk-black);
+	font-size: 15px;
+	line-height: 1.5;
+}
+.lnkup-comms-card {
+	background: #fff;
+	border: 1px solid var(--lnk-border);
+	border-radius: 16px;
+	box-shadow: 0 1px 2px rgba(11, 11, 12, 0.04), 0 8px 24px rgba(11, 11, 12, 0.04);
+	padding: 20px;
+	margin-bottom: 16px;
+}
+.lnkup-comms-state { text-align: center; color: var(--lnk-muted); }
+.lnkup-comms-state.is-error { color: var(--lnk-error); border-color: rgba(180, 35, 24, 0.25); }
+.lnkup-comms-skeleton { animation: lnkup-comms-pulse 1.4s ease-in-out infinite; }
+@keyframes lnkup-comms-pulse { 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .lnkup-comms-skeleton { animation: none; } }
+.lnkup-comms h2 { font-size: 20px; margin: 0 0 16px; }
+.lnkup-comms h3 { font-size: 16px; margin: 0 0 12px; }
+.lnkup-comms-table-wrap { overflow-x: auto; margin: 0 -4px 16px; }
+.lnkup-comms-table { width: 100%; border-collapse: collapse; }
+.lnkup-comms-table th, .lnkup-comms-table td { text-align: left; padding: 12px 8px; border-bottom: 1px solid var(--lnk-border); vertical-align: top; }
+.lnkup-comms-table thead th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--lnk-muted); }
+.lnkup-comms-cat { display: block; font-weight: 700; }
+.lnkup-comms-desc { display: block; font-size: 13px; color: var(--lnk-muted); font-weight: 400; }
+.lnkup-comms-badge { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #f1f1ec; font-size: 11px; font-weight: 600; color: var(--lnk-muted); }
+.lnkup-comms select, .lnkup-comms input[type="text"], .lnkup-comms input[type="time"], .lnkup-comms textarea {
+	width: 100%;
+	min-height: 44px;
+	padding: 8px 12px;
+	border: 1px solid var(--lnk-border);
+	border-radius: 10px;
+	background: #fff;
+	font: inherit;
+	color: inherit;
+}
+.lnkup-comms textarea { min-height: 120px; resize: vertical; }
+.lnkup-comms select:focus-visible, .lnkup-comms input:focus-visible, .lnkup-comms textarea:focus-visible, .lnkup-comms-btn:focus-visible {
+	outline: 2px solid var(--lnk-black);
+	outline-offset: 2px;
+}
+.lnkup-comms-form > label { display: block; margin: 14px 0 6px; font-weight: 600; }
+.lnkup-comms-row { display: flex; align-items: center; gap: 10px; margin: 12px 0; flex-wrap: wrap; border: 0; padding: 0; }
+.lnkup-comms-row input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--lnk-black); }
+.lnkup-comms-inline label { display: flex; align-items: center; gap: 8px; }
+.lnkup-comms-inline input[type="time"], .lnkup-comms-inline select { width: auto; }
+.lnkup-comms-note { font-size: 13px; color: var(--lnk-muted); }
+.lnkup-comms-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+.lnkup-comms-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 44px;
+	padding: 10px 20px;
+	border: 0;
+	border-radius: 10px;
+	background: var(--lnk-lime);
+	color: var(--lnk-black);
+	font-weight: 700;
+	cursor: pointer;
+	text-decoration: none;
+}
+.lnkup-comms-btn.is-secondary { background: #fff; border: 1px solid var(--lnk-black); }
+.lnkup-comms-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.lnkup-comms-status { margin: 0; font-weight: 600; }
+.lnkup-comms-status.is-error { color: var(--lnk-error); }
+.lnkup-comms-preview { margin-top: 16px; }
+.lnkup-comms-preview .lnkup-comms-card { margin: 8px 0 0; padding: 12px; }
+.lnkup-comms-success { font-weight: 700; }
+.lnkup-comms-history { list-style: none; margin: 0; padding: 0; }
+.lnkup-comms-history li { padding: 12px 0; border-bottom: 1px solid var(--lnk-border); }
+.lnkup-comms-history li p { margin: 6px 0 0; white-space: pre-line; }
+@media (max-width: 640px) {
+	.lnkup-comms-card { padding: 16px; border-radius: 14px; }
+	.lnkup-comms-table thead { display: none; }
+	.lnkup-comms-table, .lnkup-comms-table tbody, .lnkup-comms-table tr, .lnkup-comms-table th, .lnkup-comms-table td { display: block; width: 100%; }
+	.lnkup-comms-table tr { padding: 8px 0; border-bottom: 1px solid var(--lnk-border); }
+	.lnkup-comms-table th, .lnkup-comms-table td { border: 0; padding: 4px 0; }
+	.lnkup-comms-actions .lnkup-comms-btn { flex: 1 1 100%; }
+}

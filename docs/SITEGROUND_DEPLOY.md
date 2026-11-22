@@ -5,9 +5,12 @@ Production WordPress at **thelnkup.com** stays an existing SiteGround install. T
 GitHub (or a laptop script) copies only:
 
 - `wp-content/plugins/lnkup-marketplace/`
+- `wp-content/plugins/lnkup-communications/` (Communications OS; bundles Action Scheduler in `lib/`, no composer step)
 - `wp-content/themes/lnkup-theme/`
 
-Then the server runs `composer install --no-dev` in the plugin folder (Stripe + dompdf). Vercel and EAS stay on their own pipelines.
+Then the server runs `composer install --no-dev` in the lnkup-marketplace folder (Stripe + dompdf). Vercel and EAS stay on their own pipelines.
+
+The first deploy of lnkup-communications only copies files. Activate it with `wp plugin activate lnkup-communications` and follow [COMMUNICATIONS_ROLLOUT.md](COMMUNICATIONS_ROLLOUT.md). Every flow is off by default, so activating it changes nothing for users.
 
 ## What never gets uploaded
 
@@ -64,4 +67,5 @@ $env:SG_SSH_KEY  = "$HOME\.ssh\lnkup_siteground"
 
 - Hard-refresh wp-admin and the dashboards so `?ver=` assets update.
 - Confirm `POST /wp-json/lnkup/v1/auth/register` exists after plugin **12.18.39+**.
+- Communications: `wp lnkup-comms status` (flags, queue, health). Preflight before the first rollout: `wp eval-file /path/to/comms-preflight.php` (see [COMMUNICATIONS_ROLLOUT.md](COMMUNICATIONS_ROLLOUT.md)).
 - Zip upload (`scripts/build-plugin-zip.ps1`) remains a fallback if SSH is down.
