@@ -62,8 +62,18 @@ class LNKup_Passport_Settings {
 			return false;
 		}
 		$on = ! empty( $settings[ $flag ] );
+		if ( $on && 'document_vault_sharing' === $flag && class_exists( 'LNKup_Private_Uploads_Probe' ) && LNKup_Private_Uploads_Probe::is_exposed() ) {
+			$on = false;
+		}
 		return (bool) apply_filters( 'lnkup_passport_flag', $on, $flag );
 	}
+
+	/**
+	 * Set when the last save() refused to turn on Document Vault sharing.
+	 *
+	 * @var bool
+	 */
+	public static $sharing_blocked = false;
 
 	/**
 	 * Bounded integer setting.
@@ -126,8 +136,17 @@ class LNKup_Passport_Settings {
 		if ( ! is_array( $settings ) ) {
 			$settings = array();
 		}
+		$sharing_was_on = ! empty( $settings['document_vault_sharing'] );
 		foreach ( self::FLAGS as $flag ) {
 			$settings[ $flag ] = ! empty( $input[ $flag ] );
+		}
+		self::$sharing_blocked = false;
+		if ( ! $sharing_was_on && ! empty( $settings['document_vault_sharing'] ) && class_exists( 'LNKup_Private_Uploads_Probe' ) ) {
+			LNKup_Private_Uploads_Probe::run();
+			if ( ! LNKup_Private_Uploads_Probe::is_protected() ) {
+				$settings['document_vault_sharing'] = false;
+				self::$sharing_blocked              = true;
+			}
 		}
 		foreach ( self::INTS as $key => $range ) {
 			if ( isset( $input[ $key ] ) ) {

@@ -246,6 +246,9 @@ list( $event_free, $free_opps ) = lnkup_e2e_event(
 	'E2E Free Community Day',
 	array( 'free' => array( 'title' => 'Free Community Table', 'fee' => 0, 'spots' => 5 ) )
 );
+// The check-in gate specs need an outstanding document whether the legacy vendor-level check or
+// per-event organizer document review (seed-organizer-os.php) decides readiness.
+update_post_meta( $free_opps['free'], '_lnkup_required_documents', 'certificate_of_insurance' );
 list( $event_b, $b_opps ) = lnkup_e2e_event(
 	'org-b',
 	$org_b,
@@ -320,6 +323,11 @@ if ( class_exists( 'LNKup_Saved_Searches' ) ) {
 
 // Booth assignments on the main event start empty so the booth spec always has an open booth.
 if ( class_exists( 'LNKup_Operations_Tables' ) && method_exists( 'LNKup_Operations_Tables', 'booths_table' ) ) {
+	if ( class_exists( 'LNKup_Booths' ) && ! LNKup_Booths::get_for_event( $event_main ) ) {
+		foreach ( array( '1', '2', '3' ) as $booth_number ) {
+			LNKup_Booths::save( $event_main, array( 'booth_number' => $booth_number, 'booth_type' => 'standard' ) );
+		}
+	}
 	$wpdb->update( LNKup_Operations_Tables::booths_table(), array( 'application_id' => 0 ), array( 'event_id' => $event_main ), array( '%d' ), array( '%d' ) );
 	$main_apps = get_posts(
 		array(
@@ -430,6 +438,7 @@ $env = array(
 	'PLAYWRIGHT_ORGANIZER_EVENT_ID'         => $event_main,
 	'PLAYWRIGHT_ORGANIZER_B_EVENT_ID'       => $event_b,
 	'PLAYWRIGHT_VENDOR_PENDING_PAYMENT_ID'  => $pending_payment ? $pending_payment->ID : '',
+	'PLAYWRIGHT_PENDING_PAYMENT_APPLICATION_ID' => $app_pending,
 	'PLAYWRIGHT_FREE_BOOTH_PAYMENT_ID'      => $free_payment ? $free_payment->ID : '',
 	'PLAYWRIGHT_FOREIGN_PAYMENT_ID'         => $b_payment ? $b_payment->ID : '',
 	'PLAYWRIGHT_FOREIGN_DOCUMENT_ID'        => $doc_b,

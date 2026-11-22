@@ -128,7 +128,7 @@ test.describe('Launch homepage', () => {
     await expect(logo).toBeVisible();
     await expect(logo).toHaveAttribute('href', /https?:\/\//);
     await expect(page.locator('#lnkup-login, body.login')).toHaveCount(1);
-    await expect(page.locator('link[href*="login.css"]')).toHaveCount(1);
+    await expect(page.locator('link[href*="lnkup-theme/assets/css/login.css"]')).toHaveCount(1);
 
     await page.goto('/wp-login.php?action=lostpassword');
     await expect(page.getByText(/enter your account email/i)).toBeVisible();

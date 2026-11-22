@@ -54,7 +54,7 @@ test.describe('Organizer vendors, money and more', () => {
     const available = Number((body as { available_balance?: number })?.available_balance ?? 0);
     test.skip(available > 0, 'Seed has an available balance; covered by the payout test in staging');
     await page.goto('/(organizer)/money');
-    await expect(page.getByText('Nothing to cash out yet.', { exact: false })).toBeVisible();
+    await expect(page.getByText('Nothing is available to cash out yet.', { exact: false })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Cash out', exact: true })).toBeDisabled();
   });
 

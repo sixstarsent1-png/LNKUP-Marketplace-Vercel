@@ -101,12 +101,91 @@ Short paths: `P/` = `wp-content/plugins/lnkup-marketplace/`, `C/` = `wp-content/
 |---|---|---|---|---|
 | Ops overview | separate queues (trust, comms health, match health, partner reviews, reconciliation) | Admin Lite: external events, documents, connectors | Missing | One deduplicated queue; stuck-application detector |
 | Partner programs and ledger | `includes/partnerships/*`, `LNKup_Attribution_Arbiter` | Expo `(partner)` workspace, web dashboard | Built, needs verification | Tour attribution rollup; payouts stay manual |
-| Private document sharing | `document_vault_sharing`, `class-document-migration.php` | none | Blocked by an external dependency | SiteGround NGINX Direct Delivery serves `/uploads/lnkup-private/` (hosting owner) |
+| Private document sharing | `document_vault_sharing`, `class-document-migration.php`, `LNKup_Private_Uploads_Probe` gate | none | Blocked by an external dependency | SiteGround NGINX Direct Delivery serves `/uploads/lnkup-private/` (hosting owner); the probe must read `protected` on staging |
+
+## Phase 1 results: release and preview checks
+
+### Vercel previews
+- **Cause (from the build logs of PR #7 and PR #9):** the Vercel project builds from the repo root (`rootDirectory: null`). The Next.js builder reads the root `package.json`, finds no `next` dependency, and stops with `NEXT_NO_VERSION`. Changing the install command (PR #7) does not help.
+- **Fix:** an owner action, not code. In Vercel, set Project Settings → Root Directory to `lnk-up-marketplace-ui`. `lnk-up-marketplace-ui/vercel.json` then applies (`npm ci`, `npm run build`). The stale July `lnk-up-marketplace-ui/pnpm-lock.yaml`, which was missing `react-leaflet`, is removed so only `package-lock.json` decides the install.
+- **Evidence:** a local `npm run build` in `lnk-up-marketplace-ui` succeeds (Next.js production build, all routes compiled). No preview has passed yet; that waits on the Root Directory setting.
+
+### GitHub quality gates
+- Fixed separately in [PR #7](https://github.com/sixstarsent1-png/LNKUP-Marketplace-Vercel/pull/7): pnpm setup, a CI web server, strict `tsc`, and the 18 Next.js type errors. Both gates pass there. Until PR #7 merges, this stack fails the gates at the install step.
+
+### Playwright (WordPress)
+- **Timeout causes:**
+  1. A plain `npx playwright test` ignored `scripts/e2e/.env.e2e` and ran with unlimited workers. More than two workers against one wp-env container causes forced re-logins and timeouts.
+  2. A stale `PLAYWRIGHT_BASE_URL` in the shell pointed tests at another site while they used this site's fixture IDs.
+- **Fix:** both configs now load the seed file through `tests/support/seed-env.ts`, warn when the shell's base URL differs from the seeded one, and default to 2 local workers.
+- **Seed gaps that only showed on a fresh site:**
+  - No booths on the main event.
+  - `PLAYWRIGHT_PENDING_PAYMENT_APPLICATION_ID` was not exported.
+  - The free booth needed a required document for the check-in gate once per-event document review is on.
+- **Spec drift fixed:**
+  - Vendor payments tabs are `role="tab"` and grouped under the Wallet section.
+  - Quick chips have been hidden since `864b1fe`.
+  - Phase-1a assertions skip on the seeded phase `1c`.
+  - Classic applications view lives at `&mode=classic`.
+  - Core WordPress loads its own `login.css` under `SCRIPT_DEBUG`.
+  - Explore More is a collapsed `<details>`.
+- **Result** (wp-env :8894, Chromium, 2 workers), 13 core journey files:
+  - First run: 65 passed, 7 failed, 1 skipped.
+  - Rerun of the 4 changed files after the fixes: 29 passed, 2 failed (vendor payments tabs), 2 skipped.
+  - Vendor financial after the Wallet-section fix: 3 passed.
+  - Organizer integrity + vendor security after the seed changes: 21 passed, 2 skipped.
+- **Suite ordering:** the WordPress and mobile suites share one seed and consume one-spot fixtures. Reseed between them: run `seed.php`, `seed-portfolio.php`, `seed-organizer-os.php`, then `seed-onboarding.php`.
+
+### Expo
+- **Jest:** 21 suites, 177 tests passed.
+- **Typecheck:** 0 errors.
+- **Playwright on Expo web** (iPhone 15 profile, `playwright.mobile.config.ts`):
+  - First full run: 60 passed, 6 failed, 3 did not run.
+  - After fixes and a reseed, the failing files: 35 passed, 1 failed (booth assignment, fixed by the booth seed).
+  - Check-in file: 6 passed.
+  - **Covered:** role entry, sign-in persistence across reload, sign-out, role-guarded routes, the cross-role apply → approve → test-mode pay journey, check-in and its gate, failed-request handling, notification routing (jest).
+- **Bug fixed:** browser builds of the app could not submit an application draft. WordPress' REST CORS allow-list did not include `Idempotency-Key`, so the browser blocked the request (shown as "Service unavailable"). `LNKup_Mobile_Auth` now adds the header. Native builds were not affected, because CORS does not apply to them.
+- **Use a real install:** a junctioned `node_modules` makes Metro bundle another worktree's `app/`. Use `npm ci` inside the worktree.
+- **Device-only checks, not covered here:** push delivery and tap-through from a locked device, the Stripe in-app browser return on iOS and Android, camera QR scanning, universal links, SecureStore across app reinstall, and backgrounding during checkout.
+- **OTA vs native:** this stack adds no native modules and does not change `app.json`, `eas.json` or the app version. With `runtimeVersion` = app version (1.0.1), its Expo changes can ship as an OTA update on the 1.0.1 channel. Any new native module or version bump needs an EAS build and store submission first.
+
+### Private uploads (Phase 27 steps 5 and 8)
+- **Gate:** `LNKup_Private_Uploads_Probe` writes a token file into `uploads/lnkup-private/`, requests its public URL without credentials, records `protected` / `exposed` / `unknown`, and deletes the file.
+- **Enforcement:**
+  - Turning on `document_vault_sharing` and starting the private document migration both require a fresh `protected` result.
+  - An `exposed` result switches sharing off at runtime and stops a running migration batch.
+  - Passport admin → System health shows the result and has a re-check button.
+- **Evidence:**
+  - `private-uploads-probe-test.php` passes 16 checks using faked responses (exposed, unreachable, protected, regression after rollout).
+  - A direct request to a synthetic file on wp-env (Apache) returns 403.
+  - The probe from inside wp-env reports `unknown` (the container cannot reach its own published port), so sharing stays off there.
+- **Still blocked:** production remains blocked until SiteGround NGINX Direct Delivery is turned off and the probe reads `protected` on staging and then production. Owner: hosting. Document Vault sharing and the migration stay gated.
+
+### Deployable revisions and flag dependencies
+| Component | Revision |
+|---|---|
+| Marketplace plugin | 12.33.0 (this stack) |
+| Communications plugin | 1.2.0 |
+| Theme | 1.6.1 |
+| Next.js | this stack; deploys only after the Root Directory fix |
+| Expo | 1.0.1 binary; this stack is OTA-eligible |
+
+| Feature | Flag(s) | Depends on |
+|---|---|---|
+| Apply wizard, multi-stop | `apply_wizard_enabled`, `tour_multi_apply_enabled` (`LNKup_Rollout`) | none |
+| Review v2, waitlist offers | `application_review_v2_enabled`, `waitlist_offers_enabled`, `organizer_os_pilot_user_ids` | waitlist needs review v2 |
+| Event tasks, readiness | `organizer_ops_v2_enabled` | none |
+| Organizer document review | `organizer_document_review_enabled` | `document_vault_sharing`, which needs the private uploads probe to pass |
+| Teams | `trust_org_teams` | none |
+| Portfolio OS | `portfolio_os_enabled`, `portfolio_os_user_ids` | none |
+| Guided onboarding | `organizer_onboarding_v2_enabled` | none |
+| Matching | matching flags (`LNKup_Rollout`) | `matching_reputation_signals` waits on Passport soak |
+| Communications flows | `flow_*` (`LNKup_Rollout`) | live sender configuration |
 
 ## Running checklist
 
 - [x] **Phase 0:** integration branch, bootstrap files tracked, lint, activation, typechecks ([PR #9](https://github.com/sixstarsent1-png/LNKUP-Marketplace-Vercel/pull/9))
-- [ ] **Phase 1:** matrix, release checks, private-upload probe
+- [x] **Phase 1:** matrix, release checks, private-upload probe. Open: Vercel Root Directory (project owner), SiteGround Direct Delivery (hosting), PR #7 merge.
 - [ ] **Phase 2:** booking journey and financial integrity
 - [ ] **Phase 3:** organizer management, tours, event day
 - [ ] **Phase 4:** acquisition, discovery, communications, analytics

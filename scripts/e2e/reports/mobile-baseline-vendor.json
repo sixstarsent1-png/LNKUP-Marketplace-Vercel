@@ -1,31 +1,45 @@
 {
-  "loginMs": 7736,
+  "loginMs": 8443,
   "metrics": [
     {
       "route": "/(vendor)",
-      "ms": 1360,
+      "ms": 15243,
       "settled": true,
-      "apiCalls": 3,
+      "apiCalls": 15,
       "calls": [
         "GET /lnkup/v1/applications/vendor",
-        "GET /lnkup/v1/applications/vendor",
-        "POST /lnkup/v1/marketplace/track/event"
+        "POST /lnkup/v1/marketplace/track/event",
+        "GET /lnkup/v1/marketplace/sections/recommended?limit=3",
+        "GET /lnkup/v1/marketplace/sections/trending?section=closing_soon&limit=3",
+        "GET /lnkup/v1/verification/vendor",
+        "GET /lnkup/v1/reputation/vendor-dashboard",
+        "GET /lnkup/v1/operations/vendor-home",
+        "GET /lnkup/v1/marketplace/favorites",
+        "GET /lnkup/v1/comms/inbox/count?role=vendor",
+        "POST /lnkup/v1/marketplace/track/event",
+        "POST /lnkup/v1/marketplace/track/event",
+        "POST /lnkup/v1/marketplace/track/event",
+        "GET /lnkup/v1/comms/next-steps?role=vendor",
+        "GET /lnkup/v1/growth/profile-strength",
+        "GET /lnkup/v1/notifications/inbox"
       ],
-      "pending": [
-        "GET /lnkup/v1/applications/vendor",
-        "GET /lnkup/v1/applications/vendor",
-        "POST /lnkup/v1/marketplace/track/event"
-      ],
+      "pending": [],
       "errors": []
     },
     {
       "route": "/(vendor)/find",
-      "ms": 3466,
+      "ms": 7801,
       "settled": true,
-      "apiCalls": 3,
+      "apiCalls": 9,
       "calls": [
+        "GET /lnkup/v1/match/vendor/recommendations?section=recommended&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=preferred_markets&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=deadlines&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=previous_organizers&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=tours&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=series&per_page=6",
         "GET /lnkup/v1/marketplace/favorites",
-        "GET /lnkup/v1/marketplace/search?per_page=20&page=1&sort=recommended",
+        "GET /lnkup/v1/marketplace/search?per_page=20&page=1&include_external=false&sort=recommended",
         "GET /lnkup/v1/applications/vendor"
       ],
       "pending": [],
@@ -33,7 +47,7 @@
     },
     {
       "route": "/(vendor)/requests",
-      "ms": 6972,
+      "ms": 8900,
       "settled": true,
       "apiCalls": 1,
       "calls": [
@@ -44,7 +58,7 @@
     },
     {
       "route": "/(vendor)/wallet",
-      "ms": 4633,
+      "ms": 4731,
       "settled": true,
       "apiCalls": 7,
       "calls": [
@@ -61,7 +75,7 @@
     },
     {
       "route": "/(vendor)/more",
-      "ms": 1257,
+      "ms": 3710,
       "settled": true,
       "apiCalls": 3,
       "calls": [
@@ -69,45 +83,40 @@
         "GET /lnkup/v1/applications/vendor",
         "GET /lnkup/v1/vendor/profile"
       ],
-      "pending": [
-        "GET /lnkup/v1/push/preferences",
-        "GET /lnkup/v1/applications/vendor",
-        "GET /lnkup/v1/vendor/profile"
-      ],
+      "pending": [],
       "errors": []
     },
     {
       "route": "/(vendor)/profile",
-      "ms": 7403,
+      "ms": 16482,
       "settled": true,
-      "apiCalls": 4,
+      "apiCalls": 5,
       "calls": [
         "GET /lnkup/v1/vendor/profile",
         "GET /lnkup/v1/verification/vendor",
         "GET /lnkup/v1/applications/vendor",
-        "GET /lnkup/v1/growth/profile-strength"
+        "GET /lnkup/v1/growth/profile-strength",
+        "GET /lnkup/v1/match/vendor/preferences"
       ],
       "pending": [],
       "errors": []
     },
     {
       "route": "/(vendor)/documents",
-      "ms": 1339,
+      "ms": 4421,
       "settled": true,
-      "apiCalls": 2,
+      "apiCalls": 3,
       "calls": [
+        "GET /lnkup/v1/documents/shares",
         "GET /lnkup/v1/documents/vendor",
         "GET /lnkup/v1/applications/vendor"
       ],
-      "pending": [
-        "GET /lnkup/v1/documents/vendor",
-        "GET /lnkup/v1/applications/vendor"
-      ],
+      "pending": [],
       "errors": []
     },
     {
       "route": "/(vendor)/favorites",
-      "ms": 3500,
+      "ms": 4478,
       "settled": true,
       "apiCalls": 2,
       "calls": [
@@ -119,60 +128,62 @@
     },
     {
       "route": "/(vendor)/growth",
-      "ms": 7708,
+      "ms": 1289,
       "settled": true,
-      "apiCalls": 3,
+      "apiCalls": 2,
       "calls": [
         "GET /lnkup/v1/growth/dashboard",
-        "GET /lnkup/v1/applications/vendor",
-        "GET /lnkup/v1/reputation/vendor-dashboard"
+        "GET /lnkup/v1/applications/vendor"
       ],
-      "pending": [],
+      "pending": [
+        "GET /lnkup/v1/growth/dashboard",
+        "GET /lnkup/v1/applications/vendor"
+      ],
       "errors": []
     },
     {
       "route": "/(vendor)/reviews",
-      "ms": 4031,
+      "ms": 1395,
       "settled": true,
       "apiCalls": 2,
       "calls": [
         "GET /lnkup/v1/reputation/vendor-dashboard",
         "GET /lnkup/v1/applications/vendor"
       ],
-      "pending": [],
+      "pending": [
+        "GET /lnkup/v1/reputation/vendor-dashboard",
+        "GET /lnkup/v1/applications/vendor"
+      ],
       "errors": []
     },
     {
       "route": "/(vendor)/operations",
-      "ms": 8949,
+      "ms": 11758,
       "settled": true,
       "apiCalls": 2,
       "calls": [
         "GET /lnkup/v1/applications/vendor",
-        "GET /lnkup/v1/operations/vendor-homes?application_ids=66%2C64"
+        "GET /lnkup/v1/operations/vendor-homes?application_ids=151%2C149"
       ],
       "pending": [],
       "errors": []
     },
     {
       "route": "/(vendor)/notifications",
-      "ms": 11016,
+      "ms": 8302,
       "settled": true,
-      "apiCalls": 6,
+      "apiCalls": 3,
       "calls": [
+        "GET /lnkup/v1/comms/inbox?role=vendor&tab=all&page=1&per_page=20&filter=all",
         "GET /lnkup/v1/applications/vendor",
-        "GET /lnkup/v1/verification/vendor",
-        "GET /lnkup/v1/reputation/vendor-dashboard",
-        "GET /lnkup/v1/operations/vendor-home",
-        "GET /lnkup/v1/growth/profile-strength",
-        "GET /lnkup/v1/notifications/inbox"
+        "GET /lnkup/v1/comms/inbox/count?role=vendor"
       ],
       "pending": [],
       "errors": []
     },
     {
       "route": "/(vendor)/saved-searches",
-      "ms": 1293,
+      "ms": 1345,
       "settled": true,
       "apiCalls": 2,
       "calls": [
@@ -187,7 +198,7 @@
     },
     {
       "route": "/(vendor)/referrals",
-      "ms": 3451,
+      "ms": 4110,
       "settled": true,
       "apiCalls": 2,
       "calls": [

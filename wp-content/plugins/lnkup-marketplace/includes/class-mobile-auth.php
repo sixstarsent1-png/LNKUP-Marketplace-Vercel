@@ -27,6 +27,20 @@ class LNKup_Mobile_Auth {
 	public static function init(): void {
 		add_filter( 'determine_current_user', array( __CLASS__, 'authenticate_bearer' ), 20 );
 		add_filter( 'rest_authentication_errors', array( __CLASS__, 'rest_auth_errors' ), 20 );
+		add_filter( 'rest_allowed_cors_headers', array( __CLASS__, 'allow_app_cors_headers' ) );
+	}
+
+	/**
+	 * Let browser builds of the app send the idempotency header that draft submit,
+	 * multi-stop apply and portfolio writes require; native builds are not subject to CORS.
+	 *
+	 * @param string[] $headers Allowed request headers.
+	 * @return string[]
+	 */
+	public static function allow_app_cors_headers( $headers ): array {
+		$headers   = is_array( $headers ) ? $headers : array();
+		$headers[] = 'Idempotency-Key';
+		return array_values( array_unique( $headers ) );
 	}
 
 	/**

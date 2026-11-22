@@ -38,16 +38,18 @@ test.describe('Vendor financial dashboard', () => {
       await expect(page.getByRole('heading', { level: 1, name: /^wallet$/i })).toBeVisible();
       await expect(page.locator('#lnkup-vendor-financial')).toBeVisible();
       await expect(page.locator('#lnkup-fin-balance-hero')).toBeVisible();
-      await expect(page.getByRole('button', { name: /^overview$/i })).toBeVisible();
-      await expect(page.getByRole('button', { name: /^payment methods$/i })).toBeVisible();
-      await expect(page.getByRole('button', { name: /^wallet & credits$/i })).toBeVisible();
+      await expect(page.getByRole('tab', { name: /^overview$/i })).toBeVisible();
+      await expect(page.getByRole('tab', { name: /^payment methods$/i })).toBeVisible();
+      await page.getByRole('button', { name: /^wallet$/i }).click();
+      await expect(page.getByRole('tab', { name: /^wallet & credits$/i })).toBeVisible();
       await expect(page.locator('#lnkup-fin-vendor-overview')).not.toContainText('Could not load', { timeout: 15000 });
       expect(connectRequests).toHaveLength(0);
     });
 
     test('refunds tab shows request form', async ({ page }) => {
       await page.goto('/vendor-dashboard/?view=payments');
-      await page.getByRole('button', { name: /^refunds$/i }).click();
+      await page.getByRole('button', { name: /^wallet$/i }).click();
+      await page.getByRole('tab', { name: /^refunds$/i }).click();
       await expect(page.locator('#lnkup-refund-form')).toBeVisible();
     });
   });

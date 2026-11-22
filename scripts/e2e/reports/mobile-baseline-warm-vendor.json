@@ -1,0 +1,65 @@
+{
+  "metrics": [
+    {
+      "tab": "Explore",
+      "ms": 171,
+      "apiCalls": 8,
+      "calls": [
+        "GET /lnkup/v1/match/vendor/recommendations?section=recommended&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=preferred_markets&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=deadlines&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=previous_organizers&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=tours&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=series&per_page=6",
+        "GET /lnkup/v1/marketplace/favorites",
+        "GET /lnkup/v1/marketplace/search?per_page=20&page=1&include_external=false&sort=recommended"
+      ]
+    },
+    {
+      "tab": "Bookings",
+      "ms": 135,
+      "apiCalls": 0,
+      "calls": []
+    },
+    {
+      "tab": "Wallet",
+      "ms": 133,
+      "apiCalls": 6,
+      "calls": [
+        "GET /lnkup/v1/financial/summary?role=vendor",
+        "GET /lnkup/v1/financial/dashboard?role=vendor",
+        "GET /lnkup/v1/financial/activity?role=vendor",
+        "GET /lnkup/v1/financial/invoices?role=vendor",
+        "GET /lnkup/v1/financial/receipts?role=vendor",
+        "GET /lnkup/v1/financial/disputes?role=vendor"
+      ]
+    },
+    {
+      "tab": "Profile",
+      "ms": 147,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/push/preferences",
+        "GET /lnkup/v1/vendor/profile"
+      ]
+    },
+    {
+      "tab": "Home",
+      "ms": 107,
+      "apiCalls": 0,
+      "calls": []
+    },
+    {
+      "tab": "Explore",
+      "ms": 122,
+      "apiCalls": 0,
+      "calls": []
+    },
+    {
+      "tab": "Bookings",
+      "ms": 110,
+      "apiCalls": 0,
+      "calls": []
+    }
+  ]
+}

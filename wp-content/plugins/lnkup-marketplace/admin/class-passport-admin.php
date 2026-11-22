@@ -18,6 +18,28 @@ class LNKup_Passport_Admin {
 		add_action( 'admin_post_lnkup_passport_settings', array( __CLASS__, 'handle_settings' ) );
 		add_action( 'admin_post_lnkup_passport_migration', array( __CLASS__, 'handle_migration' ) );
 		add_action( 'admin_post_lnkup_passport_refresh', array( __CLASS__, 'handle_refresh' ) );
+		add_action( 'admin_post_lnkup_passport_probe', array( __CLASS__, 'handle_probe' ) );
+	}
+
+	/**
+	 * Human label for the private uploads probe result.
+	 */
+	private static function probe_label(): string {
+		$last = LNKup_Private_Uploads_Probe::last();
+		$when = $last['checked_at'] ? wp_date( 'M j, H:i', $last['checked_at'] ) : '';
+		switch ( $last['status'] ) {
+			case LNKup_Private_Uploads_Probe::STATUS_OK:
+				/* translators: %s: time of the check */
+				return sprintf( __( 'Protected (checked %s)', 'lnkup-marketplace' ), $when );
+			case LNKup_Private_Uploads_Probe::STATUS_EXPOSED:
+				/* translators: %s: time of the check */
+				return sprintf( __( 'EXPOSED: files are served by URL (checked %s). Sharing and migration stay off until hosting blocks the folder.', 'lnkup-marketplace' ), $when );
+			default:
+				return $when
+					/* translators: 1: time of the check, 2: error detail */
+					? sprintf( __( 'Not verified (checked %1$s: %2$s)', 'lnkup-marketplace' ), $when, $last['detail'] )
+					: __( 'Not verified yet', 'lnkup-marketplace' );
+		}
 	}
 
 	public static function add_menu(): void {
@@ -135,6 +157,7 @@ class LNKup_Passport_Admin {
 			__( 'Lapsed document shares', 'lnkup-marketplace' )          => (string) (int) get_option( 'lnkup_passport_lapsed_shares', 0 ),
 			__( 'Reputation caches older than 7 days', 'lnkup-marketplace' ) => (string) $stale,
 			__( 'Legacy documents still in public uploads', 'lnkup-marketplace' ) => (string) LNKup_Document_Migration::remaining(),
+			__( 'Private uploads folder', 'lnkup-marketplace' )         => self::probe_label(),
 			__( 'Next daily Passport job', 'lnkup-marketplace' )         => wp_next_scheduled( LNKup_Passport::DAILY_HOOK ) ? wp_date( 'M j, H:i', (int) wp_next_scheduled( LNKup_Passport::DAILY_HOOK ) ) : __( 'Not scheduled', 'lnkup-marketplace' ),
 		);
 		echo '<table class="widefat striped" style="max-width:780px"><tbody>';
@@ -142,6 +165,9 @@ class LNKup_Passport_Admin {
 			echo '<tr><th>' . esc_html( $label ) . '</th><td>' . esc_html( $value ) . '</td></tr>';
 		}
 		echo '</tbody></table>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top:8px">';
+		wp_nonce_field( 'lnkup_passport_probe', 'lnkup_nonce' );
+		echo '<input type="hidden" name="action" value="lnkup_passport_probe" /><button class="button">' . esc_html__( 'Re-check private uploads folder', 'lnkup-marketplace' ) . '</button></form>';
 
 		$migrating = (bool) get_option( LNKup_Document_Migration::ENABLED_OPT );
 		echo '<h2>' . esc_html__( 'Private document migration', 'lnkup-marketplace' ) . '</h2>';
@@ -368,7 +394,20 @@ class LNKup_Passport_Admin {
 		$log    = is_array( $log ) ? $log : array();
 		array_unshift( $log, array( 'user_id' => get_current_user_id(), 'at' => current_time( 'mysql' ), 'before' => $before, 'after' => $after ) );
 		update_option( 'lnkup_passport_settings_log', array_slice( $log, 0, 50 ), false );
-		wp_safe_redirect( add_query_arg( 'lnkup_msg', rawurlencode( __( 'Passport settings saved.', 'lnkup-marketplace' ) ), admin_url( 'admin.php?page=lnkup-passport&tab=settings' ) ) );
+		$message = LNKup_Passport_Settings::$sharing_blocked
+			? __( 'Settings saved, but Document Vault sharing stayed off: the private uploads folder did not pass the protection check. See System health.', 'lnkup-marketplace' )
+			: __( 'Passport settings saved.', 'lnkup-marketplace' );
+		wp_safe_redirect( add_query_arg( 'lnkup_msg', rawurlencode( $message ), admin_url( 'admin.php?page=lnkup-passport&tab=settings' ) ) );
+		exit;
+	}
+
+	public static function handle_probe(): void {
+		check_admin_referer( 'lnkup_passport_probe', 'lnkup_nonce' );
+		if ( ! LNKup_Capabilities::user_has_manage_all() ) {
+			wp_die( esc_html__( 'Permission denied.', 'lnkup-marketplace' ) );
+		}
+		LNKup_Private_Uploads_Probe::run();
+		wp_safe_redirect( add_query_arg( 'lnkup_msg', rawurlencode( self::probe_label() ), admin_url( 'admin.php?page=lnkup-passport&tab=health' ) ) );
 		exit;
 	}
 
@@ -377,12 +416,13 @@ class LNKup_Passport_Admin {
 		if ( ! LNKup_Capabilities::user_has_manage_all() ) {
 			wp_die( esc_html__( 'Permission denied.', 'lnkup-marketplace' ) );
 		}
+		$url = admin_url( 'admin.php?page=lnkup-passport&tab=health' );
 		if ( 'stop' === sanitize_key( wp_unslash( $_POST['mode'] ?? '' ) ) ) {
 			LNKup_Document_Migration::disable();
-		} else {
-			LNKup_Document_Migration::enable();
+		} elseif ( ! LNKup_Document_Migration::enable() ) {
+			$url = add_query_arg( 'lnkup_msg', rawurlencode( __( 'Migration not started: the private uploads folder did not pass the protection check.', 'lnkup-marketplace' ) ), $url );
 		}
-		wp_safe_redirect( admin_url( 'admin.php?page=lnkup-passport&tab=health' ) );
+		wp_safe_redirect( $url );
 		exit;
 	}
 

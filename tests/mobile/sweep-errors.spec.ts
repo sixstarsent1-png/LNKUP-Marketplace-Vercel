@@ -4,6 +4,7 @@ import { appLogin, organizerUser, restAs, vendorUser } from './helpers/app-sessi
 const pendingPaymentAppId = process.env.PLAYWRIGHT_PENDING_PAYMENT_APPLICATION_ID || '64';
 const eventId = process.env.PLAYWRIGHT_ORGANIZER_EVENT_ID || '56';
 const organizerB = process.env.PLAYWRIGHT_ORGANIZER_B_USER || 'e2e_org_b';
+const opportunityId = process.env.PLAYWRIGHT_CAPACITY_OPPORTUNITY_ID || '58';
 
 /**
  * Fail one REST route with a server error and count how many times the app called it.
@@ -62,7 +63,7 @@ test.describe('Vendor error paths', () => {
 
   test('a failed save toggle puts the heart back and says why', async ({ page }) => {
     await failRoute(page, '**/wp-json/lnkup/v1/marketplace/favorites');
-    await page.goto('/opportunity/58');
+    await page.goto(`/opportunity/${opportunityId}`);
     const heart = page.getByRole('button', { name: /^(Save|Unsave) / }).first();
     await expect(heart).toBeVisible({ timeout: 45_000 });
     const before = await heart.getAttribute('aria-label');
