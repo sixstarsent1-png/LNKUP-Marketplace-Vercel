@@ -286,9 +286,13 @@ class LNKup_Shortcodes {
 			}
 			$apply_flags = lnkup_get_settings();
 			// The wizard also powers withdraw buttons and draft resume cards on vendor Requests.
-			if ( ! empty( $apply_flags['apply_wizard_enabled'] ) || ! empty( $apply_flags['tour_multi_apply_enabled'] ) || ( $vendor_dash && in_array( $vendor_view, array( 'home', 'applications' ), true ) ) ) {
+			if ( ! empty( $apply_flags['apply_wizard_enabled'] ) || ! empty( $apply_flags['tour_multi_apply_enabled'] ) || ( $vendor_dash && in_array( $vendor_view, array( 'home', 'applications', 'bookings' ), true ) ) ) {
 				wp_enqueue_style( 'lnkup-apply-wizard' );
 				wp_enqueue_script( 'lnkup-apply-wizard' );
+			}
+			if ( $vendor_dash && 'bookings' === $vendor_view ) {
+				wp_enqueue_style( 'lnkup-vendor-bookings', LNKUP_PLUGIN_URL . 'public/css/vendor-bookings.css', array( 'lnkup-marketplace-v2' ), LNKUP_VERSION );
+				wp_enqueue_script( 'lnkup-vendor-bookings', LNKUP_PLUGIN_URL . 'public/js/vendor-bookings.js', array(), LNKUP_VERSION, true );
 			}
 			if ( $feed && ! empty( $_GET['tour_id'] ) && ! empty( $apply_flags['tour_multi_apply_enabled'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				wp_enqueue_script( 'lnkup-tour-apply' );
@@ -368,7 +372,7 @@ class LNKup_Shortcodes {
 			wp_enqueue_script( 'lnkup-maps' );
 		}
 
-		$needs_checkout = $vendor_dash && in_array( $vendor_view, array( 'home', 'applications', 'payments', 'financial', 'operations' ), true );
+		$needs_checkout = $vendor_dash && in_array( $vendor_view, array( 'home', 'applications', 'bookings', 'payments', 'financial', 'operations' ), true );
 		$needs_financial = $needs_checkout || ( $org['page'] && '' === $org['detail'] && 'financial' === $org['view'] );
 		if ( $needs_financial ) {
 			wp_enqueue_style( 'lnkup-financial' );
@@ -598,6 +602,7 @@ class LNKup_Shortcodes {
 		$map  = array(
 			'home'         => 'render_home',
 			'applications' => 'render_applications',
+			'bookings'     => 'render_bookings',
 			'documents'    => 'render_documents',
 			'payments'     => 'render_payments',
 			'financial'    => 'render_payments',

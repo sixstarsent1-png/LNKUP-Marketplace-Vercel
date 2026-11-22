@@ -9,7 +9,8 @@ $tests = @(
   'comms-push-test',
   'comms-organizer-test',
   'comms-activation-test',
-  'comms-security-test'
+  'comms-security-test',
+  'comms-recovery-test'
 )
 $failed = @()
 foreach ($t in $tests) {

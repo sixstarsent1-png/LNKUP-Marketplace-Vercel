@@ -306,6 +306,35 @@ class LNKup_Comms_Context {
 		) > 0;
 	}
 
+	/**
+	 * A draft reminder is still worth sending: the draft is open, owned by the recipient, not
+	 * saved again since this reminder was scheduled, the slot still accepts applications, and the
+	 * vendor has not applied another way.
+	 *
+	 * @param array $ctx Built context (draft_id, draft_rev, vendor_user_id, opportunity_id).
+	 */
+	public static function draft_still_open( array $ctx ): bool {
+		$draft  = absint( $ctx['draft_id'] ?? 0 );
+		$opp    = (int) $ctx['opportunity_id'];
+		$vendor = (int) $ctx['vendor_user_id'];
+		if ( ! $draft || ! $opp || ! $vendor || ! class_exists( 'LNKup_Application_Drafts' ) ) {
+			return false;
+		}
+		if ( LNKup_Application_Drafts::POST_STATUS !== get_post_status( $draft )
+			|| LNKup_Application_Drafts::STATE_OPEN !== (string) get_post_meta( $draft, '_lnkup_draft_state', true )
+			|| (int) get_post_meta( $draft, '_lnkup_draft_vendor_user_id', true ) !== $vendor
+			|| (int) get_post_meta( $draft, '_lnkup_draft_opportunity_id', true ) !== $opp ) {
+			return false;
+		}
+		if ( isset( $ctx['draft_rev'] ) && (int) get_post_meta( $draft, '_lnkup_draft_revision', true ) !== (int) $ctx['draft_rev'] ) {
+			return false;
+		}
+		if ( ! self::opportunity_open( $opp ) ) {
+			return false;
+		}
+		return ! ( class_exists( 'LNKup_Applications' ) && LNKup_Applications::find_active_application( $opp, $vendor ) );
+	}
+
 	// ------------------------------------------------------------------ Validity.
 
 	/**
@@ -344,6 +373,9 @@ class LNKup_Comms_Context {
 				break;
 			case 'payment_is_due':
 				$valid = self::payment_due( $app, $payment ) && ! self::event_is_past( $event ) && ! self::event_cancelled( $event );
+				break;
+			case 'draft_still_open':
+				$valid = self::draft_still_open( $ctx );
 				break;
 			case 'payment_failed':
 				$valid = 'failed' === self::payment_status( $payment ) && ! get_post_meta( $payment, '_lnkup_voided_at', true ) && in_array( $status, array( 'approved', 'payment_required' ), true );
@@ -740,6 +772,8 @@ class LNKup_Comms_Context {
 				return '/(vendor)/documents';
 			case 'opportunity':
 				return $opp ? '/opportunity/' . $opp : '/(vendor)/find';
+			case 'draft_resume':
+				return $opp ? '/apply/' . $opp : '/(vendor)/requests';
 			case 'vendor_find':
 				return '/(vendor)/find';
 			case 'tour':
@@ -809,6 +843,8 @@ class LNKup_Comms_Context {
 				return $permalink ? (string) $permalink : self::web_url( 'vendor_find', $ctx, $role );
 			case 'vendor_find':
 				return function_exists( 'lnkup_page_url_helper' ) ? (string) lnkup_page_url_helper( 'opportunities' ) : home_url( '/opportunities/' );
+			case 'draft_resume':
+				return $opp ? add_query_arg( array( 'apply' => $opp, 'resume' => 1 ), self::web_url( 'vendor_find', $ctx, $role ) ) : add_query_arg( 'view', 'applications', $vendor_dash );
 			case 'invite':
 				$invite_url = (string) ( $ctx['invite_url'] ?? '' );
 				// Only same-site invite links; anything else falls back to the opportunity.
