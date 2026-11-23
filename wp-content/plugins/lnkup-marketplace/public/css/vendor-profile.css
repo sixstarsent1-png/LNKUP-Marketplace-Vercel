@@ -191,3 +191,66 @@
     border-radius: 0.75rem;
   }
 }
+
+/*
+ * Single-column editor. The theme turns every .lnkup-profile-layout into a 280px + 1fr grid at
+ * 1024px+, which squeezed the lone sections column into 280px. Two classes outrank that rule.
+ */
+.lnkup-profile-layout.lnkup-profile-layout--stack {
+  display: block;
+  grid-template-columns: none;
+}
+
+.lnkup-vendor-profile-editor .lnkup-profile-strength-summary,
+.lnkup-vendor-profile-editor .lnkup-profile-layout--stack .lnkup-profile-sections {
+  width: 100%;
+  max-width: 56rem;
+  margin-inline: 0;
+}
+
+.lnkup-vendor-profile-editor .lnkup-profile-section {
+  scroll-margin-top: 5rem;
+  min-width: 0;
+}
+
+.lnkup-vendor-profile-editor .lnkup-profile-section__pill {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.lnkup-vendor-profile-editor .lnkup-profile-section__title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lnkup-vendor-profile-editor .lnkup-grid--2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 1rem;
+}
+
+.lnkup-vendor-profile-editor .lnkup-form-row,
+.lnkup-vendor-profile-editor .lnkup-form-row input,
+.lnkup-vendor-profile-editor .lnkup-form-row textarea,
+.lnkup-vendor-profile-editor .lnkup-form-row select {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (min-width: 640px) {
+  .lnkup-vendor-profile-editor .lnkup-grid--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Dot and title stay on one line; the status pill sits beside them or wraps below on narrow screens. */
+.lnkup-vendor-profile-editor .lnkup-profile-section__header {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 0.375rem;
+}
+
+.lnkup-vendor-profile-editor .lnkup-profile-section__complete-dot {
+  margin-top: 0;
+}

@@ -6,8 +6,12 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
-**Plugin version:** 12.33.3  
+**Plugin version:** 12.33.4  
 **Theme version:** 1.6.1
+
+### v12.33.4 (Vendor Profile editor width)
+
+- **Fix:** the vendor Profile editor rendered in a 280px column at 1024px+ because the theme's `.lnkup-profile-layout` grid (`280px 1fr`) applied to the single-column `--stack` layout. `vendor-profile.css` resets it (`.lnkup-profile-layout.lnkup-profile-layout--stack { display: block }`), gives the progress card and sections one 56rem column, keeps section titles and status pills on one row, uses two-column field grids from 640px, and adds `scroll-margin-top` for the "Still to finish" links. Plugin CSS only; theme unchanged.
 
 ### v12.33.3 (Organizers no longer see LNKup platform fees)
 
