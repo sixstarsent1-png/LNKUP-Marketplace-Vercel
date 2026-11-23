@@ -649,7 +649,8 @@ class LNKup_Organizer_Dashboard_Views {
 		if ( $next_event ) {
 			$date = (string) get_post_meta( $next_event->ID, '_lnkup_event_date', true );
 			/* translators: 1: event title, 2: date */
-			$subtitle = sprintf( __( 'Next up: %1$s · %2$s', 'lnkup-marketplace' ), $next_event->post_title, $date ? date_i18n( get_option( 'date_format' ), strtotime( $date ) ) : __( 'date TBD', 'lnkup-marketplace' ) );
+			$title    = function_exists( 'lnkup_strip_title_date' ) ? lnkup_strip_title_date( lnkup_display_event_title( $next_event->post_title, $date ) ) : $next_event->post_title;
+			$subtitle = sprintf( __( 'Next up: %1$s · %2$s', 'lnkup-marketplace' ), $title, $date ? date_i18n( 'D, M j', strtotime( $date ) ) : __( 'date TBD', 'lnkup-marketplace' ) );
 		} else {
 			$subtitle = __( 'What needs your attention across your events today.', 'lnkup-marketplace' );
 		}

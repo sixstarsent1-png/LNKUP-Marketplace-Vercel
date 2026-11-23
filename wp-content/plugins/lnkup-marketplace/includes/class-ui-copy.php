@@ -30,7 +30,7 @@ class LNKup_UI_Copy {
 			'revenue'                   => __( 'Vendor revenue', 'lnkup-marketplace' ),
 			'event_readiness'           => __( 'Event readiness', 'lnkup-marketplace' ),
 			'vendor_roster'             => __( 'Vendor roster', 'lnkup-marketplace' ),
-			'launch_event'              => __( 'Launch event', 'lnkup-marketplace' ),
+			'launch_event'              => __( 'Create event', 'lnkup-marketplace' ),
 			'create_event'              => __( 'Launch event', 'lnkup-marketplace' ),
 			'open_financial_center'     => __( 'Open financial center', 'lnkup-marketplace' ),
 			'open_financials'           => __( 'Open financial center', 'lnkup-marketplace' ),

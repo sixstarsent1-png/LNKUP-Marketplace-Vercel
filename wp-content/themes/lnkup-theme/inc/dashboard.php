@@ -114,9 +114,9 @@ function lnkup_dashboard_vendor_title() {
 
 		'home'         => __( 'Home', 'lnkup-theme' ),
 
-		'applications' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'nav_requests' ) : __( 'Requests', 'lnkup-theme' ),
+		'applications' => __( 'Requests', 'lnkup-theme' ),
 
-		'bookings'     => __( 'My Bookings', 'lnkup-theme' ),
+		'bookings'     => __( 'Bookings', 'lnkup-theme' ),
 
 		'documents'    => __( 'Documents', 'lnkup-theme' ),
 
@@ -164,7 +164,7 @@ function lnkup_dashboard_organizer_title() {
 		'start'        => __( 'Get started', 'lnkup-theme' ),
 		'events'       => __( 'Events', 'lnkup-theme' ),
 		'tours'        => __( 'Tours & Series', 'lnkup-theme' ),
-		'applications' => __( 'Requests', 'lnkup-theme' ),
+		'applications' => __( 'Applications', 'lnkup-theme' ),
 		'financial'    => __( 'Money', 'lnkup-theme' ),
 		'vendors'      => __( 'Vendors', 'lnkup-theme' ),
 		'lists'        => __( 'Vendor Lists', 'lnkup-theme' ),
@@ -172,7 +172,7 @@ function lnkup_dashboard_organizer_title() {
 		'referrals'    => __( 'Referral Invites', 'lnkup-theme' ),
 		'operations'   => __( 'Operations', 'lnkup-theme' ),
 		'intelligence' => __( 'Intelligence', 'lnkup-theme' ),
-		'create'       => __( 'Launch event', 'lnkup-theme' ),
+		'create'       => __( 'Create event', 'lnkup-theme' ),
 		'help'         => __( 'Help', 'lnkup-theme' ),
 		'profile'      => __( 'Profile', 'lnkup-theme' ),
 		'team'         => __( 'Team & Trust', 'lnkup-theme' ),
@@ -440,9 +440,10 @@ function lnkup_get_dashboard_nav( $role ) {
 
 			array( 'label' => __( 'Explore', 'lnkup-theme' ), 'href' => lnkup_page_url( 'opportunities' ), 'slug' => 'opportunities', 'icon' => 'search', 'view' => '', 'locked' => ! $marketplace_open, 'locked_hint' => __( 'Opens on launch day', 'lnkup-theme' ), 'tier' => 'primary' ),
 
-			array( 'label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'nav_requests' ) : __( 'Requests', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'applications', $dashboard ), 'slug' => 'vendor-dashboard', 'icon' => 'inbox', 'view' => 'applications', 'badge' => $marketplace_open ? ( $badges['applications'] ?? 0 ) : 0, 'locked' => ! $marketplace_open, 'locked_hint' => __( 'Opens on launch day', 'lnkup-theme' ), 'tier' => 'primary' ),
+			// Requests are applications still in review; Bookings are approved, paid and past spots.
+			array( 'label' => __( 'Requests', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'applications', $dashboard ), 'slug' => 'vendor-dashboard', 'icon' => 'inbox', 'view' => 'applications', 'badge' => $marketplace_open ? ( $badges['applications'] ?? 0 ) : 0, 'locked' => ! $marketplace_open, 'locked_hint' => __( 'Opens on launch day', 'lnkup-theme' ), 'tier' => 'primary' ),
 
-			array( 'label' => __( 'My Bookings', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'bookings', $dashboard ), 'slug' => 'vendor-dashboard', 'icon' => 'calendar', 'view' => 'bookings', 'locked' => ! $marketplace_open, 'locked_hint' => __( 'Opens on launch day', 'lnkup-theme' ), 'tier' => 'primary' ),
+			array( 'label' => __( 'Bookings', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'bookings', $dashboard ), 'slug' => 'vendor-dashboard', 'icon' => 'calendar', 'view' => 'bookings', 'locked' => ! $marketplace_open, 'locked_hint' => __( 'Opens on launch day', 'lnkup-theme' ), 'tier' => 'primary' ),
 
 			array( 'label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'nav_wallet' ) : __( 'Wallet', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'payments', $dashboard ), 'slug' => 'vendor-dashboard', 'icon' => 'payment', 'view' => 'payments', 'tier' => 'primary' ),
 
@@ -1117,17 +1118,10 @@ function lnkup_dashboard_shell_close() {
 							'locked_hint' => $lock_hint,
 						),
 
-						array(
-							'label'       => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'nav_requests' ) : __( 'Requests', 'lnkup-theme' ),
-							'href'        => add_query_arg( 'view', 'applications', $dashboard ),
-							'icon'        => 'inbox',
-							'view'        => 'applications',
-							'locked'      => ! $marketplace_open,
-							'locked_hint' => $lock_hint,
-						),
-
-						// Five slots: Bookings takes Wallet's place on phones (payments are reachable from each booking and the sidebar).
+						// Five slots: Home, Explore, Bookings, Wallet, Profile. Requests in review are one tap away from Home and the Bookings header.
 						array( 'label' => __( 'Bookings', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'bookings', $dashboard ), 'icon' => 'calendar', 'view' => 'bookings', 'locked' => ! $marketplace_open, 'locked_hint' => $lock_hint ),
+
+						array( 'label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'nav_wallet' ) : __( 'Wallet', 'lnkup-theme' ), 'href' => add_query_arg( 'view', 'payments', $dashboard ), 'icon' => 'payment', 'view' => 'payments' ),
 
 						array( 'label' => function_exists( 'lnkup_copy' ) ? lnkup_copy( 'nav_profile' ) : __( 'Profile', 'lnkup-theme' ), 'href' => lnkup_page_url( 'vendor-profile' ), 'icon' => 'store', 'slug' => 'vendor-profile' ),
 

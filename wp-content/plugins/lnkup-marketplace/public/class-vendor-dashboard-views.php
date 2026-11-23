@@ -198,7 +198,8 @@ class LNKup_Vendor_Dashboard_Views {
 		endif;
 
 		if ( class_exists( 'LNKup_Dashboard_Tour' ) ) {
-			echo LNKup_Dashboard_Tour::render_modal( 'vendor', $tour_auto ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			// One first-run overlay at a time: the welcome modal wins, the tour stays available from Help.
+			echo LNKup_Dashboard_Tour::render_modal( 'vendor', $tour_auto && ! $welcome ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		}
 
 		return ob_get_clean();
@@ -491,7 +492,7 @@ class LNKup_Vendor_Dashboard_Views {
 			<?php
 			echo lnkup_page_header( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 				array(
-					'title'    => __( 'My Bookings', 'lnkup-marketplace' ),
+					'title'    => __( 'Bookings', 'lnkup-marketplace' ),
 					'subtitle' => __( 'Approved, paid and past bookings — payments, passes and event details in one place.', 'lnkup-marketplace' ),
 					'actions'  => '<a class="lnkup-btn lnkup-btn--outline" href="' . esc_url( add_query_arg( 'view', 'applications', lnkup_page_url_helper( 'vendor-dashboard' ) ) ) . '">' . esc_html__( 'Requests in review', 'lnkup-marketplace' ) . '</a>',
 				)
@@ -620,7 +621,12 @@ class LNKup_Vendor_Dashboard_Views {
 				<p class="lnkup-request-row__meta"><?php echo esc_html( implode( ' · ', array_filter( array( $item['booth'], $item['organizer_name'], $item['tour'] ? $item['tour']['title'] : '' ) ) ) ); ?></p>
 				<ul class="lnkup-request-row__badges">
 					<li class="lnkup-status lnkup-status--<?php echo esc_attr( $item['status'] ); ?>"><?php echo esc_html( $item['status_label'] ); ?></li>
-					<?php if ( isset( $pay_labels[ $item['payment_status'] ] ) && ! ( 'paid' === $item['payment_status'] && in_array( $item['status'], array( 'paid', 'completed' ), true ) ) ) : ?>
+					<?php
+					// One chip per fact: the status chip already says "paid" or "payment required".
+					$pay_said = ( 'paid' === $item['payment_status'] && in_array( $item['status'], array( 'paid', 'completed' ), true ) )
+						|| ( 'pending' === $item['payment_status'] && 'payment_required' === $item['status'] );
+					?>
+					<?php if ( isset( $pay_labels[ $item['payment_status'] ] ) && ! $pay_said ) : ?>
 						<li class="lnkup-request-badge"><?php echo esc_html( $pay_labels[ $item['payment_status'] ] ); ?></li>
 					<?php endif; ?>
 					<?php if ( in_array( $item['documents_code'], array( 'missing', 'pending' ), true ) ) : ?>
@@ -665,8 +671,8 @@ class LNKup_Vendor_Dashboard_Views {
 		<div class="lnkup-mp lnkup-vendor-dash lnkup-booking-detail" data-testid="lnkup-booking-detail">
 		<?php if ( null === $detail ) : ?>
 			<?php
-			echo lnkup_page_header( array( 'title' => __( 'Booking', 'lnkup-marketplace' ), 'back_url' => $back, 'back_label' => __( 'My Bookings', 'lnkup-marketplace' ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-			echo lnkup_empty_state( array( 'title' => __( 'Booking not found', 'lnkup-marketplace' ), 'desc' => __( 'This booking does not exist or belongs to another account.', 'lnkup-marketplace' ), 'cta_label' => __( 'Back to My Bookings', 'lnkup-marketplace' ), 'cta_href' => $back ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			echo lnkup_page_header( array( 'title' => __( 'Booking', 'lnkup-marketplace' ), 'back_url' => $back, 'back_label' => __( 'Bookings', 'lnkup-marketplace' ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			echo lnkup_empty_state( array( 'title' => __( 'Booking not found', 'lnkup-marketplace' ), 'desc' => __( 'This booking does not exist or belongs to another account.', 'lnkup-marketplace' ), 'cta_label' => __( 'Back to Bookings', 'lnkup-marketplace' ), 'cta_href' => $back ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			?>
 		<?php else : ?>
 			<?php
@@ -677,7 +683,7 @@ class LNKup_Vendor_Dashboard_Views {
 					'title'      => $detail['event_name'],
 					'subtitle'   => implode( ' · ', array_filter( array( $detail['booth'], $detail['status_label'] ) ) ),
 					'back_url'   => $back,
-					'back_label' => __( 'My Bookings', 'lnkup-marketplace' ),
+					'back_label' => __( 'Bookings', 'lnkup-marketplace' ),
 				)
 			);
 			?>
@@ -1031,8 +1037,12 @@ class LNKup_Vendor_Dashboard_Views {
 
 			<?php echo self::render_home_welcome( $ctx, $display_name, $subtitle, $market_open ? $find_url : '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<?php
+			// New vendors see setup first; vendors with applications see what needs attention and
+			// what is coming up first, and setup after.
 			$getting_started = self::render_getting_started( $ctx );
-			echo $getting_started; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			if ( ! $applications ) {
+				echo $getting_started; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			}
 			?>
 			<?php if ( ! $applications ) : ?>
 				<?php
@@ -1048,6 +1058,7 @@ class LNKup_Vendor_Dashboard_Views {
 			<?php else : ?>
 				<?php
 				echo self::render_next_action( $priorities ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				echo self::render_next_event_strip( $week, $ops_url ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 				$bucket_counts = LNKup_Vendor_Dashboard_Data::request_bucket_counts( $applications, $user_id );
 				$favorites     = class_exists( 'LNKup_Vendor_Personalization' ) ? LNKup_Vendor_Personalization::get_favorites( $user_id ) : array();
 				$saved_count   = count( (array) ( $favorites['events'] ?? array() ) ) + count( (array) ( $favorites['opportunities'] ?? array() ) );
@@ -1080,7 +1091,7 @@ class LNKup_Vendor_Dashboard_Views {
 					),
 					array( 'testid' => 'lnkup-vendor-home-stats' )
 				);
-				echo self::render_next_event_strip( $week, $ops_url ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				echo $getting_started; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 				?>
 			<?php endif; ?>
 			<?php if ( $market_open && $recommended && function_exists( 'lnkup_render_opportunity_card_v2' ) ) : ?>

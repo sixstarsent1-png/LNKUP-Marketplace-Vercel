@@ -173,8 +173,17 @@
     }
     var when = money.last_synced_at ? String(money.last_synced_at).slice(0, 16).replace('T', ' ') : '';
     return '<p class="lnkup-muted lnkup-fin-synced" data-testid="lnkup-fin-last-synced">' +
-      (when ? 'Last synced with Stripe ' + escapeHtml(when) : 'Not synced with Stripe yet') +
-      ' · <button type="button" class="lnkup-link-btn" data-fin-sync>Sync now</button></p>';
+      (when ? 'Balances updated ' + escapeHtml(when) : 'Balances not refreshed yet') +
+      ' · <button type="button" class="lnkup-link-btn" data-fin-sync>Refresh</button></p>';
+  }
+
+  /** Plain wording for payout status messages (no processor names in the dashboard). */
+  function payoutCopy(message) {
+    var text = String(message || '');
+    if (/stripe connect is not enabled/i.test(text)) {
+      return 'Direct payouts are not set up on this marketplace yet.';
+    }
+    return text.replace(/Stripe Connect/gi, 'payouts').replace(/Stripe/g, 'the payment provider');
   }
 
   /** POST /financial/sync, then reload money panels. */
@@ -946,25 +955,40 @@
     }
     dash = dash || {};
     report = report || {};
-    var outstanding = Number(report.pending_payments || dash.outstanding || dash.pending_payments || 0);
-    var paid = Number(report.lifetime_spend || dash.lifetime_spend || dash.revenue_paid || 0);
-    var wallet = Number(report.credits_available || dash.credits_available || dash.wallet_balance || 0);
+    // First field that the server actually sent; null when none did (shown as Unavailable, not $0).
+    function pick(keys) {
+      for (var i = 0; i < keys.length; i++) {
+        var src = keys[i][0];
+        var v = src[keys[i][1]];
+        if (v !== undefined && v !== null && v !== '' && !isNaN(Number(v))) return Number(v);
+      }
+      return null;
+    }
+    function moneyCell(label, value, primary) {
+      var known = value !== null;
+      return '<div' + (primary ? ' class="lnkup-fin-balance-hero__primary"' : '') + '><p class="lnkup-fin-balance-hero__label">' + label + '</p>' +
+        '<p class="lnkup-fin-balance-hero__value' + (known ? '' : ' is-unavailable') + '">' + (known ? '$' + value.toFixed(2) : 'Unavailable') + '</p></div>';
+    }
+    var outstanding = pick([[report, 'pending_payments'], [dash, 'outstanding'], [dash, 'pending_payments']]);
+    var paid = pick([[report, 'lifetime_spend'], [dash, 'lifetime_spend'], [dash, 'revenue_paid']]);
+    var wallet = pick([[report, 'credits_available'], [dash, 'credits_available'], [dash, 'wallet_balance']]);
     hero.dataset.loaded = '1';
+    function render(nextLabel, nextClass) {
+      hero.innerHTML = '<div class="lnkup-fin-balance-hero__grid lnkup-fin-balance-hero__grid--vendor">' +
+        moneyCell('Amount due', outstanding, true) +
+        moneyCell('Total spent', paid, false) +
+        moneyCell('Credits', wallet, false) +
+        '<div><p class="lnkup-fin-balance-hero__label">Next installment</p><p class="lnkup-fin-balance-hero__value ' + nextClass + '">' + escapeHtml(nextLabel) + '</p></div>' +
+        '</div>';
+    }
     finFetch('/installments').then(function (rows) {
-      var nextDue = rows && rows.length ? rows[0].due_date : '—';
-      hero.innerHTML = '<div class="lnkup-fin-balance-hero__grid lnkup-fin-balance-hero__grid--vendor">' +
-        '<div class="lnkup-fin-balance-hero__primary"><p class="lnkup-fin-balance-hero__label">Amount due</p><p class="lnkup-fin-balance-hero__value">$' + outstanding.toFixed(2) + '</p></div>' +
-        '<div><p class="lnkup-fin-balance-hero__label">Total spent</p><p class="lnkup-fin-balance-hero__value">$' + paid.toFixed(2) + '</p></div>' +
-        '<div><p class="lnkup-fin-balance-hero__label">Credits</p><p class="lnkup-fin-balance-hero__value">$' + wallet.toFixed(2) + '</p></div>' +
-        '<div><p class="lnkup-fin-balance-hero__label">Next installment</p><p class="lnkup-fin-balance-hero__value">' + escapeHtml(String(nextDue).slice(0, 10)) + '</p></div>' +
-        '</div>';
+      if (rows && rows.length && rows[0].due_date) {
+        render(String(rows[0].due_date).slice(0, 10), '');
+      } else {
+        render('None scheduled', 'is-none');
+      }
     }).catch(function () {
-      hero.innerHTML = '<div class="lnkup-fin-balance-hero__grid lnkup-fin-balance-hero__grid--vendor">' +
-        '<div class="lnkup-fin-balance-hero__primary"><p class="lnkup-fin-balance-hero__label">Amount due</p><p class="lnkup-fin-balance-hero__value">$' + outstanding.toFixed(2) + '</p></div>' +
-        '<div><p class="lnkup-fin-balance-hero__label">Total spent</p><p class="lnkup-fin-balance-hero__value">$' + paid.toFixed(2) + '</p></div>' +
-        '<div><p class="lnkup-fin-balance-hero__label">Credits</p><p class="lnkup-fin-balance-hero__value">$' + wallet.toFixed(2) + '</p></div>' +
-        '<div><p class="lnkup-fin-balance-hero__label">Next installment</p><p class="lnkup-fin-balance-hero__value">—</p></div>' +
-        '</div>';
+      render('Unavailable', 'is-unavailable');
     });
   }
 
@@ -1474,7 +1498,7 @@
         html += '<button type="button" class="lnkup-btn lnkup-btn--sm" id="lnkup-connect-reconnect">' +
           (connect.status === 'active' ? 'Update payout account' : 'Finish payout setup') + '</button>';
       } else if (connect.message) {
-        html += '<p class="lnkup-muted">' + escapeHtml(connect.message) + '</p>';
+        html += '<p class="lnkup-muted">' + escapeHtml(payoutCopy(connect.message)) + '</p>';
       }
       html += '</div>';
       panel.innerHTML = html;
@@ -1649,7 +1673,7 @@
     }
     connect = connect || {};
     if (!connect.available && connect.message) {
-      el.innerHTML = '<div class="lnkup-fin-connect-banner lnkup-fin-connect-banner--info">' + escapeHtml(connect.message) + '</div>';
+      el.innerHTML = '<div class="lnkup-fin-connect-banner lnkup-fin-connect-banner--info">' + escapeHtml(payoutCopy(connect.message)) + '</div>';
       return;
     }
     if (connect.status === 'active' && connect.payouts_enabled) {
