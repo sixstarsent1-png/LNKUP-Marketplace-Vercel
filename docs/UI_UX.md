@@ -680,7 +680,7 @@ stateDiagram-v2
 | Empty financial | `empty_financial` | No financial activity yet. Payments will appear here once vendors start booking. |
 | Empty applications | `empty_applications` | Vendor requests will appear here once vendors apply to your opportunities. |
 | Empty vendor requests | `empty_vendor_requests` | No new vendor requests yet. Invite vendors or share this opportunity to start filling your roster. |
-| Empty documents | `empty_documents` | No documents uploaded yet. Required vendor documents will appear here for review. |
+| Empty documents | `empty_documents` | No documents yet |
 | Find Events (no results) | — | No matching opportunities found. Try clearing filters or searching another city. |
 | Vendor operations (no data) | — | Your event operations details will appear here once you're approved and paid for an event. |
 | Vendor growth (new user) | — | Your growth insights will appear once you start applying to and completing events. |
@@ -758,7 +758,7 @@ Use `lnkup_copy( 'key' )` in PHP and `LNKupUI.t( 'key', fallback )` in JS. Add n
 | `empty_applications` | Vendor requests will appear here once vendors apply to your opportunities. |
 | `empty_vendor_requests` | No new vendor requests yet. Invite vendors or share this opportunity to start filling your roster. |
 | `empty_confirmed_vendors` | No vendors confirmed yet. Approve requests or invite vendors to start building your event roster. |
-| `empty_documents` | No documents uploaded yet. Required vendor documents will appear here for review. |
+| `empty_documents` | No documents yet |
 | `panel_error` | We couldn't load this section. Try refreshing or contact support. |
 
 #### Apply Modal

@@ -2175,3 +2175,27 @@ form.lnkup-bookings__filters .lnkup-btn {
 		gap: 3.5rem;
 	}
 }
+
+.lnkup-empty-state__icon:empty {
+	display: none;
+}
+
+/* Dashboard workspace bar on phones: one row. The menu toggle already opens the sidebar, and the account button carries the workspace name. */
+@media (max-width: 767px) {
+	.lnkup-workspace-bar {
+		flex-wrap: nowrap;
+	}
+
+	.lnkup-workspace-bar .lnkup-workspace-bar__slash,
+	.lnkup-workspace-bar .lnkup-workspace-bar__name,
+	.lnkup-workspace-bar #lnkup-workspace-more {
+		display: none;
+	}
+
+	.lnkup-workspace-bar .lnkup-workspace-profile__toggle {
+		max-width: 9rem;
+		border: 1px solid var(--x-line);
+		border-radius: 999px;
+		color: var(--x-ink);
+	}
+}

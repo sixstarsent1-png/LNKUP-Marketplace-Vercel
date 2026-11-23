@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react"
 import dynamic from "next/dynamic"
-import Image from "next/image"
 import Link from "next/link"
 import {
   Calendar,
@@ -23,6 +22,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { VerificationBadge } from "@/components/marketplace/badges"
+import { EventArt } from "@/components/marketplace/event-art"
 import { useOpportunityApplyState } from "@/lib/hooks/use-opportunity-apply-state"
 import { cn } from "@/lib/utils"
 import {
@@ -194,32 +194,23 @@ export function OpportunityCard({
         )}
         data-testid={highlighted ? "opportunity-card-highlighted" : "opportunity-card"}
       >
-        <div className="relative aspect-[4/5] w-full bg-muted">
-          {event.image && event.image !== "/placeholder.svg" ? (
-            <Image
-              src={event.image}
-              alt={event.name}
-              fill
-              className="object-cover object-top"
-            />
-          ) : (
-            <div className="flex h-full items-end p-3 text-sm font-semibold" role="img" aria-label={event.name}>
-              LNKup
-            </div>
-          )}
-          <div className="absolute top-3 left-3 flex gap-2">
+        <div className="relative aspect-[4/3] w-full bg-muted">
+          <EventArt image={event.image} name={event.name} />
+          <div className="absolute top-3 left-3 right-14 flex flex-wrap gap-2">
             {event.trending && (
               <Badge className="bg-accent text-accent-foreground">Trending</Badge>
             )}
             {event.organizerVerified && <VerificationBadge label="Verified" />}
             {event.eventType && (
-              <Badge variant="outline">{event.eventType}</Badge>
+              <Badge variant="outline" className="border-transparent bg-background/90 text-foreground backdrop-blur">
+                {event.eventType}
+              </Badge>
             )}
             {event.documentsRequired && (
               <Badge variant="secondary">Docs required</Badge>
             )}
             {(event.indoor || event.outdoor) && (
-              <Badge variant="outline">
+              <Badge variant="outline" className="border-transparent bg-background/90 text-foreground backdrop-blur">
                 {event.indoor && event.outdoor ? "Indoor/Outdoor" : event.indoor ? "Indoor" : "Outdoor"}
               </Badge>
             )}

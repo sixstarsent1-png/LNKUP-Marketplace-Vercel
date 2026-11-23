@@ -56,6 +56,8 @@ Rule for this pass: on those files, put the visual change in a new partial, styl
 | `public/js/marketplace-v2.js` | `selectSlot( card, initial )`: the automatic first selection no longer overwrites the bar. | The bar text was set by this function on load. |
 | `public/class-organizer-dashboard-views.php` (`render_home_welcome`) | "Next up" uses the display title without a trailing date, and a short date. | One line. |
 | `includes/portfolio/class-portfolio-public.php` (`render`) | Stop cards show status, spots left and a link to the stop's event page. They use `lnkup_public_money()` and `lnkup_application_status_label()`. The logged-out "Log in" is a text link. | Stop markup lives only here. Uses the existing `data()` fields. |
+| Next.js `components/marketplace/opportunity-card.tsx` | The media area renders `<EventArt>` (new component) instead of `next/image`; the badges over it get a light background. | The card owns its media block. Apply, save and status logic are untouched. |
+| Next.js `app/vendor/wallet/page.tsx` | The hero metrics and `heroMoney()` are removed; "1 booking" singular. | The duplicate figures were in this page. Amounts still come from `MoneyStatCard`. |
 
 ## Baseline review
 
@@ -289,6 +291,30 @@ After views are in `docs/design-pass/after/` (`home-*-top`, the `home-*-sN` sect
     - `vendor-journey:123` is a login reauth flake; it passes on rerun.
     - `vendor-operations:112` fails with the `phase/7-handoff` version of the view file too. The cause is the data (the first selectable event is unpaid, so only the pass tab renders), not this pass.
   - `vendor-bookings` follows the "Bookings" back link.
+
+## Step 5: Expo, Next.js and secondary screens
+
+- **Event art, all three apps:**
+  - An event without a usable image shows a black poster with the event's initials in lime and a small "LNKUP" mark. This matches the WordPress cards and replaces the flat lime block.
+  - A flyer is shown whole over a blurred copy of itself instead of being cropped.
+  - Expo: `components/ui/event-image.tsx` takes `title` and `fit`. Explore cards, organizer event cards and the event detail hero use it.
+  - Next.js: new `components/marketplace/event-art.tsx`, used by the opportunity card.
+- **Expo cards:** one card is one booth, so the fee is that booth's exact price ("$120"), not "From $120".
+- **Expo sign in and sign up:** Terms and Privacy Policy appear once, as one sentence with a single link row.
+- **Next.js:**
+  - Opportunity card badges over the artwork have a light background. The category badge rendered dark-on-dark and looked empty.
+  - Wallet: the hero no longer repeats the two money cards with rounded amounts ("$229" over "$229.01"). "1 bookings" reads "1 booking".
+- **WordPress secondary screens** (documents, help, Passport, notification settings, referrals):
+  - Phone dashboard header is one row: menu, logo, search, account. The workspace name appeared twice, and "More" opened the same sidebar as the menu button.
+  - Empty states without an icon no longer show a blank dashed square.
+  - Documents empty state: the title is "No documents yet"; the explanation stays in the description.
+  - Notification settings on phone: each dropdown is labelled "Email" or "Push" (the column headers are hidden at that width).
+  - Referrals inside the dashboard: the payout explanation appears once, in the card that has the actual percentage.
+- **Checks:**
+  - Expo: `tsc` passes; jest 24 suites, 200 tests pass.
+  - Next.js: `tsc` reports the same 18 errors as `phase/7-handoff`. The three in `opportunity-card.tsx` are the existing analytics `eventId` typing. `eslint` cannot run: the app has no `eslint.config.*`.
+  - Captures: `expo-explore`, `expo-detail`, `expo-login`, `next-find`, `next-wallet`, `vendor-documents`, `vendor-help`, `vendor-passport`, `vendor-notifications`, `vendor-referrals`.
+  - Expo web only reloads code when Metro runs without `CI=1`.
 
 ## Handoffs
 

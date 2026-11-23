@@ -90,8 +90,8 @@
 				cat.promotional ? el( 'span', { className: 'lnkup-comms-badge', text: t.promo } ) : null,
 				el( 'span', { className: 'lnkup-comms-desc', text: cat.description } )
 			] );
-			var emailCell = cat.locked ? el( 'td', { text: t.locked } ) : el( 'td', {}, [ select( 'email:' + cat.key, cat.email, prefs.emailModes, cat.label + ' — ' + t.email ) ] );
-			var pushCell = cat.locked ? el( 'td', { text: t.locked } ) : el( 'td', {}, [ select( 'push:' + cat.key, cat.push, [ 'on', 'off' ], cat.label + ' — ' + t.push ) ] );
+			var emailCell = cat.locked ? el( 'td', { text: t.locked, 'data-label': t.email } ) : el( 'td', { 'data-label': t.email }, [ select( 'email:' + cat.key, cat.email, prefs.emailModes, cat.label + ' — ' + t.email ) ] );
+			var pushCell = cat.locked ? el( 'td', { text: t.locked, 'data-label': t.push } ) : el( 'td', { 'data-label': t.push }, [ select( 'push:' + cat.key, cat.push, [ 'on', 'off' ], cat.label + ' — ' + t.push ) ] );
 			body.appendChild( el( 'tr', {}, [ label, emailCell, pushCell ] ) );
 		} );
 		table.appendChild( body );

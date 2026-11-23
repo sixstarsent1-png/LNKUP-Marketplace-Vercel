@@ -37,11 +37,12 @@ export function OpportunityCard({
   onToggleSave?: () => void
 }) {
   const location = [item.city, item.state].filter(Boolean).join(", ")
+  // One card is one booth, so its fee is exact; "From" is only for an event's range (web cards).
   const fee =
     item.vendorFee == null
       ? "Fee unavailable"
       : item.vendorFee > 0
-        ? `From ${formatMoney(item.vendorFee)}`
+        ? formatMoney(item.vendorFee)
         : "Free"
   const open = onPress ?? onApply
   const cta = opportunityApplyCta(item)
@@ -58,7 +59,13 @@ export function OpportunityCard({
           accessibilityRole="button"
           accessibilityLabel={[`View details for ${item.title}`, item.eventDate, location, fee].filter(Boolean).join(", ")}
         >
-          <EventImage uri={image?.thumb || image?.url || item.imageUrl} label={category ?? "Event"} height={168} radius={0} />
+          <EventImage
+            uri={image?.thumb || image?.url || item.imageUrl}
+            title={item.title}
+            height={168}
+            radius={0}
+            fit="contain"
+          />
         </Pressable>
         <View style={styles.overlayRow} pointerEvents="box-none">
           {category ? (

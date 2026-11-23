@@ -85,5 +85,6 @@
 	.lnkup-comms-table, .lnkup-comms-table tbody, .lnkup-comms-table tr, .lnkup-comms-table th, .lnkup-comms-table td { display: block; width: 100%; }
 	.lnkup-comms-table tr { padding: 8px 0; border-bottom: 1px solid var(--lnk-border); }
 	.lnkup-comms-table th, .lnkup-comms-table td { border: 0; padding: 4px 0; }
+	.lnkup-comms-table td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 4px; font-size: 12px; font-weight: 600; color: var(--lnk-muted); }
 	.lnkup-comms-actions .lnkup-comms-btn { flex: 1 1 100%; }
 }
