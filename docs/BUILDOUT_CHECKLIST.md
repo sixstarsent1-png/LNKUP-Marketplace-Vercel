@@ -357,6 +357,37 @@ Short paths: `P/` = `wp-content/plugins/lnkup-marketplace/`, `C/` = `wp-content/
   - Expo `partner-home.test.ts`: 15/15.
   - `connector-program.spec.ts`: 52 passed, 10 skipped. Its interest page check now asserts on the visible "Charlotte" text, since the hidden hero stamp also matches.
 
+## Phase 7 results: demonstrations and handoff
+
+All runs used wp-env (:8894) with synthetic fixtures and Stripe test mode, with no live sends and no deploys.
+
+| Demonstration | Evidence |
+|---|---|
+| 1. Independent organizer through to check-in | `launch-publish-idempotency-test` (publish once, drafts hidden), `organizer-next-step-test`, `booking-lifecycle-test` (apply, approve, test-mode pay, invoice and receipt, pass, check-in at the assigned event only) |
+| 2. Multi-city tour with per-stop rollup | `team-scope-rollup-test` (stop readiness, tasks, money hidden without `view_financials`), `partner-earnings-contract-test` tour section (per-stop attribution) |
+| 3. Waitlist and refund | `comms-organizer-os-test` (one message per offer), `booking-lifecycle-test` full refund (pass locked, slot freed once, ledger reversed once), `financial-refund-dispute-test` |
+| 4. Reopen restore | Expo jest (`pending-destination`, `current-href`, notification routing, checkout return), Next.js and Expo draft resume lists (`draft-submit-changes-test`) |
+| 5. Admin queue to canonical record | `ops-overview-test`. Live check in Next.js `/admin/ops`: the queue loaded from WordPress, snooze removed the item and added it to the hidden count, and restore brought it back. Each item links to the record. |
+| 6. Referral to ledger | `partnerships-test` (attribution, hold → approve → paid, reversal, clawback), `partner-earnings-contract-test` (all states, 66 rows, paging) |
+
+### Suite results (phase/6-partners-rollout, 2026-11-22)
+
+| Suite | Result |
+|---|---|
+| PHP runners: applications, financial, comms, trust, org-growth, partnerships | 54 suites, 2,037 checks, 0 failures |
+| `php -l` (both plugins and the theme) | 540 files, 0 failures |
+| Expo `tsc` / jest | clean / 24 suites, 200 tests passed |
+| Next.js `tsc` | 18 errors in 13 files, all from before this work; fixed by PR #7 |
+| Playwright web, Chromium, full suite | 437 passed, 121 failed, 96 skipped, 12 did not run |
+
+How to read the Playwright failures:
+- **69 are in `lnkup-app-*` specs.** These target a mock-mode Next.js app as the base URL and mock their APIs. In this run the base URL was WordPress and the app was in live mode, so they don't test these branches.
+- **52 are WordPress specs.**
+  - 46 also fail on `phase/1-release-checks`, so they predate Phases 2–6. They come from redesign copy and test-ID changes (sidebar labels, organizer home), plus default-off flags (external events, the public Passport URL).
+  - The other 6 pass when run alone (5 passed, 1 skips itself on a condition), so they failed only under full-suite load.
+- Updating these older specs for the redesign is follow-up work.
+- The mobile-viewport Playwright project was not re-run in full. The Expo web specs (`run-mobile.ps1`) were last run in Phase 1.
+
 ## Running checklist
 
 - [x] **Phase 0:** integration branch, bootstrap files tracked, lint, activation, typechecks ([PR #9](https://github.com/sixstarsent1-png/LNKUP-Marketplace-Vercel/pull/9))
@@ -366,4 +397,4 @@ Short paths: `P/` = `wp-content/plugins/lnkup-marketplace/`, `C/` = `wp-content/
 - [x] **Phase 4:** acquisition, discovery, communications, analytics. Open: external listings in the apps; `task_digest` and document updates through Communications; no live sends in this pass.
 - [x] **Phase 5:** internal operations workspace. Open: Admin Lite needs `ENABLE_OPS_ANALYTICS` on the Vercel project (project owner).
 - [x] **Phase 6:** partnerships and rollout plan ([ROLLOUT_PLAN.md](ROLLOUT_PLAN.md)). Open: payouts stay manual until KYC and 1099 (finance owner).
-- [ ] **Phase 7:** demonstrations and handoff
+- [x] **Phase 7:** demonstrations and handoff. Open: update the older Playwright specs for the redesign; run the `lnkup-app-*` specs against a mock-mode Next.js app.
