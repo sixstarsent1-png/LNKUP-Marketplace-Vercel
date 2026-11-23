@@ -27,14 +27,18 @@ const WIDTHS = {
 
 /** Screens to capture. `as` is the WordPress user to sign in as, `expo` the Expo session role. */
 const SCREENS = [
-  { id: 'home', url: `${WP}/`, full: true },
+  { id: 'home', url: `${WP}/`, full: true, sections: 'main.lnkup-site__main > section, .lnkup-site > footer' },
   { id: 'explore', url: `${WP}/opportunities/` },
   { id: 'explore-city', url: `${WP}/opportunities/?city=Charlotte` },
   { id: 'event-flyer', url: `${WP}/lnkup_event/atlanta-greek-picnic-weekend-festival-and-vendor-village-featuring-live-djs-food-row-and-pop-up-shops/`, full: true },
   { id: 'event-no-art', url: `${WP}/lnkup_event/raleigh-sunday-flea/` },
   { id: 'tour', url: `${WP}/tours/e2e-southern-tour/`, full: true },
   { id: 'signup', url: `${WP}/sign-up/` },
-  { id: 'city', url: `${WP}/charlotte/` },
+  { id: 'login', url: `${WP}/log-in/` },
+  { id: 'city', url: `${WP}/markets/charlotte/`, full: true },
+  { id: 'organizers', url: `${WP}/organizers/` },
+  { id: 'storefront', url: `${WP}/organizers/?organizer=six-stars-entertainment`, full: true },
+  { id: 'vendors', url: `${WP}/vendors/` },
   { id: 'vendor-home', url: `${WP}/vendor-dashboard/`, as: 'e2e_vendor_a', full: true },
   { id: 'vendor-bookings', url: `${WP}/vendor-dashboard/?view=bookings`, as: 'e2e_vendor_a', full: true },
   { id: 'vendor-wallet', url: `${WP}/vendor-dashboard/?view=payments`, as: 'e2e_vendor_a' },
@@ -96,6 +100,15 @@ for (const [width, ctxOptions] of Object.entries(WIDTHS)) {
       await page.screenshot({ path: file, type: 'jpeg', quality: 70, fullPage: Boolean(screen.full) });
       if (screen.full) {
         await page.screenshot({ path: file.replace(/\.jpg$/, '-top.jpg'), type: 'jpeg', quality: 75 });
+      }
+      if (process.env.DESIGN_SECTIONS && screen.sections) {
+        const sections = page.locator(screen.sections);
+        const count = await sections.count();
+        for (let i = 0; i < count; i++) {
+          const section = sections.nth(i);
+          if (!(await section.isVisible())) continue;
+          await section.screenshot({ path: file.replace(/\.jpg$/, `-s${i + 1}.jpg`), type: 'jpeg', quality: 70 });
+        }
       }
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       results.push(`${screen.id} ${width}: ${file}${overflow > 1 ? ` (horizontal overflow ${overflow}px)` : ''}`);

@@ -42,11 +42,12 @@ if ( '' === $body || ( $marketplace_open && in_array( $body, $stale, true ) ) ) 
 					<a href="<?php echo esc_url( $signup_url ); ?>" class="lnkup-btn lnkup-btn--primary lnkup-btn--lg" data-testid="lnkup-final-cta-signup"><?php echo esc_html( $button ); ?></a>
 				<?php endif; ?>
 				<?php if ( $marketplace_open ) : ?>
-					<a href="<?php echo esc_url( $opportunities_url ); ?>" class="lnkup-btn lnkup-btn--outline lnkup-btn--lg lnkup-btn--on-dark"><?php esc_html_e( 'Find Events', 'lnkup-theme' ); ?></a>
+					<?php if ( is_user_logged_in() || 0 !== strcasecmp( trim( $button ), 'Find Events' ) ) : ?>
+						<a href="<?php echo esc_url( $opportunities_url ); ?>" class="lnkup-btn lnkup-btn--outline lnkup-btn--lg lnkup-btn--on-dark"><?php esc_html_e( 'Browse open spots', 'lnkup-theme' ); ?></a>
+					<?php endif; ?>
 				<?php else : ?>
 					<a href="#how-it-works" class="lnkup-btn lnkup-btn--outline lnkup-btn--lg lnkup-btn--on-dark"><?php esc_html_e( 'Explore How It Works', 'lnkup-theme' ); ?></a>
 				<?php endif; ?>
-				<?php lnkup_theme_app_store_badge( 'white', 'final-cta' ); ?>
 			</div>
 		</div>
 	</div>

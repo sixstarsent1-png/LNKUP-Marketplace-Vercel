@@ -30,9 +30,6 @@ if ( is_user_logged_in() ) {
 <header class="lnkup-header<?php echo $marketplace_open ? '' : ' lnkup-header--prelaunch'; ?>">
 	<?php
 	get_template_part( 'template-parts/landing/launch-bar' );
-	if ( ! $is_front ) {
-		get_template_part( 'template-parts/landing/app-release-bar' );
-	}
 	?>
 	<div class="lnkup-header__inner">
 		<a href="<?php echo esc_url( home_url( '/' ) ); ?>" class="lnkup-header__logo" aria-label="<?php esc_attr_e( 'LNKup home', 'lnkup-theme' ); ?>">

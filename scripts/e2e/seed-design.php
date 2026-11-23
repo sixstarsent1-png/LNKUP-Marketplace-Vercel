@@ -134,8 +134,10 @@ foreach ( $fixtures as $fx ) {
 	if ( $fx['image'] ) {
 		list( $w, $h, $lines, $bg, $src ) = $fx['image'];
 		$att = lnkup_design_image( $event_id, $fx['key'], $w, $h, $lines, $bg, $src );
+		update_post_meta( $event_id, '_lnkup_featured_image_id', $att );
 	} else {
 		delete_post_thumbnail( $event_id );
+		delete_post_meta( $event_id, '_lnkup_featured_image_id' );
 		$att = 0;
 	}
 	foreach ( $opps as $slot_key => $opp_id ) {
@@ -149,8 +151,10 @@ foreach ( $fixtures as $fx ) {
 		}
 		if ( $att ) {
 			set_post_thumbnail( $opp_id, $att );
+			update_post_meta( $opp_id, '_lnkup_featured_image_id', $att );
 		} else {
 			delete_post_thumbnail( $opp_id );
+			delete_post_meta( $opp_id, '_lnkup_featured_image_id' );
 		}
 		LNKup_Marketplace_Index::sync_opportunity( $opp_id );
 	}

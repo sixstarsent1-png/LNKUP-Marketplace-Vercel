@@ -88,12 +88,17 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  if (!dismissed) {
+  // The prompt never takes over a first page view or the homepage hero: it waits for the second
+  // page in a visit, and it is a bar the visitor can ignore, not a dialog.
+  var views = 0;
+  try {
+    views = parseInt(sessionStorage.getItem('lnkup_page_views') || '0', 10) + 1;
+    sessionStorage.setItem('lnkup_page_views', String(views));
+  } catch (e) {
+    views = 1;
+  }
+  if (!dismissed && views >= 2 && !document.body.classList.contains('home')) {
     sheet.hidden = false;
-    var focusTarget = sheet.querySelector('[data-app-sheet-download]');
-    if (focusTarget) {
-      focusTarget.focus();
-    }
   }
 
   sheet.querySelectorAll('[data-app-sheet-dismiss]').forEach(function (el) {

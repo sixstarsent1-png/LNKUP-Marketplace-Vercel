@@ -50,6 +50,8 @@ Rule for this pass: on those files, put the visual change in a new partial, styl
 
 | Shared file | Edit in this pass | Why it could not be isolated |
 |---|---|---|
+| `includes/helpers.php` | `lnkup_render_homepage_event_card()` now calls `lnkup_render_event_card_from_summary( lnkup_event_card_summary() )` (216 lines replaced by 1). `lnkup_sanitize_card_image_url()` checks same-site URLs before the Eventbrite rules. | Every public card goes through this function. The card logic moved, unchanged in meaning, to `includes/presentation/event-card-summary.php`. The image check fixes same-site uploads being upgraded to https, which broke them on http staging and local sites. |
+| `lnkup-marketplace.php` | One line: load `includes/presentation/event-card-summary.php` after `helpers.php`. | Bootstrap file list. |
 
 ## Baseline review
 
@@ -171,7 +173,48 @@ Tags: **[seen]** observed in the browser · **[code]** found only in code · **[
 - [n/a] Real devices: haptics, native sheets, push taps, VoiceOver.
 - [n/a] The Next.js app was not captured for the baseline. It is covered in step 5.
 
+## Step 2: homepage and public navigation
+
+After views are in `docs/design-pass/after/` (`home-*-top`, the `home-*-sN` sections, `signup`, `login`, `city`, `organizers`, `storefront`).
+
+- **First screen:**
+  - A live pill: "Booking vendors now in Charlotte, Atlanta +4", built from the cities that have open listings.
+  - The headline.
+  - One search: the city field with a hint taken from real data, plus "Find spots".
+  - Up to four city links with counts, which carry the filter into Explore.
+  - A stack of up to three real flyers from events accepting vendors: fanned on desktop, a swipe strip on phone. The flyers are shown whole over a blurred copy, so their text is never cropped.
+  - With no flyers available, the photo carries the hero.
+- **App promotion has one place per page:**
+  - On the homepage: the app section only. The final call to action and the footer no longer repeat the badge there.
+  - On other pages: a quiet "Get the app" in the header, and a slim, non-blocking bottom bar on iPhone from the second page of a visit. It replaces the first-visit sheet with a backdrop.
+  - The top app banner is gone. Safari's own Smart App Banner is unchanged.
+- **Section order:**
+  1. Open opportunities (whole rows only).
+  2. Browse by city (tiles) and by what you sell.
+  3. Tours and series (only when a published tour has an open stop; each stop shows its date, city and open or closed).
+  4. How it works.
+  5. A new organizer band (list spots, review vendors, get paid and run the day).
+  6. Trust (live totals that are still zero are hidden instead of showing "$0.00").
+  7. The app.
+  8. The closing call to action (no duplicate "Find Events" button).
+- **Shared card** (`lnkup_render_event_card_from_summary`):
+  - Scan order: event, date and city, fit (categories and organizer), fee chip (Free, a single price, "From $X" for a range, "Fee unavailable", "Fee set by the organizer"), availability ("Only 3 spots left", "24 spots open · 2 booth types"), then the action.
+  - The whole card is clickable, and each button's accessible name includes the event.
+  - Sold-out and closed events dim their art and say so once.
+  - Events without art get an LNKup poster with their initials.
+- **Header and footer:**
+  - Nav links share one baseline.
+  - Ghost buttons on light pages are now ink (they were white on white site-wide).
+  - Lime buttons carry dark text.
+  - The footer blurb no longer claims "thousands of vendors".
+- **Sign up:** a lime check list, and a clear selected state for the role choice.
+- **Motion and focus:** a lime focus ring with an ink halo, press scale, card lift and the live-dot pulse, all switched off under reduced motion.
+- **Verification:**
+  - Phone and desktop captures of the homepage, sign up, log in, the Charlotte city page, organizers and a storefront.
+  - Playwright `landing-launch`, `public-pages`, `market-pages`: 19 passed, 10 skipped (Chromium).
+
 ## Handoffs
 
 | Screen | Expected | Contract | Found |
 |---|---|---|---|
+| Homepage and Explore cards | A booth with no fee set reads "Fee unavailable". | `LNKup_Marketplace_Index::sync_opportunity()` stores `vendor_fee` as `(float) get_post_meta( …, '_lnkup_vendor_fee' )`. | A missing fee is indexed as `0.00`, so the card says "Free" (seen with the Raleigh Sunday Flea fixture). The card cannot tell "free" from "not set" without a nullable fee in the index. |
