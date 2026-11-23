@@ -9,6 +9,7 @@ $tests = @(
   'organizer-activation-test',
   'organizer-next-step-test',
   'opportunity-funnel-test',
+  'ops-overview-test',
   'financial-fee-backfill-test'
 )
 $failed = @()

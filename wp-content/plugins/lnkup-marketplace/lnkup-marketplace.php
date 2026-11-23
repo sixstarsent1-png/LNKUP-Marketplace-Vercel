@@ -367,6 +367,8 @@ $lnkup_core_files = array(
 	'includes/portfolio/class-portfolio-public.php',
 	'includes/portfolio/class-portfolio-rest.php',
 	'admin/class-match-admin.php',
+	'includes/class-ops-overview.php',
+	'admin/class-ops-admin.php',
 	'includes/passport/class-passport-settings.php',
 	'includes/passport/class-passport-tables.php',
 	'includes/passport/class-passport-privacy.php',
@@ -524,6 +526,8 @@ function lnkup_marketplace_init() {
 	LNKup_Portfolio_Public::init();
 	LNKup_Portfolio_REST::init();
 	LNKup_Match_Admin::init();
+	LNKup_Ops_Overview::init();
+	LNKup_Ops_Admin::init();
 	LNKup_Passport::init();
 	LNKup_Shortcodes::init();
 	LNKup_Registration::init();

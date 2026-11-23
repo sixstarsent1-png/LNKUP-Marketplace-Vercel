@@ -97,6 +97,7 @@ export const roleNav: Record<Role, NavItem[]> = {
         "/admin/more",
         "/admin/external-events",
         "/admin/verification",
+        "/admin/ops",
         "/admin/connectors",
       ],
     },

@@ -307,6 +307,25 @@ Short paths: `P/` = `wp-content/plugins/lnkup-marketplace/`, `C/` = `wp-content/
 - **Verified unchanged:** saved-search alerts (`matching-alerts-test`), reapply rules (`reapply-policy-test`), match funnel (`match-funnel-test`).
 - **Not built:** an external-listing label and claim path in Next.js and Expo. External listings stay off by default (redesign decision), and the apps never show them, so nothing is mislabeled. WordPress keeps the opt-in filter and claim route.
 
+## Phase 5 results: internal operations workspace
+
+- **One queue for staff:** `LNKup_Ops_Overview` gathers exceptions from seven sources into `GET /admin/ops/queue` (manage-all). Each item has a severity, age, owner, the affected records, and a link to the screen where the decision is made. Items are sorted by severity, then age.
+  - **Applications:** review waiting more than 5 days, approved but past the payment deadline, info request unanswered for 7 days. Grouped per event and kind, so one busy event is one item.
+  - **Payments:** reconciliation errors, reconciliation not run in 3 hours, webhooks unprocessed after 15 minutes.
+  - **Events:** readiness below 100% within 14 days.
+  - **Trust:** pending organizer verification, disputed claims and open cases, as counts and links only.
+  - **Communications, matching and partners:** failing health checks, stale matching jobs, commissions waiting for a decision, and held payouts.
+- **Excluded:** test and demo accounts, using the same exclusion list as the funnel.
+- **Dismiss, snooze, restore:** `POST /admin/ops/queue/state`.
+  - A dismissed item comes back when it changes, for example a higher count or severity.
+  - A snooze lasts 1 hour to 14 days.
+  - Every change writes a Trust audit row with the note. State is stored in `{prefix}lnkup_ops_item_state`.
+- **Screens:**
+  - wp-admin **LNKup → Operations queue**: admin-post with a nonce and a manage-all check.
+  - Next.js Admin Lite `/admin/ops`, linked from Admin → More. Its BFF `/api/admin/ops` uses the same `ENABLE_OPS_ANALYTICS` gate and admin session as other Admin Lite pages. Loading, empty and error states.
+- **Privacy:** the queue returns no document names, trust case summaries, evidence or fingerprints. The queue sends no push notifications.
+- **Evidence:** `ops-overview-test.php` (43 checks: organizer and vendor 403, grouping, exclusion, dismiss until changed, snooze expiry, restore, audit rows, privacy), in the Organizer Growth runner. The wp-admin page renders without notices.
+
 ## Running checklist
 
 - [x] **Phase 0:** integration branch, bootstrap files tracked, lint, activation, typechecks ([PR #9](https://github.com/sixstarsent1-png/LNKUP-Marketplace-Vercel/pull/9))
@@ -314,6 +333,6 @@ Short paths: `P/` = `wp-content/plugins/lnkup-marketplace/`, `C/` = `wp-content/
 - [x] **Phase 2:** booking journey and financial integrity. Open: Expo drafts list ships with PR #10; live Stripe test-mode card run needs staging keys.
 - [x] **Phase 3:** organizer management, tours, event day. Open: shared team CRM, waitlist offers in the apps, `$request['id']` audit outside operations.
 - [x] **Phase 4:** acquisition, discovery, communications, analytics. Open: external listings in the apps; `task_digest` and document updates through Communications; no live sends in this pass.
-- [ ] **Phase 5:** internal operations workspace
+- [x] **Phase 5:** internal operations workspace. Open: Admin Lite needs `ENABLE_OPS_ANALYTICS` on the Vercel project (project owner).
 - [ ] **Phase 6:** partnerships and rollout plan
 - [ ] **Phase 7:** demonstrations and handoff
