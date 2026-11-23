@@ -56,17 +56,33 @@ class LNKup_Receipts {
 		);
 	}
 
-	public static function list_for_user( $user_id, $limit = 25 ) {
+	/**
+	 * Vendor receipts, newest payment first.
+	 *
+	 * @param int $user_id  Vendor user ID.
+	 * @param int $per_page Page size (max 100).
+	 * @param int $page     1-based page.
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function list_for_user( $user_id, $per_page = 25, $page = 1 ) {
 		global $wpdb;
-		$table = LNKup_Financial_Tables::receipts_table();
+		$table    = LNKup_Financial_Tables::receipts_table();
+		$per_page = min( 100, max( 1, absint( $per_page ) ) );
+		$page     = max( 1, absint( $page ) );
 		return $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE vendor_user_id = %d ORDER BY created_at DESC LIMIT %d",
+				"SELECT * FROM {$table} WHERE vendor_user_id = %d ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d",
 				$user_id,
-				min( 50, max( 1, absint( $limit ) ) )
+				$per_page,
+				( $page - 1 ) * $per_page
 			),
 			ARRAY_A
 		);
+	}
+
+	public static function count_for_user( $user_id ) {
+		global $wpdb;
+		return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . LNKup_Financial_Tables::receipts_table() . ' WHERE vendor_user_id = %d', absint( $user_id ) ) );
 	}
 
 	public static function format( $row ) {

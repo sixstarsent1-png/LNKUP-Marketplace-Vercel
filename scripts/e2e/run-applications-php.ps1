@@ -3,6 +3,9 @@
 $tests = @(
   'booking-application-os-test',
   'booking-center-test',
+  'booking-lifecycle-test',
+  'draft-submit-changes-test',
+  'launch-publish-idempotency-test',
   'financial-refund-dispute-test',
   'financial-checkout-test',
   'financial-security-test'

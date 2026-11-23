@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { isLiveApiEnabled } from "@/lib/api/config"
 import { mapVendorInvoicesList, mockVendorInvoices } from "@/lib/api/vendor-financial"
-import { wpFetchJson } from "@/lib/api/wp-fetch"
+import { wpFetchAllPages } from "@/lib/api/wp-paged"
 import { authRequiredResponse, toErrorResponse } from "@/lib/api/normalize-wp-error"
 import { getSession, toWpAuth } from "@/lib/auth/session"
 
@@ -17,9 +17,12 @@ export async function GET() {
     }
 
     const auth = toWpAuth(session)
-    const data = await wpFetchJson("/financial/invoices", { auth, query: { role: "vendor" } })
+    const { items, truncated } = await wpFetchAllPages<Record<string, unknown>>("/financial/invoices", {
+      auth,
+      query: { role: "vendor" },
+    })
 
-    return NextResponse.json({ items: mapVendorInvoicesList(data) })
+    return NextResponse.json({ items: mapVendorInvoicesList(items), truncated })
   } catch (error) {
     return toErrorResponse(error, {
       context: "vendor/wallet/invoices",

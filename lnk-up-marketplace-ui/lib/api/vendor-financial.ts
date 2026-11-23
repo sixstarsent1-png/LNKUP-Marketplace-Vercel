@@ -132,6 +132,34 @@ export function mapPaymentStatusLabel(status?: string): string {
   return STATUS_LABELS[key] ?? status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+interface VendorMoneyMetric {
+  cents?: unknown
+  status?: unknown
+}
+
+type VendorMoneyMetrics = Partial<Record<"paid" | "processing" | "outstanding" | "refunded", VendorMoneyMetric>>
+
+/** `money.metrics` from `GET /financial/dashboard?role=vendor`, when the server sends the contract. */
+export function vendorMoneyMetrics(money: unknown): VendorMoneyMetrics | null {
+  if (!money || typeof money !== "object") return null
+  const metrics = (money as { metrics?: unknown }).metrics
+  return metrics && typeof metrics === "object" ? (metrics as VendorMoneyMetrics) : null
+}
+
+/** Dollars for a contract metric the server confirmed; undefined when missing or not ok. */
+export function contractDollars(metric: VendorMoneyMetric | undefined): number | undefined {
+  if (!metric || metric.status !== "ok" || typeof metric.cents !== "number" || !Number.isFinite(metric.cents)) {
+    return undefined
+  }
+  return metric.cents / 100
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === "") return undefined
+  const n = Number(value)
+  return Number.isFinite(n) ? n : undefined
+}
+
 export function mapVendorWalletSummary(
   summaryData: unknown,
   dashboardData: unknown,
@@ -145,18 +173,20 @@ export function mapVendorWalletSummary(
     (r) => r.status === "payment_required" || r.status === "approved",
   )
   const paid = requests.filter((r) => r.status === "paid" || r.status === "completed")
+  const contract = vendorMoneyMetrics(d.money ?? s.money)
 
-  const amountDue = paymentRequired.reduce((sum, r) => sum + (r.amountDue ?? r.vendorFee ?? 0), 0)
-  const totalPaid = paid.reduce((sum, r) => sum + (r.amountDue ?? r.vendorFee ?? 0), 0)
+  // Totals come from the server money contract (older servers send flat fields). A figure the
+  // server did not confirm stays undefined and renders as unavailable; a confirmed 0 stays 0.
+  const amountDue = contract ? contractDollars(contract.outstanding) : finiteNumber(s.amount_due ?? d.amount_due)
+  const totalPaid = contract ? contractDollars(contract.paid) : finiteNumber(s.total_paid ?? d.total_paid)
 
-  const credits =
-    Number(s.available_credits ?? s.credit_balance ?? wallet?.credits ?? d.credits_available ?? 0) || undefined
-  const pendingCredits = Number(s.pending_credits ?? wallet?.pending_credits ?? 0) || undefined
-  const pendingRefunds = Number(s.pending_refunds ?? d.pending_refunds ?? 0) || undefined
+  const credits = finiteNumber(s.available_credits ?? s.credit_balance ?? wallet?.credits ?? d.credits_available)
+  const pendingCredits = finiteNumber(s.pending_credits ?? wallet?.pending_credits)
+  const pendingRefunds = finiteNumber(s.pending_refunds ?? d.pending_refunds)
 
   return {
-    amountDue: amountDue > 0 ? amountDue : Number(s.amount_due ?? d.amount_due ?? 0) || undefined,
-    totalPaid: totalPaid > 0 ? totalPaid : Number(s.total_paid ?? d.total_paid ?? 0) || undefined,
+    amountDue,
+    totalPaid,
     availableCredits: credits,
     pendingCredits,
     pendingRefunds,

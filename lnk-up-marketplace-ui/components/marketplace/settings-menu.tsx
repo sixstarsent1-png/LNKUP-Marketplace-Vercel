@@ -1,7 +1,8 @@
 import Link from "next/link"
 import type { LucideIcon } from "lucide-react"
-import { ChevronRight, LogOut } from "lucide-react"
+import { ChevronRight } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { SignOutButton } from "@/components/auth/sign-out-button"
 
 export type SettingsGroup = {
   title: string
@@ -56,15 +57,7 @@ export function SettingsMenu({ groups }: { groups: SettingsGroup[] }) {
       ))}
       <Card>
         <CardContent className="py-2">
-          <button
-            type="button"
-            className="flex w-full items-center gap-3 rounded-lg px-2 py-3 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
-          >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
-              <LogOut className="size-4" />
-            </span>
-            <span className="flex-1 font-medium">Sign out</span>
-          </button>
+          <SignOutButton className="flex w-full items-center gap-3 rounded-lg px-2 py-3 text-left text-sm text-destructive transition-colors hover:bg-destructive/10" />
         </CardContent>
       </Card>
     </div>

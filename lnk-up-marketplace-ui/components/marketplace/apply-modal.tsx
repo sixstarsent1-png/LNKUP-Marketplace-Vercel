@@ -48,6 +48,16 @@ const REAPPLY_NOTES: Record<string, string> = {
   opportunity_changed: "This booth changed since your last application. You can apply again.",
 }
 
+/** Submit refusals that mean the booth changed while the vendor was filling in the form. */
+const CHANGED_WHILE_APPLYING: Record<string, string> = {
+  deadline: "Applications closed",
+  full: "This booth is full",
+  closed: "Applications closed",
+  invite_only: "Invite only",
+}
+
+const SUBMIT_BLOCKING_CODES = new Set(["duplicate", "previously_declined", ...Object.keys(CHANGED_WHILE_APPLYING)])
+
 function reapplyNoteFor(previous: WpApplyContext["previous_application"]): string | null {
   if (!previous || previous.reapply !== "allowed") return null
   return REAPPLY_NOTES[previous.reason] ?? "You withdrew an earlier application for this booth. You can apply again."
@@ -241,7 +251,7 @@ export function ApplyModal({
           return
         }
 
-        if (result.code === "duplicate" || result.code === "previously_declined") {
+        if (result.code && SUBMIT_BLOCKING_CODES.has(result.code)) {
           setContextErrorCode(result.code)
           setContextError(result.message)
           return
@@ -287,15 +297,17 @@ export function ApplyModal({
     role: "vendor",
     redirect: "/vendor/onboarding",
   })
-  const loginUrl = getVendorLoginUrl({ intent: "vendor", redirect: "/vendor/find" })
+  const loginUrl = getVendorLoginUrl({ intent: "vendor", redirect: opportunityId ? `/vendor/find?opportunityId=${opportunityId}&apply=1` : "/vendor/find" })
   const marketplaceClosed = contextErrorCode === "marketplace_closed"
   const duplicateApply = contextErrorCode === "duplicate" || context?.eligibility?.block_reason === "duplicate"
   const declined =
     contextErrorCode === "previously_declined" || context?.eligibility?.block_reason === "previously_declined"
+  const changedTitle = contextErrorCode ? CHANGED_WHILE_APPLYING[contextErrorCode] : undefined
   const blocked =
     marketplaceClosed ||
     duplicateApply ||
     declined ||
+    Boolean(changedTitle) ||
     (context?.eligibility?.can_apply === false && !duplicateApply)
   const blockMessage = declined
     ? "This organizer declined your earlier application. You can apply again if they invite you or change this opportunity."
@@ -360,7 +372,7 @@ export function ApplyModal({
                   ? "You already applied"
                   : declined
                     ? "Application declined"
-                    : "Cannot apply"}
+                    : (changedTitle ?? "Cannot apply")}
             </DialogTitle>
             <DialogDescription>
               {duplicateApply

@@ -93,6 +93,24 @@ export type VendorWalletBundle = {
 /** Due when payment is required, or approved with a payment id ready. */
 export { isPaymentDueRequest } from "@/lib/api/vendor-requests"
 
+type VendorMoneyMetric = { cents?: unknown; status?: unknown }
+type VendorMoneyMetrics = Partial<Record<"paid" | "processing" | "outstanding" | "refunded", VendorMoneyMetric>>
+
+/** `money.metrics` from `GET /financial/dashboard?role=vendor`, when the server sends the contract. */
+export function vendorMoneyMetrics(money: unknown): VendorMoneyMetrics | null {
+  if (!money || typeof money !== "object") return null
+  const metrics = (money as { metrics?: unknown }).metrics
+  return metrics && typeof metrics === "object" ? (metrics as VendorMoneyMetrics) : null
+}
+
+/** Dollars for a contract metric the server confirmed; undefined when missing or not ok. */
+export function contractDollars(metric: VendorMoneyMetric | undefined): number | undefined {
+  if (!metric || metric.status !== "ok" || typeof metric.cents !== "number" || !Number.isFinite(metric.cents)) {
+    return undefined
+  }
+  return metric.cents / 100
+}
+
 export function mapVendorWalletSummary(
   summaryData: unknown,
   dashboardData: unknown,
@@ -112,48 +130,38 @@ export function mapVendorWalletSummary(
 
   const paymentRequired = requests.filter(isPaymentDueRequest)
   const paid = requests.filter((r) => r.status === "paid" || r.status === "completed")
+  const contract = vendorMoneyMetrics(d.money ?? s.money)
 
-  const amountDueFromRequests = paymentRequired.reduce((sum, r) => sum + (r.amountDue ?? 0), 0)
-  const totalPaidFromRequests = paid.reduce((sum, r) => sum + (r.amountDue ?? 0), 0)
+  // Totals come from the server money contract; older servers send flat fields. A figure the
+  // server did not confirm stays undefined and renders as unavailable, never as $0.
+  const amountDue = contract
+    ? contractDollars(contract.outstanding)
+    : pickNumber(s.outstanding, d.outstanding, s.pending_payments, d.pending_payments, s.amount_due, d.amount_due)
 
-  const amountDue =
-    amountDueFromRequests > 0
-      ? amountDueFromRequests
-      : (pickNumber(
-          s.outstanding,
-          d.outstanding,
-          s.pending_payments,
-          d.pending_payments,
-          s.amount_due,
-          d.amount_due,
-        ) ?? 0)
+  const totalPaid = contract
+    ? contractDollars(contract.paid)
+    : pickNumber(
+        s.revenue_paid,
+        d.revenue_paid,
+        s.money_spent,
+        d.money_spent,
+        s.lifetime_spend,
+        d.lifetime_spend,
+        s.total_paid,
+        d.total_paid,
+      )
 
-  const totalPaid =
-    totalPaidFromRequests > 0
-      ? totalPaidFromRequests
-      : (pickNumber(
-          s.revenue_paid,
-          d.revenue_paid,
-          s.money_spent,
-          d.money_spent,
-          s.lifetime_spend,
-          d.lifetime_spend,
-          s.total_paid,
-          d.total_paid,
-        ) ?? 0)
-
-  const availableCredits =
-    pickNumber(
-      s.credits_available,
-      d.credits_available,
-      s.available_credits,
-      d.available_credits,
-      s.credit_balance,
-      d.credit_balance,
-      s.wallet_balance,
-      d.wallet_balance,
-      wallet?.balance,
-    ) ?? 0
+  const availableCredits = pickNumber(
+    s.credits_available,
+    d.credits_available,
+    s.available_credits,
+    d.available_credits,
+    s.credit_balance,
+    d.credit_balance,
+    s.wallet_balance,
+    d.wallet_balance,
+    wallet?.balance,
+  )
 
   return {
     amountDue,
@@ -442,8 +450,8 @@ async function loadVendorWallet(auth?: WpAuth, force = false): Promise<VendorWal
         wpFetchJson<unknown>("/financial/summary", { auth, query: roleQuery }).catch(() => null),
         wpFetchJson<unknown>("/financial/dashboard", { auth, query: roleQuery }).catch(() => null),
         wpFetchJson<unknown>("/financial/activity", { auth, query: roleQuery }).catch(() => null),
-        wpFetchJson<unknown>("/financial/invoices", { auth, query: roleQuery }).catch(() => null),
-        wpFetchJson<unknown>("/financial/receipts", { auth, query: roleQuery }).catch(() => null),
+        wpFetchJson<unknown>("/financial/invoices", { auth, query: { ...roleQuery, per_page: 100 } }).catch(() => null),
+        wpFetchJson<unknown>("/financial/receipts", { auth, query: { ...roleQuery, per_page: 100 } }).catch(() => null),
         wpFetchJson<unknown>("/financial/disputes", { auth, query: roleQuery }).catch(() => null),
       ])
 

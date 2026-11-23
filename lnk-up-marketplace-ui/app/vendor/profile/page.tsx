@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { SignOutButton } from "@/components/auth/sign-out-button"
 import { ProfileCompletionChecklist } from "@/components/vendor/profile-completion-checklist"
 import { VendorDocumentsPanel } from "@/components/vendor/vendor-documents-panel"
 import { ShareVendorProfileCard } from "@/components/vendor/share-vendor-profile-card"
@@ -28,7 +29,6 @@ import {
   Bell,
   CreditCard,
   HelpCircle,
-  LogOut,
   ChevronRight,
   Pencil,
   Upload,
@@ -444,10 +444,7 @@ function VendorProfileContent() {
               </button>
             ))}
             <Separator className="my-1" />
-            <button className="flex items-center gap-3 rounded-lg px-2 py-3 text-left text-sm text-destructive transition-colors hover:bg-destructive/10">
-              <LogOut className="size-4" />
-              <span className="flex-1 font-medium">Sign out</span>
-            </button>
+            <SignOutButton className="flex items-center gap-3 rounded-lg px-2 py-3 text-left text-sm text-destructive transition-colors hover:bg-destructive/10" />
           </CardContent>
         </Card>
       </div>

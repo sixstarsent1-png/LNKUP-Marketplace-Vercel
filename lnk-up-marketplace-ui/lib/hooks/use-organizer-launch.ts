@@ -8,6 +8,7 @@ import {
   type OrganizerLaunchPublishResult,
   buildMockLaunchDraft,
   emptyLaunchDraft,
+  withLaunchClientToken,
 } from "@/lib/api/organizer-launch"
 
 export function useOrganizerLaunch() {
@@ -65,15 +66,20 @@ export function useOrganizerLaunch() {
     setPublishing(true)
     setError(null)
     setPublishResult(null)
+    const attempt = withLaunchClientToken(next ?? draft)
+    setDraft((current) => (current.clientToken ? current : { ...current, clientToken: attempt.clientToken }))
     try {
       const response = await fetch("/api/organizer/launch/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(next ?? draft),
+        body: JSON.stringify(attempt),
       })
       const payload = (await response.json()) as OrganizerLaunchPublishResult
       if (!response.ok && payload.status !== "handoff_required" && payload.status !== "validation_error") {
         throw new Error(payload.message || "Publish failed")
+      }
+      if (payload.status === "published") {
+        setDraft((current) => ({ ...current, clientToken: undefined }))
       }
       setPublishResult(payload)
       return payload

@@ -208,6 +208,25 @@ export function reapplyNote(previous: PreviousApplication | null): string | null
 export const DECLINED_MESSAGE =
   "This organizer declined your earlier application. You can apply again if they invite you or change this opportunity."
 
+export type ApplyBlock = { title: string; message: string }
+
+const APPLY_BLOCKS: Record<string, ApplyBlock> = {
+  duplicate: { title: "You already applied", message: "Track this application under Bookings." },
+  previously_declined: { title: "Application declined", message: DECLINED_MESSAGE },
+  deadline: { title: "Applications closed", message: "The application deadline for this booth has passed." },
+  full: { title: "This booth is full", message: "Every spot is taken. Look for another booth at this event." },
+  closed: { title: "Applications closed", message: "The organizer is not taking applications for this booth." },
+  invite_only: { title: "Invite only", message: "This booth takes vendors by invitation only." },
+}
+
+/**
+ * Codes from apply-context or a refused submit that stop the form. Price and question changes are
+ * not here: they keep the form open so the vendor can review and submit again.
+ */
+export function applyBlockFor(code: string | null | undefined): ApplyBlock | null {
+  return code ? (APPLY_BLOCKS[code] ?? null) : null
+}
+
 export async function fetchApplyContext(
   opportunityId: number,
   auth?: WpAuth,

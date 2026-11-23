@@ -24,6 +24,16 @@ import { PaymentReturnBanner } from "@/components/financial/payment-return-banne
 import { PanelContent, EmptyState, SkeletonList } from "@/components/marketplace/states"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 
+/** Whole-dollar hero figure; a value the server did not confirm reads "Unavailable", never $0. */
+function heroMoney(amount: number | undefined, currency?: string): string {
+  if (amount === undefined || !Number.isFinite(amount)) return "Unavailable"
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency ?? "USD",
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
+
 function VendorWalletContent() {
   const live = isLiveApiEnabled()
   const { state: qaState, retry: qaRetry } = usePanelState()
@@ -123,19 +133,11 @@ function VendorWalletContent() {
                 ? [
                     {
                       label: "Due",
-                      value: new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: summary.currency ?? "USD",
-                        maximumFractionDigits: 0,
-                      }).format(summary.amountDue ?? 0),
+                      value: heroMoney(summary.amountDue, summary.currency),
                     },
                     {
                       label: "Paid",
-                      value: new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: summary.currency ?? "USD",
-                        maximumFractionDigits: 0,
-                      }).format(summary.totalPaid ?? 0),
+                      value: heroMoney(summary.totalPaid, summary.currency),
                     },
                     {
                       label: "Bookings",

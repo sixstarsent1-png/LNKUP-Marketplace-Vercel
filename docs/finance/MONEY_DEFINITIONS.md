@@ -58,10 +58,10 @@ The block is additive. Legacy fields (`available_balance`, `display_balances`, `
 
 | Key | Definition |
 | --- | --- |
-| `paid` | Sum of `_lnkup_total_amount` on the vendor's `paid` payments, with `count`. |
+| `paid` | What the vendor paid and kept paid: the total of `paid` and `disputed` payments, the paid part of `partially_paid` deposits, and the total minus the refund on `partially_refunded` payments. `count` is the number of payments contributing. |
 | `processing` | Payments Stripe reports as processing (ACH). |
-| `outstanding` | `pending` and `failed` payments still owed. |
-| `refunded` | `_lnkup_refund_amount` (or the total when not recorded) on `refunded` payments. |
+| `outstanding` | `pending` and `failed` payments still owed, plus the unpaid balance of `partially_paid` deposits. |
+| `refunded` | `_lnkup_refund_amount` on `refunded` (the total when not recorded) and `partially_refunded` payments. `paid` + `refunded` equals what the vendor has paid. |
 
 ## Freshness
 
