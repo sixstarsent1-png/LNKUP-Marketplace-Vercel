@@ -787,18 +787,22 @@ class LNKup_Connector_Rewards {
 	}
 
 	/**
-	 * List rewards for connector.
+	 * List rewards for connector, newest first.
 	 *
 	 * @param int $connector_id Connector ID.
+	 * @param int $limit        Rows per page (1-100).
+	 * @param int $offset       Rows to skip.
 	 */
-	public static function list_for_connector( $connector_id ) {
+	public static function list_for_connector( $connector_id, $limit = 50, $offset = 0 ) {
 		global $wpdb;
 		$table = LNKup_Treasury_Tables::referral_rewards_table();
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE connector_id = %d ORDER BY created_at DESC LIMIT 50",
-				absint( $connector_id )
+				"SELECT * FROM {$table} WHERE connector_id = %d ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d",
+				absint( $connector_id ),
+				max( 1, min( 100, (int) $limit ) ),
+				max( 0, (int) $offset )
 			),
 			ARRAY_A
 		);
@@ -819,6 +823,7 @@ class LNKup_Connector_Rewards {
 	 * @param int $connector_id Connector ID.
 	 */
 	public static function balances_for_connector( $connector_id ) {
+		$rows     = self::status_rows( $connector_id );
 		$balances = array(
 			'pending_hold'      => 0.0,
 			'awaiting_approval' => 0.0,
@@ -828,10 +833,10 @@ class LNKup_Connector_Rewards {
 			'reversed'          => 0.0,
 			'expired'           => 0.0,
 		);
-		foreach ( self::list_for_connector( $connector_id ) as $row ) {
-			$key = $row['display_status'];
+		foreach ( $rows as $row ) {
+			$key = self::display_status( $row );
 			if ( isset( $balances[ $key ] ) && 'reversed' !== $key ) {
-				$balances[ $key ] += (float) $row['net_amount'];
+				$balances[ $key ] += self::net_amount( $row );
 			}
 			$balances['reversed'] += (float) ( $row['reversed_amount'] ?? 0 );
 			if ( 'reversed' === $key && (float) ( $row['reversed_amount'] ?? 0 ) <= 0 ) {
@@ -842,6 +847,50 @@ class LNKup_Connector_Rewards {
 			$balances[ $k ] = round( $v, 2 );
 		}
 		return $balances;
+	}
+
+	/**
+	 * Every reward row for a connector with only the columns status and totals need. The ledger
+	 * list stops at 50 rows, so balances and counts must not be built from it.
+	 *
+	 * @param int $connector_id Connector ID.
+	 * @return array<int, array<string, string>>
+	 */
+	public static function status_rows( $connector_id ) {
+		global $wpdb;
+		$table = LNKup_Treasury_Tables::referral_rewards_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (array) $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT referral_id, amount, reversed_amount, reward_status, available_at, payment_id FROM {$table} WHERE connector_id = %d",
+				absint( $connector_id )
+			),
+			ARRAY_A
+		);
+	}
+
+	/**
+	 * Ledger facts that must cover every row, not one page: row count, the earliest date an
+	 * unpaid commission becomes payable, and the distinct payments behind the commissions.
+	 *
+	 * @param int $connector_id Connector ID.
+	 * @return array{total:int, next_available:int, payment_ids:int[]}
+	 */
+	public static function ledger_summary( $connector_id ) {
+		$rows = self::status_rows( $connector_id );
+		$next = 0;
+		$pays = array();
+		foreach ( $rows as $row ) {
+			$status = self::display_status( $row );
+			$avail  = strtotime( (string) ( $row['available_at'] ?? '' ) );
+			if ( in_array( $status, array( 'pending_hold', 'awaiting_approval', 'approved' ), true ) && $avail && ( ! $next || $avail < $next ) ) {
+				$next = $avail;
+			}
+			if ( (int) $row['payment_id'] > 0 ) {
+				$pays[ (int) $row['payment_id'] ] = true;
+			}
+		}
+		return array( 'total' => count( $rows ), 'next_available' => $next, 'payment_ids' => array_keys( $pays ) );
 	}
 
 	/**
@@ -870,11 +919,12 @@ class LNKup_Connector_Rewards {
 		$balances = self::balances_for_connector( $connector_id );
 		$pending  = 0;
 		$approved = 0;
-		foreach ( self::list_for_connector( $connector_id ) as $row ) {
-			if ( in_array( $row['display_status'], array( 'pending_hold', 'awaiting_approval' ), true ) ) {
+		foreach ( self::status_rows( $connector_id ) as $row ) {
+			$status = self::display_status( $row );
+			if ( in_array( $status, array( 'pending_hold', 'awaiting_approval' ), true ) ) {
 				++$pending;
 			}
-			if ( 'approved' === $row['display_status'] ) {
+			if ( 'approved' === $status ) {
 				++$approved;
 			}
 		}

@@ -117,6 +117,13 @@ describe("partner API normalizers", () => {
     expect(earnings.ledger).toEqual([expect.objectContaining({ id: 3, netAmount: 12.5, status: "approved" })])
   })
 
+  it("reads ledger paging so older commissions can be loaded", () => {
+    const first = normalizeEarnings({ ledger: [{ id: 9 }], ledger_total: 66, ledger_page: 1, ledger_has_more: true })
+    expect(first).toEqual(expect.objectContaining({ ledgerTotal: 66, ledgerPage: 1, ledgerHasMore: true }))
+    const legacy = normalizeEarnings({ ledger: [{ id: 9 }, { id: 8 }] })
+    expect(legacy).toEqual(expect.objectContaining({ ledgerTotal: 2, ledgerPage: 1, ledgerHasMore: false }))
+  })
+
   it("reports lead submission as disabled only when the server says so", () => {
     expect(normalizeLeads({}).enabled).toBe(true)
     expect(normalizeLeads({ enabled: false }).enabled).toBe(false)

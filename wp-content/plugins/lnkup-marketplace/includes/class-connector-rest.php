@@ -314,12 +314,18 @@ class LNKup_Connector_REST {
 		return rest_ensure_response( LNKup_Connector::get_funnel( (int) $connector['id'] ) );
 	}
 
-	public static function get_earnings() {
+	public static function get_earnings( WP_REST_Request $request ) {
 		$connector = self::require_connector();
 		if ( is_wp_error( $connector ) ) {
 			return $connector;
 		}
-		return rest_ensure_response( LNKup_Connector::get_earnings( (int) $connector['id'] ) );
+		return rest_ensure_response(
+			LNKup_Connector::get_earnings(
+				(int) $connector['id'],
+				max( 1, absint( $request->get_param( 'page' ) ?: 1 ) ),
+				max( 1, min( 100, absint( $request->get_param( 'per_page' ) ?: 50 ) ) )
+			)
+		);
 	}
 
 	public static function get_resources() {

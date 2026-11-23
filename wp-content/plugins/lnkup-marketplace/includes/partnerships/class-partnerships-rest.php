@@ -64,6 +64,11 @@ class LNKup_Partnerships_REST {
 			'callback' => array( __CLASS__, 'post_rule_publish' ),
 		) ) );
 
+		register_rest_route( self::NS, '/partners/tours/(?P<id>\d+)/attribution', array_merge( $admin, array(
+			'methods'  => 'GET',
+			'callback' => array( __CLASS__, 'get_tour_attribution' ),
+		) ) );
+
 		register_rest_route( self::NS, '/partners/reviews', array_merge( $admin, array(
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'get_reviews' ),
@@ -295,6 +300,10 @@ class LNKup_Partnerships_REST {
 			return $ready;
 		}
 		return self::respond( LNKup_Commission_Rules::publish( absint( $request['id'] ), get_current_user_id() ) );
+	}
+
+	public static function get_tour_attribution( WP_REST_Request $request ) {
+		return self::respond( LNKup_Partnerships::tour_attribution( absint( $request->get_url_params()['id'] ?? 0 ) ) );
 	}
 
 	public static function get_reviews( WP_REST_Request $request ) {

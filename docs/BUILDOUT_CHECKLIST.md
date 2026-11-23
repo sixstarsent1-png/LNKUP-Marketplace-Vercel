@@ -100,7 +100,7 @@ Short paths: `P/` = `wp-content/plugins/lnkup-marketplace/`, `C/` = `wp-content/
 | Area | WordPress | Clients | Status | Missing step |
 |---|---|---|---|---|
 | Ops overview | separate queues (trust, comms health, match health, partner reviews, reconciliation) | Admin Lite: external events, documents, connectors | Missing | One deduplicated queue; stuck-application detector |
-| Partner programs and ledger | `includes/partnerships/*`, `LNKup_Attribution_Arbiter` | Expo `(partner)` workspace, web dashboard | Built, needs verification | Tour attribution rollup; payouts stay manual |
+| Partner programs and ledger | `includes/partnerships/*`, `LNKup_Attribution_Arbiter` | Expo `(partner)` workspace, web dashboard | Verified (Phase 6; balances over 50 rows fixed) | Payouts stay manual until KYC and 1099 |
 | Private document sharing | `document_vault_sharing`, `class-document-migration.php`, `LNKup_Private_Uploads_Probe` gate | none | Blocked by an external dependency | SiteGround NGINX Direct Delivery serves `/uploads/lnkup-private/` (hosting owner); the probe must read `protected` on staging |
 
 ## Phase 1 results: release and preview checks
@@ -326,6 +326,37 @@ Short paths: `P/` = `wp-content/plugins/lnkup-marketplace/`, `C/` = `wp-content/
 - **Privacy:** the queue returns no document names, trust case summaries, evidence or fingerprints. The queue sends no push notifications.
 - **Evidence:** `ops-overview-test.php` (43 checks: organizer and vendor 403, grouping, exclusion, dismiss until changed, snooze expiry, restore, audit rows, privacy), in the Organizer Growth runner. The wp-admin page renders without notices.
 
+## Phase 6 results: partnerships and rollout plan
+
+- **Verified unchanged:** partner ownership, approval, codes, attribution conflicts (`LNKup_Attribution_Arbiter`), one commission per payment, refund reversal and clawback, hold → approve → paid, and suspension (`run-partnerships-php.ps1`, `comms-partners-test`).
+- **Fixed: partner balances stopped at 50 commissions.**
+  - `balances_for_connector()` and `count_by_connector()` summed the ledger list, which returns the 50 newest rows. A partner with more history saw low approved, paid and reversed totals.
+  - Both now read every row. Per-referral approved earnings in the funnel also read every row and use the net amount, so a partly refunded commission no longer shows in full.
+- **Fixed: "Become eligible for first payout"** counted held and unapproved commissions toward the minimum, while the step said approved only. It now uses approved commissions.
+- **Ledger history is paged:**
+  - `/connector/earnings` takes `page`/`per_page` and returns `ledger_total` and `ledger_has_more`.
+  - Balances, the next payable date and the estimate cover every commission, whatever the page.
+  - The estimate now counts each payment once.
+  - The WordPress dashboard and the Expo Earnings screen have "Show older commissions". The web filter also gained "Under review" (`on_hold`).
+- **Program terms:** Expo Earnings links to the program's own terms (`terms_url`) when set. Lead status, terms summary and resources were already available in the apps or on the web dashboard.
+- **Meaning of each state in the apps:**
+  - Estimated is a projection and never payable.
+  - Pending covers the refund hold plus LNKup review.
+  - Under review means an admin hold.
+  - Approved means payable.
+  - Paid and reversed are final.
+  - Verified against the REST contract the app reads.
+- **Tour attribution rollup (admin only):** `GET /partners/tours/{id}/attribution`.
+  - Per stop and per partner: paid bookings, attributed bookings, booth value, and commission by state.
+  - Each payment counts once, even with two commission rows.
+  - Refunded bookings stay counted and their commission shows as reversed. Unpaid bookings and events outside the tour are left out.
+  - Organizers get 403.
+- **Payouts stay manual.** The KYC and 1099 dependency is in [ROLLOUT_PLAN.md](ROLLOUT_PLAN.md).
+- **Evidence:**
+  - `partner-earnings-contract-test.php`, added to the partnerships runner. Its checks cover 66 commissions across all states, paging, the payout step, the tour rollup and permissions.
+  - Expo `partner-home.test.ts`: 15/15.
+  - `connector-program.spec.ts`: 52 passed, 10 skipped. Its interest page check now asserts on the visible "Charlotte" text, since the hidden hero stamp also matches.
+
 ## Running checklist
 
 - [x] **Phase 0:** integration branch, bootstrap files tracked, lint, activation, typechecks ([PR #9](https://github.com/sixstarsent1-png/LNKUP-Marketplace-Vercel/pull/9))
@@ -334,5 +365,5 @@ Short paths: `P/` = `wp-content/plugins/lnkup-marketplace/`, `C/` = `wp-content/
 - [x] **Phase 3:** organizer management, tours, event day. Open: shared team CRM, waitlist offers in the apps, `$request['id']` audit outside operations.
 - [x] **Phase 4:** acquisition, discovery, communications, analytics. Open: external listings in the apps; `task_digest` and document updates through Communications; no live sends in this pass.
 - [x] **Phase 5:** internal operations workspace. Open: Admin Lite needs `ENABLE_OPS_ANALYTICS` on the Vercel project (project owner).
-- [ ] **Phase 6:** partnerships and rollout plan
+- [x] **Phase 6:** partnerships and rollout plan ([ROLLOUT_PLAN.md](ROLLOUT_PLAN.md)). Open: payouts stay manual until KYC and 1099 (finance owner).
 - [ ] **Phase 7:** demonstrations and handoff
