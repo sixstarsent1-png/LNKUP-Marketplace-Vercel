@@ -7,6 +7,8 @@ $tests = @(
   'org-growth-analytics-test',
   'org-supply-intel-test',
   'organizer-activation-test',
+  'organizer-next-step-test',
+  'opportunity-funnel-test',
   'financial-fee-backfill-test'
 )
 $failed = @()

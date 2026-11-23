@@ -92,7 +92,7 @@ foreach ( get_class_methods( 'LNKup_Notifications' ) as $method ) {
 }
 $unknown = array();
 foreach ( array_keys( LNKup_Comms_Delegation::map() ) as $key ) {
-	if ( ! isset( $methods[ $key ] ) && ! in_array( $key, array( 'invoice_email', 'financial_reminder' ), true ) ) {
+	if ( ! isset( $methods[ $key ] ) && ! in_array( $key, array_merge( array( 'invoice_email', 'financial_reminder' ), LNKup_Notifications::KEYED_MESSAGES ), true ) ) {
 		$unknown[] = $key;
 	}
 }

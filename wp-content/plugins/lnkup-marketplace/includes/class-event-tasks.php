@@ -504,7 +504,9 @@ class LNKup_Event_Tasks {
 		}
 		$event = get_the_title( (int) $row['event_id'] );
 		$due   = $row['due_at'] ? wp_date( get_option( 'date_format' ), strtotime( (string) $row['due_at'] ) ) : '';
-		LNKup_Notifications::send(
+		LNKup_Notifications::send_keyed(
+			'task_assigned',
+			array( (int) $task_id, (int) $assignee ),
 			$user->user_email,
 			/* translators: %s: event name */
 			sprintf( __( 'New task for %s', 'lnkup-marketplace' ), $event ),
@@ -705,7 +707,9 @@ class LNKup_Event_Tasks {
 			foreach ( array_slice( $tasks, 0, 25 ) as $task ) {
 				$lines .= '<li>' . esc_html( $task['title'] . ' — ' . get_the_title( (int) $task['event_id'] ) . ' (' . wp_date( get_option( 'date_format' ), strtotime( (string) $task['due_at'] ) ) . ')' ) . '</li>';
 			}
-			LNKup_Notifications::send(
+			LNKup_Notifications::send_keyed(
+				'task_digest',
+				array( (int) $user_id, count( $tasks ) ),
 				$user->user_email,
 				/* translators: %d: number of tasks */
 				sprintf( _n( '%d event task needs attention', '%d event tasks need attention', count( $tasks ), 'lnkup-marketplace' ), count( $tasks ) ),

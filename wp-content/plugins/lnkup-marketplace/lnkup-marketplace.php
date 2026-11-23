@@ -139,6 +139,8 @@ $lnkup_core_files = array(
 	'includes/class-organizer-recruit-rest.php',
 	'includes/class-organizer-recruit-render.php',
 	'includes/class-marketplace-analytics.php',
+	'includes/class-analytics-exclusions.php',
+	'includes/class-opportunity-funnel.php',
 	'includes/class-marketplace-cron.php',
 	'includes/class-marketplace-rest.php',
 	'includes/class-organizer-crm-tables.php',
@@ -427,6 +429,7 @@ function lnkup_marketplace_init() {
 	LNKup_Capabilities::init();
 	LNKup_Marketplace_Index::init();
 	LNKup_Marketplace_Analytics::init();
+	LNKup_Opportunity_Funnel::init();
 	LNKup_Marketplace_Cron::init();
 	LNKup_Activation_Emails::init();
 	LNKup_Market_Pages::init();

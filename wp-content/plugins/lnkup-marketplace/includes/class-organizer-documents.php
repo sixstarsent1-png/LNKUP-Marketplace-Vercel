@@ -440,6 +440,6 @@ class LNKup_Organizer_Documents {
 			$html .= '<blockquote>' . esc_html( $note ) . '</blockquote>';
 		}
 		$html .= '<p><a href="' . esc_url( add_query_arg( 'view', 'documents', lnkup_page_url_helper( 'vendor-dashboard' ) ) ) . '">' . esc_html__( 'Open my documents', 'lnkup-marketplace' ) . '</a></p>';
-		LNKup_Notifications::send( $vendor->user_email, sprintf( $subject, get_the_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) ) ), $html );
+		LNKup_Notifications::send_keyed( 'organizer_document_update', array( (int) $app_id ), $vendor->user_email, sprintf( $subject, get_the_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) ) ), $html );
 	}
 }

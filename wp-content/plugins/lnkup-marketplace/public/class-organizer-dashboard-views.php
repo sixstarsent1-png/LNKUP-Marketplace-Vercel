@@ -185,6 +185,10 @@ class LNKup_Organizer_Dashboard_Views {
 			<?php else : ?>
 				<div class="lnkup-start__next lnkup-start__next--done" data-testid="lnkup-start-next">
 					<strong><?php echo $v2 ? esc_html__( 'Setup complete — vendors are booking and paying through LNKup.', 'lnkup-marketplace' ) : esc_html__( 'You are fully set up — vendors are booking and paying through LNKup.', 'lnkup-marketplace' ); ?></strong>
+					<?php if ( ! empty( $data['next_step'] ) ) : ?>
+						<span class="lnkup-muted" data-testid="lnkup-start-ongoing"><?php echo esc_html( $data['next_step']['title'] ); ?></span>
+						<a class="lnkup-btn lnkup-btn--primary" href="<?php echo esc_url( $data['next_step']['url'] ); ?>"><?php echo esc_html( $data['next_step']['label'] ); ?></a>
+					<?php endif; ?>
 				</div>
 			<?php endif; ?>
 

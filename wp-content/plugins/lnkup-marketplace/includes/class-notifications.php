@@ -60,6 +60,30 @@ class LNKup_Notifications {
 	 * @param array  $args      Original method arguments.
 	 * @return bool
 	 */
+	/**
+	 * Keys sent through send_keyed() rather than a send_{key}() method. Communications claims
+	 * some of them; the rest stay plain email until a flow covers them.
+	 */
+	const KEYED_MESSAGES = array( 'waitlist_offer_made', 'waitlist_offer_expired', 'review_assigned', 'task_assigned', 'task_digest', 'organizer_document_update' );
+
+	/**
+	 * Send a message that LNKup Communications may claim by key (preferences, inbox, push,
+	 * dedupe, delivery log). When no flow claims the key, the plain email goes out as before.
+	 *
+	 * @param string $event_key Message key, e.g. waitlist_offer_made.
+	 * @param array  $args      Arguments the Communications adapter needs (IDs first).
+	 * @param string $to        Fallback email recipient.
+	 * @param string $subject   Fallback subject.
+	 * @param string $body      Fallback HTML body.
+	 * @return bool Whether a message was handed off or sent.
+	 */
+	public static function send_keyed( $event_key, array $args, $to, $subject, $body ) {
+		if ( self::delegated( $event_key, $args ) ) {
+			return true;
+		}
+		return self::send( $to, $subject, $body );
+	}
+
 	public static function delegated( $event_key, $args = array() ) {
 		if ( ! has_filter( 'lnkup_pre_send_notification' ) ) {
 			return false;
@@ -870,6 +894,9 @@ class LNKup_Notifications {
 	 * @param int $payment_id Payment ID.
 	 */
 	public static function send_payment_required( $app_id, $payment_id ) {
+		if ( class_exists( 'LNKup_Applications' ) && LNKup_Applications::is_approving_waitlist_offer() ) {
+			return true;
+		}
 		if ( self::delegated( 'payment_required', func_get_args() ) ) {
 			return true;
 		}

@@ -204,7 +204,7 @@ class LNKup_Waitlist_Offers {
 
 		$expires = gmdate( 'Y-m-d H:i:s', time() + $hours * HOUR_IN_SECONDS );
 		// Capacity is checked inside transition() under the inventory lock; a full slot returns 409.
-		$result = LNKup_Applications::transition( $app_id, 'approved', array( 'source' => 'waitlist_offer', 'payment_due_at' => $expires ) );
+		$result = LNKup_Applications::approve_for_waitlist_offer( $app_id, array( 'payment_due_at' => $expires ) );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
@@ -338,7 +338,9 @@ class LNKup_Waitlist_Offers {
 		}
 		$event    = get_the_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) );
 		$deadline = wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $expires . ' UTC' ) );
-		LNKup_Notifications::send(
+		LNKup_Notifications::send_keyed(
+			'waitlist_offer_made',
+			array( (int) $app_id, (string) $expires ),
 			$vendor->user_email,
 			/* translators: %s: event name */
 			sprintf( __( 'A spot opened up at %s', 'lnkup-marketplace' ), $event ),
@@ -364,7 +366,9 @@ class LNKup_Waitlist_Offers {
 			return;
 		}
 		$event = get_the_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) );
-		LNKup_Notifications::send(
+		LNKup_Notifications::send_keyed(
+			'waitlist_offer_expired',
+			array( (int) $app_id ),
 			$organizer->user_email,
 			/* translators: %s: event name */
 			sprintf( __( 'Waitlist offer expired for %s', 'lnkup-marketplace' ), $event ),
