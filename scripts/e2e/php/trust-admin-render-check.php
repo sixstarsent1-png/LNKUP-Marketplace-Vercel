@@ -35,7 +35,7 @@ $res = rest_do_request( new WP_REST_Request( 'GET', '/lnkup/v1/organizer/verific
 lnkup_t_same( 200, $res->get_status(), 'organizer reads own verification' );
 $res = rest_do_request( new WP_REST_Request( 'GET', '/lnkup/v1/org/team' ) );
 lnkup_t_same( 200, $res->get_status(), 'organizer reads own team' );
-lnkup_t_same( false, $res->get_data()['enabled'] ?? null, 'team access reports disabled by default' );
+lnkup_t_same( (bool) LNKup_Org_Teams::enabled(), $res->get_data()['enabled'] ?? null, 'team access reports the trust_org_teams flag' );
 
 wp_set_current_user( 0 );
 lnkup_t_finish();

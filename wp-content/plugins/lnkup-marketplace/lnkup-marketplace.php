@@ -369,6 +369,7 @@ $lnkup_core_files = array(
 	'includes/passport/class-passport-tables.php',
 	'includes/passport/class-passport-privacy.php',
 	'includes/passport/class-passport-public.php',
+	'includes/passport/class-private-uploads-probe.php',
 	'includes/passport/class-document-migration.php',
 	'includes/passport/class-verification-records.php',
 	'includes/passport/class-document-vault.php',

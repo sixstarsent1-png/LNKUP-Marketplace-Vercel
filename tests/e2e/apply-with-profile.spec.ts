@@ -83,7 +83,7 @@ test.describe('Apply with Profile', () => {
     test('requests view shows vendor application cards', async ({ page }) => {
       test.skip(!organizerUser || !organizerPass, 'Run scripts/e2e/seed.php');
       await loginPage(page, organizerUser, organizerPass);
-      await page.goto('/organizer-dashboard/?view=applications');
+      await page.goto('/organizer-dashboard/?view=applications&mode=classic');
       const card = page.locator('.lnkup-crm-app-card--v2').first();
       await expect(card).toBeVisible();
       await expect(card.locator('.lnkup-request-row__title')).not.toBeEmpty();

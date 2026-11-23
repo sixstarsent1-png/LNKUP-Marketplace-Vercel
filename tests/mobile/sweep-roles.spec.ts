@@ -3,6 +3,7 @@ import { organizerUser, restAs, vendorUser } from './helpers/app-session';
 
 const eventId = process.env.PLAYWRIGHT_ORGANIZER_EVENT_ID || '56';
 const freeAppId = process.env.PLAYWRIGHT_FREE_APPLICATION_ID || '66';
+const opportunityId = process.env.PLAYWRIGHT_FRESH_OPPORTUNITY_ID || '59';
 const organizerB = process.env.PLAYWRIGHT_ORGANIZER_B_USER || 'e2e_org_b';
 
 /** Routes the mobile app calls for one role; the other role must be refused (401/403), never served. */
@@ -45,7 +46,7 @@ test.describe('Role permissions behind every tab', () => {
   test("another organizer cannot read or change this organizer's event", async ({ page }) => {
     expect((await restAs(page, organizerB, 'GET', `/crm/events/${eventId}/roster`)).status).toBe(403);
     expect((await restAs(page, organizerB, 'POST', `/operations/applications/${freeAppId}/checkin`, { action: 'checked_in' })).status).toBe(403);
-    expect((await restAs(page, organizerB, 'POST', `/organizer/opportunities/59/status`, { status: 'closed' })).status).toBe(403);
+    expect((await restAs(page, organizerB, 'POST', `/organizer/opportunities/${opportunityId}/status`, { status: 'closed' })).status).toBe(403);
   });
 
   test('the owner can read their own event-day roster', async ({ page }) => {

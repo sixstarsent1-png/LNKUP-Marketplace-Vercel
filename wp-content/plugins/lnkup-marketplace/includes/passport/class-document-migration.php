@@ -62,12 +62,26 @@ class LNKup_Document_Migration {
 		return count( self::find_public_files( 5000 ) );
 	}
 
-	public static function enable(): void {
+	/**
+	 * Start the migration. Refused unless the private directory just passed the protection probe,
+	 * since moving files into a publicly served folder would not make them private.
+	 *
+	 * @return bool Whether the migration was started.
+	 */
+	public static function enable(): bool {
+		if ( class_exists( 'LNKup_Private_Uploads_Probe' ) ) {
+			LNKup_Private_Uploads_Probe::run();
+			if ( ! LNKup_Private_Uploads_Probe::is_protected() ) {
+				self::log( 'blocked', LNKup_Private_Uploads_Probe::last() );
+				return false;
+			}
+		}
 		update_option( self::ENABLED_OPT, 1, false );
 		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
 			wp_schedule_event( time() + 60, 'hourly', self::CRON_HOOK );
 		}
 		self::log( 'enabled', array( 'remaining' => self::remaining() ) );
+		return true;
 	}
 
 	public static function disable(): void {
@@ -78,6 +92,11 @@ class LNKup_Document_Migration {
 
 	public static function run_scheduled_batch(): void {
 		if ( ! get_option( self::ENABLED_OPT ) ) {
+			return;
+		}
+		if ( class_exists( 'LNKup_Private_Uploads_Probe' ) && LNKup_Private_Uploads_Probe::STATUS_EXPOSED === LNKup_Private_Uploads_Probe::run()['status'] ) {
+			self::disable();
+			self::log( 'blocked', LNKup_Private_Uploads_Probe::last() );
 			return;
 		}
 		$moved = self::migrate_batch( self::BATCH_SIZE );

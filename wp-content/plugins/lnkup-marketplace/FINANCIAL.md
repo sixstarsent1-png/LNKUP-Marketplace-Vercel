@@ -46,7 +46,7 @@ Apps/mobile checkout is **handoff-only** (`/financial/checkout/{id}/redirect-url
 
 **Checkout Session ACH contract:** `checkout.session.completed` finalizes only when `payment_status=paid`. Unpaid/unsettled sessions call `mark_payment_processing` and wait for `payment_intent.succeeded` (same unlock rules as PI ACH). Sessions receive the same `excluded_payment_method_types` as PaymentIntents when ACH is off.
 
-**Webhook signatures:** `LNKup_Stripe_Client::verify_webhook()` never returns an unverified payload — a missing secret or `Stripe-Signature` header is a `WP_Error`. Signatures older than 300 seconds are rejected (replay protection), and any matching `v1` signature is accepted (secret rotation). When `stripe_webhook_secret` or `stripe_connect_webhook_secret` is set, unsigned payloads are always rejected — `test_mode` does **not** bypass verification. Unsigned JSON is only allowed with no secrets + test_mode (local/dev).
+**Webhook signatures:** `LNKup_Stripe_Client::verify_webhook()` never returns an unverified payload — a missing secret or `Stripe-Signature` header is a `WP_Error`. Signatures older than 300 seconds are rejected (replay protection), and any matching `v1` signature is accepted (secret rotation). When `stripe_webhook_secret` or `stripe_connect_webhook_secret` is set, unsigned payloads are always rejected — `test_mode` does **not** bypass verification. There is no unsigned path: with no secret configured, every webhook is rejected as `not_configured`, including in test mode and local dev.
 
 **Connect webhook endpoint:** Events on connected accounts (`account.updated`, `account.application.deauthorized`, `payout.paid`, `payout.failed`) are delivered only to a Stripe destination that listens to connected accounts. Point it at the same `/wp-json/lnkup/v1/stripe-webhook` URL and save its signing secret as `stripe_connect_webhook_secret`; the handler tries the platform secret first, then the Connect secret.
 
@@ -190,7 +190,7 @@ Extended tables via `LNKup_Financial_Tables::create_tables()` on version bump:
 After one paid booth checkout, open the PaymentIntent in Stripe Dashboard (or call `GET /lnkup/v1/financial/payments/{id}/audit` and compare `stripe_dashboard`):
 
 1. **`amount`** = vendor checkout total (`_lnkup_total_amount` / audit `total_charged` / `stripe_charge_cents`).
-2. **`application_fee_amount`** = vendor checkout fee + organizer commission (default **$5.99 + 6% of booth**); audit `application_fee_cents`.
+2. **`application_fee_amount`** = charge − organizer share, where the share = booth − commission + tax − any organizer-funded promo (12.23.1+, see [MONEY_DEFINITIONS](../../../docs/finance/MONEY_DEFINITIONS.md)). LNKup keeps the processing fee. Only with `processing_fee_payee = organizer` does it equal vendor checkout fee + organizer commission. Audit `application_fee_cents`.
 3. **`transfer_data.destination`** = organizer Express account id (`destination_account`).
 4. Connected account receives ≈ **amount − application_fee** (`destination_amount`). This includes estimated processing the vendor paid; product **organizer_net** (booth − 6%) is lower and is reporting/ledger math, not the Stripe transfer gross.
 5. Platform balance shows the application fee credit; **Stripe card fees are debited from the platform** (normal for destination charges).

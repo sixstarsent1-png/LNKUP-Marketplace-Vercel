@@ -1,4 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
+import { loadSeedEnv } from './tests/support/seed-env';
+
+loadSeedEnv(__dirname);
 
 const appUrl = process.env.PLAYWRIGHT_MOBILE_APP_URL || 'http://localhost:8081';
 

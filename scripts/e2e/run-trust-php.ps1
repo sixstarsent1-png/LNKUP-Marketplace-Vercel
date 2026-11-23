@@ -2,7 +2,9 @@
 # Usage: powershell -File scripts/e2e/run-trust-php.ps1
 $tests = @(
   'trust-safety-test',
-  'trust-admin-render-check'
+  'trust-admin-render-check',
+  'vendor-passport-test',
+  'private-uploads-probe-test'
 )
 $failed = @()
 foreach ($t in $tests) {

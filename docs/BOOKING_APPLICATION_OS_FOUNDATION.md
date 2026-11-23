@@ -104,7 +104,7 @@ Rollback: turn the two flags off (the old one-step form returns). The integrity 
 
 ## G. Remaining limitations
 
-- No mobile (Expo) wizard yet; the REST contract above is ready for it (Stage 11).
+- ~~No mobile (Expo) wizard yet.~~ Built in 12.32.0: Expo draft autosave, resume, submit and discard (`lib/api/apply.ts`), multi-stop apply (`app/tour/apply/[tourId].tsx`), withdraw (`app/booking/[applicationId].tsx`) and info-request answers (`lib/api/vendor-requests.ts`). Neither app lists drafts across devices yet; see [BUILDOUT_CHECKLIST](BUILDOUT_CHECKLIST.md).
 - No abandonment / payment reminders yet (Stage 9), no funnel analytics (Stage 12), no add-ons (Stage 17), no admin health page (Stage 23).
 - `fee_payer_mode = split` still behaves as `vendor`; ACH processing rate applies only when `_lnkup_payment_method` is known before charging (Stripe picks the method after the amount is set, so card rate is the default).
 - Refunds still cannot start from `partially_paid` bookings (refund rules unchanged).

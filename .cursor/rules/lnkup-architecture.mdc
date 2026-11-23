@@ -20,7 +20,7 @@ You are in the **LNK Marketplace** monorepo (`lnk-up-marketplace-platform`). Pro
 
 **Out of scope unless explicitly requested:** WooCommerce, attendee ticketing (Posh/Eventbrite/Universe), treating Next.js or Expo as a replacement system of record.
 
-**Platform:** WordPress 6.0+, PHP 7.4+ (plugin), PHP 8.0+ (theme). Plugin v12.24.0. ~215 REST routes under `lnkup/v1`.
+**Platform:** WordPress 6.0+, PHP 7.4+ (plugin), PHP 8.0+ (theme). Plugin v12.33.0. ~576 REST routes under `lnkup/v1`.
 
 ## What LNK Marketplace Is
 

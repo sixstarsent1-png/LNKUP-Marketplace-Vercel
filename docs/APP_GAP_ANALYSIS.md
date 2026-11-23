@@ -6,6 +6,8 @@
 
 Compares the Next.js premium app against WordPress production capabilities. For architecture and the full App Roadmap, see [SYSTEM_OVERVIEW.md §14.2](SYSTEM_OVERVIEW.md#142-app-roadmap-phases-126).
 
+> **Superseded (Nov 2026):** `/vendor/wallet` is live (`app/api/vendor/wallet/*`) and organizer login is built (Phases 14A–C, 16). Use [BUILDOUT_CHECKLIST](BUILDOUT_CHECKLIST.md) for current status; treat the tables below as history.
+>
 > **Note:** Route-level mock/live tables below may lag Phases 15–21. Refresh during [Phase 22 live-API audit](PHASE_22_PRODUCTION_LAUNCH_HARDENING.md).
 
 ---
