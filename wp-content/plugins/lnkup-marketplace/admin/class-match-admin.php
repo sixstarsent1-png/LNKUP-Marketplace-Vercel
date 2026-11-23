@@ -17,6 +17,8 @@ class LNKup_Match_Admin {
 		add_action( 'admin_post_lnkup_match_save_settings', array( __CLASS__, 'handle_save_settings' ) );
 		add_action( 'admin_post_lnkup_match_save_groups', array( __CLASS__, 'handle_save_groups' ) );
 		add_action( 'admin_post_lnkup_match_rebuild', array( __CLASS__, 'handle_rebuild' ) );
+		add_action( 'admin_post_lnkup_match_revert', array( __CLASS__, 'handle_revert' ) );
+		add_action( 'admin_post_lnkup_rollout_save', array( __CLASS__, 'handle_rollout_save' ) );
 	}
 
 	public static function add_menu() {
@@ -44,6 +46,7 @@ class LNKup_Match_Admin {
 			'quality'     => __( 'Data Quality', 'lnkup-marketplace' ),
 			'diagnose'    => __( 'Why Matched?', 'lnkup-marketplace' ),
 			'health'      => __( 'Automation Health', 'lnkup-marketplace' ),
+			'rollout'     => __( 'Rollout & health', 'lnkup-marketplace' ),
 			'supply'      => __( 'Supply & Demand', 'lnkup-marketplace' ),
 		);
 	}
@@ -57,6 +60,11 @@ class LNKup_Match_Admin {
 		echo '<div class="wrap"><h1>' . esc_html__( 'Marketplace Intelligence', 'lnkup-marketplace' ) . '</h1>';
 		if ( isset( $_GET['updated'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Saved.', 'lnkup-marketplace' ) . '</p></div>';
+		}
+		$error = get_transient( self::error_key() );
+		if ( $error ) {
+			delete_transient( self::error_key() );
+			echo '<div class="notice notice-error"><p>' . esc_html( (string) $error ) . '</p></div>';
 		}
 		echo '<nav class="nav-tab-wrapper">';
 		foreach ( self::tabs() as $key => $label ) {
@@ -72,7 +80,7 @@ class LNKup_Match_Admin {
 		$health = LNKup_Match_Cron::health();
 		$flags  = array();
 		foreach ( LNKup_Match_Settings::FLAGS as $flag ) {
-			$flags[ $flag ] = LNKup_Match_Settings::enabled( $flag );
+			$flags[ $flag ] = LNKup_Match_Settings::active( $flag );
 		}
 		echo '<table class="widefat striped" style="max-width:720px"><tbody>';
 		$rows = array(
@@ -88,8 +96,66 @@ class LNKup_Match_Admin {
 			echo '<tr><th><code>' . esc_html( $flag ) . '</code></th><td>' . ( $on ? esc_html__( 'On', 'lnkup-marketplace' ) : esc_html__( 'Off', 'lnkup-marketplace' ) ) . '</td></tr>';
 		}
 		echo '</tbody></table>';
+		self::render_quality_report();
 		self::render_alert_report();
 		echo '<p class="description">' . esc_html__( 'Matching is rules-based and explainable. Eligibility is checked first; relevance never overrides a failed eligibility rule. Popularity, organizer size and payment volume are not ranking factors.', 'lnkup-marketplace' ) . '</p>';
+	}
+
+	/**
+	 * Recommendation funnel (last 30 days, observed): by band, section, rules version, and cohort vs. rest.
+	 */
+	private static function render_quality_report() {
+		$report = LNKup_Match_Quality::report( 30 );
+		echo '<h2>' . esc_html__( 'Recommendation quality (last 30 days, observed)', 'lnkup-marketplace' ) . '</h2>';
+		if ( ! $report['totals']['impressions'] && ! $report['totals']['applications'] ) {
+			echo '<p class="description">' . esc_html__( 'No recommendation impressions yet. They appear once vendors in the rollout audience open Find Events.', 'lnkup-marketplace' ) . '</p>';
+		} else {
+			$groups = array(
+				__( 'All recommendations', 'lnkup-marketplace' ) => array( 'total' => $report['totals'] ),
+				__( 'By match band', 'lnkup-marketplace' )        => $report['by_band'],
+				__( 'By section', 'lnkup-marketplace' )           => $report['by_section'],
+				__( 'By rules version', 'lnkup-marketplace' )     => $report['by_rules_version'],
+			);
+			foreach ( $groups as $title => $rows ) {
+				self::render_funnel_table( $title, $rows );
+			}
+		}
+		$cohort = $report['cohort'];
+		echo '<h3>' . esc_html( sprintf( __( 'Vendors in the recommendations audience vs. the rest (%s)', 'lnkup-marketplace' ), 'all' === $cohort['audience'] ? __( 'everyone', 'lnkup-marketplace' ) : $cohort['percent'] . '%' ) ) . '</h3>';
+		echo '<table class="widefat striped" style="max-width:720px"><thead><tr><th></th><th>' . esc_html__( 'Vendors', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Applications', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Per vendor', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Approval rate', 'lnkup-marketplace' ) . '</th></tr></thead><tbody>';
+		foreach ( array( 'cohort' => __( 'In audience', 'lnkup-marketplace' ), 'rest' => __( 'Not yet', 'lnkup-marketplace' ) ) as $key => $label ) {
+			$row = $cohort['groups'][ $key ];
+			echo '<tr><th>' . esc_html( $label ) . '</th><td>' . esc_html( number_format_i18n( $row['vendors'] ) ) . '</td><td>' . esc_html( number_format_i18n( $row['applications'] ) ) . '</td><td>' . esc_html( null === $row['applications_per_vendor'] ? '—' : (string) $row['applications_per_vendor'] ) . '</td><td>' . esc_html( null === $row['approval_rate'] ? '—' : $row['approval_rate'] . '%' ) . '</td></tr>';
+		}
+		echo '</tbody></table>';
+		echo '<p class="description">' . esc_html__( 'Applications that followed a recommendation click or impression within 14 days. This shows what happened, not that the recommendation caused it.', 'lnkup-marketplace' ) . ( $report['partial'] ? ' ' . esc_html__( 'Partial: only the most recent events were counted.', 'lnkup-marketplace' ) : '' ) . '</p>';
+	}
+
+	/**
+	 * @param string $title Table title.
+	 * @param array  $rows  Label => funnel row.
+	 */
+	private static function render_funnel_table( $title, array $rows ) {
+		if ( ! $rows ) {
+			return;
+		}
+		echo '<h3>' . esc_html( $title ) . '</h3><table class="widefat striped" style="max-width:960px"><thead><tr><th></th>';
+		foreach ( array( __( 'Impressions', 'lnkup-marketplace' ), __( 'Clicks', 'lnkup-marketplace' ), __( 'CTR', 'lnkup-marketplace' ), __( 'Applications', 'lnkup-marketplace' ), __( 'Approved', 'lnkup-marketplace' ), __( 'Approval rate', 'lnkup-marketplace' ), __( 'Paid', 'lnkup-marketplace' ) ) as $head ) {
+			echo '<th>' . esc_html( $head ) . '</th>';
+		}
+		echo '</tr></thead><tbody>';
+		foreach ( $rows as $label => $row ) {
+			echo '<tr><th>' . esc_html( (string) $label ) . '</th>';
+			foreach ( array( 'impressions', 'clicks' ) as $col ) {
+				echo '<td>' . esc_html( number_format_i18n( $row[ $col ] ) ) . '</td>';
+			}
+			echo '<td>' . esc_html( null === $row['ctr'] ? '—' : $row['ctr'] . '%' ) . '</td>';
+			foreach ( array( 'applications', 'approved' ) as $col ) {
+				echo '<td>' . esc_html( number_format_i18n( $row[ $col ] ) ) . '</td>';
+			}
+			echo '<td>' . esc_html( null === $row['approval_rate'] ? '—' : $row['approval_rate'] . '%' ) . '</td><td>' . esc_html( number_format_i18n( $row['paid'] ) ) . '</td></tr>';
+		}
+		echo '</tbody></table>';
 	}
 
 	/**
@@ -142,6 +208,12 @@ class LNKup_Match_Admin {
 
 	private static function render_rules() {
 		$settings = lnkup_get_settings();
+		$preview  = isset( $_GET['preview'] ) ? get_transient( self::preview_key() ) : false; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( is_array( $preview ) ) {
+			$settings = array_merge( $settings, (array) $preview['candidate'] );
+			self::render_preview( (array) $preview['result'] );
+		}
+		echo '<p>' . esc_html( sprintf( __( 'Current rules version: v%d', 'lnkup-marketplace' ), LNKup_Match_Settings::rules_version() ) ) . '</p>';
 		$labels   = array(
 			'category'     => __( 'Vendor category compatibility', 'lnkup-marketplace' ),
 			'geo'          => __( 'Geographic compatibility', 'lnkup-marketplace' ),
@@ -179,8 +251,14 @@ class LNKup_Match_Admin {
 			echo '<tr><th>' . esc_html( $label ) . '</th><td><input type="number" min="0" name="' . esc_attr( $key ) . '" value="' . esc_attr( (string) ( $settings[ $key ] ?? '' ) ) . '" class="small-text" /></td></tr>';
 		}
 		echo '</table>';
-		submit_button( __( 'Save matching settings', 'lnkup-marketplace' ) );
-		echo '</form>';
+		$note = is_array( $preview ) ? (string) $preview['note'] : '';
+		echo '<p><label for="lnkup-change-note"><strong>' . esc_html__( 'Why are you changing the ranking?', 'lnkup-marketplace' ) . '</strong></label><br /><input type="text" id="lnkup-change-note" name="change_note" class="regular-text" maxlength="200" value="' . esc_attr( $note ) . '" /><br /><span class="description">' . esc_html__( 'Required when a weight or the minimum score changes. Saving creates a new rules version and recomputes matches.', 'lnkup-marketplace' ) . '</span></p>';
+		echo '<p class="submit">';
+		echo '<button type="submit" name="intent" value="preview" class="button">' . esc_html__( 'Preview changes', 'lnkup-marketplace' ) . '</button> ';
+		echo '<button type="submit" name="intent" value="save" class="button button-primary">' . esc_html__( 'Save as new version', 'lnkup-marketplace' ) . '</button>';
+		echo '</p></form>';
+
+		self::render_versions();
 
 		$log = get_option( 'lnkup_match_settings_log', array() );
 		if ( is_array( $log ) && $log ) {
@@ -193,10 +271,82 @@ class LNKup_Match_Admin {
 						$changed[] = $key . ': ' . wp_json_encode( $entry['before'][ $key ] ?? null ) . ' → ' . wp_json_encode( $value );
 					}
 				}
-				echo '<tr><td>' . esc_html( $entry['at'] ) . '</td><td>' . esc_html( $user ? $user->display_name : '#' . (int) $entry['user_id'] ) . '</td><td>' . esc_html( implode( '; ', $changed ) ) . '</td></tr>';
+				echo '<tr><td>' . esc_html( $entry['at'] ) . '</td><td>' . esc_html( $user ? $user->display_name : '#' . (int) $entry['user_id'] ) . '</td><td>' . esc_html( implode( '; ', $changed ) . ( ! empty( $entry['note'] ) ? ' — ' . $entry['note'] : '' ) ) . '</td></tr>';
 			}
 			echo '</tbody></table>';
 		}
+	}
+
+	/**
+	 * Simulator output for the candidate rules (no data was changed).
+	 *
+	 * @param array $result LNKup_Match_Simulator::preview() result.
+	 */
+	private static function render_preview( array $result ) {
+		echo '<div class="notice notice-info" style="padding:12px" data-testid="lnkup-match-preview"><h2 style="margin-top:0">' . esc_html__( 'Preview: what changes if you save', 'lnkup-marketplace' ) . '</h2>';
+		if ( ! empty( $result['error'] ) ) {
+			echo '<p>' . esc_html( (string) $result['error'] ) . '</p></div>';
+			return;
+		}
+		echo '<p>' . esc_html( sprintf( __( 'Sample: %1$d vendors, %2$d vendor-opportunity pairs.', 'lnkup-marketplace' ), (int) $result['vendors'], (int) $result['pairs'] ) ) . ( ! empty( $result['partial'] ) ? ' ' . esc_html__( 'Partial sample (time limit reached).', 'lnkup-marketplace' ) : '' ) . '</p>';
+		echo '<table class="widefat striped" style="max-width:720px"><thead><tr><th></th><th>' . esc_html__( 'Now', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'After', 'lnkup-marketplace' ) . '</th></tr></thead><tbody>';
+		echo '<tr><th>' . esc_html__( 'Recommended pairs', 'lnkup-marketplace' ) . '</th><td>' . (int) $result['before']['recommended'] . '</td><td>' . (int) $result['after']['recommended'] . '</td></tr>';
+		echo '<tr><th>' . esc_html__( 'Vendors with at least one recommendation', 'lnkup-marketplace' ) . '</th><td>' . (int) $result['before']['vendors_with_matches'] . '</td><td>' . (int) $result['after']['vendors_with_matches'] . '</td></tr>';
+		foreach ( array( 'strong', 'good', 'possible' ) as $band ) {
+			echo '<tr><th>' . esc_html( ucfirst( $band ) ) . '</th><td>' . (int) ( $result['before']['bands'][ $band ] ?? 0 ) . '</td><td>' . (int) ( $result['after']['bands'][ $band ] ?? 0 ) . '</td></tr>';
+		}
+		echo '<tr><th>' . esc_html__( 'Average score (recommended)', 'lnkup-marketplace' ) . '</th><td>' . esc_html( (string) $result['before']['avg_score'] ) . '</td><td>' . esc_html( (string) $result['after']['avg_score'] ) . '</td></tr>';
+		echo '</tbody></table>';
+		if ( ! empty( $result['factor_contribution'] ) ) {
+			echo '<h3>' . esc_html__( 'Average factor contribution (points, recommended pairs after the change)', 'lnkup-marketplace' ) . '</h3><p>';
+			$parts = array();
+			foreach ( (array) $result['factor_contribution'] as $factor => $points ) {
+				$parts[] = $factor . ': ' . $points;
+			}
+			echo esc_html( implode( ' · ', $parts ) ) . '</p>';
+		}
+		foreach ( array( 'gained' => __( 'Newly recommended (examples)', 'lnkup-marketplace' ), 'lost' => __( 'No longer recommended (examples)', 'lnkup-marketplace' ) ) as $key => $title ) {
+			if ( empty( $result[ $key ] ) ) {
+				continue;
+			}
+			echo '<h3>' . esc_html( $title ) . '</h3><ul>';
+			foreach ( (array) $result[ $key ] as $row ) {
+				echo '<li>' . esc_html( sprintf( '%s → %s: %d → %d%s', $row['vendor'], $row['opportunity'], (int) $row['score_before'], (int) $row['score_after'], $row['reason'] ? ' (' . $row['reason'] . ')' : '' ) ) . '</li>';
+			}
+			echo '</ul>';
+		}
+		echo '<p class="description">' . esc_html__( 'Nothing was saved. Review the numbers, then use "Save as new version".', 'lnkup-marketplace' ) . '</p></div>';
+	}
+
+	/**
+	 * Rules versions with notes and one-click revert.
+	 */
+	private static function render_versions() {
+		$versions = LNKup_Match_Settings::versions();
+		if ( ! $versions ) {
+			return;
+		}
+		$current = LNKup_Match_Settings::rules_version();
+		echo '<h2>' . esc_html__( 'Rules versions', 'lnkup-marketplace' ) . '</h2><table class="widefat striped" style="max-width:960px"><thead><tr><th>' . esc_html__( 'Version', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'When', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Who', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Note', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Weights / min score', 'lnkup-marketplace' ) . '</th><th></th></tr></thead><tbody>';
+		foreach ( array_slice( $versions, 0, 20 ) as $row ) {
+			$user     = (int) $row['user_id'] ? get_userdata( (int) $row['user_id'] ) : null;
+			$settings = (array) $row['settings'];
+			$summary  = array();
+			foreach ( LNKup_Match_Settings::WEIGHT_KEYS as $factor => $key ) {
+				$summary[] = $factor . ' ' . (int) ( $settings[ $key ] ?? 0 );
+			}
+			$summary[] = 'min ' . (int) ( $settings['match_min_score'] ?? 0 );
+			echo '<tr><td>v' . (int) $row['version'] . ( (int) $row['version'] === $current ? ' <strong>(' . esc_html__( 'current', 'lnkup-marketplace' ) . ')</strong>' : '' ) . '</td><td>' . esc_html( (string) $row['at'] ) . '</td><td>' . esc_html( $user ? $user->display_name : '—' ) . '</td><td>' . esc_html( (string) $row['note'] ) . '</td><td>' . esc_html( implode( ', ', $summary ) ) . '</td><td>';
+			if ( (int) $row['version'] !== $current ) {
+				echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:flex;gap:4px">';
+				wp_nonce_field( 'lnkup_match_revert' );
+				echo '<input type="hidden" name="action" value="lnkup_match_revert" /><input type="hidden" name="version" value="' . (int) $row['version'] . '" />';
+				echo '<input type="text" name="change_note" placeholder="' . esc_attr__( 'Why (optional)', 'lnkup-marketplace' ) . '" class="regular-text" style="width:160px" />';
+				echo '<button type="submit" class="button">' . esc_html__( 'Revert to this version', 'lnkup-marketplace' ) . '</button></form>';
+			}
+			echo '</td></tr>';
+		}
+		echo '</tbody></table>';
 	}
 
 	private static function render_categories() {
@@ -305,6 +455,106 @@ class LNKup_Match_Admin {
 		echo '</form>';
 	}
 
+	/**
+	 * Staged rollout: matching health, one row per flag with audience, stage gates and history.
+	 */
+	private static function render_rollout() {
+		$health = LNKup_Match_Cron::health();
+		$issues = LNKup_Match_Cron::health_issues();
+		echo '<h2>' . esc_html__( 'Matching health', 'lnkup-marketplace' ) . '</h2><table class="widefat striped" style="max-width:720px"><tbody>';
+		$backfill = $health['backfill'];
+		$rows     = array(
+			__( 'Vendor index backfill', 'lnkup-marketplace' )     => $backfill['running'] ? sprintf( __( 'Running: page %1$d of %2$d (%3$s%%)', 'lnkup-marketplace' ), $backfill['page'], $backfill['total_pages'], (string) ( $backfill['percent'] ?? 0 ) ) : ( $backfill['complete'] ? __( 'Complete', 'lnkup-marketplace' ) : __( 'Not run yet', 'lnkup-marketplace' ) ),
+			__( 'Recompute queue', 'lnkup-marketplace' )           => sprintf( __( '%1$d items, oldest %2$s', 'lnkup-marketplace' ), $health['queue_size'], null === $health['queue_oldest_minutes'] ? '—' : sprintf( __( '%d min', 'lnkup-marketplace' ), $health['queue_oldest_minutes'] ) ),
+			__( 'Consecutive failed runs', 'lnkup-marketplace' )   => (string) $health['consecutive_error_runs'],
+			__( 'Nightly rebuild scheduled', 'lnkup-marketplace' ) => $health['next_daily_run'] ? wp_date( 'Y-m-d H:i', $health['next_daily_run'] ) : __( 'No', 'lnkup-marketplace' ),
+		);
+		foreach ( $rows as $label => $value ) {
+			echo '<tr><th>' . esc_html( $label ) . '</th><td>' . esc_html( (string) $value ) . '</td></tr>';
+		}
+		echo '</tbody></table>';
+		if ( $issues ) {
+			echo '<div class="notice notice-warning inline"><ul>';
+			foreach ( $issues as $issue ) {
+				echo '<li>' . esc_html( $issue['detail'] ) . '</li>';
+			}
+			echo '</ul></div>';
+		}
+
+		echo '<h2>' . esc_html__( 'Rollout', 'lnkup-marketplace' ) . '</h2>';
+		echo '<p class="description">' . esc_html__( 'The on/off switch still controls each feature (kill switch). The audience narrows who sees it while it ramps: internal (allowlist + admins), 5%, 25%, 50%, everyone. Buckets are stable per user, so the same vendors stay in as the percentage grows.', 'lnkup-marketplace' ) . '</p>';
+		echo '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Feature', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'On', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Audience', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Since', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Change', 'lnkup-marketplace' ) . '</th></tr></thead><tbody>';
+		$stage_labels = array(
+			'internal' => __( 'Internal (allowlist + admins)', 'lnkup-marketplace' ),
+			'p5'       => '5%',
+			'p25'      => '25%',
+			'p50'      => '50%',
+			'all'      => __( 'Everyone', 'lnkup-marketplace' ),
+		);
+		foreach ( LNKup_Rollout::FLAGS as $flag => $meta ) {
+			$config = LNKup_Rollout::config( $flag );
+			$next   = LNKup_Rollout::next_stage( $config['stage'] ) ?: $config['stage'];
+			$audience = 'all' === $config['audience'] ? __( 'Everyone', 'lnkup-marketplace' ) : sprintf( __( '%1$s%% + %2$d allowlisted', 'lnkup-marketplace' ), $config['percent'], count( $config['user_ids'] ) );
+			echo '<tr data-testid="lnkup-rollout-row" data-flag="' . esc_attr( $flag ) . '"><td><strong>' . esc_html( $meta['label'] ) . '</strong><br /><code>' . esc_html( $flag ) . '</code></td>';
+			echo '<td>' . ( LNKup_Rollout::active( $flag ) ? esc_html__( 'On', 'lnkup-marketplace' ) : esc_html__( 'Off', 'lnkup-marketplace' ) ) . '</td>';
+			echo '<td>' . esc_html( $audience ) . '</td><td>' . esc_html( $config['stage_since'] ?: '—' ) . '</td><td>';
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+			wp_nonce_field( 'lnkup_rollout_save' );
+			echo '<input type="hidden" name="action" value="lnkup_rollout_save" /><input type="hidden" name="flag" value="' . esc_attr( $flag ) . '" />';
+			echo '<select name="stage">';
+			foreach ( $stage_labels as $key => $label ) {
+				echo '<option value="' . esc_attr( $key ) . '" ' . selected( $next, $key, false ) . '>' . esc_html( $label ) . '</option>';
+			}
+			echo '</select> <input type="text" name="user_ids" value="' . esc_attr( implode( ',', $config['user_ids'] ) ) . '" placeholder="' . esc_attr__( 'Allowlist user IDs', 'lnkup-marketplace' ) . '" style="width:140px" />';
+			echo ' <input type="text" name="note" placeholder="' . esc_attr__( 'Note', 'lnkup-marketplace' ) . '" style="width:160px" />';
+			echo ' <label><input type="checkbox" name="override" value="1" /> ' . esc_html__( 'Override failing checks', 'lnkup-marketplace' ) . '</label> ';
+			echo '<button type="submit" class="button">' . esc_html__( 'Apply', 'lnkup-marketplace' ) . '</button></form>';
+			echo '<ul style="margin:6px 0 0">';
+			foreach ( LNKup_Rollout::gates( $flag, $next ) as $gate ) {
+				echo '<li>' . ( $gate['ok'] ? '&#10003; ' : '&#10007; ' ) . esc_html( $gate['label'] ) . ( $gate['ok'] || '' === $gate['detail'] ? '' : ' — ' . esc_html( $gate['detail'] ) ) . '</li>';
+			}
+			echo '</ul></td></tr>';
+		}
+		echo '</tbody></table>';
+
+		$history = array_slice( LNKup_Rollout::history(), 0, 20 );
+		if ( $history ) {
+			echo '<h2>' . esc_html__( 'Rollout history', 'lnkup-marketplace' ) . '</h2><table class="widefat striped" style="max-width:960px"><thead><tr><th>' . esc_html__( 'When', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Who', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Feature', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Change', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Note', 'lnkup-marketplace' ) . '</th></tr></thead><tbody>';
+			foreach ( $history as $row ) {
+				$user   = get_userdata( (int) $row['user_id'] );
+				$change = sprintf( '%s %d%% → %s %d%%', $row['before']['audience'], (int) $row['before']['percent'], $row['after']['audience'], (int) $row['after']['percent'] );
+				echo '<tr><td>' . esc_html( $row['at'] ) . '</td><td>' . esc_html( $user ? $user->display_name : 'wp-cli' ) . '</td><td><code>' . esc_html( $row['flag'] ) . '</code></td><td>' . esc_html( $change ) . '</td><td>' . esc_html( (string) $row['note'] ) . '</td></tr>';
+			}
+			echo '</tbody></table>';
+		}
+	}
+
+	public static function handle_rollout_save() {
+		self::require_admin();
+		check_admin_referer( 'lnkup_rollout_save' );
+		$flag   = isset( $_POST['flag'] ) ? sanitize_key( wp_unslash( $_POST['flag'] ) ) : '';
+		$stage  = isset( $_POST['stage'] ) ? sanitize_key( wp_unslash( $_POST['stage'] ) ) : '';
+		$users  = isset( $_POST['user_ids'] ) ? sanitize_text_field( wp_unslash( $_POST['user_ids'] ) ) : '';
+		$note   = isset( $_POST['note'] ) ? sanitize_text_field( wp_unslash( $_POST['note'] ) ) : '';
+		$config = LNKup_Rollout::config( $flag );
+		$result = true;
+		$ids    = array_values( array_unique( array_filter( array_map( 'absint', explode( ',', $users ) ) ) ) );
+		if ( $ids !== $config['user_ids'] ) {
+			$result = LNKup_Rollout::set( $flag, array( 'user_ids' => $ids ), $note ?: 'Allowlist updated' );
+		}
+		if ( ! is_wp_error( $result ) && $stage && $stage !== $config['stage'] ) {
+			$result = LNKup_Rollout::advance( $flag, $stage, $note, ! empty( $_POST['override'] ) );
+		}
+		$args = array( 'page' => self::SLUG, 'tab' => 'rollout' );
+		if ( is_wp_error( $result ) ) {
+			set_transient( self::error_key(), $result->get_error_message(), 5 * MINUTE_IN_SECONDS );
+		} else {
+			$args['updated'] = 1;
+		}
+		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
 	private static function render_supply() {
 		echo '<p>' . esc_html__( 'Geographic supply & demand reporting (vendor supply, organizer demand, liquidity, unmet demand, growth opportunities) is planned for Phase 7 and will build on the vendor index and match tables shown on the other tabs.', 'lnkup-marketplace' ) . '</p>';
 	}
@@ -314,13 +564,64 @@ class LNKup_Match_Admin {
 		check_admin_referer( 'lnkup_match_save_settings' );
 		$input = array();
 		foreach ( LNKup_Match_Settings::keys() as $key ) {
-			if ( isset( $_POST[ $key ] ) ) {
+			if ( in_array( $key, LNKup_Match_Settings::FLAGS, true ) ) {
+				$input[ $key ] = isset( $_POST[ $key ] ) ? 1 : 0; // Unchecked boxes are not posted.
+			} elseif ( isset( $_POST[ $key ] ) ) {
 				$input[ $key ] = sanitize_text_field( wp_unslash( $_POST[ $key ] ) );
 			}
 		}
-		LNKup_Match_Settings::save( $input );
-		wp_safe_redirect( add_query_arg( array( 'page' => self::SLUG, 'tab' => 'rules', 'updated' => 1 ), admin_url( 'admin.php' ) ) );
+		$note   = isset( $_POST['change_note'] ) ? sanitize_text_field( wp_unslash( $_POST['change_note'] ) ) : '';
+		$intent = isset( $_POST['intent'] ) ? sanitize_key( wp_unslash( $_POST['intent'] ) ) : 'save';
+		$base   = array( 'page' => self::SLUG, 'tab' => 'rules' );
+
+		if ( 'preview' === $intent ) {
+			$candidate = array_intersect_key( $input, array_flip( LNKup_Match_Settings::rule_keys() ) );
+			set_transient(
+				self::preview_key(),
+				array(
+					'candidate' => $candidate,
+					'note'      => $note,
+					'result'    => LNKup_Match_Simulator::preview( $candidate ),
+				),
+				HOUR_IN_SECONDS
+			);
+			wp_safe_redirect( add_query_arg( array_merge( $base, array( 'preview' => 1 ) ), admin_url( 'admin.php' ) ) );
+			exit;
+		}
+
+		$result = LNKup_Match_Settings::save( $input, $note );
+		if ( is_wp_error( $result ) ) {
+			set_transient( self::error_key(), $result->get_error_message(), 5 * MINUTE_IN_SECONDS );
+			wp_safe_redirect( add_query_arg( $base, admin_url( 'admin.php' ) ) );
+			exit;
+		}
+		delete_transient( self::preview_key() );
+		wp_safe_redirect( add_query_arg( array_merge( $base, array( 'updated' => 1 ) ), admin_url( 'admin.php' ) ) );
 		exit;
+	}
+
+	public static function handle_revert() {
+		self::require_admin();
+		check_admin_referer( 'lnkup_match_revert' );
+		$version = isset( $_POST['version'] ) ? absint( $_POST['version'] ) : 0;
+		$note    = isset( $_POST['change_note'] ) ? sanitize_text_field( wp_unslash( $_POST['change_note'] ) ) : '';
+		$result  = LNKup_Match_Settings::revert( $version, $note );
+		$args    = array( 'page' => self::SLUG, 'tab' => 'rules' );
+		if ( is_wp_error( $result ) ) {
+			set_transient( self::error_key(), $result->get_error_message(), 5 * MINUTE_IN_SECONDS );
+		} else {
+			$args['updated'] = 1;
+		}
+		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	private static function preview_key() {
+		return 'lnkup_match_preview_' . get_current_user_id();
+	}
+
+	private static function error_key() {
+		return 'lnkup_match_admin_error_' . get_current_user_id();
 	}
 
 	public static function handle_save_groups() {

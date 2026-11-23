@@ -37,6 +37,9 @@ export default function SignupScreen() {
     params.role === "organizer" ? "organizer" : "vendor",
   )
   const [fullName, setFullName] = useState("")
+  const [organizationName, setOrganizationName] = useState("")
+  const [city, setCity] = useState("")
+  const [stateCode, setStateCode] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [passwordConfirm, setPasswordConfirm] = useState("")
@@ -77,6 +80,10 @@ export default function SignupScreen() {
       setLocalError("Passwords do not match.")
       return
     }
+    if (role === "organizer" && (!organizationName.trim() || !city.trim() || !stateCode.trim())) {
+      setLocalError("Add your organization name and the city and state where you hold events.")
+      return
+    }
     if (!acceptedTerms) {
       setLocalError("Please accept the Terms and Privacy Policy to continue.")
       return
@@ -95,6 +102,9 @@ export default function SignupScreen() {
         role,
         fullName,
         terms: acceptedTerms,
+        organizationName,
+        city,
+        state: stateCode,
       })
       router.replace(role === "organizer" ? "/(organizer)" : "/(vendor)")
     } catch {
@@ -159,6 +169,52 @@ export default function SignupScreen() {
                 style={styles.input}
               />
             </View>
+
+            {role === "organizer" ? (
+              <>
+                <View style={styles.field}>
+                  <Meta style={styles.label}>Organization or business name</Meta>
+                  <TextInput
+                    autoCapitalize="words"
+                    value={organizationName}
+                    onChangeText={setOrganizationName}
+                    placeholder="Your events company"
+                    placeholderTextColor={colors.gray400}
+                    style={styles.input}
+                    maxLength={120}
+                    accessibilityLabel="Organization or business name"
+                  />
+                </View>
+                <View style={styles.cityRow}>
+                  <View style={[styles.field, styles.cityField]}>
+                    <Meta style={styles.label}>Primary city</Meta>
+                    <TextInput
+                      autoCapitalize="words"
+                      value={city}
+                      onChangeText={setCity}
+                      placeholder="Houston"
+                      placeholderTextColor={colors.gray400}
+                      style={styles.input}
+                      maxLength={120}
+                      accessibilityLabel="Primary city"
+                    />
+                  </View>
+                  <View style={[styles.field, styles.stateField]}>
+                    <Meta style={styles.label}>State</Meta>
+                    <TextInput
+                      autoCapitalize="characters"
+                      value={stateCode}
+                      onChangeText={setStateCode}
+                      placeholder="TX"
+                      placeholderTextColor={colors.gray400}
+                      style={styles.input}
+                      maxLength={32}
+                      accessibilityLabel="State"
+                    />
+                  </View>
+                </View>
+              </>
+            ) : null}
 
             <View style={styles.field}>
               <Meta style={styles.label}>Email</Meta>
@@ -278,6 +334,16 @@ const styles = StyleSheet.create({
   },
   field: {
     gap: spacing.xs,
+  },
+  cityRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  cityField: {
+    flex: 2,
+  },
+  stateField: {
+    flex: 1,
   },
   label: {
     fontFamily: fonts.bodySemi,

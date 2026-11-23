@@ -20,7 +20,7 @@ async function openHubTab(page: Page, name: RegExp) {
 
 test.describe('Partnership OS — access control', () => {
   test('partner admin REST routes reject anonymous callers', async ({ request }) => {
-    for (const path of ['/partners/overview', '/partners/ledger', '/partners/rules', '/partners/reviews', '/partners/territories']) {
+    for (const path of ['/partners/overview', '/partners/readiness', '/partners/ledger', '/partners/rules', '/partners/reviews', '/partners/territories']) {
       const res = await request.get(`/wp-json/lnkup/v1${path}`);
       expect(res.status(), path).toBe(401);
       expect(res.headers()['content-type']).toContain('application/json');
@@ -73,6 +73,25 @@ test.describe('Partnerships & Referrals admin hub', () => {
     await page.goto(`${HUB}&tab=settings`);
     await expect(page.getByLabel('Attribution enforcement')).toHaveValue(/shadow|enforce|off/);
   });
+
+  test('go-live readiness shows the stage checklist and every check', async ({ page }) => {
+    await openHubTab(page, /^Go-live readiness$/);
+    await expect(page.getByTestId('lnkup-partners-readiness')).toBeVisible();
+    const stages = page.getByTestId('lnkup-readiness-stages');
+    for (const key of ['deployed', 'enforce', 'programs', 'communications', 'mobile']) {
+      await expect(stages.getByTestId(`lnkup-readiness-stage-${key}`)).toContainText(/Done|Ready|Blocked/);
+    }
+    await expect(page.getByTestId('lnkup-readiness-check-schema')).toContainText('OK');
+    await expect(page.getByTestId('lnkup-readiness-check-payouts')).toContainText(/Manual only/);
+    await expect(page.getByText(/Fatal error|Warning:|Notice:/)).toHaveCount(0);
+  });
+
+  test('readiness re-check refreshes without changing settings', async ({ page }) => {
+    await page.goto(`${HUB}&tab=readiness`);
+    await page.getByTestId('lnkup-readiness-refresh').click();
+    await expect(page.getByText('Readiness re-checked.')).toBeVisible();
+    await expect(page.getByTestId('lnkup-partners-tab-readiness')).toHaveClass(/nav-tab-active/);
+  });
 });
 
 test.describe('City Connector — Organizer Leads and My Cities', () => {
@@ -115,6 +134,11 @@ test.describe('City Connector — Organizer Leads and My Cities', () => {
     const cities = page.getByTestId('lnkup-connector-cities');
     await expect(cities).toBeVisible();
     await expect(cities.getByText(/referrals outside these cities count the same/)).toBeVisible();
+  });
+
+  test('connectors cannot open the go-live readiness tab', async ({ page }) => {
+    await page.goto(`${HUB}&tab=readiness`);
+    await expect(page.getByTestId('lnkup-partners-readiness')).toHaveCount(0);
   });
 
   test('leads view does not overflow on a phone-width viewport', async ({ page }) => {

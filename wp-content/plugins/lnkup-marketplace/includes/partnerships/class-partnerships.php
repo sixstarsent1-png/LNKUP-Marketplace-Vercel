@@ -61,6 +61,9 @@ class LNKup_Partnerships {
 		$prev = self::settings();
 		update_option( self::SETTINGS_OPTION, $next, false );
 		LNKup_Financial_Audit::log( 'partnership_settings_updated', 'partnership_settings', 0, array( 'from' => $prev, 'to' => $next ) );
+		if ( class_exists( 'LNKup_Partnership_Readiness' ) ) {
+			LNKup_Partnership_Readiness::flush();
+		}
 		return $next;
 	}
 

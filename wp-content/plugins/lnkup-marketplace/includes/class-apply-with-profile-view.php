@@ -246,7 +246,7 @@ class LNKup_Apply_With_Profile_View {
 	 * Whether the step-based wizard (autosave, resume, questions, estimate) is on.
 	 */
 	public static function wizard_enabled(): bool {
-		return ! empty( lnkup_get_settings()['apply_wizard_enabled'] );
+		return LNKup_Rollout::enabled( 'apply_wizard_enabled' );
 	}
 
 	/**

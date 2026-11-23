@@ -1,5 +1,5 @@
 import * as SecureStore from "@/lib/storage/secure-store"
-import { isOrganizerRole, isVendorRole } from "@/lib/auth/roles"
+import { isOrganizerRole, isPartnerRole, isVendorRole } from "@/lib/auth/roles"
 
 /**
  * One place that remembers where the user was trying to go (push tap, deep link, expired session)
@@ -10,11 +10,12 @@ import { isOrganizerRole, isVendorRole } from "@/lib/auth/roles"
 const STORAGE_KEY = "lnkup_pending_destination_v1"
 const MAX_AGE_MS = 30 * 60 * 1000
 
-type Scope = "vendor" | "organizer" | "any"
+type Scope = "vendor" | "organizer" | "partner" | "any"
 
 const ROUTE_RULES: Array<{ pattern: RegExp; scope: Scope }> = [
   { pattern: /^\/\(vendor\)(\/[\w-]+)?(\?[\w=&%.-]*)?$/, scope: "vendor" },
   { pattern: /^\/\(organizer\)(\/[\w-]+){0,2}(\?[\w=&%.-]*)?$/, scope: "organizer" },
+  { pattern: /^\/\(partner\)(\/[\w-]+)?(\?[\w=&%.-]*)?$/, scope: "partner" },
   { pattern: /^\/(pass|apply|booking)\/\d+(\?[\w=&%.-]*)?$/, scope: "vendor" },
   { pattern: /^\/opportunity\/\d+(\?[\w=&%.-]*)?$/, scope: "any" },
   { pattern: /^\/tour\/\d+$/, scope: "any" },
@@ -53,9 +54,20 @@ export function destinationScope(raw: string): Scope | null {
 export function isDestinationAllowed(raw: string, roles: string[] | undefined): boolean {
   const scope = destinationScope(raw)
   if (!scope) return false
-  if (scope === "any") return isVendorRole(roles) || isOrganizerRole(roles)
-  if (scope === "vendor") return isVendorRole(roles)
-  return isOrganizerRole(roles)
+  switch (scope) {
+    case "any":
+      return isVendorRole(roles) || isOrganizerRole(roles)
+    case "vendor":
+      return isVendorRole(roles)
+    case "organizer":
+      return isOrganizerRole(roles)
+    case "partner":
+      return isPartnerRole(roles)
+    default: {
+      const unhandled: never = scope
+      return unhandled
+    }
+  }
 }
 
 /** Allowed destination (decoded) or null. */

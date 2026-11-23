@@ -44,6 +44,10 @@ class LNKup_Comms_Engine {
 		if ( '' !== $flag && ! LNKup_Comms_Settings::enabled( $flag ) && empty( $opts['force'] ) ) {
 			return 0;
 		}
+		if ( '' !== $flag && empty( $opts['force'] ) && ! LNKup_Comms_Settings::enabled_for( $flag, $recipient ) ) {
+			LNKup_Comms_Analytics::bump( 'skipped_cohort', $trigger );
+			return 0;
+		}
 		$priority = (string) ( $opts['priority'] ?? $def['priority'] );
 		if ( 'critical' !== $priority && LNKup_Comms_Settings::automation_paused( $trigger ) ) {
 			LNKup_Comms_Analytics::bump( 'skipped_paused', $trigger );
@@ -297,6 +301,10 @@ class LNKup_Comms_Engine {
 		$flag = (string) ( $def['flag'] ?? '' );
 		if ( '' !== $flag && empty( $stored['_forced'] ) && ! LNKup_Comms_Settings::enabled( $flag ) ) {
 			return 'flag_off:' . $flag;
+		}
+		// The audience may have been narrowed after scheduling.
+		if ( '' !== $flag && empty( $stored['_forced'] ) && ! LNKup_Comms_Settings::enabled_for( $flag, (int) $message['recipient_user_id'] ) ) {
+			return 'cohort_excluded';
 		}
 		$ctx    = LNKup_Comms_Context::build( array_merge( $stored, array( 'priority' => (string) $message['priority'] ) ) );
 		$role   = (string) $message['recipient_role'];

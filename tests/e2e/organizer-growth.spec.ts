@@ -197,6 +197,30 @@ test.describe('Organizer Growth admin', () => {
     await expect(cost).toContainText('$125.00');
   });
 
+  test('vendor supply tab rebuilds the snapshot and lists cities', async ({ page }) => {
+    await openTab(page, /vendor supply/i);
+    const body = page.getByTestId('og-supply-body');
+    await expect(body.getByRole('button', { name: 'Rebuild now' })).toBeVisible();
+    await body.getByRole('button', { name: 'Rebuild now' }).click();
+    await expect(page.getByRole('status')).toContainText(/Snapshot rebuilt|rebuilt in the last 10 minutes/);
+    await expect(body.getByTestId('og-supply-table').or(body.getByText('No cities match these filters.'))).toBeVisible();
+  });
+
+  test('supply city drawer opens and links to leads in that city', async ({ page }) => {
+    await openTab(page, /vendor supply/i);
+    const body = page.getByTestId('og-supply-body');
+    const cityTable = body.getByTestId('og-supply-table');
+    await expect(cityTable.or(body.getByText(/No cities match these filters|No vendor supply data yet/))).toBeVisible();
+    test.skip(!(await cityTable.isVisible()), 'No supply cities in this environment');
+    const firstCity = cityTable.getByRole('button').first();
+    const cityName = ((await firstCity.textContent()) ?? '').split(',')[0].trim();
+    await firstCity.click();
+    const drawer = page.getByTestId('og-supply-city');
+    await expect(drawer.getByRole('heading', { name: 'By category' })).toBeVisible();
+    await drawer.getByRole('button', { name: 'View leads in this city' }).click();
+    await expect(page.getByTestId('og-lead-filters').getByLabel('Search')).toHaveValue(cityName);
+  });
+
   test('spend entries are voided with a reason, never deleted', async ({ page }) => {
     await openTab(page, /^spend$/i);
     const row = page.getByTestId('og-spend-list').getByRole('row').filter({ hasText: `${prefix} flyers` });

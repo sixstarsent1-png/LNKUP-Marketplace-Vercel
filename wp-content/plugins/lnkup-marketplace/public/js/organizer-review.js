@@ -630,16 +630,24 @@
 		if (answers.length || Object.keys(answers).length) {
 			wrap.appendChild(section('Answers', [answerList(answers)]));
 		}
-		if (!ws.documents_hidden) {
+		if (ws.document_review) {
+			wrap.appendChild(documentReviewSection(ws));
+		} else if (!ws.documents_hidden) {
 			var docs = ws.documents || [];
 			wrap.appendChild(section('Documents', [docs.length ? el('ul', { class: 'lnkup-review__list-plain' }, docs.map(function (doc) {
 				return el('li', {}, [el('span', { text: doc.label || doc.type || 'Document' }), ' ', badge(doc.status || '', doc.status === 'approved' ? 'good' : (doc.status === 'missing' || doc.status === 'expired' ? 'warn' : ''))]);
 			})) : el('p', { class: 'lnkup-muted', text: 'No documents required for this slot.' })]));
 		}
 
+		if (ws.status === 'waitlisted' && actions.indexOf('assign_reviewer') !== -1 && ws.opportunity_id) {
+			wrap.appendChild(waitlistSection(ws));
+		}
 		wrap.appendChild(reviewersSection(ws, actions));
 		if (actions.indexOf('score') !== -1) {
 			wrap.appendChild(scoreForm(ws));
+		}
+		if (actions.indexOf('assign_reviewer') !== -1) {
+			wrap.appendChild(rubricSection(ws));
 		}
 		wrap.appendChild(reviewsSection(ws));
 
@@ -661,6 +669,90 @@
 			}))]));
 		}
 		replace(panel, wrap);
+	}
+
+	var DOC_STATUS = {
+		missing: ['Missing', 'warn'],
+		requested: ['Requested', 'info'],
+		submitted: ['Ready for review', 'info'],
+		accepted: ['Accepted', 'good'],
+		rejected: ['Rejected', 'warn'],
+		replacement_requested: ['Replacement requested', 'warn'],
+		expired: ['Expired', 'warn'],
+		waived: ['Waived', '']
+	};
+
+	/**
+	 * Per-event document review (organizer_document_review_enabled). Decisions apply to this event only.
+	 */
+	function documentReviewSection(ws) {
+		var review = ws.document_review || { items: [] };
+		var items = review.items || [];
+		var sec = section('Documents for this event', []);
+		if (!items.length) {
+			sec.appendChild(el('p', { class: 'lnkup-muted', text: 'No documents are required for this vendor slot.' }));
+			return sec;
+		}
+		var refresh = function (rows) {
+			ws.document_review.items = rows;
+			var next = documentReviewSection(ws);
+			sec.replaceWith(next);
+		};
+		var post = async function (path, body, button) {
+			busy(button, true);
+			var res = await api('/applications/' + ws.id + '/documents' + path, { method: 'POST', body: body });
+			busy(button, false);
+			if (!res.ok) {
+				flash(sec, res.error, true);
+				return;
+			}
+			refresh(res.data.items || []);
+			loadQueue();
+		};
+		var list = el('ul', { class: 'lnkup-review__list-plain lnkup-review__docs' });
+		var missing = [];
+		items.forEach(function (row) {
+			var meta = DOC_STATUS[row.status] || [row.status, ''];
+			var li = el('li', { class: 'lnkup-review__doc' }, [
+				el('strong', { text: row.label }),
+				badge(meta[0], meta[1]),
+				row.expires_on ? el('span', { class: 'lnkup-muted', text: 'Expires ' + row.expires_on }) : null,
+				row.download_url ? el('a', { href: row.download_url, target: '_blank', rel: 'noopener', text: 'Open shared file' }) : (row.document_id && !row.shared ? el('span', { class: 'lnkup-muted', text: 'Not shared with you yet' }) : null),
+				row.reason ? el('div', { class: 'lnkup-muted', text: 'Note: ' + row.reason }) : null
+			]);
+			if (review.can_review && row.document_id && ['submitted', 'rejected', 'replacement_requested', 'accepted'].indexOf(row.status) !== -1) {
+				var accept = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--primary lnkup-btn--sm', text: 'Accept' });
+				accept.addEventListener('click', function () { post('/' + row.type + '/review', { decision: 'accept' }, accept); });
+				var reject = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--ghost lnkup-btn--sm', text: 'Needs changes…' });
+				reject.addEventListener('click', function () {
+					var reason = el('textarea', { rows: '3', maxlength: '1000', placeholder: 'What should the vendor fix?' });
+					var send = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--primary', text: 'Ask for a new version' });
+					var close = modal(row.label + ': needs changes', el('label', { class: 'lnkup-review__field' }, [el('span', { text: 'Message to the vendor' }), reason]), function (closeFn) {
+						return [el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--ghost', text: 'Cancel', onclick: closeFn }), send];
+					});
+					send.addEventListener('click', function () {
+						if (reason.value.trim().length < 3) {
+							reason.focus();
+							return;
+						}
+						close();
+						post('/' + row.type + '/review', { decision: 'replacement', reason: reason.value }, null);
+					});
+				});
+				li.appendChild(el('div', { class: 'lnkup-review__inline' }, [row.status !== 'accepted' ? accept : null, reject]));
+			}
+			if (['missing', 'requested', 'expired', 'rejected', 'replacement_requested'].indexOf(row.status) !== -1) {
+				missing.push(row.type);
+			}
+			list.appendChild(li);
+		});
+		sec.appendChild(list);
+		if (review.can_review && missing.length) {
+			var ask = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--outline lnkup-btn--sm', text: 'Request missing documents' });
+			ask.addEventListener('click', function () { post('/request', { types: missing }, ask); });
+			sec.appendChild(ask);
+		}
+		return sec;
 	}
 
 	function fact(label, value) {
@@ -805,6 +897,118 @@
 			loadQueue();
 		});
 		return box;
+	}
+
+	/**
+	 * Waitlist order for this vendor slot; moving a vendor saves the whole order (POST waitlist/reorder).
+	 */
+	function waitlistSection(ws) {
+		var sec = section('Waitlist order', [el('p', { class: 'lnkup-muted', text: 'Loading the waitlist…' })]);
+		var draw = function (items) {
+			var ids = items.map(function (row) { return row.id; });
+			var index = ids.indexOf(ws.id);
+			var list = el('ol', { class: 'lnkup-review__list-plain lnkup-review__waitlist' }, items.map(function (row) {
+				return el('li', { class: row.id === ws.id ? 'is-current' : '' }, [
+					el('span', { text: (row.vendor_name || ('#' + row.id)) + (row.id === ws.id ? ' (this vendor)' : '') }),
+					row.category ? el('span', { class: 'lnkup-muted', text: row.category }) : null
+				]);
+			}));
+			var move = async function (delta, button) {
+				var target = index + delta;
+				if (index < 0 || target < 0 || target >= ids.length) {
+					return;
+				}
+				var order = ids.slice();
+				order.splice(index, 1);
+				order.splice(target, 0, ws.id);
+				busy(button, true);
+				var res = await api('/opportunities/' + ws.opportunity_id + '/waitlist/reorder', { method: 'POST', body: { order: order } });
+				busy(button, false);
+				if (!res.ok) {
+					flash(sec, res.error, true);
+					return;
+				}
+				ws.waitlist_position = order.indexOf(ws.id) + 1;
+				draw(res.data.items || []);
+				loadQueue();
+			};
+			var up = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--outline lnkup-btn--sm', text: 'Move up', disabled: index <= 0 });
+			var down = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--outline lnkup-btn--sm', text: 'Move down', disabled: index < 0 || index >= ids.length - 1 });
+			up.addEventListener('click', function () { move(-1, up); });
+			down.addEventListener('click', function () { move(1, down); });
+			var body = el('div', {}, [
+				el('p', { class: 'lnkup-muted', text: index >= 0 ? 'Position ' + (index + 1) + ' of ' + ids.length + '. Offer open spots in this order.' : 'This vendor is not on the waitlist.' }),
+				list,
+				el('div', { class: 'lnkup-review__inline' }, [up, down])
+			]);
+			while (sec.childNodes.length > 1) {
+				sec.removeChild(sec.lastChild);
+			}
+			sec.appendChild(body);
+		};
+		api('/opportunities/' + ws.opportunity_id + '/waitlist').then(function (res) {
+			if (!res.ok) {
+				while (sec.childNodes.length > 1) {
+					sec.removeChild(sec.lastChild);
+				}
+				sec.appendChild(el('p', { class: 'lnkup-muted', text: res.error }));
+				return;
+			}
+			draw(res.data.items || []);
+		});
+		return sec;
+	}
+
+	/**
+	 * Event scoring rubric (shown to people who can decide applications). Saving bumps the rubric
+	 * version; scores already submitted keep the version they were given against.
+	 */
+	function rubricSection(ws) {
+		var rubric = ws.rubric || { criteria: [] };
+		var summary = rubric.criteria.map(function (c) { return c.label + (c.weight > 1 ? ' ×' + c.weight : ''); }).join(' · ');
+		var edit = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--ghost lnkup-btn--sm', text: rubric.is_default ? 'Customize rubric' : 'Edit rubric' });
+		edit.addEventListener('click', function () {
+			var rows = el('div', { class: 'lnkup-review__rubric-rows' });
+			var addRow = function (criterion) {
+				var label = el('input', { type: 'text', maxlength: '80', value: criterion ? criterion.label : '', 'aria-label': 'Criterion' });
+				var weight = el('select', { 'aria-label': 'Weight' }, [1, 2, 3, 4, 5].map(function (n) {
+					return el('option', { value: String(n), text: n === 1 ? 'Weight 1' : 'Weight ' + n, selected: criterion && Number(criterion.weight) === n });
+				}));
+				var remove = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--ghost lnkup-btn--sm', text: 'Remove' });
+				var row = el('div', { class: 'lnkup-review__rubric-row', 'data-key': criterion ? criterion.key : '' }, [label, weight, remove]);
+				remove.addEventListener('click', function () { row.remove(); });
+				rows.appendChild(row);
+			};
+			rubric.criteria.forEach(addRow);
+			var add = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--outline lnkup-btn--sm', text: 'Add criterion', onclick: function () { addRow(null); } });
+			var save = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--primary', text: 'Save rubric' });
+			var body = el('div', {}, [
+				el('p', { class: 'lnkup-muted', text: 'Reviewers score each criterion from 1 to 5. Higher weights count more in the average. Scores guide decisions; they never approve or decline on their own.' }),
+				rows,
+				add
+			]);
+			var close = modal('Scoring rubric for ' + (ws.event_title || 'this event'), body, function (closeFn) {
+				return [el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--ghost', text: 'Cancel', onclick: closeFn }), save];
+			});
+			save.addEventListener('click', async function () {
+				var criteria = Array.prototype.map.call(rows.querySelectorAll('.lnkup-review__rubric-row'), function (row) {
+					return { key: row.getAttribute('data-key') || '', label: row.querySelector('input').value.trim(), weight: Number(row.querySelector('select').value) };
+				}).filter(function (c) { return c.label; });
+				busy(save, true);
+				var res = await api('/events/' + ws.event_id + '/rubric', { method: 'PUT', body: { criteria: criteria } });
+				busy(save, false);
+				if (!res.ok) {
+					flash(body, res.error, true);
+					return;
+				}
+				close();
+				openPanel(ws.id);
+			});
+		});
+		return section('Scoring rubric', [
+			el('p', { class: 'lnkup-muted', text: (rubric.is_default ? 'Default: ' : 'This event: ') + summary }),
+			edit
+		]);
 	}
 
 	function reviewersSection(ws, actions) {

@@ -60,6 +60,7 @@ class LNKup_Organizer_Growth_Admin {
 			'outreach' => __( 'Outreach Campaigns', 'lnkup-marketplace' ),
 			'analytics' => __( 'Analytics', 'lnkup-marketplace' ),
 			'spend'    => __( 'Spend', 'lnkup-marketplace' ),
+			'supply'   => __( 'Vendor Supply', 'lnkup-marketplace' ),
 			'import'   => __( 'Import', 'lnkup-marketplace' ),
 			'settings' => __( 'Settings', 'lnkup-marketplace' ),
 		);

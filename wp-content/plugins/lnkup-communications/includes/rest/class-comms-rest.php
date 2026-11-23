@@ -28,7 +28,7 @@ class LNKup_Comms_REST {
 		$role_arg = array(
 			'role' => array(
 				'type'              => 'string',
-				'enum'              => array( 'vendor', 'organizer', '' ),
+				'enum'              => array( 'vendor', 'organizer', 'partner', '' ),
 				'default'           => '',
 				'sanitize_callback' => 'sanitize_key',
 			),
@@ -315,6 +315,9 @@ class LNKup_Comms_REST {
 	public static function next_steps( WP_REST_Request $request ): WP_REST_Response {
 		$user_id = get_current_user_id();
 		$role    = self::resolve_role( $user_id, (string) $request['role'] );
+		if ( 'partner' === $role ) {
+			return rest_ensure_response( array( 'steps' => array(), 'upcoming' => array(), 'role' => $role ) );
+		}
 		$data    = 'organizer' === $role ? LNKup_Comms_Next_Steps::organizer( $user_id ) : LNKup_Comms_Next_Steps::vendor( $user_id );
 		$data['role'] = $role;
 		return rest_ensure_response( $data );

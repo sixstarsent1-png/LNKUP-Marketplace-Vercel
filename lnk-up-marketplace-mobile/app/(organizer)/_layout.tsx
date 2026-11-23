@@ -19,7 +19,7 @@ function countPending(items: OrganizerVendorRequest[]): number {
 }
 
 export default function OrganizerLayout() {
-  const { isAuthenticated, isOrganizer, isVendor, auth } = useAuth()
+  const { isAuthenticated, isOrganizer, isVendor, isPartner, auth } = useAuth()
   const { screenOptions, tabIconSize } = useTabBarScreenOptions()
   const [pendingCount, setPendingCount] = useState(0)
   const segments = useSegments()
@@ -61,7 +61,7 @@ export default function OrganizerLayout() {
   }
 
   if (!isOrganizer) {
-    return <Redirect href={isVendor ? "/(vendor)" : "/no-access"} />
+    return <Redirect href={isVendor ? "/(vendor)" : isPartner ? "/(partner)" : "/no-access"} />
   }
 
   return (

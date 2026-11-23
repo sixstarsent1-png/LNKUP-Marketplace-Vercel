@@ -22,13 +22,19 @@ export function useSignOut(): [() => Promise<void>, boolean] {
   return [async () => void (await run()), busy]
 }
 
-/** Double-tap-safe switch between the vendor and organizer shells for dual-role accounts. */
+const SHELL_FOR: Record<AppHomeRole, "/(vendor)" | "/(organizer)" | "/(partner)"> = {
+  vendor: "/(vendor)",
+  organizer: "/(organizer)",
+  partner: "/(partner)",
+}
+
+/** Double-tap-safe switch between the vendor, organizer and partner shells for multi-role accounts. */
 export function useSwitchRole(): [(role: AppHomeRole) => Promise<void>, boolean] {
   const { setHomeRole } = useAuth()
   const [run, busy] = useSingleFlight(async (role: AppHomeRole) => {
     try {
       await setHomeRole(role)
-      router.replace(role === "organizer" ? "/(organizer)" : "/(vendor)")
+      router.replace(SHELL_FOR[role])
     } catch {
       showToast("Couldn't switch workspace. Try again.", "error")
     }

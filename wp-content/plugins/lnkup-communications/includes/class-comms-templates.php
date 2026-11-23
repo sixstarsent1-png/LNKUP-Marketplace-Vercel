@@ -11,7 +11,8 @@ defined( 'ABSPATH' ) || exit;
 
 class LNKup_Comms_Templates {
 
-	const FIELDS = array( 'subject', 'heading', 'body', 'cta', 'push_title', 'push_body' );
+	/** inbox_body is optional; when empty the inbox reuses push_body. Push text never carries amounts, inbox text may. */
+	const FIELDS = array( 'subject', 'heading', 'body', 'cta', 'push_title', 'push_body', 'inbox_body' );
 
 	/**
 	 * @var array<string, array>|null
@@ -181,7 +182,7 @@ class LNKup_Comms_Templates {
 		};
 
 		$rendered = array();
-		foreach ( array( 'subject', 'heading', 'cta', 'push_title', 'push_body' ) as $field ) {
+		foreach ( array( 'subject', 'heading', 'cta', 'push_title', 'push_body', 'inbox_body' ) as $field ) {
 			$value = $line( (string) ( $template[ $field ] ?? '' ), false );
 			if ( '' === $value && in_array( $field, array( 'subject', 'heading', 'push_title' ), true ) ) {
 				return new WP_Error( 'lnkup_comms_render', 'unresolved:' . $field );
@@ -217,6 +218,7 @@ class LNKup_Comms_Templates {
 		}
 		$rendered['push_title'] = self::truncate( $rendered['push_title'], 65 );
 		$rendered['push_body']  = self::truncate( $rendered['push_body'], 178 );
+		$rendered['inbox_body'] = self::truncate( $rendered['inbox_body'], 240 );
 		$rendered['subject']    = self::truncate( $rendered['subject'], 120 );
 		$rendered['paragraphs'] = $paragraphs;
 		$rendered['items']      = self::clean_items( $items );

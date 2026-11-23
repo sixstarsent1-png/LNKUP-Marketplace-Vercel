@@ -156,7 +156,6 @@ class LNKup_Portfolio_Public {
 			);
 		}
 		$organizer_id = (int) get_post_meta( $tour_id, '_lnkup_organizer_user_id', true );
-		$settings     = lnkup_get_settings();
 		$brand_id     = (int) get_post_meta( $tour_id, '_lnkup_brand_id', true );
 		$categories   = array_keys( $categories );
 		sort( $categories );
@@ -178,7 +177,7 @@ class LNKup_Portfolio_Public {
 			'stops'           => $stops,
 			'accepting'       => (bool) array_filter( wp_list_pluck( $stops, 'accepting' ) ),
 			'url'             => self::tour_url( $tour_id ),
-			'multi_apply_url' => ! empty( $settings['tour_multi_apply_enabled'] ) ? add_query_arg( 'tour_id', (int) $tour_id, lnkup_page_url_helper( 'opportunities' ) ) : '',
+			'multi_apply_url' => LNKup_Rollout::enabled( 'tour_multi_apply_enabled' ) ? add_query_arg( 'tour_id', (int) $tour_id, lnkup_page_url_helper( 'opportunities' ) ) : '',
 		);
 	}
 

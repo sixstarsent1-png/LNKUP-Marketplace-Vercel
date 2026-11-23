@@ -171,7 +171,7 @@ class LNKup_Org_Lead_Scoring {
 
 		$vendors = self::vendor_count_for_city( (string) ( $lead['city'] ?? '' ), (string) ( $lead['state'] ?? '' ) );
 		$minimum = max( 1, $config['vendor_market_minimum'] );
-		$add( 'vendor_market', $vendors >= $minimum ? 1 : ( $vendors > 0 ? $vendors / $minimum : 0 ), sprintf( '%d LNKup vendor profiles in this city', $vendors ) );
+		$add( 'vendor_market', $vendors >= $minimum ? 1 : ( $vendors > 0 ? $vendors / $minimum : 0 ), sprintf( '%d active LNKup vendors serve this city', $vendors ) );
 
 		$score = array_sum( array_column( $items, 'points' ) );
 		$tier  = $score >= $config['tier_a'] ? 'A' : ( $score >= $config['tier_b'] ? 'B' : 'C' );
@@ -290,32 +290,9 @@ class LNKup_Org_Lead_Scoring {
 	}
 
 	/**
-	 * Real count of published vendor profiles whose city matches (cached 12h).
+	 * Active, discoverable vendors who serve the city (vendor supply snapshot).
 	 */
 	public static function vendor_count_for_city( string $city, string $state ): int {
-		global $wpdb;
-		$city = trim( $city );
-		if ( '' === $city ) {
-			return 0;
-		}
-		$key    = 'lnkup_org_vc_' . md5( strtolower( $city . '|' . $state ) );
-		$cached = get_transient( $key );
-		if ( false !== $cached ) {
-			return (int) $cached;
-		}
-		$sql  = "SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
-			INNER JOIN {$wpdb->postmeta} c ON c.post_id = p.ID AND c.meta_key = '_lnkup_city' AND LOWER(c.meta_value) = %s";
-		$args = array( strtolower( $city ) );
-		if ( '' !== trim( $state ) ) {
-			$sql   .= " LEFT JOIN {$wpdb->postmeta} s ON s.post_id = p.ID AND s.meta_key = '_lnkup_state'";
-			$sql   .= " WHERE p.post_type = 'lnkup_vendor_profile' AND p.post_status = 'publish' AND (s.meta_value IS NULL OR s.meta_value = '' OR UPPER(s.meta_value) = %s)";
-			$args[] = strtoupper( trim( $state ) );
-		} else {
-			$sql .= " WHERE p.post_type = 'lnkup_vendor_profile' AND p.post_status = 'publish'";
-		}
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
-		$count = (int) $wpdb->get_var( $wpdb->prepare( $sql, $args ) );
-		set_transient( $key, $count, 12 * HOUR_IN_SECONDS );
-		return $count;
+		return LNKup_Org_Supply_Intel::vendor_market_count( $city, $state );
 	}
 }

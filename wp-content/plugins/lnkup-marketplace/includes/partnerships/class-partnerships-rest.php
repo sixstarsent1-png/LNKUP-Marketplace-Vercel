@@ -28,6 +28,11 @@ class LNKup_Partnerships_REST {
 			'callback' => array( __CLASS__, 'get_overview' ),
 		) ) );
 
+		register_rest_route( self::NS, '/partners/readiness', array_merge( $admin, array(
+			'methods'  => 'GET',
+			'callback' => array( __CLASS__, 'get_readiness' ),
+		) ) );
+
 		register_rest_route( self::NS, '/partners/referrals', array_merge( $admin, array(
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'get_referrals' ),
@@ -198,6 +203,14 @@ class LNKup_Partnerships_REST {
 			return $ready;
 		}
 		return rest_ensure_response( LNKup_Partnerships::overview() );
+	}
+
+	public static function get_readiness() {
+		$ready = self::require_ready();
+		if ( is_wp_error( $ready ) ) {
+			return $ready;
+		}
+		return rest_ensure_response( LNKup_Partnership_Readiness::report() );
 	}
 
 	public static function get_referrals( WP_REST_Request $request ) {

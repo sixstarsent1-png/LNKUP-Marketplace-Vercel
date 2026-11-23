@@ -5,6 +5,7 @@ $tests = @(
   'org-growth-integrity-test',
   'org-growth-test',
   'org-growth-analytics-test',
+  'org-supply-intel-test',
   'organizer-activation-test',
   'financial-fee-backfill-test'
 )

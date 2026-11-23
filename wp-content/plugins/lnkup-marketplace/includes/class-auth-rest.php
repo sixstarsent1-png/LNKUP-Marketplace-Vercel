@@ -177,6 +177,11 @@ class LNKup_Auth_REST {
 				'role'             => $role_param,
 				'full_name'        => sanitize_text_field( (string) $request->get_param( 'full_name' ) ),
 				'terms'            => $terms,
+				// Organizer basics (optional here so older app builds keep working).
+				'organization_name' => sanitize_text_field( (string) $request->get_param( 'organization_name' ) ),
+				'city'             => sanitize_text_field( (string) $request->get_param( 'city' ) ),
+				'state'            => sanitize_text_field( (string) $request->get_param( 'state' ) ),
+				'category'         => sanitize_title( (string) $request->get_param( 'category' ) ),
 			)
 		);
 
@@ -257,7 +262,8 @@ class LNKup_Auth_REST {
 	}
 
 	/**
-	 * Vendors, organizers, and admins may use the app.
+	 * Vendors, organizers, admins and active partner accounts (City Connector, affiliate,
+	 * strategic partner contact) may use the app.
 	 *
 	 * @param WP_User $user User.
 	 */
@@ -268,6 +274,9 @@ class LNKup_Auth_REST {
 			if ( in_array( $role, $roles, true ) ) {
 				return true;
 			}
+		}
+		if ( array_intersect( array( 'lnkup_connector', 'lnkup_partner' ), $roles ) && class_exists( 'LNKup_Roles' ) && LNKup_Roles::is_connector( (int) $user->ID ) ) {
+			return true;
 		}
 		return ! empty( $user->allcaps['lnkup_manage_all'] );
 	}

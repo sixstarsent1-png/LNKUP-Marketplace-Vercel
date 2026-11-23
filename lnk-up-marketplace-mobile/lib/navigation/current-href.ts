@@ -31,7 +31,7 @@ export function currentHref(segments: string[], params: Params): string {
  * Href from the URL that opened the app (deep link, universal link, or the browser address on web),
  * scoped to `group` when the path is one of that shell's screens.
  */
-export function hrefFromLinkingUrl(url: string | null | undefined, group: "(vendor)" | "(organizer)"): string | null {
+export function hrefFromLinkingUrl(url: string | null | undefined, group: "(vendor)" | "(organizer)" | "(partner)"): string | null {
   if (!url) return null
   let parsed: ReturnType<typeof Linking.parse>
   try {
@@ -56,7 +56,7 @@ export function hrefFromLinkingUrl(url: string | null | undefined, group: "(vend
  * URL the app was opened with.
  */
 export function shellReturnTo(
-  group: "(vendor)" | "(organizer)",
+  group: "(vendor)" | "(organizer)" | "(partner)",
   segments: string[],
   params: Params,
   linkingUrl: string | null | undefined,

@@ -264,11 +264,16 @@ class LNKup_Marketplace_REST {
 	}
 
 	public static function track_event( WP_REST_Request $request ) {
-		$type = sanitize_key( $request->get_param( 'event_type' ) ?: 'unknown' );
-		$data = (array) $request->get_param( 'data' );
-		$opp  = absint( $request->get_param( 'opportunity_id' ) );
-		LNKup_Marketplace_Analytics::track( $type, $data, get_current_user_id(), $opp );
-		return rest_ensure_response( array( 'success' => true ) );
+		$result = LNKup_Match_Funnel::track_client_event(
+			(string) $request->get_param( 'event_type' ),
+			$request->get_param( 'data' ),
+			absint( $request->get_param( 'opportunity_id' ) )
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		// Unknown or not-applicable events are ignored (202) so older clients never error.
+		return new WP_REST_Response( array( 'success' => $result['recorded'], 'ignored' => $result['reason'] ?: null ), $result['recorded'] ? 200 : 202 );
 	}
 
 	public static function get_favorites() {

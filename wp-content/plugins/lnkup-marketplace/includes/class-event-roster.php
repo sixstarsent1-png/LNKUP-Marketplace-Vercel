@@ -78,13 +78,20 @@ class LNKup_Event_Roster {
 				if ( ! $paid ) {
 					$keys[] = 'missing_payment';
 				} else {
-					$readiness = (string) $row['readiness'];
-					$doc_code  = '';
-					if ( class_exists( 'LNKup_Verification' ) ) {
-						$doc_ctx  = LNKup_Verification::get_application_document_context( (int) $app->ID );
-						$doc_code = (string) ( $doc_ctx['code'] ?? '' );
+					$readiness   = (string) $row['readiness'];
+					$outstanding = false;
+					if ( LNKup_Feature_Flags::document_review() ) {
+						// Per-event organizer decisions are authoritative for this event's roster.
+						foreach ( LNKup_Organizer_Documents::requirements_for_application( (int) $app->ID ) as $requirement ) {
+							if ( ! in_array( $requirement['status'], array( 'accepted', 'waived' ), true ) ) {
+								$outstanding = true;
+							}
+						}
+					} else {
+						$doc_code    = class_exists( 'LNKup_Verification' ) ? (string) ( LNKup_Verification::get_application_document_context( (int) $app->ID )['code'] ?? '' ) : '';
+						$outstanding = in_array( $doc_code, array( 'pending', 'missing' ), true ) || LNKup_Vendor_Readiness::STATUS_NEEDS_DOCUMENTS === $readiness;
 					}
-					if ( in_array( $doc_code, array( 'pending', 'missing' ), true ) || LNKup_Vendor_Readiness::STATUS_NEEDS_DOCUMENTS === $readiness ) {
+					if ( $outstanding ) {
 						$keys[] = 'missing_documents';
 					} else {
 						$keys[] = 'paid';

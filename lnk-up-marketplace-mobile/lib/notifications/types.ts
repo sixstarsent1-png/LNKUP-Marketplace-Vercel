@@ -62,6 +62,15 @@ export const NOTIFICATION_TYPES = [
   "organizer_checkin_activity",
   "organizer_event_completed",
   "organizer_ops_summary",
+  // Server — partner (City Connector, affiliate, strategic partner).
+  "partner_application",
+  "partner_referral",
+  "partner_commission",
+  "partner_payout",
+  "partner_lead",
+  // Server — vendor/organizer Referral Invites.
+  "referral_joined",
+  "referral_credit",
   // Shared.
   "platform_announcement",
 ] as const
@@ -77,7 +86,10 @@ export function normalizeNotificationType(raw: unknown): LnkupNotificationType {
 
 export type InboxTab = "all" | "applications" | "payments" | "events" | "opportunities" | "operations"
 
-export function inboxTabsFor(role: "vendor" | "organizer"): ReadonlyArray<{ value: InboxTab; label: string }> {
+export function inboxTabsFor(role: "vendor" | "organizer" | "partner"): ReadonlyArray<{ value: InboxTab; label: string }> {
+  if (role === "partner") {
+    return [{ value: "all", label: "All" }]
+  }
   if (role === "organizer") {
     return [
       { value: "all", label: "All" },
@@ -104,7 +116,7 @@ export type LnkupNotification = {
   createdAt?: string
   readAt?: string
   severity?: "info" | "success" | "warning" | "urgent"
-  role?: "vendor" | "organizer"
+  role?: "vendor" | "organizer" | "partner"
   href?: string
   actionLabel?: string
   requestId?: string
@@ -203,6 +215,13 @@ const TYPE_LABELS: Record<LnkupNotificationType, string> = {
   organizer_checkin_activity: "Check-in",
   organizer_event_completed: "Event wrap-up",
   organizer_ops_summary: "Summary",
+  partner_application: "Partner account",
+  partner_referral: "Referral",
+  partner_commission: "Commission",
+  partner_payout: "Payout",
+  partner_lead: "Lead update",
+  referral_joined: "Invite joined",
+  referral_credit: "Referral credit",
   platform_announcement: "LNKup",
 }
 

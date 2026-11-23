@@ -15,7 +15,7 @@ import {
  * so screens can fall back to the older composed feed.
  */
 
-export type CommsRole = "vendor" | "organizer"
+export type CommsRole = "vendor" | "organizer" | "partner"
 
 export function isCommsUnavailable(error: unknown): boolean {
   return error instanceof WpFetchError && (error.status === 404 || error.code === "rest_no_route")
@@ -50,7 +50,7 @@ const PRIORITIES = new Set(["critical", "high", "normal", "promotional"])
 /** Map a server inbox row to the app's notification shape. */
 export function normalizeInboxItem(raw: WpInboxItem): LnkupNotification | null {
   if (!raw || !raw.id || !raw.title) return null
-  const role = raw.role === "organizer" || raw.role === "vendor" ? raw.role : undefined
+  const role = raw.role === "organizer" || raw.role === "vendor" || raw.role === "partner" ? raw.role : undefined
   return {
     id: String(raw.id),
     type: normalizeNotificationType(raw.type),

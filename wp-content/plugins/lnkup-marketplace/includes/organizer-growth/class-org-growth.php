@@ -25,6 +25,8 @@ class LNKup_Org_Growth {
 		'org_growth_sender_postal_address'  => 'textarea',
 		'org_growth_import_max_rows'        => 'int',
 		'org_growth_activation_paid_bookings' => 'int',
+		'org_growth_supply_min_active_vendors' => 'int',
+		'org_growth_supply_surplus_ratio'      => 'int',
 	);
 
 	public static function init(): void {
@@ -34,6 +36,7 @@ class LNKup_Org_Growth {
 		LNKup_Org_Lead_Import::init();
 		LNKup_Org_Lead_Tasks::init();
 		LNKup_Org_Growth_REST::init();
+		LNKup_Org_Supply_Intel::init();
 		add_action( 'lnkup_marketplace_daily', array( 'LNKup_Org_Lead_Scoring', 'rescore_stale' ), 50 );
 		add_action( 'lnkup_org_growth_rescore', array( 'LNKup_Org_Lead_Scoring', 'run_rescore' ) );
 		add_action(

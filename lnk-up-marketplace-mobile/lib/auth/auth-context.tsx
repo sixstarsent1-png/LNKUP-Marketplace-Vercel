@@ -30,6 +30,7 @@ import {
   resolveHomeHref,
   saveHomePreference,
   sessionHasOrganizer,
+  sessionHasPartner,
   sessionHasVendor,
   type AppHomeRole,
   type HomeHref,
@@ -44,6 +45,7 @@ type AuthContextValue = {
   isAuthenticated: boolean
   isOrganizer: boolean
   isVendor: boolean
+  isPartner: boolean
   login: (username: string, password: string) => Promise<void>
   register: (payload: RegisterPayload) => Promise<void>
   enterDemoSession: (opts?: { displayName?: string; role?: AppHomeRole }) => Promise<void>
@@ -144,17 +146,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (opts?: { displayName?: string; role?: AppHomeRole }) => {
       const role = opts?.role ?? "vendor"
       const isOrg = role === "organizer"
+      const isPartnerDemo = role === "partner"
       const next: MobileSession = {
-        username: isOrg ? "organizer_demo" : "vendor_demo",
+        username: isOrg ? "organizer_demo" : isPartnerDemo ? "partner_demo" : "vendor_demo",
         appPassword: "demo",
         token: undefined,
         user: {
-          id: isOrg ? 1 : 0,
-          name: opts?.displayName?.trim() || (isOrg ? "Organizer Demo" : "Vendor Demo"),
-          slug: isOrg ? "organizer-demo" : "vendor-demo",
-          roles: isOrg
-            ? ["lnkup_organizer"]
-            : ["lnkup_vendor"],
+          id: isOrg ? 1 : isPartnerDemo ? 2 : 0,
+          name: opts?.displayName?.trim() || (isOrg ? "Organizer Demo" : isPartnerDemo ? "Partner Demo" : "Vendor Demo"),
+          slug: isOrg ? "organizer-demo" : isPartnerDemo ? "partner-demo" : "vendor-demo",
+          roles: isOrg ? ["lnkup_organizer"] : isPartnerDemo ? ["lnkup_connector"] : ["lnkup_vendor"],
         },
       }
       await saveSession(next)
@@ -197,6 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: Boolean(session),
       isOrganizer: sessionHasOrganizer(session),
       isVendor: sessionHasVendor(session),
+      isPartner: sessionHasPartner(session),
       login,
       register,
       enterDemoSession,

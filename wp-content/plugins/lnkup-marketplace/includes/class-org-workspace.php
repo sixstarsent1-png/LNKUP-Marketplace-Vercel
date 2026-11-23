@@ -46,10 +46,23 @@ class LNKup_Org_Workspace {
 	 * @param string $role  vendor|organizer.
 	 */
 	public static function staff_nav_items( $items, $role ) {
-		if ( 'organizer' !== $role || ! LNKup_Capabilities::is_team_only_member() ) {
+		if ( 'organizer' !== $role ) {
 			return $items;
 		}
-		$keep = array( 'home', 'team', 'help' );
+		if ( ! LNKup_Feature_Flags::organizer_ops() ) {
+			$items = array_values(
+				array_filter(
+					(array) $items,
+					static function ( $item ) {
+						return 'tasks' !== ( $item['view'] ?? '' );
+					}
+				)
+			);
+		}
+		if ( ! LNKup_Capabilities::is_team_only_member() ) {
+			return $items;
+		}
+		$keep = array( 'home', 'team', 'help', 'tasks' );
 		if ( LNKup_Feature_Flags::application_review() ) {
 			$keep[] = 'applications';
 		}
@@ -136,6 +149,10 @@ class LNKup_Org_Workspace {
 								<strong><?php echo esc_html( get_the_title( $event_id ) ); ?></strong>
 								<span class="lnkup-muted"><?php echo esc_html( (string) get_post_meta( $event_id, '_lnkup_event_date', true ) ); ?></span>
 								<a href="<?php echo esc_url( add_query_arg( array( 'event' => $event_id, 'roster' => 1 ), lnkup_page_url_helper( 'organizer-dashboard' ) ) ); ?>"><?php esc_html_e( 'Roster', 'lnkup-marketplace' ); ?></a>
+								<?php if ( LNKup_Feature_Flags::organizer_ops() ) : ?>
+									· <a href="<?php echo esc_url( add_query_arg( array( 'event' => $event_id, 'tab' => 'readiness' ), lnkup_page_url_helper( 'organizer-dashboard' ) ) ); ?>"><?php esc_html_e( 'Readiness', 'lnkup-marketplace' ); ?></a>
+									· <a href="<?php echo esc_url( add_query_arg( array( 'event' => $event_id, 'tab' => 'tasks' ), lnkup_page_url_helper( 'organizer-dashboard' ) ) ); ?>"><?php esc_html_e( 'Tasks', 'lnkup-marketplace' ); ?></a>
+								<?php endif; ?>
 								<?php if ( in_array( (int) $event_id, $checkin_ok, true ) ) : ?>
 									· <a href="<?php echo esc_url( add_query_arg( array( 'event' => $event_id, 'scan' => 1 ), lnkup_page_url_helper( 'organizer-dashboard' ) ) ); ?>"><?php esc_html_e( 'Check-in', 'lnkup-marketplace' ); ?></a>
 								<?php endif; ?>

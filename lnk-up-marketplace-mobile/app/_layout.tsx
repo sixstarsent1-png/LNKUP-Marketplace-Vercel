@@ -52,6 +52,7 @@ function RootNavigator() {
         <Stack.Screen name="signup" />
         <Stack.Screen name="(vendor)" />
         <Stack.Screen name="(organizer)" />
+        <Stack.Screen name="(partner)" />
         <Stack.Screen name="pass/[applicationId]" options={{ headerShown: false }} />
         <Stack.Screen name="apply/[opportunityId]" options={{ headerShown: false }} />
         <Stack.Screen name="opportunity/[opportunityId]" options={{ headerShown: false }} />

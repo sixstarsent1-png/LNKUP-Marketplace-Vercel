@@ -1,0 +1,386 @@
+/* Organizer event panels (readiness, tasks, documents, my tasks) and the Overview v2. */
+
+.lnkup-ops2 {
+	display: grid;
+	gap: 16px;
+}
+
+.lnkup-ops2__loading {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	padding: 24px;
+	color: #666;
+}
+
+.lnkup-ops2__spinner {
+	width: 18px;
+	height: 18px;
+	border: 2px solid #e5e5e5;
+	border-top-color: #111;
+	border-radius: 50%;
+	animation: lnkup-ops2-spin 0.8s linear infinite;
+}
+
+@keyframes lnkup-ops2-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.lnkup-ops2__spinner {
+		animation: none;
+	}
+}
+
+.lnkup-ops2__badge {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: #f1f1f1;
+	color: #111;
+	font-size: 12px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.lnkup-ops2__badge.is-good {
+	background: #c6f432;
+}
+
+.lnkup-ops2__badge.is-warn {
+	background: #fff4d6;
+}
+
+.lnkup-ops2__badge.is-info {
+	background: #eef4ff;
+}
+
+.lnkup-ops2__flash {
+	margin: 0;
+	padding: 10px 12px;
+	border-radius: 10px;
+	background: #f3fbd6;
+}
+
+.lnkup-ops2__flash.is-error {
+	background: #fdecec;
+	color: #8a1f1f;
+}
+
+.lnkup-ops2__inline {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+}
+
+.lnkup-ops2__field {
+	display: grid;
+	gap: 4px;
+	font-size: 14px;
+}
+
+.lnkup-ops2__field input,
+.lnkup-ops2__field select,
+.lnkup-ops2__field textarea,
+.lnkup-ops2__inline select,
+.lnkup-ops2__inline textarea {
+	min-height: 40px;
+	border: 1px solid #d4d4d4;
+	border-radius: 10px;
+	padding: 8px 10px;
+	font: inherit;
+	background: #fff;
+}
+
+.lnkup-ops2__form {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+	gap: 10px;
+	align-items: end;
+	padding: 14px;
+	border: 1px solid #eee;
+	border-radius: 14px;
+	background: #fff;
+}
+
+.lnkup-ops2__chips {
+	display: flex;
+	gap: 8px;
+	overflow-x: auto;
+	padding-bottom: 2px;
+}
+
+.lnkup-ops2__chip {
+	flex: 0 0 auto;
+	border: 1px solid #d4d4d4;
+	background: #fff;
+	border-radius: 999px;
+	padding: 6px 12px;
+	min-height: 36px;
+	font: inherit;
+	font-size: 14px;
+	cursor: pointer;
+}
+
+.lnkup-ops2__chip.is-active {
+	background: #111;
+	border-color: #111;
+	color: #fff;
+}
+
+.lnkup-ops2__chip:focus-visible {
+	outline: 2px solid #c6f432;
+	outline-offset: 2px;
+}
+
+/* Readiness */
+.lnkup-ops2__summary {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px 20px;
+	align-items: center;
+	padding: 16px;
+	border-radius: 16px;
+	background: #111;
+	color: #fff;
+}
+
+.lnkup-ops2__summary .lnkup-muted {
+	color: rgba(255, 255, 255, 0.75);
+}
+
+.lnkup-ops2__big {
+	font-size: 28px;
+}
+
+.lnkup-ops2__meter,
+.lnkup-overview-v2__meter {
+	flex: 1 1 160px;
+	height: 8px;
+	border-radius: 999px;
+	background: rgba(198, 244, 50, 0.25);
+	overflow: hidden;
+}
+
+.lnkup-ops2__meter span,
+.lnkup-overview-v2__meter span {
+	display: block;
+	height: 100%;
+	background: #c6f432;
+}
+
+.lnkup-overview-v2__meter {
+	background: #eee;
+}
+
+.lnkup-ops2__next h3 {
+	font-size: 15px;
+	margin: 0 0 6px;
+}
+
+.lnkup-ops2__next ol {
+	margin: 0;
+	padding-left: 20px;
+	display: grid;
+	gap: 4px;
+}
+
+.lnkup-ops2__checklist,
+.lnkup-ops2__task-list,
+.lnkup-ops2__comments,
+.lnkup-ops2__list-plain {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 8px;
+}
+
+.lnkup-ops2__check {
+	padding: 12px 14px;
+	border: 1px solid #eee;
+	border-left-width: 4px;
+	border-radius: 12px;
+	background: #fff;
+	display: grid;
+	gap: 4px;
+}
+
+.lnkup-ops2__check.is-verified {
+	border-left-color: #c6f432;
+}
+
+.lnkup-ops2__check.is-confirmed {
+	border-left-color: #7aa7ff;
+}
+
+.lnkup-ops2__check.is-incomplete {
+	border-left-color: #f0b400;
+}
+
+.lnkup-ops2__check p {
+	margin: 0;
+}
+
+.lnkup-ops2__check-head {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.lnkup-ops2__mark {
+	font-size: 13px;
+	color: #335;
+}
+
+/* Tasks */
+.lnkup-ops2__task {
+	border: 1px solid #eee;
+	border-radius: 12px;
+	background: #fff;
+	padding: 10px 12px;
+}
+
+.lnkup-ops2__task.is-overdue {
+	border-color: #f0b400;
+}
+
+.lnkup-ops2__task.is-done strong,
+.lnkup-ops2__task.is-cancelled strong {
+	text-decoration: line-through;
+	color: #777;
+}
+
+.lnkup-ops2__task-main {
+	display: grid;
+	grid-template-columns: auto 1fr auto auto auto;
+	gap: 10px;
+	align-items: center;
+}
+
+.lnkup-ops2__task-main input[type="checkbox"] {
+	width: 22px;
+	height: 22px;
+}
+
+.lnkup-ops2__task-details {
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid #f0f0f0;
+	display: grid;
+	gap: 8px;
+}
+
+.lnkup-ops2__pre {
+	white-space: pre-wrap;
+	margin: 0;
+}
+
+.lnkup-ops2__template-manager {
+	display: grid;
+	gap: 10px;
+	padding-top: 16px;
+	border-top: 1px solid #eee;
+}
+
+/* Documents */
+.lnkup-ops2__table-wrap {
+	overflow-x: auto;
+	border: 1px solid #eee;
+	border-radius: 14px;
+	background: #fff;
+}
+
+.lnkup-ops2__table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 14px;
+}
+
+.lnkup-ops2__table th,
+.lnkup-ops2__table td {
+	text-align: left;
+	vertical-align: top;
+	padding: 10px 12px;
+	border-bottom: 1px solid #f0f0f0;
+}
+
+/* Dialog */
+.lnkup-ops2__modal {
+	position: fixed;
+	inset: 0;
+	z-index: 1100;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	background: rgba(0, 0, 0, 0.45);
+}
+
+.lnkup-ops2__modal-card {
+	background: #fff;
+	border-radius: 16px;
+	padding: 20px;
+	width: min(520px, 100%);
+	display: grid;
+	gap: 12px;
+}
+
+.lnkup-ops2__modal-card h2 {
+	font-size: 18px;
+	margin: 0;
+}
+
+.lnkup-ops2__modal-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+/* Overview v2 */
+.lnkup-overview-v2__events {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+	gap: 12px;
+}
+
+.lnkup-overview-v2__event {
+	display: grid;
+	gap: 8px;
+	padding: 14px;
+	border: 1px solid #eee;
+	border-radius: 14px;
+	background: #fff;
+}
+
+.lnkup-overview-v2__event header {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	align-items: baseline;
+}
+
+.lnkup-overview-v2__event h3 {
+	font-size: 16px;
+	margin: 0;
+}
+
+.lnkup-overview-v2__stats {
+	margin: 0;
+	font-size: 14px;
+}
+
+.lnkup-overview-v2__next {
+	font-size: 14px;
+	font-weight: 600;
+}
+
+@media (max-width: 640px) {
+	.lnkup-ops2__task-main {
+		grid-template-columns: auto 1fr;
+	}
+}

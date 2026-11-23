@@ -182,9 +182,20 @@ Blocked vendors get `previously_declined` (REST 409, button state `declined`). D
 
 **Tests:** `scripts/e2e/php/reapply-policy-test.php`, Expo `__tests__/apply-flow.test.ts` and `opportunity-cta.test.ts`.
 
-## 11. Not built in this pass
+## 11. Phases 8–9: tuning tools and staged rollout (plugin 12.33.0)
 
-- Phase 7: geographic supply & demand, Organizer Acquisition OS feed (that OS does not exist yet).
-- Phase 8–9: tuning and staged rollout.
-- `/marketplace/track/event` still accepts any event type (multiple clients send free-form names).
+Runbook: [MATCHING_ROLLOUT.md](MATCHING_ROLLOUT.md).
+
+- **Staged audience (`LNKup_Rollout`, option `lnkup_rollout`):** the flag still turns a feature on or off; the audience narrows who sees it (internal allowlist + admins, 5/25/50%, everyone) with a stable per-user bucket per group (`matching_vendor`, `matching_organizer`, `apply`). Covers the matching, apply and Communications discovery/recruitment flags. `LNKup_Match_Settings::enabled( $flag, $user_id )` checks the audience; `active()` is used by cron and compute. Communications checks `enabled_for()` at dispatch and send time (`cohort_excluded`) and leaves delegated core emails to core for people outside the audience. Widening runs checks (backfill, queue freshness, data quality, 7 days of transactional sends, unsubscribe rate, 3 days at stage) that can be overridden with a note. WP-CLI: `wp lnkup rollout status|set`.
+- **Funnel:** `/marketplace/track/event` now accepts only known client events (unknown ones get 202 and are dropped), requires sign-in for `match_click`, caps 120 events per minute per user/IP, and flattens data. `recommendation_clicked` is stored as `match_click`. `match_impression` records `items [{opportunity_id, band, position}]`, `rules_version` and the audience. `match_rec_application` records applications that followed a click or impression within 14 days (`LNKup_Match_Funnel`). Analytics gains `(user_id, event_type)` and `opportunity_id` indexes. WordPress, Next.js and Expo rails send `match_click` with section and position.
+- **Quality report (`LNKup_Match_Quality`):** impressions, clicks, CTR, applications, approvals and paid by band, section and rules version, plus applications per vendor in vs. outside the audience. Shown on Marketplace Intelligence → Overview (10-minute cache).
+- **Versioned rules:** weight / minimum-score changes need a note, create a version (`lnkup_match_rules_versions`, `lnkup_match_rules_version`) and recompute; results store `rules_version`. Revert creates a new version pointing at the old one. Flag and cap changes no longer queue a full rebuild.
+- **Preview (`LNKup_Match_Simulator`):** scores a deterministic sample (up to 300 vendors, 10-second budget) with current and candidate rules using the pure engine; no writes.
+- **Health:** queue age, consecutive failed runs, backfill progress; admin notice and an email (6-hour throttle) when matching is stale; "Rollout & health" tab.
+- **Tests:** `rollout-test.php` 32/32, `match-tuning-test.php` 31/31, `match-funnel-test.php` 24/24.
+
+## 12. Not built in this pass
+
+- Phase 7: geographic supply & demand, Organizer Acquisition OS feed.
 - Vendor centroids depend on Nominatim; profiles whose city cannot be located score geography by city/state strings only.
+- A/B testing between two rule sets (preview + versions + revert only).

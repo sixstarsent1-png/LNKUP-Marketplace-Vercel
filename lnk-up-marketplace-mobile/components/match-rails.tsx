@@ -10,6 +10,7 @@ import { isAbortError } from "@/lib/api/wp-client"
 import {
   VENDOR_MATCH_SECTION_TITLES,
   fetchVendorMatchSection,
+  trackMatchClick,
   type MatchedOpportunity,
   type MatchedTour,
   type VendorMatchSection,
@@ -78,7 +79,7 @@ export function MatchRails({ auth, savedIds, onToggleSave }: Props) {
         return (
           <View key={section} style={styles.section} testID={`match-rail-${section}`}>
             <SectionTitle>{VENDOR_MATCH_SECTION_TITLES[section]}</SectionTitle>
-            {result.items.slice(0, 3).map((item) =>
+            {result.items.slice(0, 3).map((item, index) =>
               item.kind === "tour" ? (
                 <TourRow key={`tour-${item.id}`} tour={item} />
               ) : (
@@ -87,6 +88,9 @@ export function MatchRails({ auth, savedIds, onToggleSave }: Props) {
                   item={item}
                   saved={item.opportunity.opportunityId ? savedIds.has(item.opportunity.opportunityId) : false}
                   onToggleSave={onToggleSave}
+                  onOpen={(opportunityId) =>
+                    trackMatchClick(auth, { opportunityId, section, position: index + 1, band: item.match?.band })
+                  }
                 />
               ),
             )}
@@ -101,10 +105,12 @@ function OpportunityRow({
   item,
   saved,
   onToggleSave,
+  onOpen,
 }: {
   item: MatchedOpportunity
   saved: boolean
   onToggleSave: (opportunityId: number) => void
+  onOpen: (opportunityId: number) => void
 }) {
   const id = item.opportunity.opportunityId
   return (
@@ -126,8 +132,22 @@ function OpportunityRow({
         item={item.opportunity}
         saved={saved}
         onToggleSave={id ? () => onToggleSave(id) : undefined}
-        onPress={id ? () => router.push(`/opportunity/${id}` as Href) : undefined}
-        onApply={id ? () => router.push(`/apply/${id}` as Href) : undefined}
+        onPress={
+          id
+            ? () => {
+                onOpen(id)
+                router.push(`/opportunity/${id}` as Href)
+              }
+            : undefined
+        }
+        onApply={
+          id
+            ? () => {
+                onOpen(id)
+                router.push(`/apply/${id}` as Href)
+              }
+            : undefined
+        }
       />
     </View>
   )
