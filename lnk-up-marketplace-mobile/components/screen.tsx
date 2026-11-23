@@ -1,4 +1,4 @@
-import type { ReactElement, ReactNode } from "react"
+import { useEffect, useRef, type ReactElement, type ReactNode } from "react"
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -122,7 +122,17 @@ type ScreenListProps<T> = Omit<ScreenProps, "scroll" | "children" | "style"> & {
   listFooter?: ReactNode
   onEndReached?: () => void
   testID?: string
+  /**
+   * When set, the scroll offset is remembered under this key and restored when the list remounts,
+   * or when `focused` turns true again (the web build hides a tab screen under a pushed route and
+   * the browser drops its scroll position).
+   */
+  restoreKey?: string
+  /** Screen focus from the navigator; pass it together with `restoreKey`. */
+  focused?: boolean
 }
+
+const savedListOffsets = new Map<string, number>()
 
 /**
  * `Screen` whose body is a virtualized FlatList, for long or paginated lists. Same title, pinned
@@ -145,12 +155,48 @@ export function ScreenList<T>({
   listFooter,
   onEndReached,
   testID,
+  restoreKey,
+  focused,
 }: ScreenListProps<T>) {
   const { contentPadding } = useBreakpoint()
   const column = [constrainedColumnStyle(layout.contentMaxWidth), { paddingHorizontal: contentPadding }]
+  const listRef = useRef<FlatList<T>>(null)
+  const restored = useRef(false)
+
+  useEffect(() => {
+    if (!restoreKey || restored.current || data.length === 0) return
+    restored.current = true
+    const offset = savedListOffsets.get(restoreKey)
+    if (!offset) return
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset, animated: false })
+    })
+  }, [restoreKey, data.length])
+
+  const offsetAtBlur = useRef<number | null>(null)
+  useEffect(() => {
+    if (!restoreKey || focused === undefined) return
+    if (!focused) {
+      offsetAtBlur.current = savedListOffsets.get(restoreKey) ?? null
+      return
+    }
+    const offset = offsetAtBlur.current
+    offsetAtBlur.current = null
+    if (!offset) return
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset, animated: false })
+    })
+  }, [focused, restoreKey])
 
   const list = (
     <FlatList
+      ref={listRef}
+      onScroll={
+        restoreKey
+          ? (event) => savedListOffsets.set(restoreKey, event.nativeEvent.contentOffset.y)
+          : undefined
+      }
+      scrollEventThrottle={restoreKey ? 16 : undefined}
       style={styles.flex}
       contentContainerStyle={styles.scroll}
       data={data}
