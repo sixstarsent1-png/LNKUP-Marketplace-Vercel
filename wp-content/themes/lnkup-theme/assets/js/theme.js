@@ -97,7 +97,8 @@ document.addEventListener('DOMContentLoaded', function () {
   } catch (e) {
     views = 1;
   }
-  if (!dismissed && views >= 2 && !document.body.classList.contains('home')) {
+  var stickyAction = document.querySelector('.lnkup-public-event-bar, .lnkup-mp-v2__compare-tray:not([hidden]), [data-sticky-action]');
+  if (!dismissed && views >= 2 && !document.body.classList.contains('home') && !stickyAction) {
     sheet.hidden = false;
   }
 

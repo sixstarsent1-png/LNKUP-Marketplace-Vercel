@@ -30,6 +30,8 @@ const SCREENS = [
   { id: 'home', url: `${WP}/`, full: true, sections: 'main.lnkup-site__main > section, .lnkup-site > footer' },
   { id: 'explore', url: `${WP}/opportunities/` },
   { id: 'explore-city', url: `${WP}/opportunities/?city=Charlotte` },
+  { id: 'explore-empty', url: `${WP}/opportunities/?city=Boise` },
+  { id: 'explore-sheet', url: `${WP}/opportunities/`, click: '#lnkup-filter-toggle' },
   { id: 'event-flyer', url: `${WP}/lnkup_event/atlanta-greek-picnic-weekend-festival-and-vendor-village-featuring-live-djs-food-row-and-pop-up-shops/`, full: true },
   { id: 'event-no-art', url: `${WP}/lnkup_event/raleigh-sunday-flea/` },
   { id: 'tour', url: `${WP}/tours/e2e-southern-tour/`, full: true },
@@ -97,6 +99,10 @@ for (const [width, ctxOptions] of Object.entries(WIDTHS)) {
     try {
       await page.goto(screen.url, { waitUntil: 'networkidle', timeout: 45000 });
       await page.waitForTimeout(1200);
+      if (screen.click) {
+        await page.locator(screen.click).first().click();
+        await page.waitForTimeout(600);
+      }
       await page.screenshot({ path: file, type: 'jpeg', quality: 70, fullPage: Boolean(screen.full) });
       if (screen.full) {
         await page.screenshot({ path: file.replace(/\.jpg$/, '-top.jpg'), type: 'jpeg', quality: 75 });

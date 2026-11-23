@@ -40,9 +40,13 @@ test.describe('Marketplace V2', () => {
   test('filter drawer opens on mobile', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/opportunities/');
-    await page.locator('#lnkup-filter-fab').click();
-    await expect(page.locator('#lnkup-filter-drawer')).toBeVisible();
+    await page.getByRole('button', { name: /^filters/i }).first().click();
+    const sheet = page.getByRole('dialog', { name: 'Filters' });
+    await expect(sheet).toBeVisible();
     await expect(page.getByRole('button', { name: /apply filters/i })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+    await expect(page.getByRole('button', { name: /^filters/i }).first()).toBeFocused();
   });
 
   test('clear all filters from empty state', async ({ page }) => {
@@ -84,7 +88,7 @@ test.describe('Marketplace V2', () => {
     await page.goto('/opportunities/');
     await expect(page.locator('#lnkup-results-grid .lnkup-event-card--v2').first()).toBeVisible({ timeout: 15000 });
     await expect(page.locator('#lnkup-apply-panel')).toHaveCount(0);
-    const applyBtn = page.locator('#lnkup-results-grid .lnkup-event-card--v2').first().getByRole('link', { name: /^apply$/i });
+    const applyBtn = page.locator('#lnkup-results-grid .lnkup-event-card--v2').first().getByRole('link', { name: /^apply to /i });
     await applyBtn.click();
     const modal = page.locator('#lnkup-apply-modal');
     await expect(modal).toBeVisible();

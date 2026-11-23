@@ -9,6 +9,22 @@
 
 defined( 'ABSPATH' ) || exit;
 
+/*
+ * Explore interaction layer (filter sheet, filter count, empty-state actions, return position).
+ * Loaded only where the marketplace feed script is.
+ */
+add_action(
+	'wp_enqueue_scripts',
+	static function () {
+		if ( ! wp_script_is( 'lnkup-marketplace-v2', 'enqueued' ) ) {
+			return;
+		}
+		$file = LNKUP_PLUGIN_DIR . 'public/js/explore-ux.js';
+		wp_enqueue_script( 'lnkup-explore-ux', LNKUP_PLUGIN_URL . 'public/js/explore-ux.js', array( 'lnkup-marketplace-v2' ), LNKUP_VERSION . '.' . ( file_exists( $file ) ? (string) filemtime( $file ) : '0' ), true );
+	},
+	100
+);
+
 /**
  * Summarize an event from its opportunity rows.
  *
