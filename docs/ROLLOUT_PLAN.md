@@ -2,7 +2,7 @@
 
 How the features built in the buildout (PRs #9 to #16) go from "merged, flags off" to "on for everyone". Nothing here is switched on by merging. Each step is a settings change made by a named owner, and every step can be reversed by turning the same setting back off.
 
-Related: [BUILDOUT_CHECKLIST.md](BUILDOUT_CHECKLIST.md) (what was verified), [MATCHING_DISCOVERY.md](MATCHING_DISCOVERY.md) (matching gates), `wp-content/plugins/lnkup-marketplace/FINANCIAL.md` (money).
+Related: [BUILDOUT_CHECKLIST.md](BUILDOUT_CHECKLIST.md) (what was verified), [ORGANIZER_OS_ROLLOUT.md](ORGANIZER_OS_ROLLOUT.md) (Organizer OS tables, crons, per-step checks and full removal), [MATCHING_DISCOVERY.md](MATCHING_DISCOVERY.md) (matching gates), `wp-content/plugins/lnkup-marketplace/FINANCIAL.md` (money).
 
 ## Controls
 
