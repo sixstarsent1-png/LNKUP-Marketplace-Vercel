@@ -18,6 +18,11 @@ const bootstrap = read(join(plugin, 'lnkup-marketplace.php'));
 const rewards = read(join(plugin, 'includes/class-connector-rewards.php'));
 const tables = read(join(moduleDir, 'class-partner-tables.php'));
 
+const readiness = read(join(moduleDir, 'class-partnership-readiness.php'));
+const preflight = read('scripts/prod/partnerships-preflight.php');
+const WRITE_CALLS = /update_option|add_option|delete_option|set_transient|delete_transient|update_user_meta|wp_schedule|wp_clear_scheduled|->(insert|update|delete|replace|query)\(/;
+const transientCalls = readiness.match(/(get|set|delete)_transient\([^)]*\)/g) || [];
+
 const routeBlocks = rest.split('register_rest_route(').slice(1);
 const unguarded = routeBlocks.filter((b) => {
   const body = b.split(/register_rest_route\(|\n\t}\n/)[0];
@@ -40,6 +45,10 @@ const checks = [
   ['connector reversals are proportional', /reverse_for_payment\( int \$payment_id, string \$why = 'refund', float \$ratio = 1\.0 \)/.test(rewards)],
   ['admin actions verify a nonce', /check_admin_referer\( self::NONCE \)/.test(read(adminFile))],
   ['CSV export neutralizes formula injection', /csv_cell/.test(read(join(moduleDir, 'class-partnerships.php')))],
+  ['readiness REST route is admin-only', /'\/partners\/readiness', array_merge\( \$admin/.test(rest)],
+  ['production preflight contains no write calls', !WRITE_CALLS.test(preflight) && /report\( false \)/.test(preflight)],
+  ['readiness service only writes its own cache key', !WRITE_CALLS.test(readiness.replace(/(set|delete)_transient\( self::CACHE_KEY[^)]*\)/g, '')) && transientCalls.length > 0 && transientCalls.every((c) => c.includes('self::CACHE_KEY'))],
+  ['readiness report skips the cache when asked (preflight path)', /if \( \$use_cache \) \{\s*set_transient/.test(readiness)],
 ];
 
 let failed = 0;

@@ -72,7 +72,8 @@ class LNKup_Comms_Delegation {
 		$name   = sanitize_text_field( (string) ( $args[1] ?? '' ) );
 		$count  = absint( $args[2] ?? 0 );
 		$search = sanitize_key( (string) ( $args[5] ?? '' ) );
-		if ( ! $user || ! $count || '' === $name ) {
+		// Outside the staged audience, core keeps sending so the vendor still hears about it.
+		if ( ! $user || ! $count || '' === $name || ! LNKup_Comms_Settings::enabled_for( 'flow_discovery', $user ) ) {
 			return false;
 		}
 		$items = array();
@@ -103,7 +104,7 @@ class LNKup_Comms_Delegation {
 		$user   = absint( $args[0] ?? 0 );
 		$window = sanitize_key( (string) ( $args[3] ?? '48h' ) );
 		$opp    = absint( $args[4] ?? 0 );
-		if ( ! $user || ! $opp ) {
+		if ( ! $user || ! $opp || ! LNKup_Comms_Settings::enabled_for( 'flow_discovery', $user ) ) {
 			return false;
 		}
 		$labels = array(
@@ -128,7 +129,7 @@ class LNKup_Comms_Delegation {
 			return false;
 		}
 		$vendor = (int) get_post_meta( $invite, '_lnkup_vendor_user_id', true );
-		if ( ! $vendor ) {
+		if ( ! $vendor || ! LNKup_Comms_Settings::enabled_for( 'flow_discovery', $vendor ) ) {
 			return false;
 		}
 		LNKup_Comms_Engine::dispatch(

@@ -37,7 +37,7 @@ export type EventItem = {
   organizer: string
   organizerVerified: boolean
   expectedAttendance: number
-  vendorFee: number
+  vendorFee: number | null
   spotsRemaining: number
   totalSpots: number
   categoriesNeeded: string[]

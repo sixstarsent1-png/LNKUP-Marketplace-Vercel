@@ -16,7 +16,8 @@ import {
   getTermsOfServiceUrl,
 } from "@/lib/api/config"
 import { useAuth } from "@/lib/auth/auth-context"
-import { useSignOut, useSwitchRole } from "@/lib/hooks/use-account-actions"
+import { useSignOut } from "@/lib/hooks/use-account-actions"
+import { WorkspaceSwitchGroup } from "@/components/workspace-switch-group"
 import { openExternalUrl } from "@/lib/navigation/open-external-url"
 import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
@@ -140,9 +141,8 @@ function openLink(link: MoreLink): void {
 }
 
 export default function OrganizerMoreScreen() {
-  const { session, isVendor } = useAuth()
+  const { session } = useAuth()
   const [signOut, signingOut] = useSignOut()
-  const [switchRole, switching] = useSwitchRole()
   const displayName = session?.user.name ?? "Organizer"
 
   return (
@@ -189,17 +189,7 @@ export default function OrganizerMoreScreen() {
         </View>
       ))}
 
-      {isVendor ? (
-        <ListGroup title="Account">
-          <ListRow
-            icon="swap-horizontal-outline"
-            iconTone="accent"
-            title="Switch to Vendor"
-            meta={switching ? "Switching…" : "Find events and manage your bookings"}
-            onPress={() => void switchRole("vendor")}
-          />
-        </ListGroup>
-      ) : null}
+      <WorkspaceSwitchGroup current="organizer" title="Account" />
 
       <Button
         label="Sign out"

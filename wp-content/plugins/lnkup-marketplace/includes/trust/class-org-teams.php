@@ -38,6 +38,7 @@ class LNKup_Org_Teams {
 	 * review_applications: open the review queue and workspace, see application answers.
 	 * score_applications:  submit a rubric score and recommendation (never changes status).
 	 * manage_applications: approve, decline, waitlist, request info, offer waitlist spots.
+	 * review_documents:    request, accept or reject required documents for an event.
 	 *
 	 * @return array<string, string[]>
 	 */
@@ -45,9 +46,9 @@ class LNKup_Org_Teams {
 		$ops    = array( 'view_roster', 'check_in', 'edit_ops', 'edit_packets', 'edit_map', 'broadcast' );
 		$review = array( 'review_applications', 'score_applications', 'view_documents' );
 		return array(
-			'admin'          => array_merge( $ops, $review, array( 'view_intelligence', 'view_financials', 'manage_staff', 'manage_applications', 'manage_refunds', 'cancel_event', 'manage_team' ) ),
-			'event_manager'  => array_merge( $ops, $review, array( 'view_intelligence', 'manage_applications', 'cancel_event' ) ),
-			'vendor_manager' => array_merge( $review, array( 'view_roster', 'broadcast', 'manage_applications' ) ),
+			'admin'          => array_merge( $ops, $review, array( 'view_intelligence', 'view_financials', 'manage_staff', 'manage_applications', 'review_documents', 'manage_refunds', 'cancel_event', 'manage_team' ) ),
+			'event_manager'  => array_merge( $ops, $review, array( 'view_intelligence', 'manage_applications', 'review_documents', 'cancel_event' ) ),
+			'vendor_manager' => array_merge( $review, array( 'view_roster', 'broadcast', 'manage_applications', 'review_documents' ) ),
 			'reviewer'       => $review,
 			'finance'        => array( 'view_roster', 'view_financials', 'manage_refunds' ),
 			'ops_staff'      => $ops,

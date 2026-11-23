@@ -176,7 +176,7 @@ export function buildMockEventWorkspace(eventId: string): OrganizerEventWorkspac
       id: "101",
       title: `Vendors for ${event.name}`,
       categories: event.categoriesNeeded,
-      vendorFee: event.vendorFee,
+      vendorFee: event.vendorFee ?? undefined,
       spotsTotal: event.totalSpots,
       spotsRemaining: event.totalSpots - event.approvedVendors,
       applicationDeadline: event.deadline !== "Rolling" ? event.deadline : undefined,

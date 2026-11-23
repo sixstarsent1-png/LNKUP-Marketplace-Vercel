@@ -114,7 +114,6 @@ class LNKup_Applications {
 		}
 
 		$button_state = self::button_state_from_eligibility( $eligibility );
-		$settings     = lnkup_get_settings();
 		$draft        = null;
 		if ( $user_id && class_exists( 'LNKup_Application_Drafts' ) ) {
 			$open = LNKup_Application_Drafts::get_for_opportunity( $user_id, $opportunity_id );
@@ -168,8 +167,8 @@ class LNKup_Applications {
 			'previous_application' => $eligibility['previous_application'] ?? null,
 			'tour_id'       => $tour_id,
 			'features'      => array(
-				'drafts'           => ! empty( $settings['apply_wizard_enabled'] ),
-				'tour_multi_apply' => class_exists( 'LNKup_Application_Groups' ) && LNKup_Application_Groups::enabled(),
+				'drafts'           => LNKup_Rollout::enabled( 'apply_wizard_enabled', $user_id ?: null ),
+				'tour_multi_apply' => class_exists( 'LNKup_Application_Groups' ) && LNKup_Application_Groups::enabled( $user_id ?: null ),
 			),
 		);
 	}

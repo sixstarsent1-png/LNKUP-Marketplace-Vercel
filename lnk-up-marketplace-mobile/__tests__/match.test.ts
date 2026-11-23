@@ -1,4 +1,35 @@
-import { mapRecommendations } from "@/lib/api/match"
+import { fetchFindVendorsEnabled, mapRecommendations } from "@/lib/api/match"
+import { wpFetchJson } from "@/lib/api/wp-client"
+
+jest.mock("@/lib/api/config", () => ({
+  ...jest.requireActual("@/lib/api/config"),
+  isLiveApiEnabled: () => true,
+}))
+
+jest.mock("@/lib/api/wp-client", () => ({
+  ...jest.requireActual("@/lib/api/wp-client"),
+  wpFetchJson: jest.fn(),
+}))
+
+const mockedFetch = wpFetchJson as jest.MockedFunction<typeof wpFetchJson>
+const auth = { username: "org", appPassword: "x" }
+
+describe("organizer Find Vendors status", () => {
+  beforeEach(() => mockedFetch.mockReset())
+
+  it("is on only when the server says so", async () => {
+    mockedFetch.mockResolvedValueOnce({ find_vendors_enabled: true })
+    await expect(fetchFindVendorsEnabled(auth)).resolves.toBe(true)
+    expect(mockedFetch).toHaveBeenCalledWith("/match/organizer/status", { auth })
+  })
+
+  it("treats a missing or false flag as off", async () => {
+    mockedFetch.mockResolvedValueOnce({ find_vendors_enabled: false })
+    await expect(fetchFindVendorsEnabled(auth)).resolves.toBe(false)
+    mockedFetch.mockResolvedValueOnce({})
+    await expect(fetchFindVendorsEnabled(auth)).resolves.toBe(false)
+  })
+})
 
 describe("vendor match recommendations", () => {
   it("treats a disabled engine as an empty, hidden section", () => {

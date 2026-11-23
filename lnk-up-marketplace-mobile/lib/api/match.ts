@@ -137,6 +137,27 @@ export async function fetchVendorMatchSection(
   return mapRecommendations(data)
 }
 
+/**
+ * Best-effort match funnel click (section + position) so applications can be attributed to recommendations.
+ */
+export function trackMatchClick(
+  auth: WpAuth | undefined,
+  click: { opportunityId: number; section: VendorMatchSection; position: number; band?: string },
+): void {
+  if (!isLiveApiEnabled() || !auth || !click.opportunityId) return
+  wpFetchJson("/marketplace/track/event", {
+    method: "POST",
+    auth,
+    body: {
+      event_type: "match_click",
+      opportunity_id: click.opportunityId,
+      data: { section: click.section, position: click.position, band: click.band ?? "", source: "app" },
+    },
+  }).catch(() => {
+    // Analytics never blocks navigation.
+  })
+}
+
 /* ------------------------------------------------------------------ */
 /* Vendor matching preferences                                         */
 /* ------------------------------------------------------------------ */
@@ -275,6 +296,16 @@ export type MatchedVendor = {
   reasons: string[]
   stage: string
   acceptsInvites: boolean
+}
+
+/**
+ * Whether organizer Find Vendors is switched on for this organizer (flag + rollout audience).
+ * Callers treat a failed check (including older servers without the route) as off.
+ */
+export async function fetchFindVendorsEnabled(auth: WpAuth): Promise<boolean> {
+  if (!isLiveApiEnabled()) return true
+  const data = await wpFetchJson<{ find_vendors_enabled?: boolean }>("/match/organizer/status", { auth })
+  return data.find_vendors_enabled === true
 }
 
 export type EventVendorMatches =

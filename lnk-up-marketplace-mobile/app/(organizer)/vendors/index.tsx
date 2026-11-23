@@ -39,6 +39,7 @@ import {
   type OrganizerDirectoryVendor,
   type OrganizerDiscoverFilters,
 } from "@/lib/api/organizer-vendor-directory"
+import { fetchFindVendorsEnabled } from "@/lib/api/match"
 import { invalidateOrganizerMoney } from "@/lib/api/organizer-financial"
 import { useAuth } from "@/lib/auth/auth-context"
 import { promptText, showToast } from "@/lib/feedback/feedback"
@@ -94,6 +95,22 @@ export default function OrganizerVendorsScreen() {
   const didFocusLoad = useRef(false)
   const reviewInFlight = useRef(false)
   const [infoItem, setInfoItem] = useState<OrganizerVendorRequest | null>(null)
+  const [findVendorsEnabled, setFindVendorsEnabled] = useState(false)
+
+  useEffect(() => {
+    if (!auth) return
+    let cancelled = false
+    fetchFindVendorsEnabled(auth)
+      .then((enabled) => {
+        if (!cancelled) setFindVendorsEnabled(enabled)
+      })
+      .catch(() => {
+        if (!cancelled) setFindVendorsEnabled(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [auth])
 
   const loadRequests = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
@@ -420,7 +437,7 @@ export default function OrganizerVendorsScreen() {
 
             <SegmentedControl options={segmentOptions} value={segment} onChange={setSegment} />
 
-            {segment === "discover" ? (
+            {segment === "discover" && findVendorsEnabled ? (
               <InlineBanner
                 tone="info"
                 title="Recruit for an event"

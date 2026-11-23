@@ -9,7 +9,7 @@ test.describe('Marketplace V2', () => {
       await expect(page.getByRole('heading', { name: /find events opens on launch day/i })).toBeVisible();
       return;
     }
-    await expect(page.getByRole('heading', { name: /find events/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^explore$/i })).toBeVisible();
     await expect(page.locator('#lnkup-search-input')).toBeVisible();
     await expect(page.locator('#lnkup-results-grid')).toBeVisible();
     await expect(page.locator('#lnkup-result-count')).toContainText(/opportunit/i);

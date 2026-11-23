@@ -93,6 +93,16 @@ class LNKup_Match_REST {
 
 		register_rest_route(
 			self::NS,
+			'/match/organizer/status',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'organizer_status' ),
+				'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/admin/match/diagnose',
 			array(
 				'methods'             => 'GET',
@@ -123,13 +133,26 @@ class LNKup_Match_REST {
 		return $user_id && ( LNKup_Roles::is_vendor( $user_id ) || LNKup_Capabilities::user_has_manage_all( $user_id ) );
 	}
 
+	public static function organizer_permission() {
+		$user_id = get_current_user_id();
+		return $user_id && ( LNKup_Roles::is_organizer( $user_id ) || current_user_can( 'lnkup_review_applications' ) || LNKup_Capabilities::user_has_manage_all( $user_id ) );
+	}
+
 	public static function organizer_event_permission( WP_REST_Request $request ) {
 		$user_id = get_current_user_id();
-		if ( ! $user_id ) {
-			return false;
-		}
-		$is_organizer = LNKup_Roles::is_organizer( $user_id ) || current_user_can( 'lnkup_review_applications' ) || LNKup_Capabilities::user_has_manage_all( $user_id );
-		return $is_organizer && LNKup_Capabilities::organizer_owns_event( absint( $request['event_id'] ), $user_id );
+		return self::organizer_permission() && LNKup_Capabilities::organizer_owns_event( absint( $request['event_id'] ), $user_id );
+	}
+
+	/**
+	 * Whether organizer Find Vendors is on for the current user (flag + rollout audience).
+	 * Lets the apps hide recruit entry points instead of linking to a disabled screen.
+	 */
+	public static function organizer_status() {
+		return rest_ensure_response(
+			array(
+				'find_vendors_enabled' => LNKup_Match_Settings::enabled( 'matching_organizer_discovery_enabled' ),
+			)
+		);
 	}
 
 	public static function admin_permission() {
@@ -159,7 +182,7 @@ class LNKup_Match_REST {
 			return $result;
 		}
 		if ( ! empty( $result['items'] ) ) {
-			LNKup_Marketplace_Analytics::track( 'match_impression', array( 'section' => $section, 'count' => count( $result['items'] ) ), get_current_user_id() );
+			LNKup_Match_Funnel::impression( get_current_user_id(), $section, $result['items'] );
 			if ( ! in_array( $section, array( 'tours', 'series' ), true ) && rest_sanitize_boolean( $request->get_param( 'html' ) ) ) {
 				$result['html'] = lnkup_render_opportunity_cards_batch( $result['items'] );
 			}

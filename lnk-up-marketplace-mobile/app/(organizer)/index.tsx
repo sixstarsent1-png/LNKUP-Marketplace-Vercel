@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react"
 import { Linking, StyleSheet, View } from "react-native"
 import { router, type Href, useFocusEffect } from "expo-router"
 
+import { ContinueSetupCard } from "@/components/continue-setup-card"
 import { NextStepsCard } from "@/components/next-steps-card"
 import { NotificationBell } from "@/components/notification-bell"
 import { PushPermissionPrompt } from "@/components/push-permission-prompt"
@@ -426,6 +427,8 @@ export default function OrganizerHomeScreen() {
           {hero ? <OrganizerHomeHero hero={hero} /> : null}
 
           <PushPermissionPrompt role="organizer" />
+
+          <ContinueSetupCard />
 
           <NextStepsCard role="organizer" />
 

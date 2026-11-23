@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 
     const auth = toWpAuth(session)
     const url = new URL(request.url)
-    const query: Record<string, string> = {}
+    const query: Record<string, string> = { html: "0" }
     const q = url.searchParams.get("q")
     const category = url.searchParams.get("category")
     const city = url.searchParams.get("city")

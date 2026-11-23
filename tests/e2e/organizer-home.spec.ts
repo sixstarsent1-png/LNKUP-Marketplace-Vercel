@@ -11,9 +11,15 @@ test.describe('Organizer Home', () => {
     await page.goto('/organizer-dashboard/');
   });
 
-  test('shows the organization welcome, action center, and recent activity', async ({ page }) => {
+  test('shows the organization welcome, what needs attention, and recent activity', async ({ page }) => {
     await expect(page.getByTestId('lnkup-organizer-home-welcome')).toContainText(/welcome back/i);
-    await expect(page.getByTestId('lnkup-organizer-attention')).toContainText(/action center/i);
+    const overviewV2 = page.getByTestId('lnkup-overview-v2');
+    if (await overviewV2.count()) {
+      await expect(overviewV2.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
+      await expect(page.getByTestId('lnkup-overview-upcoming')).toBeVisible();
+    } else {
+      await expect(page.getByTestId('lnkup-organizer-attention')).toContainText(/action center/i);
+    }
     const activity = page.getByTestId('lnkup-organizer-recent-activity');
     await expect(activity).toBeVisible();
     await expect(activity.getByRole('listitem').first()).toBeVisible();

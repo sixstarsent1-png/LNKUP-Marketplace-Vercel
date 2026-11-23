@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { FilterChip } from "@/components/ui/chip"
 import { Meta, SectionTitle } from "@/components/ui/typography"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
+import { isLiveApiEnabled } from "@/lib/api/config"
 import { isAbortError } from "@/lib/api/wp-client"
 import {
   clearFilterKey,
@@ -232,7 +233,7 @@ export default function VendorFindScreen() {
     <>
       <ScreenList
         title="Explore"
-        subtitle="Apply for free. Pay only when accepted."
+        subtitle="Bookable spots. Apply for free. Pay only when accepted."
         keyboardAvoiding
         refreshing={refreshing}
         onRefresh={() => {
@@ -281,6 +282,13 @@ export default function VendorFindScreen() {
         }
         listHeader={
           <>
+            {!isLiveApiEnabled() ? (
+              <InlineBanner
+                tone="info"
+                title="Sample events"
+                message="These cards are test data. Live events appear when the app is pointed at LNKup."
+              />
+            ) : null}
             <View>
               <View style={styles.searchRow}>
                 <View style={styles.inputWrap}>

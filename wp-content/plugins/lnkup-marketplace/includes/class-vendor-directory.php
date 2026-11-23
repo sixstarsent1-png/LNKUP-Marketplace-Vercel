@@ -9,8 +9,16 @@ defined( 'ABSPATH' ) || exit;
 
 class LNKup_Vendor_Directory {
 
+	/** Seconds a discover page is reused for the same organizer and filters. */
+	const DISCOVER_CACHE_TTL = 120;
+
+	/** User meta bumped to invalidate an organizer's cached discover pages. */
+	const CACHE_GEN_META = '_lnkup_vendor_directory_gen';
+
 	/**
 	 * Search vendors for organizer.
+	 *
+	 * Pass html=0 (apps) to skip server-rendered cards; the dashboard omits it and gets html.
 	 *
 	 * @param int   $organizer_id Organizer user ID.
 	 * @param array $args         Query args.
@@ -20,20 +28,65 @@ class LNKup_Vendor_Directory {
 		$view  = sanitize_key( $args['view'] ?? 'card' );
 		$page  = max( 1, absint( $args['page'] ?? 1 ) );
 		$per   = min( 48, max( 12, absint( $args['per_page'] ?? 24 ) ) );
+		$html  = ! isset( $args['html'] ) || rest_sanitize_boolean( $args['html'] );
 
 		if ( 'my' === $scope ) {
-			return self::search_my_vendors( $organizer_id, $args, $page, $per, $view );
+			$result = self::search_my_vendors( $organizer_id, $args, $page, $per, $view );
+		} elseif ( 'imported' === $scope ) {
+			$result = self::search_imported_prospects( $organizer_id, $args, $page, $per, $view );
+		} else {
+			return self::cached_discover( (int) $organizer_id, $args, $page, $per, $view, $html );
 		}
-		if ( 'imported' === $scope ) {
-			return self::search_imported_prospects( $organizer_id, $args, $page, $per, $view );
+		if ( ! $html ) {
+			unset( $result['html'] );
 		}
-		return self::search_discover( $organizer_id, $args, $page, $per, $view );
+		return $result;
+	}
+
+	/**
+	 * Drop an organizer's cached discover pages (favorite / preferred changes).
+	 *
+	 * @param int $organizer_id Organizer user ID.
+	 */
+	public static function flush_discover_cache( $organizer_id ) {
+		$organizer_id = (int) $organizer_id;
+		if ( $organizer_id ) {
+			update_user_meta( $organizer_id, self::CACHE_GEN_META, (int) get_user_meta( $organizer_id, self::CACHE_GEN_META, true ) + 1 );
+		}
+	}
+
+	/**
+	 * Discover results, reused for a short time so repeated refreshes do not rebuild every card.
+	 */
+	private static function cached_discover( $organizer_id, $args, $page, $per, $view, $html ) {
+		$filters = array(
+			'q'        => trim( (string) ( $args['q'] ?? '' ) ),
+			'city'     => (string) ( $args['city'] ?? '' ),
+			'state'    => (string) ( $args['state'] ?? '' ),
+			'category' => (string) ( $args['category'] ?? '' ),
+			'verified' => ! empty( $args['verified'] ),
+			'sort'     => sanitize_key( (string) ( $args['sort'] ?? 'score' ) ),
+		);
+		$key = 'lnkup_vdir_' . md5(
+			wp_json_encode(
+				array( $organizer_id, (int) get_user_meta( $organizer_id, self::CACHE_GEN_META, true ), $filters, $page, $per, $view, $html )
+			)
+		);
+		$cached = $organizer_id ? get_transient( $key ) : false;
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+		$result = self::search_discover( $organizer_id, $args, $page, $per, $view, $html );
+		if ( $organizer_id ) {
+			set_transient( $key, $result, self::DISCOVER_CACHE_TTL );
+		}
+		return $result;
 	}
 
 	/**
 	 * Discover marketplace-wide vendor profiles.
 	 */
-	private static function search_discover( $organizer_id, $args, $page, $per, $view ) {
+	private static function search_discover( $organizer_id, $args, $page, $per, $view, $html = true ) {
 		$query = lnkup_get_discoverable_vendors(
 			array(
 				'page'     => $page,
@@ -56,7 +109,7 @@ class LNKup_Vendor_Directory {
 		LNKup_Organizer_CRM::prime_relationships( (int) $organizer_id, $vendor_ids );
 		try {
 			foreach ( $query['posts'] as $post ) {
-				$profile = LNKup_Vendor_CRM_Profile::get( $post->ID, $organizer_id );
+				$profile = LNKup_Vendor_CRM_Profile::get_card( $post->ID, $organizer_id );
 				if ( $profile ) {
 					$items[] = lnkup_normalize_vendor_card( $profile );
 				}
@@ -66,14 +119,17 @@ class LNKup_Vendor_Directory {
 		}
 		$items = self::sort_items( $items, $args );
 
-		return array(
+		$result = array(
 			'items'   => $items,
 			'total'   => $query['total'],
 			'page'    => $query['page'],
 			'pages'   => $query['pages'],
-			'html'    => self::render_items( $items, $view, 'discover' ),
 			'scope'   => 'discover',
 		);
+		if ( $html ) {
+			$result['html'] = self::render_items( $items, $view, 'discover' );
+		}
+		return $result;
 	}
 
 	/**

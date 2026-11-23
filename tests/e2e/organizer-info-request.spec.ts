@@ -16,7 +16,7 @@ test.describe('Request more information', () => {
 
   test('organizer asks the vendor a question', async ({ page }) => {
     await loginPage(page, organizerUser, password);
-    await page.goto(`/organizer-dashboard/?view=applications&event_filter=${eventId}`);
+    await page.goto(`/organizer-dashboard/?view=applications&mode=classic&event_filter=${eventId}`);
     const ask = page.locator(`[data-testid="lnkup-org-request-info"][data-app-id="${appId}"]`);
     await expect(ask, 'review application should be open for questions').toBeVisible();
     await ask.click();
@@ -42,7 +42,7 @@ test.describe('Request more information', () => {
 
   test('organizer sees the reply and the request is back in review', async ({ page }) => {
     await loginPage(page, organizerUser, password);
-    await page.goto(`/organizer-dashboard/?view=applications&event_filter=${eventId}`);
+    await page.goto(`/organizer-dashboard/?view=applications&mode=classic&event_filter=${eventId}`);
     await expect(page.getByTestId('lnkup-org-info-thread').filter({ hasText: reply })).toContainText(/vendor replied/i);
     await expect(page.locator(`[data-testid="lnkup-org-request-info"][data-app-id="${appId}"]`)).toBeVisible();
   });

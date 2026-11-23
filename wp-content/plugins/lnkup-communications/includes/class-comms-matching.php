@@ -148,7 +148,7 @@ class LNKup_Comms_Matching {
 	 */
 	public static function core_engine_ready(): bool {
 		return class_exists( 'LNKup_Match_Settings' ) && class_exists( 'LNKup_Match_Tables' ) && class_exists( 'LNKup_Match_Service' )
-			&& LNKup_Match_Settings::enabled() && LNKup_Match_Tables::exists( LNKup_Match_Tables::results_table() );
+			&& LNKup_Match_Settings::active() && LNKup_Match_Tables::exists( LNKup_Match_Tables::results_table() );
 	}
 
 	/**
@@ -216,7 +216,7 @@ class LNKup_Comms_Matching {
 	 * Published tour an opportunity belongs to (0 when none), only when tour matching is on.
 	 */
 	public static function tour_for_opportunity( int $opp_id ): int {
-		if ( ! self::core_engine_ready() || ! LNKup_Match_Settings::enabled( 'matching_tours_enabled' ) ) {
+		if ( ! self::core_engine_ready() || ! LNKup_Match_Settings::active( 'matching_tours_enabled' ) ) {
 			return 0;
 		}
 		$event_id = (int) get_post_meta( $opp_id, '_lnkup_event_id', true );

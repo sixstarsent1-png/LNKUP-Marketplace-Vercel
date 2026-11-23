@@ -168,6 +168,79 @@ class LNKup_Vendor_CRM_Profile {
 	}
 
 	/**
+	 * Directory card: only the fields cards, sorts and app lists read.
+	 *
+	 * Skips the per-organizer application/payment history, documents, notes, flags, tags,
+	 * gallery, passport and profile strength that get() builds, so a page of discover results
+	 * stays fast. Contact details are never included.
+	 *
+	 * @param int $profile_id   Profile ID.
+	 * @param int $organizer_id Viewing organizer.
+	 * @return array|null
+	 */
+	public static function get_card( $profile_id, $organizer_id = 0 ) {
+		$profile_id   = (int) $profile_id;
+		$organizer_id = $organizer_id ?: get_current_user_id();
+		$post         = get_post( $profile_id );
+		if ( ! $post || 'lnkup_vendor_profile' !== $post->post_type ) {
+			return null;
+		}
+		$vendor_id  = (int) get_post_meta( $profile_id, '_lnkup_owner_user_id', true );
+		$rel        = LNKup_Organizer_CRM::get_relationship( $organizer_id, $vendor_id );
+		$categories = wp_get_post_terms( $profile_id, 'lnkup_vendor_category', array( 'fields' => 'names' ) );
+		if ( is_wp_error( $categories ) ) {
+			$categories = array();
+		}
+		$logo_id    = (int) get_post_meta( $profile_id, '_lnkup_logo_attachment_id', true );
+		$cover_id   = (int) get_post_meta( $profile_id, '_lnkup_cover_image_id', true );
+		$reputation = class_exists( 'LNKup_Vendor_Reputation' ) ? LNKup_Vendor_Reputation::get( $profile_id ) : array();
+		$reputation = is_array( $reputation ) ? $reputation : array();
+		$metrics    = is_array( $reputation['metrics'] ?? null ) ? $reputation['metrics'] : array();
+
+		$indicators = array();
+		if ( class_exists( 'LNKup_Reputation_Summary' ) && class_exists( 'LNKup_Participation_History' ) ) {
+			$stats      = LNKup_Participation_History::stats( $profile_id );
+			$feedback   = LNKup_Reputation_Summary::organizer_feedback( $profile_id );
+			$indicators = array(
+				'experience'         => LNKup_Reputation_Summary::experience( $stats ),
+				'organizer_feedback' => $feedback,
+				'is_new_vendor'      => 0 === (int) $stats['confirmed_events'] && 0 === (int) $feedback['count'],
+			);
+		}
+		$completed = (int) ( $indicators['experience']['confirmed_events'] ?? $metrics['completed_events'] ?? 0 );
+
+		$profile = array(
+			'profile_id'        => $profile_id,
+			'vendor_user_id'    => $vendor_id,
+			'business_name'     => get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: $post->post_title,
+			'category'          => $categories,
+			'city'              => get_post_meta( $profile_id, '_lnkup_city', true ),
+			'state'             => get_post_meta( $profile_id, '_lnkup_state', true ),
+			'cities_served'     => json_decode( get_post_meta( $profile_id, '_lnkup_cities_served', true ) ?: '[]', true ) ?: array(),
+			'states_served'     => json_decode( get_post_meta( $profile_id, '_lnkup_states_served', true ) ?: '[]', true ) ?: array(),
+			'logo'              => $logo_id ? wp_get_attachment_image_url( $logo_id, 'medium' ) : '',
+			'cover_image'       => $cover_id ? wp_get_attachment_image_url( $cover_id, 'large' ) : '',
+			'products_services' => get_post_meta( $profile_id, '_lnkup_products_services', true ),
+			'verified'          => 'approved' === get_post_meta( $profile_id, '_lnkup_verification_status', true ),
+			'completed_events'  => $completed,
+			'is_favorite'       => ! empty( $rel['is_favorite'] ),
+			'is_preferred'      => ! empty( $rel['is_preferred'] ),
+			'vendor_score'      => $reputation['score'] ?? self::compute_score( $completed, array(), array(), $rel ),
+			'reputation_score'  => $reputation['score'] ?? 0,
+			'reputation_label'  => $reputation['label'] ?? '',
+			'avg_rating'        => $reputation['avg_rating'] ?? 0,
+			'review_count'      => $reputation['review_count'] ?? 0,
+			'reputation'        => $reputation,
+			'reliability'       => $metrics,
+			'badges'            => $reputation['badges'] ?? array(),
+			'no_show_risk'      => ( $metrics['no_show_rate'] ?? 0 ) > 10 ? 'high' : ( ( $metrics['no_show_rate'] ?? 0 ) > 5 ? 'medium' : 'low' ),
+			'indicators'        => $indicators,
+		);
+
+		return apply_filters( 'lnkup_vendor_profile_data', $profile, 'crm_card' );
+	}
+
+	/**
 	 * Get public-safe profile DTO.
 	 *
 	 * @param int $profile_id Profile ID.

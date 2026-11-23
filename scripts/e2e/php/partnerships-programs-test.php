@@ -250,11 +250,22 @@ lnkup_t_same( 'city_connector', (string) ( $r3['program'] ?? '' ), 'and the rewa
 lnkup_t_assert( ! LNKup_Connector_Rewards::terms( $cc_id )['terms_pending'], 'City Connector terms are never pending' );
 lnkup_t_assert( count( LNKup_Connector::dashboard_views( LNKup_Connector::get( $cc_id ) ) ) === 10, 'City Connector dashboard keeps every view' );
 
+echo "\n[mobile sign-in]\n";
+$may_use_mobile = static function ( int $user_id ): bool {
+	$method = new ReflectionMethod( 'LNKup_Auth_REST', 'user_may_use_mobile' );
+	$method->setAccessible( true );
+	return (bool) $method->invoke( null, get_userdata( $user_id ) );
+};
+lnkup_t_assert( $may_use_mobile( $aff_uid ), 'active affiliate may sign in to the mobile app' );
+lnkup_t_assert( $may_use_mobile( $cc_user ), 'active City Connector may sign in to the mobile app' );
+lnkup_t_assert( ! $may_use_mobile( lnkup_t_user( 'lnkup_partner' ) ), 'partner role without an active account may not' );
+
 echo "\n[suspension]\n";
 $sus = LNKup_Partner_Applications::transition( $aff_id, 'suspend', $admin, 'Policy review' );
 lnkup_t_same( 'paused', is_array( $sus ) ? $sus['status'] : '', 'affiliate suspended' );
 lnkup_t_assert( null === LNKup_Connector::resolve_code( (string) $aff_code['code'] ), 'suspended affiliate code no longer resolves' );
 lnkup_t_assert( ! LNKup_Roles::is_connector( $aff_uid ), 'suspended affiliate loses dashboard access' );
+lnkup_t_assert( ! $may_use_mobile( $aff_uid ), 'suspended affiliate can no longer sign in to the mobile app' );
 
 // --------------------------------------------------------------- Public copy and REST.
 echo "\n[public and rest]\n";

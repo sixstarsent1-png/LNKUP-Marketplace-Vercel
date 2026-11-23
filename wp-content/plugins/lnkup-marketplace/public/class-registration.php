@@ -200,9 +200,91 @@ class LNKup_Registration {
 		if ( $safe ) {
 			return $safe;
 		}
+		if ( 'lnkup_organizer' === $role && class_exists( 'LNKup_Organizer_Onboarding_Flow' ) && LNKup_Organizer_Onboarding_Flow::should_resume( (int) $user->ID ) ) {
+			return lnkup_organizer_view_url( 'start' );
+		}
 		return 'lnkup_organizer' === $role
 			? lnkup_organizer_view_url( 'home' )
 			: lnkup_page_url_helper( 'vendor-dashboard' );
+	}
+
+	/**
+	 * Organizer onboarding v2 is on.
+	 */
+	private static function onboarding_v2(): bool {
+		return class_exists( 'LNKup_Organizer_Onboarding_Flow' ) && LNKup_Organizer_Onboarding_Flow::enabled();
+	}
+
+	/**
+	 * Organization name, primary city/state and event category, shown only for organizers.
+	 * Required when visible; hidden fields are disabled so vendors are never blocked by them.
+	 *
+	 * @param string $selected_role Currently selected role.
+	 */
+	private static function render_organizer_signup_fields( string $selected_role ): string {
+		if ( ! self::onboarding_v2() ) {
+			return '';
+		}
+		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		$posted = static fn( string $key ): string => isset( $_POST[ $key ] ) ? sanitize_text_field( wp_unslash( (string) $_POST[ $key ] ) ) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		$is_org     = 'lnkup_organizer' === $selected_role;
+		$categories = LNKup_Organizer_Onboarding_Flow::category_options();
+		ob_start();
+		?>
+		<fieldset class="lnkup-signup-form__org" data-organizer-fields data-testid="lnkup-signup-org-fields"<?php echo $is_org ? '' : ' hidden'; ?>>
+			<legend class="lnkup-signup-form__label"><?php esc_html_e( 'About your organization', 'lnkup-marketplace' ); ?></legend>
+			<p class="lnkup-signup-form__field">
+				<label class="lnkup-signup-form__label" for="lnkup_org_name"><?php esc_html_e( 'Organization or business name', 'lnkup-marketplace' ); ?></label>
+				<input type="text" class="lnkup-signup-form__input" id="lnkup_org_name" name="lnkup_org_name" autocomplete="organization" maxlength="120" value="<?php echo esc_attr( $posted( 'lnkup_org_name' ) ); ?>"<?php echo $is_org ? ' required' : ' disabled'; ?> />
+			</p>
+			<div class="lnkup-signup-form__row">
+				<p class="lnkup-signup-form__field">
+					<label class="lnkup-signup-form__label" for="lnkup_org_city"><?php esc_html_e( 'Primary city', 'lnkup-marketplace' ); ?></label>
+					<input type="text" class="lnkup-signup-form__input" id="lnkup_org_city" name="lnkup_org_city" autocomplete="address-level2" maxlength="120" value="<?php echo esc_attr( $posted( 'lnkup_org_city' ) ); ?>"<?php echo $is_org ? ' required' : ' disabled'; ?> />
+				</p>
+				<p class="lnkup-signup-form__field">
+					<label class="lnkup-signup-form__label" for="lnkup_org_state"><?php esc_html_e( 'State', 'lnkup-marketplace' ); ?></label>
+					<input type="text" class="lnkup-signup-form__input" id="lnkup_org_state" name="lnkup_org_state" autocomplete="address-level1" maxlength="32" value="<?php echo esc_attr( $posted( 'lnkup_org_state' ) ); ?>"<?php echo $is_org ? ' required' : ' disabled'; ?> />
+				</p>
+			</div>
+			<?php if ( $categories ) : ?>
+				<p class="lnkup-signup-form__field">
+					<label class="lnkup-signup-form__label" for="lnkup_org_category"><?php esc_html_e( 'What kind of events?', 'lnkup-marketplace' ); ?> <span class="lnkup-signup-form__optional"><?php esc_html_e( '(optional)', 'lnkup-marketplace' ); ?></span></label>
+					<select class="lnkup-signup-form__input" id="lnkup_org_category" name="lnkup_org_category"<?php echo $is_org ? '' : ' disabled'; ?>>
+						<option value=""><?php esc_html_e( 'Choose a category', 'lnkup-marketplace' ); ?></option>
+						<?php foreach ( $categories as $slug => $name ) : ?>
+							<option value="<?php echo esc_attr( $slug ); ?>"<?php selected( $posted( 'lnkup_org_category' ), $slug ); ?>><?php echo esc_html( $name ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</p>
+			<?php endif; ?>
+		</fieldset>
+		<style>
+		.lnkup-signup-form__org { border: 0; margin: 0 0 0.5rem; padding: 0; }
+		.lnkup-signup-form__org[hidden] { display: none; }
+		.lnkup-signup-form__row { display: grid; grid-template-columns: 2fr 1fr; gap: 0.75rem; }
+		</style>
+		<script>
+		(function () {
+			var box = document.querySelector('[data-organizer-fields]');
+			var form = box && box.closest('form');
+			if (!form) { return; }
+			function sync() {
+				var picked = form.querySelector('input[name="lnkup_role"]:checked');
+				var isOrg = !!picked && picked.value === 'lnkup_organizer';
+				box.hidden = !isOrg;
+				box.querySelectorAll('input,select').forEach(function (field) {
+					field.disabled = !isOrg;
+					if (field.tagName === 'INPUT') { field.required = isOrg; }
+				});
+			}
+			form.querySelectorAll('input[name="lnkup_role"]').forEach(function (radio) { radio.addEventListener('change', sync); });
+			sync();
+		})();
+		</script>
+		<?php
+		return (string) ob_get_clean();
 	}
 
 	/**
@@ -245,6 +327,11 @@ class LNKup_Registration {
 				'full_name'        => isset( $_POST['lnkup_full_name'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['lnkup_full_name'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing
 				'outreach_token'   => isset( $_POST['lnkup_outreach_token'] ) ? sanitize_text_field( wp_unslash( $_POST['lnkup_outreach_token'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing
 				'claim_token'      => isset( $_POST['lnkup_claim_external_event_token'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['lnkup_claim_external_event_token'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'organization_name' => isset( $_POST['lnkup_org_name'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['lnkup_org_name'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'city'             => isset( $_POST['lnkup_org_city'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['lnkup_org_city'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'state'            => isset( $_POST['lnkup_org_state'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['lnkup_org_state'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'category'         => isset( $_POST['lnkup_org_category'] ) ? sanitize_title( wp_unslash( (string) $_POST['lnkup_org_category'] ) ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				'require_organization' => true,
 			)
 		);
 		if ( is_wp_error( $result ) ) {
@@ -325,6 +412,17 @@ class LNKup_Registration {
 			$role = 'lnkup_organizer';
 		}
 
+		// Organizer basics are saved whenever they are sent; the web form only requires them when
+		// guided setup (onboarding v2) is on.
+		$org_fields = null;
+		if ( 'lnkup_organizer' === $role && class_exists( 'LNKup_Organizer_Onboarding_Flow' ) ) {
+			$org_fields = LNKup_Organizer_Onboarding_Flow::sanitize_signup( $input );
+			$org_valid  = LNKup_Organizer_Onboarding_Flow::validate_signup( $org_fields, ! empty( $input['require_organization'] ) && LNKup_Organizer_Onboarding_Flow::enabled() );
+			if ( is_wp_error( $org_valid ) ) {
+				return $org_valid;
+			}
+		}
+
 		$username = self::generate_username_from_email( $email );
 		$user_id  = wp_create_user( $username, $password, $email );
 		if ( is_wp_error( $user_id ) ) {
@@ -351,6 +449,10 @@ class LNKup_Registration {
 
 		self::store_market_signup_meta( (int) $user_id, $input );
 
+		if ( null !== $org_fields ) {
+			LNKup_Organizer_Onboarding_Flow::save_signup( (int) $user_id, $org_fields );
+		}
+
 		if ( 'lnkup_vendor' === $role ) {
 			self::ensure_vendor_profile_stub( (int) $user_id, $full_name );
 		}
@@ -365,7 +467,7 @@ class LNKup_Registration {
 	 */
 	private static function resolve_post_signup_redirect( string $role ): string {
 		$default = 'lnkup_organizer' === $role
-			? lnkup_organizer_view_url( 'home' )
+			? lnkup_organizer_view_url( self::onboarding_v2() ? 'start' : 'home' )
 			: lnkup_page_url_helper( 'vendor-dashboard' );
 
 		$requested = '';
@@ -427,6 +529,9 @@ class LNKup_Registration {
 		if ( isset( $app_map[ $path_only ] ) ) {
 			$slug = $app_map[ $path_only ];
 			$url  = lnkup_page_url_helper( $slug );
+			if ( '/organizer/onboarding' === $path_only && self::onboarding_v2() ) {
+				return lnkup_organizer_view_url( 'start' );
+			}
 			if ( 'organizer-dashboard' === $slug ) {
 				$url .= '#overview';
 			}
@@ -964,6 +1069,8 @@ class LNKup_Registration {
 					<label class="lnkup-signup-form__label" for="lnkup_full_name"><?php esc_html_e( 'Full name', 'lnkup-marketplace' ); ?> <span class="lnkup-signup-form__optional"><?php esc_html_e( '(optional)', 'lnkup-marketplace' ); ?></span></label>
 					<input type="text" class="lnkup-signup-form__input" id="lnkup_full_name" name="lnkup_full_name" autocomplete="name" value="<?php echo esc_attr( $posted_name ); ?>" />
 				</p>
+
+				<?php echo self::render_organizer_signup_fields( $selected_role ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 
 				<p class="lnkup-signup-form__field">
 					<label class="lnkup-signup-form__label" for="lnkup_user_email"><?php esc_html_e( 'Email', 'lnkup-marketplace' ); ?></label>

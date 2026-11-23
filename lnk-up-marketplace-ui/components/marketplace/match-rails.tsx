@@ -71,11 +71,11 @@ export function MatchRails({ sections, results, loading }: MatchRailsProps) {
             <SectionHeader title={label.title} />
             <p className="mb-3 text-sm text-muted-foreground">{label.subtitle}</p>
             <div className="grid gap-4 sm:grid-cols-2">
-              {result.items.map((item) =>
+              {result.items.map((item, index) =>
                 item.kind === "tour" ? (
                   <TourMatchCard key={`tour-${item.id}`} tour={item} />
                 ) : (
-                  <OpportunityMatchCard key={item.event.id} item={item} section={section} />
+                  <OpportunityMatchCard key={item.event.id} item={item} section={section} position={index + 1} />
                 ),
               )}
             </div>
@@ -86,7 +86,15 @@ export function MatchRails({ sections, results, loading }: MatchRailsProps) {
   )
 }
 
-function OpportunityMatchCard({ item, section }: { item: MatchedOpportunity; section: VendorMatchSection }) {
+function OpportunityMatchCard({
+  item,
+  section,
+  position,
+}: {
+  item: MatchedOpportunity
+  section: VendorMatchSection
+  position: number
+}) {
   return (
     <div className="flex flex-col gap-2">
       {item.match && (
@@ -114,7 +122,7 @@ function OpportunityMatchCard({ item, section }: { item: MatchedOpportunity; sec
             event: "recommendation_clicked",
             source: `match_${section}`,
             opportunityId: String(item.event.opportunityId ?? item.event.id),
-            metadata: { band: item.match?.band ?? "none" },
+            metadata: { band: item.match?.band ?? "none", section, position },
           })
         }
       />

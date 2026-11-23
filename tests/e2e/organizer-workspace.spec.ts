@@ -33,7 +33,7 @@ test.describe('Organizer event workspace', () => {
   });
 
   test('application drawer offers decisions for an open request', async ({ page }) => {
-    await page.goto(`/organizer-dashboard/?view=applications&filter=pending&event_filter=${eventId}`);
+    await page.goto(`/organizer-dashboard/?view=applications&mode=classic&filter=pending&event_filter=${eventId}`);
     await page.getByRole('button', { name: /view details for/i }).first().click();
     await expect(page.getByTestId('lnkup-intel-decide')).toBeVisible();
     await expect(page.getByTestId('lnkup-intel-decide').getByRole('button', { name: /accept/i })).toBeVisible();

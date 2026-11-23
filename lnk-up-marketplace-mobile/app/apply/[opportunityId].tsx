@@ -212,7 +212,8 @@ export default function ApplyScreen() {
   }
 
   const canApplyForm = Boolean(context?.canApply && !context?.buttonDisabled && !blockedCode)
-  const feeLabel = context?.vendorFee != null && context.vendorFee > 0 ? `$${context.vendorFee}` : "Fee TBD"
+  const feeLabel =
+    context?.vendorFee == null ? "Fee unavailable" : context.vendorFee > 0 ? `$${context.vendorFee}` : "Free"
   const blockReason = blockedCode ?? context?.blockReason
   const blockedTitle =
     blockReason === "duplicate" ? "You already applied" : blockReason === "previously_declined" ? "Application declined" : "Applications unavailable"

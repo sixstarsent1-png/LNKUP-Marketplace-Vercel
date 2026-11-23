@@ -574,6 +574,12 @@ class LNKup_Application_Review {
 				'my_review'        => $mine,
 				'reviews'          => self::visible_reviews( $reviews[ $app_id ] ?? array(), (int) $user_id, $app_id ),
 				'waitlist_offer'   => LNKup_Feature_Flags::waitlist_offers() ? LNKup_Waitlist_Offers::active_offer( $app_id ) : null,
+				'document_review'  => $can_docs && LNKup_Feature_Flags::document_review() && class_exists( 'LNKup_Organizer_Documents' )
+					? array(
+						'items'      => LNKup_Organizer_Documents::requirements_for_application( $app_id, (int) $user_id ),
+						'can_review' => LNKup_Capabilities::can_on_application( $app_id, 'review_documents', $user_id ),
+					)
+					: null,
 			)
 		);
 	}
@@ -894,8 +900,44 @@ class LNKup_Application_Review {
 		if ( $wpdb->rows_affected ) {
 			self::audit( 'application_reviewer_assigned', $event_id, $actor, array( 'application_id' => $app_id, 'reviewer_user_id' => $reviewer_id ) );
 			do_action( 'lnkup_application_reviewer_assigned', $app_id, $reviewer_id, absint( $actor ) );
+			if ( $reviewer_id !== absint( $actor ) ) {
+				self::notify_reviewer( $app_id, $reviewer_id, $actor );
+			}
 		}
 		return true;
+	}
+
+	/**
+	 * Tell a reviewer they were assigned. Only names the vendor and event; answers stay in the workspace.
+	 *
+	 * @param int $app_id      Application.
+	 * @param int $reviewer_id Reviewer.
+	 * @param int $actor       Who assigned them.
+	 */
+	private static function notify_reviewer( $app_id, $reviewer_id, $actor ) {
+		$reviewer = get_userdata( $reviewer_id );
+		if ( ! $reviewer || ! class_exists( 'LNKup_Notifications' ) ) {
+			return;
+		}
+		$label    = self::bulk_label( $app_id );
+		$assigner = get_userdata( absint( $actor ) );
+		$url      = add_query_arg( array( 'view' => 'applications', 'assigned' => 'me', 'group' => 'pending', 'app' => $app_id ), lnkup_page_url_helper( 'organizer-dashboard' ) );
+		LNKup_Notifications::send(
+			$reviewer->user_email,
+			/* translators: %s: event name */
+			sprintf( __( 'Application to review for %s', 'lnkup-marketplace' ), $label['event'] ),
+			wpautop(
+				esc_html(
+					sprintf(
+						/* translators: 1: person, 2: vendor, 3: event */
+						__( '%1$s asked you to review %2$s\'s application for %3$s.', 'lnkup-marketplace' ),
+						$assigner ? $assigner->display_name : __( 'The event team', 'lnkup-marketplace' ),
+						$label['vendor'],
+						$label['event']
+					)
+				)
+			) . '<p><a href="' . esc_url( $url ) . '">' . esc_html__( 'Open the review', 'lnkup-marketplace' ) . '</a></p>'
+		);
 	}
 
 	/**

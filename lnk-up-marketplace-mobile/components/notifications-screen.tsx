@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
-import { router, useFocusEffect } from "expo-router"
+import { router, useFocusEffect, type Href } from "expo-router"
 
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { ScreenList } from "@/components/screen"
@@ -38,6 +38,12 @@ import { colors, radii, spacing, typeScale } from "@/lib/theme"
 type NotificationsScreenProps = {
   role: NotificationRole
   prefsHref: string
+}
+
+const HOME_FOR_ROLE: Record<NotificationRole, Href> = {
+  vendor: "/(vendor)",
+  organizer: "/(organizer)",
+  partner: "/(partner)",
 }
 
 /** "server" = paginated lnkup-communications inbox; "legacy" = composed feed (plugin not installed). */
@@ -231,7 +237,7 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
       subtitle={unreadCount > 0 ? `${unreadCount} unread` : "You're caught up"}
       refreshing={refreshing}
       onRefresh={() => void load("refresh")}
-      header={<BackLink label="Home" fallbackHref={role === "organizer" ? "/(organizer)" : "/(vendor)"} />}
+      header={<BackLink label="Home" fallbackHref={HOME_FOR_ROLE[role]} />}
       rightSlot={
         unreadCount > 0 ? (
           <Pressable

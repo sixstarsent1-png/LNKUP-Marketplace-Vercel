@@ -6,17 +6,52 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
-**Plugin version:** 12.32.0  
+**Plugin version:** 12.33.1  
 **Theme version:** 1.6.1
+
+### v12.33.1 (Organizer Vendors: settings save, Discover speed, Find Vendors gating)
+
+- **Settings save fix:** `LNKup_Admin::sanitize_settings()` (registered on `admin_init` for `lnkup_settings`) now only runs for the main LNKup Settings form (`option_page=lnkup_settings_group`). Before, it ran on every `lnkup_settings` write in wp-admin and rebuilt from the old values, so Matching Rules switches (and Passport / Trust & Safety settings saved from wp-admin) reverted on save. WP-CLI saves were unaffected.
+- **Matching Rules form:** blank threshold boxes are ignored on save instead of read as 0 (which forced the ranking-change note and dropped invite caps to 1); the boxes show the current values (40 / 5 / 100 / 50).
+- **Discover timeout fix:** `lnkup_get_discoverable_vendors()` sorts by score / rating / reliability with a per-row lookup instead of an EXISTS-OR-NOT-EXISTS meta clause. On production the old query ran past 90 s with the default "Highest score" sort, so `/crm/vendors?scope=discover` failed on the website ("Could not load vendors") and in the app ("Service unavailable").
+- **`/crm/vendors` discover:** card-only profiles (`LNKup_Vendor_CRM_Profile::get_card()`, no per-organizer history, documents, notes or contact details), `html=0` for app callers, 2-minute per-organizer cache cleared on favorite / preferred toggles, and a friendly 503 (`lnkup_directory_unavailable`) instead of a hang or fatal.
+- **Find Vendors gating:** new `GET /match/organizer/status` (`find_vendors_enabled`); the mobile "Recruit for an event" banner and the web app "Find Vendors" tab only show when it is on, instead of linking to "Coming soon".
+- **Tests:** new `vendor-directory-test.php`, `match-settings-blank-test.php`, `settings-sanitize-test.php`; matching, passport, trust-safety, organizer and financial suites pass; Expo Jest 179/179.
+
+### v12.33.0 (Matching Phases 8–9: tuning tools and staged rollout)
+
+Runbook: [MATCHING_ROLLOUT.md](MATCHING_ROLLOUT.md) · Reference: [MATCHING_DISCOVERY.md](MATCHING_DISCOVERY.md) §11.
+
+- **Staged rollout** for matching, apply and Communications discovery/recruitment flags: internal allowlist → 5% → 25% → 50% → everyone, stable per-user buckets, gated stage changes with override notes and history, `wp lnkup rollout status|set`, Marketplace Intelligence → "Rollout & health". Flags remain the kill switch; cron/compute stay global.
+- **Funnel fixes:** client event allowlist + rate limit on `/marketplace/track/event`; impressions record opportunities, band, position and rules version; clicks from WordPress, Next.js and Expo rails; `match_rec_application` attribution; dashboard click count fixed (`match_click`).
+- **Quality report** on Marketplace Intelligence → Overview by band, section, rules version and audience.
+- **Versioned matching rules** with required notes, `rules_version` on results, preview before save (simulator, no writes) and one-click revert; flag toggles no longer trigger full rebuilds.
+- **Matching health alerts** (stale queue, stalled backfill, failing runs) as admin notices and a throttled email.
+- **Tests:** new `rollout-test` 32, `match-tuning-test` 31, `match-funnel-test` 24; matching, matching-alerts, reapply-policy, booking-application-os, comms, trust and organizer-activation suites pass; Expo Jest 163/163, Expo and Next `tsc` clean for touched files.
 
 ### Phase 27 — Vendor Passport & Reputation OS (passport schema 1; flags off by default)
 
 Architecture: [PHASE_27_VENDOR_PASSPORT.md](PHASE_27_VENDOR_PASSPORT.md) · Release: [PHASE_27_RELEASE_CHECKLIST.md](PHASE_27_RELEASE_CHECKLIST.md).
 
+**Production (thelnkup.com, 2026-11-22):** on — `passport_enabled`, `passport_history_v2`, `review_responses`, `passport_verification_v2`. Off — `document_vault_sharing` and the document migration (private uploads are still served publicly by SiteGround's NGINX Direct Delivery), `matching_reputation_signals` and `flow_passport` (waiting ~24 h).
+
 - **Live immediately (27A hardening):** public reputation reads never write; numeric reputation routes need sign-in; slug-only public lookups honor privacy; private review notes go only to their author/staff; reported reviews stay visible until moderated; expired/pending documents are not "ready"; evidence-based completion; review disputes and unconfirmed flags never lower scores; legacy public document migration tool.
 - **Behind flags:** Passport dashboard view + `/passport/*` REST + `/vendors/{slug}` (`passport_enabled`), verification records & requests (`passport_verification_v2`), Document Vault sharing (`document_vault_sharing`), achievements (`passport_history_v2`), vendor responses (`review_responses`), matching signals (`matching_reputation_signals`), notifications (`flow_passport`).
 - **New tables:** `lnkup_vendor_verification`, `lnkup_document_share`, `lnkup_review_index`. Admin: LNKup → Vendor Passport & Trust.
 - **Clients:** Expo `/(vendor)/passport` + organizer Passport panel + Documents shares; Next.js review responses and indicator-based public mapper.
+
+### Organizer Onboarding v2 — guided setup (no schema change; no plugin version bump)
+
+Architecture: SYSTEM_OVERVIEW §9.21. Off by default: `organizer_onboarding_v2_enabled` (LNKup → Settings → "Organizer guided setup (v2)").
+
+- **One onboarding model:** `LNKup_Organizer_Onboarding_Flow` stores only the organizer's choices (user meta `_lnkup_onboarding_state`: formats, current step, skipped steps, dismissed, started/completed). Step status always comes from `LNKup_Organizer_Activation`. Steps: account → organization → format → first event → payouts → share. Format and payouts can be skipped.
+- **REST:** `GET/PATCH lnkup/v1/organizer/onboarding` (404 when the flag is off; writes are self-only).
+- **Signup:** organizer signup asks for organization name, city/state and an optional category (web form, `/auth/register`, Expo). These fields are required only on the web form with the flag on, but are saved whenever they are sent. New organizers land on **Get started**, and organizers with unfinished setup or draft events/tours are sent back there at login.
+- **Get started:** format cards route tours/series/recurring to Tours & Series when Portfolio OS is on (otherwise to Create Event with a note), a resume-drafts card, cover/Instagram/TikTok/service cities/category on the organization step, inline payout status with a "Finish payout setup" link, tour public links and an invite CTA in Share, and "Setup complete" copy. `?view=start&step=` focuses a step.
+- **Cleanup:** with the flag on, the Overview shows a compact setup banner instead of the old checklist. The legacy organizer welcome/tour modal (`lnkup_organizer_welcome_seen`) was removed. `LNKup_Activation_Emails` skips the organizer daily drip whenever the Comms `flow_onboarding` or `flow_activation` flow is on, and skips the organizer welcome when `flow_onboarding` is on.
+- **Growth/Comms:** lead activity `onboarding_format_selected` / `onboarding_completed`. Comms `organizer_onboarding_step` messages stop once guided setup is complete or dismissed.
+- **Apps:** the Next.js `/api/organizer/onboarding` BFF reads and writes WP state (falls back to its cookie when the flag is off). Expo shows a **Continue setup** card on organizer home.
+- **Tests:** `scripts/e2e/php/organizer-onboarding-flow-test.php`, Connect "verifying" case in `organizer-activation-test.php`, `tests/e2e/organizer-onboarding.spec.ts` (seed: `scripts/e2e/seed-onboarding.php`).
 
 ### Organizer Portfolio OS — tours, recurring series, templates (portfolio schema 1; no plugin version bump)
 
@@ -58,6 +93,16 @@ Architecture: SYSTEM_OVERVIEW §9.24. Off by default: `portfolio_os_enabled` (ev
   - `scripts/e2e/php/portfolio-os-test.php`: 117 assertions pass on wp-env. It covers the 7-stop tour with an Atlanta override, multi-stop apply (approve 2, reject 1, pay 2), reconciliation, the monthly series with a skip and a move, DST, templates, the 14-date background job and cross-organizer denial.
   - `tests/e2e/portfolio-os.spec.ts`: 3 pass on Chromium after `scripts/e2e/seed-portfolio.php`.
 
+### Partner and referral notifications (lnkup-communications, `flow_partners`, off by default)
+
+Details: [PARTNERSHIP_OS.md](PARTNERSHIP_OS.md#partner-and-referral-notifications-lnkup-communications-flag-flow_partners-off-by-default).
+
+- New `partner` recipient role (active City Connector / affiliate / strategic contact accounts) and `partnerships` category; partner messages go only to the owning account and are email only for now.
+- Triggers for application approval, referral registered and milestones, commission recorded/approved, daily-grouped payout records, lead progress, referral-invite joins and credits, plus admin alerts for new applications and open partner reviews.
+- Commission notices re-read the ledger at send time and are cancelled on refund; reversed, held or conflicted commissions are never announced. Applicant emails come from the marketplace mailer with suppression checks and audit entries.
+- New core hooks: `lnkup_partner_referral_attributed`, `lnkup_partner_referral_milestone`, `lnkup_org_lead_stage_changed`, `lnkup_org_lead_outcome_changed`.
+- Tests: `comms-partners-test.php` (41 assertions) plus all comms, partnership and Organizer Growth suites pass on wp-env.
+
 ### Partnership OS Stages 4–5 — Affiliate and Strategic Partner programs (12.30.0+, partner schema 1.1.1)
 
 Details: [PARTNERSHIP_OS.md](PARTNERSHIP_OS.md#stages-45-affiliate-and-strategic-partner-programs-plugin-12300-schema-111).
@@ -68,6 +113,39 @@ Details: [PARTNERSHIP_OS.md](PARTNERSHIP_OS.md#stages-45-affiliate-and-strategic
 - **Strategic Partners tab** on the existing `lnkup_org_partners` table: pipeline stages, owner, follow-up, agreement rule, contacts, performance; dedupe by domain/name and links the existing CRM lead.
 - **Public copy fix:** `/connector-interest/` no longer hardcodes "10% commission"; it renders the published rule.
 - **Tests:** `scripts/e2e/php/partnerships-programs-test.php` passes on wp-env alongside the Stage 1–3 suite; Playwright additions in `tests/e2e/partnerships.spec.ts`.
+
+### Organizer Management OS — rollout prep (no schema change)
+
+- Review workspace: rubric editor (PUT `events/{id}/rubric`) and waitlist reorder (`opportunities/{id}/waitlist/reorder`) screens in `organizer-review.js`.
+- Reviewer assignment email (`LNKup_Application_Review::notify_reviewer`).
+- Pilot allowlist `organizer_os_pilot_user_ids` (admin settings field): Organizer OS flags on for listed owners and their teams (`LNKup_Feature_Flags::organizer_os()`).
+- Staff nav items are always primary tier (never hidden under More).
+- Organizer specs pass with flags on, apart from failures that also happen with flags off; specs that test the classic requests page use `mode=classic`.
+- Enable / rollback checklist: `docs/ORGANIZER_OS_ROLLOUT.md`.
+
+### Organizer Management OS — Wave 2 (event readiness; Organizer OS schema 2; no version bump)
+
+Architecture: SYSTEM_OVERVIEW §9.25. New features are off by default: `organizer_ops_v2_enabled` and `organizer_document_review_enabled` (LNKup → Settings → Vendor applications). Document review also needs Passport `document_vault_sharing`.
+
+- **Event tasks:** assignees, due dates, priority, comments, and organizer task templates with due dates counted back from the event date.
+  - Event staff see the tasks; `edit_ops` manages them; assignees can mark their own done. Assigning a task never grants access.
+  - Assignment email, a daily due/overdue digest (`lnkup_event_tasks_due`), and team audit entries.
+  - New **Tasks** view and an event **Tasks** tab; the operations lifecycle bar shows open and overdue counts.
+- **Event readiness:** 11 checks computed from event records.
+  - Each item is shown as *verified* (system), *confirmed* (by a person, only where the system cannot decide), *incomplete*, or *not applicable*. A failing check is never overridden by a manual confirmation.
+  - Countdown, percent and next steps in an event **Readiness** tab.
+- **Organizer document review:** per-event request, accept, ask for a replacement, or waive for each required document type.
+  - Expired documents show as expired even after acceptance.
+  - Decisions never change LNKup's platform verification.
+  - Files open only for the event owner, through the vendor's Passport share.
+  - New `review_documents` team capability (Admin, Event Manager, Vendor Manager).
+  - Wired into the roster's "Documents needed" group, the readiness check, the Wave 1 review drawer, and the classic "remind vendor" button.
+- **Overview:** "Needs attention" (only real, non-zero counts), upcoming event cards with readiness and next step, recent activity and quick actions. Also available as `GET organizer/overview` for the apps later.
+- **Tables:** `lnkup_event_tasks`, `lnkup_event_task_comments`, `lnkup_task_templates`, `lnkup_app_document_reviews`.
+- **Tests:**
+  - New `scripts/e2e/php/organizer-os-wave2-test.php` (59 assertions) passes.
+  - The organizer-os, booking-application-os, trust-safety, reapply-policy, organizer-activation, matching, financial-security, financial-checkout, comms-organizer, portfolio-os and vendor-passport suites still pass.
+  - Playwright `organizer-readiness`, `organizer-tasks` and `organizer-documents`: 10/10 (chromium). Fixtures: `scripts/e2e/seed-organizer-os.php on|off`.
 
 ### Organizer Management OS — Wave 1 (foundation and review; no version bump)
 
@@ -108,6 +186,17 @@ Audit: [ORGANIZER_MANAGEMENT_OS_AUDIT.md](ORGANIZER_MANAGEMENT_OS_AUDIT.md) · A
   - New Playwright specs `organizer-review`, `organizer-team`, `organizer-waitlist` and `organizer-integrity`: 20 passed, 1 skipped (chromium, one worker). The skip is the booth-edit check, because `seed.php` clears booth assignments; the PHP suite covers that case.
   - Fixtures for the specs: run `scripts/e2e/seed-organizer-os.php on` after `seed.php`, and `off` afterwards so the classic Requests specs see the classic page.
   - The existing organizer Playwright specs were not re-run.
+
+### Organizer Acquisition Phase 6 — Vendor Supply Intelligence (organizer-growth schema 1.2.0)
+
+Architecture: SYSTEM_OVERVIEW §9.24. No plugin version bump; the snapshot table migrates through `lnkup_org_growth_schema`.
+
+- **Daily supply snapshot** per city and vendor category: vendors based there, vendors who serve it (cities served, states served, service radius), active and verified vendors, recent applicants and paid vendors, vendors with saved searches for the city, open booths, live organizers and open organizer leads. National travellers are reported separately.
+- **Signals:** Recruit organizers / Recruit vendors / Balanced / Not enough data, from configurable thresholds (Settings tab).
+- **Organizer Growth → Vendor Supply tab:** filters, 7-day change, city drawer (categories, categories with vendors but no booths, 90-day trend, open leads), CSV export, Rebuild now.
+- **Lead scoring** "existing vendor market" now counts active vendors who serve the city instead of every published profile. The lead drawer shows a supply card.
+- **Connectors:** "Vendor supply in your cities" panel on My Cities (`GET connector/supply`, aggregates only, small counts shown as "<3").
+- **Tests:** new `org-supply-intel-test.php` (62/62), added to `run-org-growth-php.ps1`. All 7 organizer-growth suites pass, as do `matching`, `matching-alerts`, `partnerships` and `partnerships-programs`. Playwright `organizer-growth.spec.ts` passes 12/12, including the 2 new Vendor Supply cases. The connector panel is covered by the PHP route tests; no browser test was run for it.
 
 ### Organizer Acquisition Phase 7 — Analytics & Activation Automations (organizer-growth schema 1.1.0 + lnkup-communications 1.2.0)
 

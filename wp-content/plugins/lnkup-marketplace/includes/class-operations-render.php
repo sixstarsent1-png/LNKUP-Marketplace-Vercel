@@ -90,8 +90,9 @@ class LNKup_Operations_Render {
 	 * Lifecycle progress bar.
 	 *
 	 * @param array $lifecycle Lifecycle DTO.
+	 * @param int   $event_id  Event (adds the open/overdue task count when tasks are on).
 	 */
-	public static function lifecycle_bar( $lifecycle ) {
+	public static function lifecycle_bar( $lifecycle, $event_id = 0 ) {
 		if ( ! $lifecycle ) {
 			return '';
 		}
@@ -104,6 +105,15 @@ class LNKup_Operations_Render {
 				$html .= '<li>' . esc_html( $task ) . '</li>';
 			}
 			$html .= '</ul>';
+		}
+		if ( $event_id && LNKup_Feature_Flags::organizer_ops() && LNKup_Organizer_OS_Tables::ready( '2' ) ) {
+			$counts = LNKup_Event_Tasks::event_counts( $event_id );
+			$url    = add_query_arg( array( 'event' => $event_id, 'tab' => 'tasks' ), lnkup_page_url_helper( 'organizer-dashboard' ) );
+			$label  = $counts['open']
+				/* translators: 1: open tasks, 2: overdue tasks */
+				? sprintf( __( '%1$d open tasks, %2$d overdue', 'lnkup-marketplace' ), $counts['open'], $counts['overdue'] )
+				: __( 'No open tasks', 'lnkup-marketplace' );
+			$html .= '<p class="lnkup-ops-lifecycle__task-count' . ( $counts['overdue'] ? ' is-overdue' : '' ) . '"><a href="' . esc_url( $url ) . '">' . esc_html( $label ) . '</a></p>';
 		}
 		$html .= '</div>';
 		return $html;

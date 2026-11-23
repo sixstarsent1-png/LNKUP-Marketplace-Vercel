@@ -207,7 +207,10 @@
       }
     });
     var cats = [];
-    root.querySelectorAll('[data-filter-cat]:checked').forEach(function (el) { cats.push(el.getAttribute('data-filter-cat')); });
+    root.querySelectorAll('[data-filter-cat]:checked').forEach(function (el) {
+      var packed = el.getAttribute('data-filter-cat-terms') || el.getAttribute('data-filter-cat') || '';
+      packed.split(',').forEach(function (term) { if (term) cats.push(term); });
+    });
     if (cats.length) state.filters.categories = cats.join(',');
 
     var types = [];
@@ -490,17 +493,45 @@
   function matchingTabDefs() {
     if (!useMatching()) return [];
     var defs = [
-      { key: 'match_recommended', label: 'Recommended for You', fetch: function () { return matchApi('recommended'); } },
-      { key: 'match_markets', label: 'Near Your Cities', fetch: function () { return matchApi('preferred_markets'); } },
-      { key: 'match_new', label: 'New Opportunities', fetch: function () { return matchApi('new'); } },
-      { key: 'match_deadlines', label: 'Deadlines Approaching', fetch: function () { return matchApi('deadlines'); } },
-      { key: 'match_previous', label: 'Previously Worked With', fetch: function () { return matchApi('previous_organizers'); } }
+      { key: 'match_recommended', section: 'recommended', label: 'Recommended for You', fetch: function () { return matchApi('recommended'); } },
+      { key: 'match_markets', section: 'preferred_markets', label: 'Near Your Cities', fetch: function () { return matchApi('preferred_markets'); } },
+      { key: 'match_new', section: 'new', label: 'New Opportunities', fetch: function () { return matchApi('new'); } },
+      { key: 'match_deadlines', section: 'deadlines', label: 'Deadlines Approaching', fetch: function () { return matchApi('deadlines'); } },
+      { key: 'match_previous', section: 'previous_organizers', label: 'Previously Worked With', fetch: function () { return matchApi('previous_organizers'); } }
     ];
     if (cfg.matching.tours) {
       defs.push({ key: 'match_tours', label: 'Tours Accepting Vendors', fetch: function () { return matchApi('tours'); }, render: renderTourCards });
       defs.push({ key: 'match_series', label: 'Recurring Markets', fetch: function () { return matchApi('series'); }, render: renderTourCards });
     }
     return defs;
+  }
+
+  /**
+   * Record a click on a recommended opportunity (section + position) for the match funnel.
+   * Best effort: never blocks navigation.
+   */
+  function trackMatchClick(e) {
+    var link = e.target.closest('a, button');
+    var rail = link && link.closest('[data-match-section]');
+    var card = rail && link.closest('[data-opportunity-id]');
+    if (!card || !cfg.restUrl) return;
+    var cards = Array.prototype.slice.call(rail.querySelectorAll('article[data-opportunity-id]'));
+    var body = JSON.stringify({
+      event_type: 'match_click',
+      opportunity_id: parseInt(card.getAttribute('data-opportunity-id'), 10) || 0,
+      data: { section: rail.getAttribute('data-match-section'), position: cards.indexOf(card) + 1, source: 'wp_find' }
+    });
+    try {
+      fetch(cfg.restUrl + '/track/event', {
+        method: 'POST',
+        credentials: 'same-origin',
+        keepalive: true,
+        headers: { 'X-WP-Nonce': cfg.restNonce || '', 'Content-Type': 'application/json' },
+        body: body
+      }).catch(function () {});
+    } catch (err) {
+      // Analytics must never break the click.
+    }
   }
 
   function initExploreMore() {
@@ -543,7 +574,8 @@
         if (!items.length) return;
         var html = def.render ? def.render(items) : (data.html || '');
         if (!html) return;
-        exploreTabCache[def.key] = '<div class="lnkup-event-grid lnkup-mp-v2__rail lnkup-mp-v2__rail-scroll-x">' + html + '</div>';
+        var sectionAttr = def.section ? ' data-match-section="' + escapeAttr(def.section) + '"' : '';
+        exploreTabCache[def.key] = '<div class="lnkup-event-grid lnkup-mp-v2__rail lnkup-mp-v2__rail-scroll-x"' + sectionAttr + '>' + html + '</div>';
         tabs.push({ key: def.key, label: def.label });
       });
 
@@ -580,6 +612,7 @@
         if (!btn) return;
         activateExploreTab(btn.getAttribute('data-tab'));
       });
+      panels.addEventListener('click', trackMatchClick);
 
       toggleDiscoveryRails();
     }).catch(function () {

@@ -232,7 +232,7 @@ class LNKup_Comms_Admin {
 		echo '</p><p class="description">' . esc_html__( 'Plain text only. A paragraph whose optional variable is empty is dropped; a missing required variable stops the send instead of sending a placeholder.', 'lnkup-communications' ) . '</p>';
 		self::form_open( 'save_template', 'templates' );
 		echo '<input type="hidden" name="template" value="' . esc_attr( $key ) . '"><table class="form-table">';
-		foreach ( array( 'subject', 'heading', 'cta', 'push_title', 'push_body' ) as $field ) {
+		foreach ( array( 'subject', 'heading', 'cta', 'push_title', 'push_body', 'inbox_body' ) as $field ) {
 			echo '<tr><th><label for="tpl-' . esc_attr( $field ) . '">' . esc_html( $field ) . '</label></th><td><input type="text" class="large-text" id="tpl-' . esc_attr( $field ) . '" name="fields[' . esc_attr( $field ) . ']" value="' . esc_attr( (string) ( $template[ $field ] ?? '' ) ) . '"></td></tr>';
 		}
 		echo '<tr><th><label for="tpl-body">body</label></th><td><textarea class="large-text" rows="6" id="tpl-body" name="fields[body]">' . esc_textarea( implode( "\n", (array) ( $template['body'] ?? array() ) ) ) . '</textarea><p class="description">' . esc_html__( 'One paragraph per line.', 'lnkup-communications' ) . '</p></td></tr></table>';
@@ -251,6 +251,9 @@ class LNKup_Comms_Admin {
 		} else {
 			$data = $preview->get_data();
 			echo '<h3>' . esc_html__( 'Push / inbox preview (sample values)', 'lnkup-communications' ) . '</h3><div class="lnkup-comms-push"><strong>' . esc_html( $data['rendered']['push_title'] ) . '</strong><br>' . esc_html( $data['rendered']['push_body'] ) . '</div>';
+			if ( '' !== (string) ( $data['rendered']['inbox_body'] ?? '' ) ) {
+				echo '<p class="description">' . esc_html__( 'Inbox text:', 'lnkup-communications' ) . ' ' . esc_html( $data['rendered']['inbox_body'] ) . '</p>';
+			}
 			echo '<h3>' . esc_html__( 'Email preview (sample values)', 'lnkup-communications' ) . '</h3><iframe class="lnkup-comms-iframe" sandbox="" title="' . esc_attr__( 'Email preview', 'lnkup-communications' ) . '" srcdoc="' . esc_attr( $data['html'] ) . '"></iframe>';
 		}
 		echo '</div></div>';

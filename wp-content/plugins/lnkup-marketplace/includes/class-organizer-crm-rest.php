@@ -235,7 +235,13 @@ class LNKup_Organizer_CRM_REST {
 	}
 
 	public static function vendors( WP_REST_Request $request ) {
-		$result = LNKup_Vendor_Directory::search( get_current_user_id(), $request->get_params() );
+		try {
+			$result = LNKup_Vendor_Directory::search( get_current_user_id(), $request->get_params() );
+		} catch ( Throwable $e ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( 'LNKup vendor directory failed: ' . $e->getMessage() );
+			return new WP_Error( 'lnkup_directory_unavailable', __( "We couldn't load vendors. Try again in a moment.", 'lnkup-marketplace' ), array( 'status' => 503 ) );
+		}
 		return rest_ensure_response( $result );
 	}
 
@@ -323,6 +329,7 @@ class LNKup_Organizer_CRM_REST {
 		$row = LNKup_Organizer_CRM::get_relationship( $org, $vendor_id );
 		$new = empty( $row['is_favorite'] ) ? 1 : 0;
 		$wpdb->update( $table, array( 'is_favorite' => $new ), array( 'organizer_user_id' => $org, 'vendor_user_id' => $vendor_id ), array( '%d' ), array( '%d', '%d' ) );
+		LNKup_Vendor_Directory::flush_discover_cache( $org );
 		return rest_ensure_response( array( 'is_favorite' => (bool) $new ) );
 	}
 
@@ -335,6 +342,7 @@ class LNKup_Organizer_CRM_REST {
 		$row = LNKup_Organizer_CRM::get_relationship( $org, $vendor_id );
 		$new = empty( $row['is_preferred'] ) ? 1 : 0;
 		$wpdb->update( $table, array( 'is_preferred' => $new ), array( 'organizer_user_id' => $org, 'vendor_user_id' => $vendor_id ), array( '%d' ), array( '%d', '%d' ) );
+		LNKup_Vendor_Directory::flush_discover_cache( $org );
 		return rest_ensure_response( array( 'is_preferred' => (bool) $new ) );
 	}
 

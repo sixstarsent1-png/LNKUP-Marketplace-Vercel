@@ -179,6 +179,7 @@ function VendorWalletContent() {
                   label="Payments due"
                   amount={summary?.amountDue}
                   currency={summary?.currency}
+                  status={loading ? "loading" : error ? "unavailable" : "ready"}
                   sublabel={`${summary?.paymentRequiredCount ?? paymentRequired.length} to pay`}
                   icon={Wallet}
                   tone="primary"
@@ -188,6 +189,7 @@ function VendorWalletContent() {
                   label="Paid bookings"
                   amount={summary?.totalPaid}
                   currency={summary?.currency}
+                  status={loading ? "loading" : error ? "unavailable" : "ready"}
                   sublabel={`${summary?.paidBookingsCount ?? 0} bookings`}
                   icon={CheckCircle2}
                   tone="success"

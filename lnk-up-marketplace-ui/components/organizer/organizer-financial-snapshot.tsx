@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
 function formatMoney(amount?: number, currency = "USD"): string {
-  if (amount == null) return "—"
+  if (amount == null) return "Unavailable"
   return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount)
 }
 

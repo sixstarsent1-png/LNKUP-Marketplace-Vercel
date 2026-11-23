@@ -13,7 +13,7 @@ defined( 'ABSPATH' ) || exit;
 
 class LNKup_Organizer_OS_Tables {
 
-	const SCHEMA_VERSION = '1';
+	const SCHEMA_VERSION = '2';
 	const SCHEMA_OPTION  = 'lnkup_organizer_os_schema';
 
 	public static function init() {
@@ -124,6 +124,102 @@ class LNKup_Organizer_OS_Tables {
 				KEY opportunity_id (opportunity_id)
 			) {$charset};"
 		);
+
+		$tasks = self::event_tasks_table();
+		dbDelta(
+			"CREATE TABLE {$tasks} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				event_id bigint(20) unsigned NOT NULL,
+				tour_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				title varchar(190) NOT NULL DEFAULT '',
+				description text,
+				assignee_user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				due_at datetime DEFAULT NULL,
+				priority varchar(10) NOT NULL DEFAULT 'normal',
+				status varchar(12) NOT NULL DEFAULT 'open',
+				source varchar(12) NOT NULL DEFAULT 'manual',
+				template_item_key varchar(80) NOT NULL DEFAULT '',
+				created_by bigint(20) unsigned NOT NULL DEFAULT 0,
+				completed_by bigint(20) unsigned NOT NULL DEFAULT 0,
+				completed_at datetime DEFAULT NULL,
+				created_at datetime NOT NULL,
+				updated_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				KEY event_status (event_id, status),
+				KEY assignee_status_due (assignee_user_id, status, due_at),
+				KEY due_at (due_at)
+			) {$charset};"
+		);
+
+		$comments = self::task_comments_table();
+		dbDelta(
+			"CREATE TABLE {$comments} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				task_id bigint(20) unsigned NOT NULL,
+				user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				body text NOT NULL,
+				created_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				KEY task_id (task_id)
+			) {$charset};"
+		);
+
+		$templates = self::task_templates_table();
+		dbDelta(
+			"CREATE TABLE {$templates} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				owner_user_id bigint(20) unsigned NOT NULL,
+				name varchar(120) NOT NULL DEFAULT '',
+				items longtext NOT NULL,
+				created_at datetime NOT NULL,
+				updated_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				KEY owner_user_id (owner_user_id)
+			) {$charset};"
+		);
+
+		$doc_reviews = self::document_reviews_table();
+		dbDelta(
+			"CREATE TABLE {$doc_reviews} (
+				id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+				application_id bigint(20) unsigned NOT NULL,
+				event_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				requirement_type varchar(60) NOT NULL,
+				document_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				status varchar(24) NOT NULL DEFAULT 'requested',
+				reason text,
+				message text,
+				requested_at datetime DEFAULT NULL,
+				reviewed_by bigint(20) unsigned NOT NULL DEFAULT 0,
+				reviewed_at datetime DEFAULT NULL,
+				history longtext,
+				created_at datetime NOT NULL,
+				updated_at datetime NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY app_type (application_id, requirement_type),
+				KEY event_status (event_id, status)
+			) {$charset};"
+		);
+	}
+
+	public static function event_tasks_table() {
+		global $wpdb;
+		return $wpdb->prefix . 'lnkup_event_tasks';
+	}
+
+	public static function task_comments_table() {
+		global $wpdb;
+		return $wpdb->prefix . 'lnkup_event_task_comments';
+	}
+
+	public static function task_templates_table() {
+		global $wpdb;
+		return $wpdb->prefix . 'lnkup_task_templates';
+	}
+
+	public static function document_reviews_table() {
+		global $wpdb;
+		return $wpdb->prefix . 'lnkup_app_document_reviews';
 	}
 
 	public static function pass_tokens_table() {
@@ -154,7 +250,8 @@ class LNKup_Organizer_OS_Tables {
 	/**
 	 * Whether the schema has been installed (features degrade to "not available" otherwise).
 	 */
-	public static function ready() {
-		return get_option( self::SCHEMA_OPTION ) === self::SCHEMA_VERSION;
+	public static function ready( $min_version = '1' ) {
+		$installed = (string) get_option( self::SCHEMA_OPTION, '' );
+		return '' !== $installed && version_compare( $installed, (string) $min_version, '>=' );
 	}
 }

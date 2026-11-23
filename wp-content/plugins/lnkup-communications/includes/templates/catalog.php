@@ -3,7 +3,8 @@
  * Default message templates. Plain text only; the renderer escapes everything.
  *
  * Keys: trigger key, optionally "trigger:variant".
- * Fields: subject, heading, body (paragraphs), cta, push_title, push_body, required (variables).
+ * Fields: subject, heading, body (paragraphs), cta, push_title, push_body, inbox_body (optional), required (variables).
+ * push_body never contains money amounts; inbox_body may.
  * A paragraph that references an empty optional variable is dropped. A missing
  * required variable stops the send (logged as render_failed) instead of sending
  * "{{event_name}}" to a real person.
@@ -775,7 +776,7 @@ return array(
 		'subject'    => __( 'Someone you referred joined LNKup', 'lnkup-communications' ),
 		'heading'    => __( 'A referral registered', 'lnkup-communications' ),
 		'body'       => array(
-			__( '{{referred_name}} ({{referred_role}}) registered on LNKup through your link.', 'lnkup-communications' ),
+			__( '{{referred_name}}, {{referred_role}} you referred, registered on LNKup through your link.', 'lnkup-communications' ),
 			__( 'You will hear from us again when they reach a qualifying milestone. Registration alone does not earn a commission.', 'lnkup-communications' ),
 		),
 		'cta'        => __( 'View your referrals', 'lnkup-communications' ),
@@ -810,7 +811,8 @@ return array(
 		),
 		'cta'        => __( 'View earnings', 'lnkup-communications' ),
 		'push_title' => __( 'Commission recorded', 'lnkup-communications' ),
-		'push_body'  => __( '{{commission_amount}} is pending review.', 'lnkup-communications' ),
+		'push_body'  => __( 'A new commission is pending review. Open LNKup to see the details.', 'lnkup-communications' ),
+		'inbox_body' => __( '{{commission_amount}} from {{referred_name}} is pending through the refund hold and LNKup review.', 'lnkup-communications' ),
 		'required'   => array( 'commission_amount', 'referred_name' ),
 	),
 	'p_commission_approved'            => array(
@@ -819,7 +821,8 @@ return array(
 		'body'       => array( __( 'LNKup approved a commission of {{commission_amount}}. It is payable and will be included in your next payout.', 'lnkup-communications' ) ),
 		'cta'        => __( 'View earnings', 'lnkup-communications' ),
 		'push_title' => __( 'Commission approved', 'lnkup-communications' ),
-		'push_body'  => __( '{{commission_amount}} is approved.', 'lnkup-communications' ),
+		'push_body'  => __( 'A commission was approved and is payable. Open LNKup to see the details.', 'lnkup-communications' ),
+		'inbox_body' => __( '{{commission_amount}} is approved and will be included in your next payout.', 'lnkup-communications' ),
 		'required'   => array( 'commission_amount' ),
 	),
 	'p_payout_recorded'                => array(
@@ -863,8 +866,7 @@ return array(
 	'r_invite_joined'                  => array(
 		'subject'    => __( '{{referred_name}} joined LNKup with your invite', 'lnkup-communications' ),
 		'heading'    => __( 'Your invite was used', 'lnkup-communications' ),
-		'body'       => array( __( '{{referred_name}} joined LNKup as {{referred_role}} using your invite link. Referral credit is earned on their qualifying paid bookings, not on signup.', 'lnkup-communications' ) ),
-		'cta'        => __( 'View your invites', 'lnkup-communications' ),
+		'body'       => array( __( '{{referred_name}} joined LNKup as {{referred_role}} using your invite link. Referral credit is earned on their qualifying paid bookings, not on signup.', 'lnkup-communications' ) ),		'cta'        => __( 'View your invites', 'lnkup-communications' ),
 		'push_title' => __( 'Your invite was used', 'lnkup-communications' ),
 		'push_body'  => __( '{{referred_name}} joined LNKup with your invite.', 'lnkup-communications' ),
 		'required'   => array( 'referred_name', 'referred_role' ),

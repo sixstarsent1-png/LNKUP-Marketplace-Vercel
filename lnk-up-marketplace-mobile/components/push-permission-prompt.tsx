@@ -22,10 +22,14 @@ const COPY = {
     title: "Know when vendors apply and pay",
     body: "Get alerts for new applications, confirmed bookings and check-in activity.",
   },
+  partner: {
+    title: "Know when your referrals move",
+    body: "Get alerts when someone joins through your link, a lead progresses or a commission is recorded.",
+  },
 } as const
 
 /** Contextual push opt-in shown on Home instead of prompting at sign-in. */
-export function PushPermissionPrompt({ role }: { role: "vendor" | "organizer" }) {
+export function PushPermissionPrompt({ role }: { role: keyof typeof COPY }) {
   const { auth } = useAuth()
   const [visible, setVisible] = useState(false)
   const [record, setRecord] = useState<PromptRecord | null>(null)

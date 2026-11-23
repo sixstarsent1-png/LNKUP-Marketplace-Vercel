@@ -59,18 +59,18 @@ test.describe('Launch homepage', () => {
       return;
     }
 
-    const hashLinks = page.locator('a[href$="#opportunities"]');
-    await expect(hashLinks.first()).toBeAttached();
     await expect(page.locator('#opportunities')).toBeAttached();
 
     const viewport = page.viewportSize();
+    const eventsLink = viewport && viewport.width < 768
+      ? page.locator('#lnkup-mobile-nav').getByRole('link', { name: /^events$/i })
+      : page.getByRole('navigation', { name: /primary/i }).getByRole('link', { name: /^events$/i });
     if (viewport && viewport.width < 768) {
       await page.getByRole('button', { name: /toggle menu/i }).click();
-      await page.locator('#lnkup-mobile-nav').getByRole('link', { name: /opportunities/i }).click();
-    } else {
-      await page.getByRole('navigation', { name: /primary/i }).getByRole('link', { name: /opportunities/i }).click();
     }
-    await expect(page.locator('#opportunities')).toBeInViewport();
+    await expect(eventsLink).toBeVisible();
+    await eventsLink.click();
+    await expect(page).toHaveURL(/opportunities/);
   });
 
   test('sign-up page renders role selector and live copy when open', async ({ page }) => {
@@ -115,18 +115,11 @@ test.describe('Launch homepage', () => {
 
   test('hero avoids fake vendor counts', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByTestId('lnkup-hero-visual')).toBeVisible();
+    await expect(page.getByTestId('lnkup-hero-search')).toBeVisible();
     await expect(page.getByText('4,800+')).toHaveCount(0);
-    await expect(page.getByText('LNKup Event')).toHaveCount(0);
-
-    if (await marketplaceIsOpen(page)) {
-      await expect(page.getByTestId('lnkup-hero-goal-card')).toHaveCount(0);
-      await expect(page.getByTestId('lnkup-hero-stat-card')).toBeVisible();
-      return;
-    }
-
-    await expect(page.getByTestId('lnkup-hero-goal-card')).toBeVisible();
-    await expect(page.getByText('active vendors')).toHaveCount(0);
+    await expect(page.getByText('LNKup Event', { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('lnkup-hero-goal-card')).toHaveCount(0);
+    await expect(page.getByTestId('lnkup-hero-stat-card')).toHaveCount(0);
   });
 
   test('login and lost-password pages are LNKup branded', async ({ page }) => {

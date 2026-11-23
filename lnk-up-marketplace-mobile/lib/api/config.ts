@@ -27,6 +27,12 @@ export function getOrganizerDashboardUrl(): string {
   return `${getWpBaseUrl()}/organizer-dashboard/`
 }
 
+/** Web Partner dashboard (City Connector, affiliate, strategic partner), optionally on one view. */
+export function getPartnerDashboardUrl(view?: string): string {
+  const base = `${getWpBaseUrl()}/connector-dashboard/`
+  return view ? `${base}?view=${encodeURIComponent(view)}` : base
+}
+
 export function getOrganizerCreateUrl(): string {
   return `${getOrganizerDashboardUrl()}#create`
 }

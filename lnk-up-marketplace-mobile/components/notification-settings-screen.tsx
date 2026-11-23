@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { Platform, StyleSheet, Switch, View } from "react-native"
+import type { Href } from "expo-router"
 
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { PushPreferencesCard } from "@/components/push-preferences-card"
@@ -21,7 +22,13 @@ import { showToast } from "@/lib/feedback/feedback"
 import { clearPushRegistration, syncPushRegistration } from "@/lib/push/notifications"
 import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
-type Props = { role: "vendor" | "organizer" }
+type Props = { role: "vendor" | "organizer" | "partner" }
+
+const INBOX_FOR_ROLE: Record<Props["role"], Href> = {
+  vendor: "/(vendor)/notifications",
+  organizer: "/(organizer)/notifications",
+  partner: "/(partner)/notifications",
+}
 
 const EMAIL_OPTIONS: ReadonlyArray<{ value: EmailMode; label: string }> = [
   { value: "immediate", label: "Instant" },
@@ -116,7 +123,7 @@ export function NotificationSettingsScreen({ role }: Props) {
     <Screen
       title="Notification settings"
       subtitle="Choose how LNKup reaches you"
-      header={<BackLink label="Notifications" fallbackHref={role === "organizer" ? "/(organizer)/notifications" : "/(vendor)/notifications"} />}
+      header={<BackLink label="Notifications" fallbackHref={INBOX_FOR_ROLE[role]} />}
     >
       {loading ? <LoadingPanel label="Loading your settings…" variant="skeleton" count={4} /> : null}
       {!loading && error ? <ErrorPanel title={error.title} message={error.message} onAction={() => void load()} /> : null}

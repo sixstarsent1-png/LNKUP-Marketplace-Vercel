@@ -138,6 +138,21 @@
 	color: var(--og-warn);
 }
 
+.lnkup-og .lnkup-og-signal.signal-recruit_organizers {
+	background: #e9f9c9;
+	color: #2f4a00;
+}
+
+.lnkup-og .lnkup-og-signal.signal-recruit_vendors {
+	background: #fff1dc;
+	color: var(--og-warn);
+}
+
+.lnkup-og .lnkup-og-signal.signal-insufficient_data {
+	background: #f0f0f1;
+	color: #50575e;
+}
+
 .lnkup-og .lnkup-og-badge.is-muted {
 	background: #efefec;
 	color: var(--og-muted);

@@ -21,6 +21,7 @@ import { PageHeader } from "@/components/marketplace/page-header"
 import { VendorCard } from "@/components/marketplace/vendor-card"
 import { OrganizerVendorRequestCard } from "@/components/organizer/organizer-vendor-request-card"
 import { FindVendorsPanel } from "@/components/organizer/find-vendors-panel"
+import { useFindVendorsEnabled } from "@/lib/hooks/use-match"
 import { PanelContent, EmptyState, SkeletonList } from "@/components/marketplace/states"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -40,6 +41,8 @@ const OrganizerVendorProfileDrawer = dynamic(
 
 function OrganizerVendorsContent() {
   const live = isLiveApiEnabled()
+  const findVendorsEnabled = useFindVendorsEnabled()
+  const showFindVendors = !live || findVendorsEnabled
   const searchParams = useSearchParams()
   const eventFilter = searchParams.get("event")
   const { state: qaState, retry: qaRetry } = usePanelState()
@@ -272,7 +275,7 @@ function OrganizerVendorsContent() {
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
           <TabsList variant="line" className="w-max">
             <TabsTrigger value="requests">Requests ({pending.length})</TabsTrigger>
-            <TabsTrigger value="find">Find Vendors</TabsTrigger>
+            {showFindVendors && <TabsTrigger value="find">Find Vendors</TabsTrigger>}
             <TabsTrigger value="discover">Discover</TabsTrigger>
             <TabsTrigger value="approved">Approved ({approved.length})</TabsTrigger>
             <TabsTrigger value="lists">Lists</TabsTrigger>
@@ -311,17 +314,19 @@ function OrganizerVendorsContent() {
           </PanelContent>
         </TabsContent>
 
-        <TabsContent value="find" className="mt-4">
-          {live ? (
-            <FindVendorsPanel initialEventId={eventFilter} />
-          ) : (
-            <EmptyState
-              icon={Search}
-              title="Find Vendors uses live data"
-              description="Connect to LNKup to see vendors that match your events."
-            />
-          )}
-        </TabsContent>
+        {showFindVendors && (
+          <TabsContent value="find" className="mt-4">
+            {live ? (
+              <FindVendorsPanel initialEventId={eventFilter} />
+            ) : (
+              <EmptyState
+                icon={Search}
+                title="Find Vendors uses live data"
+                description="Connect to LNKup to see vendors that match your events."
+              />
+            )}
+          </TabsContent>
+        )}
 
         <TabsContent value="discover" className="mt-4 flex flex-col gap-4">
           <div className="relative">

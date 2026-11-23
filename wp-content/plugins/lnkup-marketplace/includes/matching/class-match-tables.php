@@ -141,6 +141,7 @@ class LNKup_Match_Tables {
 			reasons text,
 			computed_at datetime NOT NULL,
 			first_matched_at datetime DEFAULT NULL,
+			rules_version int(10) unsigned NOT NULL DEFAULT 0,
 			PRIMARY KEY  (id),
 			UNIQUE KEY profile_opp (profile_id, opportunity_id),
 			KEY opp_score (opportunity_id, eligible, score),

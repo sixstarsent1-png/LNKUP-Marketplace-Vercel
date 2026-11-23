@@ -58,11 +58,10 @@ class LNKup_Application_Groups {
 	/**
 	 * Feature gate: tours must be on, plus the multi-apply flag.
 	 */
-	public static function enabled() {
-		$settings = lnkup_get_settings();
-		return ! empty( $settings['tour_multi_apply_enabled'] )
+	public static function enabled( $user_id = null ) {
+		return LNKup_Rollout::enabled( 'tour_multi_apply_enabled', $user_id )
 			&& class_exists( 'LNKup_Match_Settings' )
-			&& LNKup_Match_Settings::enabled( 'matching_tours_enabled' );
+			&& LNKup_Match_Settings::enabled( 'matching_tours_enabled', $user_id );
 	}
 
 	/**

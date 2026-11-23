@@ -14,12 +14,28 @@ import { mergeReadState } from "@/lib/notifications/read-state"
 import type { LnkupNotification } from "@/lib/notifications/types"
 import { MOCK_ORGANIZER_NOTIFICATIONS, MOCK_VENDOR_NOTIFICATIONS } from "@/lib/data/fixtures"
 
-export type NotificationRole = "vendor" | "organizer"
+export type NotificationRole = "vendor" | "organizer" | "partner"
+
+const MOCK_PARTNER_NOTIFICATIONS: LnkupNotification[] = [
+  {
+    id: "mock-partner-referral",
+    type: "partner_referral",
+    title: "A referral registered",
+    message: "Demo Organizer joined LNKup through your link.",
+    severity: "info",
+    role: "partner",
+    deepLink: "/(partner)/referrals",
+  },
+]
 
 export async function fetchNotifications(
   role: NotificationRole,
   options: { auth?: WpAuth; userId?: string | number } = {},
 ): Promise<LnkupNotification[]> {
+  if (role === "partner") {
+    // Partner notices only exist in the lnkup-communications inbox; there is no composed feed.
+    return isLiveApiEnabled() ? [] : mergeReadState(options.userId, MOCK_PARTNER_NOTIFICATIONS.map((n) => ({ ...n })))
+  }
   if (!isLiveApiEnabled()) {
     const fixtures =
       role === "organizer" ? MOCK_ORGANIZER_NOTIFICATIONS : MOCK_VENDOR_NOTIFICATIONS

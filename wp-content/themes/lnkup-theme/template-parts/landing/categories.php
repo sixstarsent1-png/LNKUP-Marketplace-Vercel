@@ -10,6 +10,7 @@ $title      = (string) lnkup_landing_get( 'cat_title', '' );
 $aside      = (string) lnkup_landing_get( 'cat_aside', '' );
 $categories = lnkup_landing_lines( (string) lnkup_landing_get( 'cat_list', '' ) );
 $banner     = lnkup_landing_image_url( 'cat_image_id', 'images/events/sunset-miami.svg' );
+$feed_url   = function_exists( 'lnkup_theme_opportunities_url' ) ? lnkup_theme_opportunities_url() : home_url( '/opportunities/' );
 ?>
 <section id="categories" class="lnkup-section lnkup-categories-section lnkup-reveal">
 	<?php if ( $banner ) : ?>
@@ -30,10 +31,17 @@ $banner     = lnkup_landing_image_url( 'cat_image_id', 'images/events/sunset-mia
 		</div>
 		<div class="lnkup-categories">
 			<?php foreach ( $categories as $cat ) : ?>
-				<div class="lnkup-category">
-					<span class="lnkup-category__icon" aria-hidden="true"><?php echo lnkup_theme_category_icon( $cat ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
-					<span><?php echo esc_html( $cat ); ?></span>
-				</div>
+				<?php
+				$cat_label = function_exists( 'lnkup_canonical_category_label' ) ? lnkup_canonical_category_label( $cat ) : $cat;
+				if ( '' === $cat_label ) {
+					continue;
+				}
+				$cat_href = add_query_arg( 'categories', $cat_label, $feed_url );
+				?>
+				<a class="lnkup-category" href="<?php echo esc_url( $cat_href ); ?>">
+					<span class="lnkup-category__icon" aria-hidden="true"><?php echo lnkup_theme_category_icon( $cat_label ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+					<span><?php echo esc_html( $cat_label ); ?></span>
+				</a>
 			<?php endforeach; ?>
 		</div>
 	</div>

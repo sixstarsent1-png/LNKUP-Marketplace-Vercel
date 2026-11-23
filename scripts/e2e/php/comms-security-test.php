@@ -84,6 +84,7 @@ echo "Deep links conform to the mobile allowlist\n";
 $rules = array(
 	'#^/\(vendor\)(/[\w-]+)?(\?[\w=&%.-]*)?$#',
 	'#^/\(organizer\)(/[\w-]+){0,2}(\?[\w=&%.-]*)?$#',
+	'#^/\(partner\)(/[\w-]+)?(\?[\w=&%.-]*)?$#',
 	'#^/(pass|apply|booking)/\d+(\?[\w=&%.-]*)?$#',
 	'#^/opportunity/\d+(\?[\w=&%.-]*)?$#',
 );

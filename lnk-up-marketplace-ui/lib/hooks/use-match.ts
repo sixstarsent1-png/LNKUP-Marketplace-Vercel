@@ -61,6 +61,33 @@ export function useVendorMatchSections(sections: readonly VendorMatchSection[], 
   return { results, loading }
 }
 
+/**
+ * Whether organizer Find Vendors is switched on (flag + rollout audience).
+ * Stays false while loading or when the check fails, so recruit entry points stay hidden.
+ */
+export function useFindVendorsEnabled(): boolean {
+  const live = isLiveApiEnabled()
+  const [enabled, setEnabled] = useState(false)
+
+  useEffect(() => {
+    if (!live) return
+    let cancelled = false
+    fetch("/api/match/organizer/status")
+      .then((response) => parseApiResponse<{ findVendorsEnabled: boolean }>(response))
+      .then(({ data }) => {
+        if (!cancelled) setEnabled(data?.findVendorsEnabled === true)
+      })
+      .catch((err) => {
+        console.error("[useFindVendorsEnabled]", err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [live])
+
+  return enabled
+}
+
 export interface EventVendorFilters {
   opportunityId?: string
   category?: string

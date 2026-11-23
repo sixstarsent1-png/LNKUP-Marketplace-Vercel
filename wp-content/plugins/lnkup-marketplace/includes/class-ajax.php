@@ -38,7 +38,6 @@ class LNKup_Ajax {
 		add_action( 'wp_ajax_lnkup_vendor_welcome_seen', array( __CLASS__, 'handle_vendor_welcome_seen' ) );
 		add_action( 'wp_ajax_lnkup_reset_vendor_tutorial', array( __CLASS__, 'handle_reset_vendor_tutorial' ) );
 		add_action( 'wp_ajax_lnkup_dismiss_organizer_tutorial', array( __CLASS__, 'handle_dismiss_organizer_tutorial' ) );
-		add_action( 'wp_ajax_lnkup_organizer_welcome_seen', array( __CLASS__, 'handle_organizer_welcome_seen' ) );
 		add_action( 'wp_ajax_lnkup_reset_organizer_tutorial', array( __CLASS__, 'handle_reset_organizer_tutorial' ) );
 		add_action( 'wp_ajax_lnkup_dashboard_tour_seen', array( __CLASS__, 'handle_dashboard_tour_seen' ) );
 		add_action( 'wp_ajax_lnkup_reset_dashboard_tour', array( __CLASS__, 'handle_reset_dashboard_tour' ) );
@@ -378,6 +377,25 @@ class LNKup_Ajax {
 			: LNKup_Capabilities::user_owns_post( $app_id, get_current_user_id(), '_lnkup_organizer_user_id' );
 		if ( ! $owns ) {
 			self::send_json_error( array( 'message' => __( 'Permission denied.', 'lnkup-marketplace' ) ), 403 );
+		}
+
+		if ( LNKup_Feature_Flags::document_review() ) {
+			// Ask for exactly the documents this event still needs (per-type daily throttle inside).
+			$types = array();
+			foreach ( LNKup_Organizer_Documents::requirements_for_application( $app_id ) as $requirement ) {
+				if ( in_array( $requirement['status'], array( 'missing', 'requested', 'expired', 'rejected', 'replacement_requested' ), true ) ) {
+					$types[] = $requirement['type'];
+				}
+			}
+			if ( ! $types ) {
+				self::send_json_error( array( 'message' => __( 'No reminder needed. This vendor has no missing documents.', 'lnkup-marketplace' ) ), 400 );
+			}
+			$requested = LNKup_Organizer_Documents::request( $app_id, $types, '', get_current_user_id() );
+			if ( is_wp_error( $requested ) ) {
+				$data = $requested->get_error_data();
+				self::send_json_error( array( 'message' => $requested->get_error_message(), 'code' => $requested->get_error_code() ), is_array( $data ) && ! empty( $data['status'] ) ? (int) $data['status'] : 400 );
+			}
+			self::send_json_success( array( 'message' => __( 'Document request sent', 'lnkup-marketplace' ) ) );
 		}
 
 		$throttle_key = 'lnkup_doc_remind_' . $app_id;
@@ -977,21 +995,6 @@ class LNKup_Ajax {
 		}
 		LNKup_Organizer_Launch_Checklist::dismiss( get_current_user_id() );
 		wp_send_json_success( array( 'dismissed' => true ) );
-	}
-
-	/**
-	 * Mark organizer welcome popup as seen.
-	 */
-	public static function handle_organizer_welcome_seen() {
-		LNKup_Security::verify_nonce( 'lnkup_action' );
-		if ( ! is_user_logged_in() ) {
-			wp_send_json_error( array( 'message' => __( 'Sign in required.', 'lnkup-marketplace' ) ), 401 );
-		}
-		if ( ! class_exists( 'LNKup_Organizer_Launch_Checklist' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Checklist unavailable.', 'lnkup-marketplace' ) ), 503 );
-		}
-		LNKup_Organizer_Launch_Checklist::mark_welcome_seen( get_current_user_id() );
-		wp_send_json_success( array( 'welcome_seen' => true ) );
 	}
 
 	/**

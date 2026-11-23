@@ -14,7 +14,9 @@ test.describe('Organizer launch checklist', () => {
   test('checklist shows explainable steps or the complete banner', async ({ page }) => {
     const checklist = page.getByTestId('lnkup-launch-checklist');
     const complete = page.getByText(/checklist complete/i);
-    await expect(checklist.or(complete).first()).toBeVisible();
+    // With guided setup (onboarding v2) on, the Get started banner replaces this checklist.
+    const guidedBanner = page.getByTestId('lnkup-start-banner');
+    await expect(checklist.or(complete).or(guidedBanner).first()).toBeVisible();
     if (await checklist.isVisible()) {
       await expect(checklist.getByText(/not started|in progress|complete/i).first()).toBeVisible();
       await expect(checklist.locator('[data-launch-checklist-item="create_event"]')).toHaveAttribute('data-status', /complete|in_progress/);
