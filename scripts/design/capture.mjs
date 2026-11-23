@@ -46,6 +46,10 @@ const SCREENS = [
   { id: 'vendor-wallet', url: `${WP}/vendor-dashboard/?view=payments`, as: 'e2e_vendor_a' },
   { id: 'organizer-home', url: `${WP}/organizer-dashboard/`, as: 'e2e_org_a', full: true },
   { id: 'organizer-queue', url: `${WP}/organizer-dashboard/?view=applications`, as: 'e2e_org_a', full: true },
+  { id: 'organizer-workspace', url: `${WP}/organizer-dashboard/?event=63&tab=requests`, as: 'e2e_org_a', full: true },
+  { id: 'organizer-money', url: `${WP}/organizer-dashboard/?view=financial`, as: 'e2e_org_a', full: true },
+  { id: 'organizer-applicant', url: `${WP}/organizer-dashboard/?event=63&tab=requests`, as: 'e2e_org_a', click: '.lnkup-crm-app-card--v2 button:has-text("View details")' },
+  { id: 'vendor-booking-detail', url: `${WP}/vendor-dashboard/?view=bookings`, as: 'e2e_vendor_a', click: '[data-testid="lnkup-booking-open"]', full: true },
   { id: 'expo-explore', url: `${EXPO}/find`, expo: 'vendor' },
   { id: 'expo-organizer', url: `${EXPO}/events`, expo: 'organizer' },
 ];

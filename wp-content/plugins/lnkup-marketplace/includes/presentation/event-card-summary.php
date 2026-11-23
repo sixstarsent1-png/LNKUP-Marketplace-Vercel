@@ -26,6 +26,17 @@ add_action(
 );
 
 /**
+ * Drop a trailing " — Dec 19, 2026" style date from a title (series occurrences carry one) when
+ * the date is shown next to it anyway.
+ *
+ * @param string $title Title.
+ */
+function lnkup_strip_title_date( $title ) {
+	$clean = preg_replace( '/\s+[\x{2014}\x{2013}-]\s+(?:[A-Za-z]{3,9},?\s+)?[A-Za-z]{3,9}\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\s*$/u', '', (string) $title );
+	return '' !== trim( (string) $clean ) ? trim( (string) $clean ) : (string) $title;
+}
+
+/**
  * Summarize an event from its opportunity rows.
  *
  * @param array  $slots   Opportunity rows for a single event (marketplace index shape).
@@ -53,7 +64,7 @@ function lnkup_event_card_summary( $slots, $context = 'home' ) {
 			$org_name = (string) get_user_meta( $organizer_user, '_lnkup_organizer_public_name', true );
 		}
 	}
-	$title      = lnkup_display_event_title( $title, $date, $venue, $org_name );
+	$title      = lnkup_strip_title_date( lnkup_display_event_title( $title, $date, $venue, $org_name ) );
 	$place      = ( ! empty( $first['city'] ) || ! empty( $first['state'] ) ) ? lnkup_display_place( $first['city'] ?? '', $first['state'] ?? '' ) : '';
 	$bookable   = ! ( $event_id && class_exists( 'LNKup_Organizer_Onboarding' ) && LNKup_Organizer_Onboarding::event_is_unclaimed_external( $event_id ) );
 	$view_url   = ( $event_id && class_exists( 'LNKup_Organizer_Onboarding' ) ) ? LNKup_Organizer_Onboarding::event_public_url( $event_id ) : '';

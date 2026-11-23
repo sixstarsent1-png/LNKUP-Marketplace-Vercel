@@ -54,6 +54,7 @@ Rule for this pass: on those files, put the visual change in a new partial, styl
 | `lnkup-marketplace.php` | One line: load `includes/presentation/event-card-summary.php` after `helpers.php`. | Bootstrap file list. |
 | `public/class-shortcodes.php` (`render_public_event`) | The hero art uses `lnkup_event_art_html()`. The hero facts include "Apply by …". The phone bar text is computed per event (one open booth: that booth's Apply; several: "From $X · N booth types" with "Choose a spot"). | The markup lives only in this function. No change to which spots can be applied to. |
 | `public/js/marketplace-v2.js` | `selectSlot( card, initial )`: the automatic first selection no longer overwrites the bar. | The bar text was set by this function on load. |
+| `public/class-organizer-dashboard-views.php` (`render_home_welcome`) | "Next up" uses the display title without a trailing date, and a short date. | One line. |
 | `includes/portfolio/class-portfolio-public.php` (`render`) | Stop cards show status, spots left and a link to the stop's event page. They use `lnkup_public_money()` and `lnkup_application_status_label()`. The logged-out "Log in" is a text link. | Stop markup lives only here. Uses the existing `data()` fields. |
 
 ## Baseline review
@@ -252,6 +253,42 @@ After views are in `docs/design-pass/after/` (`home-*-top`, the `home-*-sN` sect
   - Playwright (Chromium): `marketplace-v2` 12 passed, 2 skipped, after two spec updates (the floating menu button is replaced by Filters; Apply links are now named "Apply to {event}").
   - `apply-with-profile`, `apply-draft-resume`, `portfolio-os`, `tour-multi-apply`, `matching`, `vendor-journey`: passed.
   - `external-events` (6) and `saved-searches:83` fail on the `phase/1-release-checks` baseline too (pre-existing).
+
+## Step 4: dashboards
+
+- **Vendor navigation:**
+  - Sidebar: Home, Explore, Requests (applications in review, with the badge), Bookings (approved, paid and past), Wallet, Profile.
+  - Phone bottom bar: Home, Explore, Bookings, Wallet, Profile. It showed "Bookings" twice before.
+  - The page titles follow ("Requests", "Bookings"). "My Bookings" is gone. Routes are unchanged.
+- **Vendor Home:**
+  - Vendors with applications see the next action and needs-attention rows first, then the next-event strip (readiness and amount due, the pass when it is ready), then stats, then Getting started.
+  - New vendors still see setup first.
+  - Only one first-run overlay at a time: the platform tour no longer opens on top of the welcome modal.
+- **Bookings:**
+  - Row actions are sized to their label.
+  - One status chip per fact ("Payment required" no longer sits next to "Payment due").
+  - The filters are a compact grid (two columns on phone).
+- **Wallet:**
+  - A missing amount reads "Unavailable" instead of `$0.00`.
+  - No installments reads "None scheduled".
+  - A failed installment lookup reads "Unavailable".
+  - A confirmed `$0.00` still shows as money.
+- **Organizer:**
+  - One "Create event", in the shell top bar. The welcome header copy is hidden, and the `launch_event` copy now reads "Create event".
+  - "Next up" no longer repeats the date ("E2E Weekly Makers Market · Sat, Dec 19").
+  - Needs-attention rows are left aligned with an "Open" action.
+  - The Applications page title is "Applications".
+- **Event workspace applicants:**
+  - One row per applicant: select box, vendor and their facts, fee and status on the right, and the decision buttons together under a divider. Accept is last on desktop and first, full width, on phone.
+  - "View details" opens the existing applicant drawer.
+- **Money:** payout messages no longer name the processor ("Direct payouts are not set up on this marketplace yet.", "Balances updated …", "Refresh"). The API messages are unchanged; the dashboard maps them.
+- **Checks:**
+  - Captures: `vendor-home`, `vendor-bookings`, `vendor-booking-detail`, `vendor-wallet`, `organizer-home`, `organizer-workspace`, `organizer-applicant`, `organizer-money`.
+  - Playwright (Chromium), all 31 `vendor-*` and `organizer-*` specs: 117 passed, 23 failed, 56 skipped, 2 did not run.
+    - 21 of the failures also fail on `phase/1-release-checks`.
+    - `vendor-journey:123` is a login reauth flake; it passes on rerun.
+    - `vendor-operations:112` fails with the `phase/7-handoff` version of the view file too. The cause is the data (the first selectable event is unpaid, so only the pass tab renders), not this pass.
+  - `vendor-bookings` follows the "Bookings" back link.
 
 ## Handoffs
 

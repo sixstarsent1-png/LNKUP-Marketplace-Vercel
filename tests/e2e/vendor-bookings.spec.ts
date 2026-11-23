@@ -42,7 +42,7 @@ test.describe('My Bookings', () => {
     await expect(page.getByTestId('lnkup-booking-timeline')).toBeVisible();
     await expect(page.getByTestId('lnkup-booking-timeline').locator('li').first()).toContainText(/Application submitted/i);
     await expect(page.getByTestId('lnkup-booking-payment')).toBeVisible();
-    await expect(page.getByRole('link', { name: /My Bookings/i }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /^(← )?Bookings$/i }).first()).toBeVisible();
   });
 
   test('city filter narrows the list without leaving the page', async ({ page }) => {
