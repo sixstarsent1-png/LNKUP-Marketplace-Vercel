@@ -57,6 +57,8 @@ Rule for this pass: on those files, put the visual change in a new partial, styl
 | `public/class-organizer-dashboard-views.php` (`render_home_welcome`) | "Next up" uses the display title without a trailing date, and a short date. | One line. |
 | `includes/portfolio/class-portfolio-public.php` (`render`) | Stop cards show status, spots left and a link to the stop's event page. They use `lnkup_public_money()` and `lnkup_application_status_label()`. The logged-out "Log in" is a text link. | Stop markup lives only here. Uses the existing `data()` fields. |
 | Next.js `components/marketplace/opportunity-card.tsx` | The media area renders `<EventArt>` (new component) instead of `next/image`; the badges over it get a light background. | The card owns its media block. Apply, save and status logic are untouched. |
+| Expo `components/screen.tsx` (`ScreenList`) | Optional `restoreKey` and `focused` props: remember the scroll offset and restore it on remount or refocus. | `ScreenList` owns the FlatList; screens that do not pass the props behave as before. |
+| Expo `app/(vendor)/find.tsx` | Tracks focus with `useFocusEffect` and passes `restoreKey` and `focused` to `ScreenList`. | Three lines; search and filter logic untouched. |
 | Next.js `app/vendor/wallet/page.tsx` | The hero metrics and `heroMoney()` are removed; "1 booking" singular. | The duplicate figures were in this page. Amounts still come from `MoneyStatCard`. |
 
 ## Baseline review
@@ -315,6 +317,69 @@ After views are in `docs/design-pass/after/` (`home-*-top`, the `home-*-sN` sect
   - Next.js: `tsc` reports the same 18 errors as `phase/7-handoff`. The three in `opportunity-card.tsx` are the existing analytics `eventId` typing. `eslint` cannot run: the app has no `eslint.config.*`.
   - Captures: `expo-explore`, `expo-detail`, `expo-login`, `next-find`, `next-wallet`, `vendor-documents`, `vendor-help`, `vendor-passport`, `vendor-notifications`, `vendor-referrals`.
   - Expo web only reloads code when Metro runs without `CI=1`.
+
+## Step 6: verification
+
+- **Widths** (`scripts/design/widths.mjs`):
+  - Checked 12 WordPress screens at 360, 390, 768 and 1440 px: home, Explore, a portrait-flyer event, a sold-out event, a tour, sign up, vendor Home, Bookings, Wallet, Documents, organizer Home, Applications.
+  - No horizontal overflow, no unnamed controls, no images without alt, and exactly one `h1` on every screen at every width.
+  - Tap targets under 24 px were fixed in `experience.css`:
+    - the tour city filter (now 44 px tall)
+    - sign-up and applicant checkboxes (20 px, inside their labels)
+    - vendor Home stat links
+    - organizer "Next:" links
+    - applicant name buttons
+  - Event card titles stay as inline heading links; each card also has full-size Apply and Details buttons.
+- **Journeys** (`scripts/design/journeys.mjs`, phone size, screenshots in `docs/design-pass/journeys/`). All 17 steps pass:
+  - **Homepage to apply:** homepage, city tile, Explore, event, Apply. A guest gets the apply sheet with the booth choice and "Create a free vendor profile to apply".
+  - **Expo Explore:** filter by Food Vendor (18 to 11 results), scroll 900 px, open an event, go back. The filter and the exact 900 px position are kept.
+    - The scroll fix: on web, the Explore tab is hidden under the event route and the browser reset the list to 461 px. `ScreenList` now takes `restoreKey` and `focused`; the Explore screen passes its focus state, and the list returns to its last offset. Native stacks keep the screen mounted, so they were already fine.
+  - **Vendor:** Home, then the next-event action, then that booking's operations page.
+  - **Organizer:** Home, an event, Applications (6 applicants), an applicant with Accept and Decline visible. Nothing was submitted.
+  - **Money:** the vendor Wallet and organizer Financial pages show no broken amounts (`NaN`, `undefined`, `$-`) and no processor jargon. The confirmed-zero and missing-amount states were checked in step 4.
+- **Builds and tests:**
+  - Theme `npm run build` succeeds. The output differs from the committed `lnkup.css` only in line endings and was not committed.
+  - `main.css` is unchanged; `experience.css` is plain CSS.
+  - Expo: `tsc` passes; jest 24 suites, 200 tests pass.
+  - Next.js: `tsc` reports the same 18 errors as `phase/7-handoff`; `eslint` has no config in that app.
+  - Playwright (Chromium):
+    - Landing, market-pages, marketplace-v2, public-pages and tour-multi-apply: 35 passed, 12 skipped.
+    - Dashboard specs: see step 4.
+    - `organizer-documents` and `organizer-review` skip themselves in this environment.
+- **Failures not caused by this pass:**
+  - 21 dashboard tests also fail on `phase/1-release-checks`. They include `vendor-dashboard-ui` 27, 52, 84 and 111 and `dashboard-enhancements:26`.
+  - `vendor-operations:112` fails with the baseline view file too; the cause is the data.
+  - A login timeout hits a different `dashboard-enhancements` test on each run on the slow local server, and `vendor-journey:123` is a reauth flake.
+  - The Next.js Phase 13 spec on :3006 passes 17 of 19. The bell-link and notification-CTA URL checks fail in code this pass did not touch.
+- **Not verifiable here:** native-only behaviour on iOS and Android (safe areas on devices with a notch, the keyboard over the apply form, haptics, push deep links). Expo was checked on the web build only.
+
+## Final report
+
+- **Changes from the redesign (`f85e5cf`), by user task:**
+  - **Deciding where to go:**
+    - The homepage opens on a city search with live listings, and the sections are in task order.
+    - Cards show honest status, fees and spots, and fall back to real art or a branded poster, never a flat colour block.
+    - The empty Explore results offer "Search all cities".
+  - **Deciding to apply:**
+    - The event page is built around the apply choice: whole flyer, "Apply by" date, and a phone action bar that names the booth or asks you to choose a spot.
+    - Tours list each stop's status, spots and own link.
+  - **Coming back:** Explore on web and Expo keeps filters and scroll position after viewing an event.
+  - **Running a business:**
+    - Vendor Home leads with what needs doing. Bookings and Wallet show one chip per fact, and say "Unavailable" when an amount is missing, never "$0.00".
+    - Organizers get one "Create event" button, a cleaner "Next up", and applicant rows with the decision together.
+    - Payout copy no longer names the processor.
+  - **Everywhere:** one-row phone header, labelled settings, no duplicate legal links or explanations, and 24 px minimum tap targets.
+- **Before and after views:**
+  - Homepage: `before/home-phone-top.jpg` and `after/home-phone-top.jpg`.
+  - Event detail: `before/event-flyer-phone-top.jpg` and `after/event-flyer-phone-top.jpg`.
+  - Vendor Home: `before/vendor-home-phone-top.jpg` and `after/vendor-home-phone-top.jpg`.
+  - Expo Explore: `before/expo-explore-phone.jpg` and `after/expo-explore-phone.jpg`.
+  - The desktop versions are next to each of these.
+- **Coverage:**
+  - WordPress: every screen listed in steps 2 to 6.
+  - Next.js: Find Events and Wallet captured; card, art and wallet changed.
+  - Expo web: Explore, event detail, sign in, organizer events and the Explore journey. Native-only behaviour is not covered.
+- **Merge order:** #6, then #7, then #9 and #11 to #17, then #18, #19, #20, #21 and this verification PR.
 
 ## Handoffs
 

@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native"
-import { router, useLocalSearchParams, type Href } from "expo-router"
+import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-router"
 
 import { DiscoveryMap } from "@/components/discovery-map"
 import { FilterSheet } from "@/components/filter-sheet"
@@ -92,6 +92,14 @@ export default function VendorFindScreen() {
   const lastRouteKey = useRef(routeKey(routeParams))
   const hasLoadedOnce = useRef(false)
   const searchRef = useRef<AbortController | null>(null)
+  const [focused, setFocused] = useState(true)
+
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true)
+      return () => setFocused(false)
+    }, []),
+  )
 
   const chips = useMemo(() => filtersToChips(filters), [filters])
   const active = hasActiveFilters(filters)
@@ -241,6 +249,8 @@ export default function VendorFindScreen() {
           void load(filters, "replace")
         }}
         testID="vendor-find-list"
+        restoreKey={`vendor-find:${routeKey(routeParams)}`}
+        focused={focused}
         data={listItems}
         keyExtractor={opportunityKey}
         renderItem={(item) => (

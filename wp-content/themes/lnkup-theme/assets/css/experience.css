@@ -2180,6 +2180,34 @@ form.lnkup-bookings__filters .lnkup-btn {
 	display: none;
 }
 
+/* Minimum 24px tap targets for small standalone controls (WCAG 2.5.8). */
+.lnkup-tour-public__filter select {
+	min-height: 44px;
+	padding: 0 2rem 0 0.85rem;
+	border: 1px solid var(--x-line);
+	border-radius: 12px;
+	background-color: #fff;
+	font: inherit;
+	font-size: 0.9375rem;
+	color: var(--x-ink);
+}
+
+.lnkup-signup-form__field input[type="checkbox"],
+.lnkup-review input[type="checkbox"],
+.lnkup-org-review input[type="checkbox"] {
+	width: 20px;
+	height: 20px;
+	accent-color: var(--x-ink);
+}
+
+.lnkup-home-stat__link,
+.lnkup-overview-v2__next,
+.lnkup-review__open {
+	display: inline-flex;
+	align-items: center;
+	min-height: 24px;
+}
+
 /* Dashboard workspace bar on phones: one row. The menu toggle already opens the sidebar, and the account button carries the workspace name. */
 @media (max-width: 767px) {
 	.lnkup-workspace-bar {
