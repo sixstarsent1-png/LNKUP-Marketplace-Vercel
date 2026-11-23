@@ -38,6 +38,21 @@ if ( function_exists( 'lnkup_get_featured_opportunities' ) ) {
 				<a href="<?php echo esc_url( $signup_url ); ?>" class="lnkup-btn lnkup-btn--primary" data-testid="lnkup-featured-signup"><?php esc_html_e( 'Create free account', 'lnkup-theme' ); ?></a>
 			<?php endif; ?>
 		</div>
+		<?php
+		$city_counts = function_exists( 'lnkup_homepage_city_counts' ) ? lnkup_homepage_city_counts() : array();
+		if ( $marketplace_open && $city_counts ) :
+			?>
+			<ul class="lnkup-hero-cities lnkup-hero-cities--section">
+				<?php foreach ( $city_counts as $city_row ) : ?>
+					<li>
+						<a href="<?php echo esc_url( $city_row['url'] ); ?>">
+							<?php echo esc_html( $city_row['label'] ); ?>
+							<span><?php echo esc_html( sprintf( _n( '%d open', '%d open', (int) $city_row['count'], 'lnkup-theme' ), (int) $city_row['count'] ) ); ?></span>
+						</a>
+					</li>
+				<?php endforeach; ?>
+			</ul>
+		<?php endif; ?>
 		<div class="lnkup-event-grid<?php echo $marketplace_open ? '' : ' lnkup-event-grid--preview'; ?>">
 			<?php if ( ! empty( $featured ) ) : ?>
 				<?php

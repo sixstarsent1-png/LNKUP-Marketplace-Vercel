@@ -52,6 +52,16 @@ const roleProfile: Record<Role, { name: string; meta: string; initials: string }
   admin: { name: "LNKup Admin", meta: "Platform team", initials: "LA" },
 }
 
+function sessionIdentity(name: string | undefined, roleLabel: string) {
+  const trimmed = name?.trim() ?? ""
+  if (!trimmed) {
+    return { name: "Your account", meta: roleLabel, initials: "LN" }
+  }
+  const parts = trimmed.split(/\s+/).filter(Boolean)
+  const initials = `${parts[0]?.[0] ?? "L"}${parts[1]?.[0] ?? ""}`.toUpperCase()
+  return { name: trimmed, meta: roleLabel, initials }
+}
+
 function Logo({ href, className }: { href: string; className?: string }) {
   return (
     <Link href={href} className={cn("flex items-center gap-2", className)}>
@@ -208,10 +218,10 @@ export function AppShell({
   const pathname = usePathname()
   const desktopNav = getDesktopNav(role)
   const mobileNav = getMobileNav(role)
-  const profile = roleProfile[role]
   const moreActive = role === "vendor" && isNavActive(pathname, vendorMoreNav, role)
   const liveApi = isLiveApiEnabled()
   const { user, isAuthenticated, logout, canAccessVendor, canAccessOrganizer, canAccessAdmin } = useAuth()
+  const profile = liveApi ? sessionIdentity(user?.name, roleLabels[role]) : roleProfile[role]
   const switcherProps = {
     role,
     liveApi,

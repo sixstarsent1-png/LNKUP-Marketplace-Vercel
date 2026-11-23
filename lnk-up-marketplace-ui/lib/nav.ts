@@ -46,12 +46,12 @@ export const roleNav: Record<Role, NavItem[]> = {
   vendor: [
     { label: "Home", href: "/vendor", icon: Home },
     {
-      label: "Find Events",
-      mobileLabel: "Find",
+      label: "Explore",
+      mobileLabel: "Explore",
       href: "/vendor/find",
       icon: Search,
     },
-    { label: "Requests", href: "/vendor/requests", icon: Inbox },
+    { label: "Bookings", href: "/vendor/requests", icon: Inbox },
     { label: "Wallet", href: "/vendor/wallet", icon: Wallet },
     { label: "Profile", href: "/vendor/profile", icon: User, hideOnMobile: true },
     {

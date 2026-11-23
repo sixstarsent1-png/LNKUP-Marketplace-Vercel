@@ -26,7 +26,7 @@ export type MarketplaceOpportunity = {
   state?: string
   venue?: string
   categories: string[]
-  vendorFee: number
+  vendorFee: number | null
   expectedAttendance: number
   applicationDeadline?: string
   spotsRemaining: number
@@ -124,7 +124,7 @@ export function mapWpToOpportunity(item: WpOpportunityItem): MarketplaceOpportun
     state: item.state ?? "",
     venue: item.venue_name ?? "",
     categories,
-    vendorFee: item.vendor_fee ?? 0,
+    vendorFee: typeof item.vendor_fee === "number" && Number.isFinite(item.vendor_fee) ? item.vendor_fee : null,
     expectedAttendance: item.attendance ?? 0,
     applicationDeadline: formatDeadline(item.deadline, item.deadline_label),
     spotsRemaining,
@@ -167,6 +167,7 @@ export function filtersToWpQuery(params: SearchParams): Record<string, string | 
   const q: Record<string, string | number | boolean | undefined> = {
     per_page: 20,
     page: params.page ?? 1,
+    include_external: false,
   }
   if (params.query?.trim()) q.q = params.query.trim()
   if (params.city?.trim()) q.city = params.city.trim()
@@ -273,16 +274,16 @@ function filterMock(params: SearchParams): MarketplaceOpportunity[] {
     )
   }
   if (params.feeMax !== undefined) {
-    items = items.filter((item) => item.vendorFee <= (params.feeMax ?? 0))
+    items = items.filter((item) => item.vendorFee != null && item.vendorFee <= (params.feeMax ?? 0))
   }
   if (params.feeMin !== undefined) {
-    items = items.filter((item) => item.vendorFee >= (params.feeMin ?? 0))
+    items = items.filter((item) => item.vendorFee != null && item.vendorFee >= (params.feeMin ?? 0))
   }
   if (params.verifiedOrganizerOnly) {
     items = items.filter((item) => item.organizerVerified)
   }
   if (params.sort === "fee_low") {
-    items = [...items].sort((a, b) => a.vendorFee - b.vendorFee)
+    items = [...items].sort((a, b) => (a.vendorFee ?? Number.POSITIVE_INFINITY) - (b.vendorFee ?? Number.POSITIVE_INFINITY))
   } else if (params.sort === "newest") {
     items = [...items].reverse()
   }

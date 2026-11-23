@@ -1035,7 +1035,7 @@ function lnkup_opportunity_illustration_url( $opp ) {
 			return $clean;
 		}
 	}
-	return lnkup_opportunity_category_fallback_url( $opp );
+	return '';
 }
 
 /**
@@ -1059,9 +1059,9 @@ function lnkup_opportunity_category_fallback_url( $opp = array() ) {
  */
 function lnkup_event_card_img_html( $src, $alt, $fallback = '', $attachment_id = 0 ) {
 	$src      = (string) $src;
-	$fallback = $fallback ? (string) $fallback : lnkup_opportunity_category_fallback_url();
+	$fallback = (string) $fallback;
 	if ( '' === $src ) {
-		return '<div class="lnkup-event-card__placeholder" aria-hidden="true"><span>LNKup</span></div>';
+		return '<div class="lnkup-event-card__placeholder" role="img" aria-label="' . esc_attr( $alt ) . '"><span>LNKup</span></div>';
 	}
 	$srcset = '';
 	if ( $attachment_id && false !== strpos( $src, (string) wp_basename( (string) get_attached_file( (int) $attachment_id ) ) ) ) {
@@ -1102,7 +1102,7 @@ function lnkup_enqueue_card_image_fallback() {
  */
 function lnkup_print_card_image_fallback() {
 	$js = <<<'JS'
-(function(){if(window.lnkupCardImageFallback){return;}window.lnkupCardImageFallback=function(img){if(!img||img.tagName!=='IMG'||!img.hasAttribute('data-fallback-src')){return;}var f=img.getAttribute('data-fallback-src');if(!img.dataset.tried&&f&&f!==img.currentSrc&&f!==img.src){img.dataset.tried='1';img.removeAttribute('srcset');img.src=f;return;}var p=document.createElement('div');p.className='lnkup-event-card__placeholder';p.setAttribute('aria-hidden','true');p.innerHTML='<span>LNKup</span>';if(img.parentNode){img.parentNode.replaceChild(p,img);}};document.addEventListener('error',function(e){window.lnkupCardImageFallback(e.target);},true);document.querySelectorAll('img[data-fallback-src]').forEach(function(img){if(img.complete&&img.naturalWidth===0){window.lnkupCardImageFallback(img);}});})();
+(function(){if(window.lnkupCardImageFallback){return;}window.lnkupCardImageFallback=function(img){if(!img||img.tagName!=='IMG'||!img.hasAttribute('data-fallback-src')){return;}var f=img.getAttribute('data-fallback-src');if(!img.dataset.tried&&f&&f!==img.currentSrc&&f!==img.src){img.dataset.tried='1';img.removeAttribute('srcset');img.src=f;return;}var p=document.createElement('div');p.className='lnkup-event-card__placeholder';p.setAttribute('role','img');p.setAttribute('aria-label',img.alt||'LNKup');p.innerHTML='<span>LNKup</span>';if(img.parentNode){img.parentNode.replaceChild(p,img);}};document.addEventListener('error',function(e){window.lnkupCardImageFallback(e.target);},true);document.querySelectorAll('img[data-fallback-src]').forEach(function(img){if(img.complete&&img.naturalWidth===0){window.lnkupCardImageFallback(img);}});})();
 JS;
 	wp_print_inline_script_tag( $js, array( 'id' => 'lnkup-card-image-fallback' ) );
 }
@@ -1790,6 +1790,9 @@ function lnkup_parse_marketplace_filters( $source = null ) {
 	if ( ! isset( $args['has_spots'] ) && ! isset( $source['show_closed'] ) ) {
 		$args['has_spots'] = true;
 	}
+	if ( ! isset( $args['include_external'] ) ) {
+		$args['include_external'] = false;
+	}
 	if ( ! empty( $args['q'] ) && empty( $args['sort'] ) ) {
 		$args['sort'] = 'relevance';
 	}
@@ -2103,16 +2106,7 @@ function lnkup_render_external_event_card( $row ) {
 	<article class="lnkup-event-card lnkup-event-card--v2 lnkup-event-card--external<?php echo $demand_score >= 50 ? ' lnkup-event-card--external-hot' : ''; ?>" data-listing-type="external" data-external-event-id="<?php echo esc_attr( (string) $id ); ?>" data-has-interest="<?php echo $has_interest ? '1' : '0'; ?>" data-demand-score="<?php echo esc_attr( (string) $demand_score ); ?>" data-testid="lnkup-external-event-card">
 		<div class="lnkup-event-card__media">
 			<?php
-			echo lnkup_event_card_img_html(
-				$img,
-				$img_alt,
-				lnkup_opportunity_category_fallback_url(
-					array(
-						'categories'       => $row['recommended_categories'] ?? array(),
-						'event_type_label' => $row['event_type_label'] ?? $row['event_type'] ?? '',
-					)
-				)
-			); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			echo lnkup_event_card_img_html( $img, $img_alt, '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			?>
 			<div class="lnkup-event-card__badges-top">
 				<span class="lnkup-badge lnkup-badge--accent"><?php echo esc_html( (string) ( $row['event_type_label'] ?? __( 'Event Opportunity', 'lnkup-marketplace' ) ) ); ?></span>
@@ -2576,11 +2570,11 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 	?>
 	<article class="lnkup-event-card lnkup-event-card--v2<?php echo $is_closed ? ' lnkup-event-card--closed' : ''; ?><?php echo ( ! empty( $opp['card_variant'] ) && 'compact' === $opp['card_variant'] ) ? ' lnkup-event-card--compact' : ''; ?>" data-listing-type="managed" data-opportunity-id="<?php echo esc_attr( (string) $opp['opportunity_id'] ); ?>" data-lat="<?php echo esc_attr( (string) ( $opp['lat'] ?? '' ) ); ?>" data-lng="<?php echo esc_attr( (string) ( $opp['lng'] ?? '' ) ); ?>">
 		<div class="lnkup-event-card__media">
-			<?php echo lnkup_event_card_img_html( $img, $img_alt, lnkup_opportunity_category_fallback_url( $opp ), (int) ( $opp['featured_image_id'] ?? 0 ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php echo lnkup_event_card_img_html( $img, $img_alt, '', (int) ( $opp['featured_image_id'] ?? 0 ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<div class="lnkup-event-card__badges-top">
 				<span class="lnkup-badge lnkup-badge--accent"><?php echo esc_html( $opp['event_type_label'] ?? __( 'Event Opportunity', 'lnkup-marketplace' ) ); ?></span>
 				<span class="lnkup-badge lnkup-badge--managed"><?php echo esc_html( $bookable ? __( 'Book on LNKup', 'lnkup-marketplace' ) : __( 'Not bookable on LNKup', 'lnkup-marketplace' ) ); ?></span>
-				<span class="lnkup-badge"><?php echo esc_html( $opp['fee_label'] ?? lnkup_currency( $opp['vendor_fee'] ?? 0 ) ); ?></span>
+				<span class="lnkup-badge"><?php echo esc_html( $opp['fee_label'] ?? __( 'Fee unavailable', 'lnkup-marketplace' ) ); ?></span>
 			</div>
 			<?php if ( ! empty( $opp['badges'] ) ) : ?>
 				<div class="lnkup-event-card__badges-float">
@@ -2757,6 +2751,115 @@ function lnkup_display_category_badge( $value ) {
 		'service vendor'     => __( 'Services', 'lnkup-marketplace' ),
 	);
 	return $map[ $key ] ?? $label;
+}
+
+/**
+ * Public category names. Stored terms and booking meta are not renamed.
+ *
+ * @return string[]
+ */
+function lnkup_canonical_vendor_categories() {
+	return array(
+		'Food',
+		'Food Trucks',
+		'Desserts',
+		'Drinks',
+		'Retail',
+		'Clothing',
+		'Beauty',
+		'Jewelry',
+		'Art',
+		'Photo Booth',
+		'Services',
+		'Wellness',
+		'Merchandise',
+	);
+}
+
+/**
+ * Map a stored or event-specific category onto a canonical label.
+ *
+ * @param string $value Raw term or chip.
+ * @return string Empty when the value should not be shown as its own category.
+ */
+function lnkup_canonical_category_label( $value ) {
+	$raw = trim( (string) $value );
+	if ( '' === $raw ) {
+		return '';
+	}
+	$head = $raw;
+	if ( preg_match( '/^(.+?)\s+[—–]\s+/u', $raw, $match ) ) {
+		$head = trim( $match[1] );
+	}
+	$label   = lnkup_display_category_badge( $head );
+	$aliases = array(
+		'beverage'           => __( 'Drinks', 'lnkup-marketplace' ),
+		'beverage vendor'    => __( 'Drinks', 'lnkup-marketplace' ),
+		'dessert vendor'     => __( 'Desserts', 'lnkup-marketplace' ),
+		'retail vendor'      => __( 'Retail', 'lnkup-marketplace' ),
+		'clothing brand'     => __( 'Clothing', 'lnkup-marketplace' ),
+		'jewelry vendor'     => __( 'Jewelry', 'lnkup-marketplace' ),
+		'photo booth vendor' => __( 'Photo Booth', 'lnkup-marketplace' ),
+		'wellness vendor'    => __( 'Wellness', 'lnkup-marketplace' ),
+		'all vendors'        => '',
+		'all vendors welcome'=> '',
+	);
+	$key = strtolower( $label );
+	if ( array_key_exists( $key, $aliases ) ) {
+		return $aliases[ $key ];
+	}
+	foreach ( lnkup_canonical_vendor_categories() as $canonical ) {
+		if ( 0 === strcasecmp( $canonical, $label ) ) {
+			return $canonical;
+		}
+	}
+	if ( preg_match( '/[—–]/u', $raw ) ) {
+		return '';
+	}
+	return $label;
+}
+
+/**
+ * One checkbox per canonical category, keeping every stored term name for the filter.
+ *
+ * @param array $terms Term objects or names.
+ * @return array<int, array{label:string,terms:string[]}>
+ */
+function lnkup_canonical_category_options( $terms ) {
+	$grouped = array();
+	foreach ( (array) $terms as $term ) {
+		$name  = is_object( $term ) ? (string) $term->name : (string) $term;
+		$label = lnkup_canonical_category_label( $name );
+		if ( '' === $label ) {
+			continue;
+		}
+		if ( ! isset( $grouped[ $label ] ) ) {
+			$grouped[ $label ] = array();
+		}
+		$grouped[ $label ][] = $name;
+	}
+	$options = array();
+	$used    = array();
+	foreach ( lnkup_canonical_vendor_categories() as $canonical ) {
+		if ( empty( $grouped[ $canonical ] ) ) {
+			continue;
+		}
+		$options[]            = array(
+			'label' => $canonical,
+			'terms' => array_values( array_unique( $grouped[ $canonical ] ) ),
+		);
+		$used[ $canonical ] = true;
+	}
+	foreach ( $grouped as $label => $names ) {
+		if ( isset( $used[ $label ] ) ) {
+			continue;
+		}
+		$options[] = array(
+			'label' => $label,
+			'terms' => array_values( array_unique( $names ) ),
+		);
+	}
+	return $options;
 }
 
 /**
@@ -2984,14 +3087,14 @@ function lnkup_render_homepage_event_card( $slots, $context = 'home' ) {
 			);
 		}
 		foreach ( (array) ( $slot['categories'] ?? array() ) as $cat ) {
-			$label = lnkup_display_category_badge( (string) $cat );
+			$label = lnkup_canonical_category_label( (string) $cat );
 			if ( '' !== $label ) {
 				$cats[ strtolower( $label ) ] = $label;
 			}
 		}
 	}
 	if ( ! $bookable ) {
-		$status = __( 'Unclaimed Event', 'lnkup-marketplace' );
+		$status = __( 'External listing', 'lnkup-marketplace' );
 	} elseif ( $accepting && $closing ) {
 		$status = __( 'Closing Soon', 'lnkup-marketplace' );
 	} elseif ( $accepting ) {
@@ -3002,17 +3105,13 @@ function lnkup_render_homepage_event_card( $slots, $context = 'home' ) {
 		$status = __( 'Applications Closed', 'lnkup-marketplace' );
 	}
 	if ( $bookable && $fee_known ) {
-		if ( 'storefront' === $context && $fee > 0 && null !== $fee_max && $fee_max > $fee ) {
-			$fee_label = lnkup_public_money( $fee ) . '–' . lnkup_public_money( $fee_max );
-		} elseif ( 'storefront' === $context && $fee > 0 ) {
-			$fee_label = sprintf( __( 'From %s', 'lnkup-marketplace' ), lnkup_public_money( $fee ) );
-		} else {
-			$fee_label = $fee > 0
-				? sprintf( __( 'Vendor spots from %s', 'lnkup-marketplace' ), lnkup_public_money( $fee ) )
-				: __( 'Free', 'lnkup-marketplace' );
-		}
+		$fee_label = $fee > 0
+			? sprintf( __( 'From %s', 'lnkup-marketplace' ), lnkup_public_money( $fee ) )
+			: __( 'Free', 'lnkup-marketplace' );
+	} elseif ( ! $bookable ) {
+		$fee_label = __( 'External listing', 'lnkup-marketplace' );
 	} else {
-		$fee_label = __( 'View vendor opportunities', 'lnkup-marketplace' );
+		$fee_label = __( 'Fee unavailable', 'lnkup-marketplace' );
 	}
 	$visible_cats = array_slice( array_values( $cats ), 0, 3 );
 	$extra_cats   = count( $cats ) - count( $visible_cats );
@@ -3037,9 +3136,9 @@ function lnkup_render_homepage_event_card( $slots, $context = 'home' ) {
 	?>
 	<article class="lnkup-event-card lnkup-event-card--v2 lnkup-event-card--public" data-event-id="<?php echo esc_attr( (string) $event_id ); ?>">
 		<div class="lnkup-event-card__media">
-			<?php echo lnkup_event_card_img_html( $img, $img_alt, lnkup_opportunity_category_fallback_url( $first ), (int) ( $first['featured_image_id'] ?? 0 ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php echo lnkup_event_card_img_html( $img, $img_alt, '', (int) ( $first['featured_image_id'] ?? 0 ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<div class="lnkup-event-card__badges-top">
-				<span class="lnkup-badge lnkup-badge--accent"><?php echo esc_html( $status ); ?></span>
+				<span class="lnkup-badge"><?php echo esc_html( $status ); ?></span>
 				<?php if ( $app_status ) : ?>
 					<span class="lnkup-badge"><?php echo esc_html( $app_status ); ?></span>
 				<?php endif; ?>

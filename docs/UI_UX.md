@@ -51,7 +51,7 @@ LNKup is **not** attendee ticketing. Attendee sales remain outside the platform 
 | Palette | Black, white, electric lime accent |
 | Feel | Premium SaaS marketplace — clean, confident, modern |
 | Typography | Sora (display/headings), Inter (body/UI) |
-| Shape language | Rounded cards (`0.9rem` base radius), soft shadows, generous whitespace |
+| Shape language | Cards 20px, controls 12px, also 8px and 16px, pill for chips |
 | Motion | Subtle hover lifts, 0.15s transitions; respects `prefers-reduced-motion` |
 
 **Canonical design sentence:**
@@ -62,11 +62,13 @@ LNKup is **not** attendee ticketing. Attendee sales remain outside the platform 
 
 | Layer | Path | Role |
 |-------|------|------|
-| **Production theme** | `wp-content/themes/lnkup-theme/` | Dashboard shell, landing page, layout, shared CSS |
+| **Production theme** | `wp-content/themes/lnkup-theme/` | Public site, dashboard shell, landing page, shared CSS |
 | **Production plugin** | `wp-content/plugins/lnkup-marketplace/` | Business UI, shortcodes, feature CSS/JS, copy registry |
-| **Reference UI** | `app/`, `components/`, `lib/` | Next.js 16 design mock — visual parity target, **not wired to WordPress** |
+| **Premium web app** | `lnk-up-marketplace-ui/` | Next.js client of `lnkup/v1` |
+| **Native app** | `lnk-up-marketplace-mobile/` | Expo client of the same WordPress APIs |
+| **Legacy mocks** | root `app/`, `components/`, `lnkup-app-reference/` | Not production |
 
-Unless explicitly requested, all feature work belongs in the WordPress theme and plugin. The reference app uses static mock data and happy-path screens only.
+WordPress is the system of record. Next.js and Expo share Sora, Inter, the radius scale, and the opportunity card. Root `app/` is not the live product.
 
 ### Core UX Rules
 
@@ -110,7 +112,7 @@ Avoid:
 |------|------|
 | `wp-content/themes/lnkup-theme/assets/src/main.css` | Tailwind v4 source + `:root` color tokens (compiled to `assets/dist/lnkup.css`) |
 | `wp-content/themes/lnkup-theme/assets/dist/components.css` | Hand-maintained BEM component library + `--lnkup-*` bridge variables |
-| `app/globals.css` | Reference-only tokens (Geist fonts, dark-mode variants) |
+| `lnk-up-marketplace-ui/app/globals.css` | Next.js tokens (Sora, Inter, 20px card radius) |
 
 **Build:** Run `pnpm build` in the theme directory to compile `main.css` → `lnkup.css`. `components.css` is edited directly.
 
@@ -120,7 +122,7 @@ Defined in `assets/src/main.css`:
 
 ```css
 :root {
-  --radius: 0.9rem;
+  --radius: 1.25rem;
   --background: oklch(0.985 0.005 120);
   --foreground: oklch(0.18 0.012 260);
   --card: oklch(1 0 0);
@@ -197,7 +199,7 @@ Fonts load from Google Fonts via `inc/enqueue.php` (Sora 500–800, Inter 400–
 
 | Token | Value |
 |-------|-------|
-| `--radius` | 0.9rem (base) |
+| `--radius` | 1.25rem cards, 0.75rem controls, 0.5rem tight, 1rem medium |
 | `--lnkup-radius-lg` | 1.125rem |
 | `--lnkup-radius-xl` | 1.5rem |
 | `--lnkup-shadow-card` | Layered subtle shadow on cards |
@@ -212,8 +214,8 @@ Dashboard content inner max-width: **72rem** (`.lnkup-dashboard__content-inner`)
 
 | Aspect | Reference (`app/globals.css`) | Production |
 |--------|------------------------------|------------|
-| Body font | Geist Sans | Inter |
-| Display font | Geist / Sora mix | Sora |
+| Body font | Inter | Inter |
+| Display font | Sora | Sora |
 | Dark mode | CSS tokens + `.dark` variant | **Not implemented** — light-only UI |
 | Dark surfaces | Theme toggle | Section-level only (footer, CTA banner, vendor pass hero) |
 
@@ -461,7 +463,7 @@ Use **"Launch event"** / **"Create event"** — not "Import Event" unless import
 
 ### Mobile Bottom Navigation (≤768px)
 
-Five items: Home, Find Events/Events, Applications, Payments/Financial, More (opens drawer).
+Vendor: Home, Explore, Bookings, Wallet, Profile. Organizer: Home, Events, Vendors, Money, More. URLs and `?view=` values stay the same. Explore on WordPress is `/opportunities/`. Bookings is `?view=applications`.
 
 Content receives `padding-bottom: 4.5rem` plus safe-area inset so it does not sit under the bottom nav.
 

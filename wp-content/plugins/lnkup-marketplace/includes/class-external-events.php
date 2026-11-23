@@ -1882,11 +1882,13 @@ class LNKup_External_Events {
 	 * @param array<string, mixed> $args Filter args.
 	 */
 	public static function should_include_in_feed( array $args ): bool {
+		$explicit = null;
 		if ( array_key_exists( 'include_external', $args ) ) {
 			$val = $args['include_external'];
-			if ( in_array( $val, array( false, 0, '0', 'false', 'off' ), true ) ) {
+			if ( in_array( $val, array( false, 0, '0', 'false', 'off', '' ), true ) ) {
 				return false;
 			}
+			$explicit = true;
 		}
 		// Opportunity-only filters — hide external cards when the user narrows to LNKup booth listings.
 		// has_spots is intentionally omitted: it defaults on for opportunities but external events have no spots.
@@ -1899,7 +1901,7 @@ class LNKup_External_Events {
 				return false;
 			}
 		}
-		return true;
+		return true === $explicit;
 	}
 
 	/**

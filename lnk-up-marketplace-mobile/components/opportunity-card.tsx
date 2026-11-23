@@ -37,7 +37,12 @@ export function OpportunityCard({
   onToggleSave?: () => void
 }) {
   const location = [item.city, item.state].filter(Boolean).join(", ")
-  const fee = item.vendorFee > 0 ? `From ${formatMoney(item.vendorFee)}` : item.vendorFee === 0 ? "Free booth" : "Fee TBD"
+  const fee =
+    item.vendorFee == null
+      ? "Fee unavailable"
+      : item.vendorFee > 0
+        ? `From ${formatMoney(item.vendorFee)}`
+        : "Free"
   const open = onPress ?? onApply
   const cta = opportunityApplyCta(item)
   const spots = availability(item)

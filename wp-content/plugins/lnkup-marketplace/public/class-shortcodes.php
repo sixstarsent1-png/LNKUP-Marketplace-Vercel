@@ -1531,14 +1531,14 @@ class LNKup_Shortcodes {
 								'href'  => lnkup_page_url_helper( 'vendor-dashboard' ),
 							),
 							array(
-								'label' => __( 'Find Events', 'lnkup-marketplace' ),
+								'label' => __( 'Explore', 'lnkup-marketplace' ),
 							),
 						)
 					); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					?>
 				<?php endif; ?>
 				<div class="lnkup-mp-v2__hero-text lnkup-page-header__main">
-					<h1 class="lnkup-page-header__title"><?php esc_html_e( 'Find events', 'lnkup-marketplace' ); ?></h1>
+					<h1 class="lnkup-page-header__title"><?php esc_html_e( 'Explore', 'lnkup-marketplace' ); ?></h1>
 				</div>
 				<p class="lnkup-muted lnkup-mp-v2__count" id="lnkup-result-count"><?php echo esc_html( sprintf( __( '%d opportunities', 'lnkup-marketplace' ), (int) $initial['total'] ) ); ?></p>
 			</header>
@@ -1744,15 +1744,15 @@ class LNKup_Shortcodes {
 					<?php if ( ! is_wp_error( $categories ) && $categories ) : ?>
 						<fieldset class="lnkup-filter-checks">
 							<legend><?php esc_html_e( 'Vendor Categories', 'lnkup-marketplace' ); ?></legend>
-							<?php foreach ( $categories as $term ) : ?>
-								<label><input type="checkbox" data-filter-cat="<?php echo esc_attr( $term->name ); ?>" /> <?php echo esc_html( $term->name ); ?></label>
+							<?php foreach ( lnkup_canonical_category_options( $categories ) as $option ) : ?>
+								<label><input type="checkbox" data-filter-cat="<?php echo esc_attr( $option['label'] ); ?>" data-filter-cat-terms="<?php echo esc_attr( implode( ',', $option['terms'] ) ); ?>" /> <?php echo esc_html( $option['label'] ); ?></label>
 							<?php endforeach; ?>
 						</fieldset>
 					<?php endif; ?>
 					<?php if ( class_exists( 'LNKup_External_Events' ) ) : ?>
 					<fieldset class="lnkup-filter-checks">
 						<legend><?php esc_html_e( 'External listings', 'lnkup-marketplace' ); ?></legend>
-						<label><input type="checkbox" data-filter="include_external" checked /> <?php esc_html_e( 'Include external events', 'lnkup-marketplace' ); ?></label>
+						<label><input type="checkbox" data-filter="include_external" <?php checked( ! empty( $filter_args['include_external'] ) ); ?> /> <?php esc_html_e( 'Include external events', 'lnkup-marketplace' ); ?></label>
 						<label><input type="checkbox" data-filter="lnkup_only" /> <?php esc_html_e( 'LNKup listings only', 'lnkup-marketplace' ); ?></label>
 						<label><input type="checkbox" data-filter="high_demand" /> <?php esc_html_e( 'High demand external only', 'lnkup-marketplace' ); ?></label>
 					</fieldset>
@@ -4583,12 +4583,12 @@ class LNKup_Shortcodes {
 		);
 		$tabs = array(
 			'overview' => __( 'Overview', 'lnkup-marketplace' ),
-			'slots'    => __( 'Opportunities', 'lnkup-marketplace' ),
+			'slots'    => __( 'Slots', 'lnkup-marketplace' ),
 			'requests' => __( 'Applications', 'lnkup-marketplace' ),
-			'vendors'  => __( 'Confirmed', 'lnkup-marketplace' ),
+			'vendors'  => __( 'Confirmed vendors', 'lnkup-marketplace' ),
 		);
 		if ( $can_financials ) {
-			$tabs['financials'] = __( 'Financials', 'lnkup-marketplace' );
+			$tabs['financials'] = __( 'Money', 'lnkup-marketplace' );
 		}
 		$switch_events = get_posts(
 			array(
@@ -4663,12 +4663,14 @@ class LNKup_Shortcodes {
 			);
 			echo lnkup_stat_strip( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 				array(
-					array( 'label' => __( 'Requests', 'lnkup-marketplace' ), 'value' => (string) $counts['requests'] ),
-					array( 'label' => __( 'Approved', 'lnkup-marketplace' ), 'value' => (string) $counts['approved'] ),
-					array( 'label' => __( 'Awaiting payment', 'lnkup-marketplace' ), 'value' => (string) $counts['awaiting'] ),
-					array( 'label' => __( 'Paid', 'lnkup-marketplace' ), 'value' => (string) $counts['paid'] ),
+					array( 'label' => __( 'Needs review', 'lnkup-marketplace' ), 'value' => (string) $counts['pending'] ),
+					array( 'label' => __( 'Owes a fee', 'lnkup-marketplace' ), 'value' => (string) $counts['awaiting'] ),
+					array( 'label' => __( 'Confirmed', 'lnkup-marketplace' ), 'value' => (string) $counts['paid'] ),
 				)
 			);
+			if ( $counts['pending'] > 0 && 'requests' !== $tab ) {
+				echo '<p class="lnkup-event-workspace__queue"><a class="lnkup-btn lnkup-btn--primary" href="' . esc_url( add_query_arg( 'tab', 'requests', $base ) ) . '">' . esc_html( sprintf( /* translators: %d: applications waiting */ _n( 'Review %d application', 'Review %d applications', $counts['pending'], 'lnkup-marketplace' ), $counts['pending'] ) ) . '</a></p>';
+			}
 			$workspace_tabs = array();
 			foreach ( $tabs as $key => $label ) {
 				$workspace_tabs[] = array(

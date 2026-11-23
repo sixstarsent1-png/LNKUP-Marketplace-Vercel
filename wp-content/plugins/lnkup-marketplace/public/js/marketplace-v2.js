@@ -189,7 +189,7 @@
   }
 
   function collectFilters() {
-    state.filters = { has_spots: true };
+    state.filters = { has_spots: true, include_external: false };
     root.querySelectorAll('[data-filter]').forEach(function (el) {
       var key = el.getAttribute('data-filter');
       if (el.type === 'checkbox') {
@@ -207,7 +207,10 @@
       }
     });
     var cats = [];
-    root.querySelectorAll('[data-filter-cat]:checked').forEach(function (el) { cats.push(el.getAttribute('data-filter-cat')); });
+    root.querySelectorAll('[data-filter-cat]:checked').forEach(function (el) {
+      var packed = el.getAttribute('data-filter-cat-terms') || el.getAttribute('data-filter-cat') || '';
+      packed.split(',').forEach(function (term) { if (term) cats.push(term); });
+    });
     if (cats.length) state.filters.categories = cats.join(',');
 
     var types = [];
