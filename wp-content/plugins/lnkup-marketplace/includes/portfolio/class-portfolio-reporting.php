@@ -47,6 +47,7 @@ class LNKup_Portfolio_Reporting {
 			foreach ( $sum as $k => $v ) {
 				$sum[ $k ] = $v + $m[ $k ];
 			}
+			$counts  = $apps['by_event'][ $event_id ] ?? self::empty_counts();
 			$stops[] = array(
 				'event_id'     => (int) $event_id,
 				'title'        => get_the_title( $event_id ),
@@ -61,6 +62,8 @@ class LNKup_Portfolio_Reporting {
 				'spots_open'   => max( 0, $spots_total - $spots_held ),
 				'money'        => self::round_money( $m ),
 				'next_deadline'=> self::next_deadline( (int) $event_id ),
+				'operations'   => self::stop_operations( (int) $event_id ),
+				'data_warnings'=> self::stop_warnings( (int) $event_id, $spots_total, $counts, $m ),
 				'manage_url'   => add_query_arg( 'event', (int) $event_id, lnkup_page_url_helper( 'organizer-dashboard' ) ),
 			);
 		}
@@ -91,6 +94,73 @@ class LNKup_Portfolio_Reporting {
 			),
 			'stops'        => $stops,
 			'tasks'        => self::tasks( $tour_id, $stops ),
+		);
+	}
+
+	/**
+	 * Event-day work for one stop from the canonical event records. Values are null when the
+	 * feature that owns them is off, so the dashboard never shows a 0 that was not measured.
+	 *
+	 * @param int $event_id Stop.
+	 * @return array<string, mixed>
+	 */
+	private static function stop_operations( $event_id ) {
+		$ops_on    = class_exists( 'LNKup_Feature_Flags' ) && LNKup_Feature_Flags::organizer_ops();
+		$readiness = $ops_on && class_exists( 'LNKup_Event_Readiness' ) ? LNKup_Event_Readiness::evaluate( $event_id ) : null;
+		$tasks     = $ops_on && class_exists( 'LNKup_Event_Tasks' ) ? LNKup_Event_Tasks::event_counts( $event_id ) : null;
+		$documents = class_exists( 'LNKup_Feature_Flags' ) && LNKup_Feature_Flags::document_review() && class_exists( 'LNKup_Organizer_Documents' )
+			? LNKup_Organizer_Documents::counts_for_event( $event_id )
+			: null;
+		return array(
+			'readiness_percent'     => $readiness ? (int) $readiness['percent'] : null,
+			'readiness_next'        => $readiness ? array_column( (array) $readiness['next_actions'], 'label' ) : array(),
+			'tasks_open'            => $tasks ? (int) $tasks['open'] : null,
+			'tasks_overdue'         => $tasks ? (int) $tasks['overdue'] : null,
+			'documents_outstanding' => $documents ? (int) ( $documents['missing'] + $documents['requested'] + $documents['submitted'] + $documents['rejected'] + $documents['replacement_requested'] + $documents['expired'] ) : null,
+			'checked_in'            => self::checked_in_count( $event_id ),
+		);
+	}
+
+	/**
+	 * Gaps that make a stop's numbers incomplete, named so the organizer can fix them.
+	 *
+	 * @param int   $event_id    Stop.
+	 * @param int   $spots_total Configured spots.
+	 * @param array $counts      Application counts for the stop.
+	 * @param array $money       Money row for the stop.
+	 * @return string[]
+	 */
+	private static function stop_warnings( $event_id, $spots_total, array $counts, array $money ) {
+		$warnings = array();
+		if ( '' === (string) get_post_meta( $event_id, '_lnkup_event_date', true ) ) {
+			$warnings[] = 'no_event_date';
+		}
+		if ( ! LNKup_Organizer_Onboarding::event_slot_posts( $event_id ) ) {
+			$warnings[] = 'no_vendor_slots';
+		} elseif ( $spots_total <= 0 ) {
+			$warnings[] = 'unlimited_capacity';
+		}
+		if ( (int) $counts['paid'] > (int) $money['paid_bookings'] ) {
+			$warnings[] = 'paid_without_payment_record';
+		}
+		return $warnings;
+	}
+
+	/**
+	 * Applications on a stop that staff checked in.
+	 *
+	 * @param int $event_id Stop.
+	 */
+	private static function checked_in_count( $event_id ) {
+		global $wpdb;
+		return (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
+				INNER JOIN {$wpdb->postmeta} e ON e.post_id = p.ID AND e.meta_key = '_lnkup_event_id' AND e.meta_value = %s
+				INNER JOIN {$wpdb->postmeta} c ON c.post_id = p.ID AND c.meta_key = '_lnkup_checked_in_at' AND c.meta_value <> ''
+				WHERE p.post_type = 'lnkup_application'",
+				(string) absint( $event_id )
+			)
 		);
 	}
 
@@ -257,12 +327,27 @@ class LNKup_Portfolio_Reporting {
 		$not_ready   = 0;
 		$pending     = 0;
 		$unpaid      = 0;
+		$overdue     = 0;
+		$documents   = 0;
+		$incomplete  = 0;
 		foreach ( $stops as $stop ) {
 			if ( 'draft' === $stop['state'] && ! LNKup_Portfolio_Tours::readiness( $tour_id, $stop['event_id'] )['ready'] ) {
 				++$not_ready;
 			}
-			$pending += $stop['applications']['pending'];
-			$unpaid  += $stop['applications']['approved_unpaid'];
+			$pending    += $stop['applications']['pending'];
+			$unpaid     += $stop['applications']['approved_unpaid'];
+			$overdue    += (int) ( $stop['operations']['tasks_overdue'] ?? 0 );
+			$documents  += (int) ( $stop['operations']['documents_outstanding'] ?? 0 );
+			$incomplete += $stop['data_warnings'] ? 1 : 0;
+		}
+		if ( $overdue ) {
+			$tasks[] = array( 'key' => 'tasks_overdue', 'count' => $overdue, 'message' => sprintf( _n( '%d event task is overdue.', '%d event tasks are overdue.', $overdue, 'lnkup-marketplace' ), $overdue ) );
+		}
+		if ( $documents ) {
+			$tasks[] = array( 'key' => 'documents_outstanding', 'count' => $documents, 'message' => sprintf( _n( '%d required document is still outstanding.', '%d required documents are still outstanding.', $documents, 'lnkup-marketplace' ), $documents ) );
+		}
+		if ( $incomplete ) {
+			$tasks[] = array( 'key' => 'stops_incomplete_data', 'count' => $incomplete, 'message' => sprintf( _n( '%d stop is missing details, so its numbers may be incomplete.', '%d stops are missing details, so their numbers may be incomplete.', $incomplete, 'lnkup-marketplace' ), $incomplete ) );
 		}
 		if ( $not_ready ) {
 			$tasks[] = array( 'key' => 'stops_not_ready', 'count' => $not_ready, 'message' => sprintf( _n( '%d draft stop still needs details before it can be published.', '%d draft stops still need details before they can be published.', $not_ready, 'lnkup-marketplace' ), $not_ready ) );

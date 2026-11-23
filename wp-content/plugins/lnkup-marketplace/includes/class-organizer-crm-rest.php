@@ -29,6 +29,28 @@ class LNKup_Organizer_CRM_REST {
 	}
 
 	/**
+	 * Event-scoped routes also admit organization team members; the handler then checks the
+	 * member's capability on that specific event (LNKup_Capabilities::staff_can()).
+	 */
+	public static function event_scoped_permission() {
+		return self::organizer_permission() || LNKup_Capabilities::can_access_org_workspace();
+	}
+
+	/**
+	 * Organizer whose CRM a viewer reads for an application: the event owner when the viewer
+	 * may review that event's applications, otherwise 0.
+	 *
+	 * @param int $app_id Application ID.
+	 */
+	private static function crm_owner_for_application( $app_id ) {
+		$event_id = (int) get_post_meta( absint( $app_id ), '_lnkup_event_id', true );
+		if ( ! $event_id || ! LNKup_Capabilities::staff_can( $event_id, 'review_applications' ) ) {
+			return 0;
+		}
+		return (int) get_post_meta( $event_id, '_lnkup_organizer_user_id', true );
+	}
+
+	/**
 	 * Register routes.
 	 */
 	public static function register_routes() {
@@ -131,13 +153,13 @@ class LNKup_Organizer_CRM_REST {
 		register_rest_route( self::NS, '/crm/applications/(?P<id>\d+)/intel', array(
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'application_intel' ),
-			'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+			'permission_callback' => array( __CLASS__, 'event_scoped_permission' ),
 		) );
 
 		register_rest_route( self::NS, '/crm/applications/compare', array(
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'compare_applications' ),
-			'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+			'permission_callback' => array( __CLASS__, 'event_scoped_permission' ),
 		) );
 
 		register_rest_route( self::NS, '/crm/events/invite-options', array(
@@ -157,25 +179,25 @@ class LNKup_Organizer_CRM_REST {
 		register_rest_route( self::NS, '/crm/events/(?P<id>\d+)/roster', array(
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'event_roster' ),
-			'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+			'permission_callback' => array( __CLASS__, 'event_scoped_permission' ),
 		) );
 
 		register_rest_route( self::NS, '/crm/events/(?P<id>\d+)/roster/bulk', array(
 			'methods'  => 'POST',
 			'callback' => array( __CLASS__, 'roster_bulk' ),
-			'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+			'permission_callback' => array( __CLASS__, 'event_scoped_permission' ),
 		) );
 
 		register_rest_route( self::NS, '/crm/applications/(?P<id>\d+)/check-in', array(
 			'methods'  => 'POST',
 			'callback' => array( __CLASS__, 'check_in' ),
-			'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+			'permission_callback' => array( __CLASS__, 'event_scoped_permission' ),
 		) );
 
 		register_rest_route( self::NS, '/crm/applications/(?P<id>\d+)/no-show', array(
 			'methods'  => 'POST',
 			'callback' => array( __CLASS__, 'no_show' ),
-			'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+			'permission_callback' => array( __CLASS__, 'event_scoped_permission' ),
 		) );
 
 		register_rest_route( self::NS, '/crm/dashboard/widgets', array(
@@ -523,14 +545,15 @@ class LNKup_Organizer_CRM_REST {
 
 	public static function application_intel( WP_REST_Request $request ) {
 		$app_id = absint( $request['id'] );
-		if ( ! LNKup_Capabilities::user_owns_post( $app_id, get_current_user_id(), '_lnkup_organizer_user_id' ) ) {
+		$owner  = self::crm_owner_for_application( $app_id );
+		if ( ! $owner ) {
 			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 		}
 		$profile_id = (int) get_post_meta( $app_id, '_lnkup_vendor_profile_id', true );
-		$profile = LNKup_Vendor_CRM_Profile::get( $profile_id, get_current_user_id() );
+		$profile = LNKup_Vendor_CRM_Profile::get( $profile_id, $owner );
 		$readiness = LNKup_Vendor_Readiness::checklist( $app_id );
 		$reliability = $profile_id && class_exists( 'LNKup_Vendor_Reliability_Intel' )
-			? LNKup_Vendor_Reliability_Intel::for_profile( $profile_id, get_current_user_id() )
+			? LNKup_Vendor_Reliability_Intel::for_profile( $profile_id, $owner )
 			: null;
 		return rest_ensure_response( array(
 			'application_id'     => $app_id,
@@ -553,11 +576,12 @@ class LNKup_Organizer_CRM_REST {
 		$ids = array_slice( array_filter( (array) $ids ), 0, 4 );
 		$items = array();
 		foreach ( $ids as $app_id ) {
-			if ( ! LNKup_Capabilities::user_owns_post( $app_id, get_current_user_id(), '_lnkup_organizer_user_id' ) ) {
+			$owner = self::crm_owner_for_application( $app_id );
+			if ( ! $owner ) {
 				continue;
 			}
 			$profile_id = (int) get_post_meta( $app_id, '_lnkup_vendor_profile_id', true );
-			$profile = LNKup_Vendor_CRM_Profile::get( $profile_id, get_current_user_id() );
+			$profile = LNKup_Vendor_CRM_Profile::get( $profile_id, $owner );
 			if ( $profile ) {
 				$profile['application_message'] = get_post( $app_id )->post_content;
 				$profile['application_id'] = $app_id;

@@ -247,6 +247,36 @@ class LNKup_Capabilities {
 	}
 
 	/**
+	 * Tour-level access for the owner or an organization team member whose membership covers the
+	 * tour (all events, or this tour) with $capability. Event-only members are not tour viewers.
+	 *
+	 * @param int    $tour_id    Tour ID.
+	 * @param string $capability Team capability (e.g. view_roster, view_financials).
+	 * @param int    $user_id    User ID.
+	 */
+	public static function tour_staff_can( $tour_id, $capability, $user_id = 0 ) {
+		$user_id = $user_id ?: get_current_user_id();
+		$tour_id = absint( $tour_id );
+		if ( self::organizer_owns_tour( $tour_id, $user_id ) ) {
+			return true;
+		}
+		if ( ! $user_id || 'lnkup_tour' !== get_post_type( $tour_id ) || ! class_exists( 'LNKup_Org_Teams' ) || ! LNKup_Org_Teams::enabled() ) {
+			return false;
+		}
+		$owner  = (int) get_post_meta( $tour_id, '_lnkup_organizer_user_id', true );
+		$matrix = LNKup_Org_Teams::capability_matrix();
+		foreach ( LNKup_Org_Teams::active_memberships( $owner, $user_id ) as $row ) {
+			if ( ! in_array( $capability, $matrix[ $row['role'] ] ?? array(), true ) ) {
+				continue;
+			}
+			if ( 'all' === $row['scope_type'] || ( 'tour' === $row['scope_type'] && (int) $row['scope_id'] === $tour_id ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * A stop belongs to the tour and to the tour's organizer (no forged or cross-organizer stops).
 	 *
 	 * @param int $tour_id  Tour ID.
