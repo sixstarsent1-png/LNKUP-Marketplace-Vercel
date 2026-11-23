@@ -14,6 +14,7 @@ import { join } from 'node:path';
 
 const WP = process.env.DESIGN_WP_URL || 'http://localhost:8896';
 const EXPO = process.env.DESIGN_EXPO_URL || 'http://localhost:8082';
+const NEXT = process.env.DESIGN_NEXT_URL || 'http://localhost:3006';
 const PASSWORD = 'lnkup-e2e-Passw0rd!';
 const label = process.argv[2] || 'before';
 const only = (process.argv[3] || '').split(',').filter(Boolean);
@@ -44,6 +45,11 @@ const SCREENS = [
   { id: 'vendor-home', url: `${WP}/vendor-dashboard/`, as: 'e2e_vendor_a', full: true },
   { id: 'vendor-bookings', url: `${WP}/vendor-dashboard/?view=bookings`, as: 'e2e_vendor_a', full: true },
   { id: 'vendor-wallet', url: `${WP}/vendor-dashboard/?view=payments`, as: 'e2e_vendor_a' },
+  { id: 'vendor-documents', url: `${WP}/vendor-dashboard/?view=documents`, as: 'e2e_vendor_a' },
+  { id: 'vendor-help', url: `${WP}/vendor-dashboard/?view=help`, as: 'e2e_vendor_a' },
+  { id: 'vendor-passport', url: `${WP}/vendor-dashboard/?view=passport`, as: 'e2e_vendor_a' },
+  { id: 'vendor-notifications', url: `${WP}/notification-settings/`, as: 'e2e_vendor_a' },
+  { id: 'vendor-referrals', url: `${WP}/vendor-dashboard/?view=referrals`, as: 'e2e_vendor_a' },
   { id: 'organizer-home', url: `${WP}/organizer-dashboard/`, as: 'e2e_org_a', full: true },
   { id: 'organizer-queue', url: `${WP}/organizer-dashboard/?view=applications`, as: 'e2e_org_a', full: true },
   { id: 'organizer-workspace', url: `${WP}/organizer-dashboard/?event=63&tab=requests`, as: 'e2e_org_a', full: true },
@@ -51,7 +57,11 @@ const SCREENS = [
   { id: 'organizer-applicant', url: `${WP}/organizer-dashboard/?event=63&tab=requests`, as: 'e2e_org_a', click: '.lnkup-crm-app-card--v2 button:has-text("View details")' },
   { id: 'vendor-booking-detail', url: `${WP}/vendor-dashboard/?view=bookings`, as: 'e2e_vendor_a', click: '[data-testid="lnkup-booking-open"]', full: true },
   { id: 'expo-explore', url: `${EXPO}/find`, expo: 'vendor' },
+  { id: 'expo-detail', url: `${EXPO}/opportunity/106`, expo: 'vendor' },
   { id: 'expo-organizer', url: `${EXPO}/events`, expo: 'organizer' },
+  { id: 'expo-login', url: `${EXPO}/login` },
+  { id: 'next-find', url: `${NEXT}/vendor/find`, next: 'vendor' },
+  { id: 'next-wallet', url: `${NEXT}/vendor/wallet`, next: 'vendor' },
 ];
 
 /**
@@ -85,13 +95,18 @@ for (const [width, ctxOptions] of Object.entries(WIDTHS)) {
   const sessions = {};
   for (const screen of SCREENS) {
     if (only.length && !only.includes(screen.id)) continue;
-    const key = screen.as || (screen.expo ? `expo-${screen.expo}` : 'anon');
+    const key = screen.as || (screen.expo ? `expo-${screen.expo}` : screen.next ? `next-${screen.next}` : 'anon');
     if (!sessions[key]) {
       const ctx = await browser.newContext({ ...ctxOptions, reducedMotion: 'reduce' });
       const page = await ctx.newPage();
       let ok = true;
       if (screen.as) await wpLogin(page, screen.as);
       if (screen.expo) ok = await expoLogin(page, screen.expo);
+      if (screen.next) {
+        const pass = screen.next === 'organizer' ? process.env.DESIGN_ORG_APP_PASSWORD : process.env.DESIGN_VENDOR_APP_PASSWORD;
+        const user = screen.next === 'organizer' ? 'e2e_org_a' : 'e2e_vendor_a';
+        ok = Boolean(pass) && (await page.request.post(`${NEXT}/api/auth/login`, { data: { username: user, appPassword: pass } })).ok();
+      }
       sessions[key] = { ctx, page, ok };
     }
     const { page, ok } = sessions[key];

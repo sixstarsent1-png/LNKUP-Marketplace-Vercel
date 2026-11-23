@@ -214,8 +214,9 @@ export default function OpportunityDetailScreen() {
             <View style={styles.hero}>
               <EventImage
                 uri={heroImage?.url || heroImage?.thumb || detail.imageUrl}
-                label={category ?? "Event"}
-                height={220}
+                title={detail.title}
+                height={260}
+                fit="contain"
                 accessibilityLabel={`${detail.title} event photo`}
               />
               <View style={styles.heroChips}>

@@ -24,16 +24,6 @@ import { PaymentReturnBanner } from "@/components/financial/payment-return-banne
 import { PanelContent, EmptyState, SkeletonList } from "@/components/marketplace/states"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 
-/** Whole-dollar hero figure; a value the server did not confirm reads "Unavailable", never $0. */
-function heroMoney(amount: number | undefined, currency?: string): string {
-  if (amount === undefined || !Number.isFinite(amount)) return "Unavailable"
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currency ?? "USD",
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
-
 function VendorWalletContent() {
   const live = isLiveApiEnabled()
   const { state: qaState, retry: qaRetry } = usePanelState()
@@ -128,24 +118,6 @@ function VendorWalletContent() {
           <ExecutiveHero
             title="Wallet"
             subtitle="Your bookings, receipts, and credits in one place."
-            metrics={
-              summary
-                ? [
-                    {
-                      label: "Due",
-                      value: heroMoney(summary.amountDue, summary.currency),
-                    },
-                    {
-                      label: "Paid",
-                      value: heroMoney(summary.totalPaid, summary.currency),
-                    },
-                    {
-                      label: "Bookings",
-                      value: String(summary.paidBookingsCount ?? 0),
-                    },
-                  ]
-                : undefined
-            }
             primaryCta={
               (summary?.paymentRequiredCount ?? paymentRequired.length) > 0
                 ? { label: "Pay now", href: "/vendor/requests?tab=approved" }
@@ -192,7 +164,7 @@ function VendorWalletContent() {
                   amount={summary?.totalPaid}
                   currency={summary?.currency}
                   status={loading ? "loading" : error ? "unavailable" : "ready"}
-                  sublabel={`${summary?.paidBookingsCount ?? 0} bookings`}
+                  sublabel={(summary?.paidBookingsCount ?? 0) === 1 ? "1 booking" : `${summary?.paidBookingsCount ?? 0} bookings`}
                   icon={CheckCircle2}
                   tone="success"
                   testId="vendor-wallet-total-paid"

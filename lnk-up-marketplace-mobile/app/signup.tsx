@@ -273,7 +273,7 @@ export default function SignupScreen() {
               </Meta>
             </Pressable>
 
-            <LegalLinks prefix="Read" />
+            <LegalLinks prefix="Creating an account means you agree to our" />
 
             {localError ? <ErrorPanel title="Check your input" message={localError} /> : null}
             {lastError ? <ErrorPanel title={lastError.title} message={lastError.message} /> : null}

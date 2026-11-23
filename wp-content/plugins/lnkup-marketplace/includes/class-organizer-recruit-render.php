@@ -38,15 +38,12 @@ class LNKup_Organizer_Recruit_Render {
 			data-context="<?php echo esc_attr( $context ); ?>"
 			data-testid="lnkup-org-recruit-hub"
 		>
-			<div class="lnkup-org-recruit__hero">
-				<?php if ( $show_title ) : ?>
+			<?php if ( $show_title ) : ?>
+				<div class="lnkup-org-recruit__hero">
 					<p class="lnkup-org-recruit__eyebrow"><?php esc_html_e( 'Referral Invites', 'lnkup-marketplace' ); ?></p>
 					<h2 class="lnkup-org-recruit__title"><?php echo esc_html( self::headline() ); ?></h2>
-				<?php endif; ?>
-				<p class="lnkup-org-recruit__body lnkup-muted">
-					<?php esc_html_e( 'Share a role-specific link. When they pay booth fees (vendors) or collect booth fees on their events (organizers), you earn a cut of LNKup’s vendor fee and organizer fee for up to 12 months.', 'lnkup-marketplace' ); ?>
-				</p>
-			</div>
+				</div>
+			<?php endif; ?>
 			<div class="lnkup-org-recruit__mount" data-org-recruit-mount>
 				<?php echo function_exists( 'lnkup_loading_state' ) ? lnkup_loading_state( 'panel' ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			</div>

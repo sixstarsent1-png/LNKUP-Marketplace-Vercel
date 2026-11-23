@@ -8,6 +8,7 @@ type LegalLinksProps = {
   prefix?: string
 }
 
+/** One sentence and one pair of real links (the links were listed twice before). */
 export function LegalLinks({ prefix = "By using LNKup you agree to our" }: LegalLinksProps) {
   async function openUrl(url: string) {
     try {
@@ -19,24 +20,14 @@ export function LegalLinks({ prefix = "By using LNKup you agree to our" }: Legal
 
   return (
     <View style={styles.wrap}>
-      <Meta style={styles.text}>
-        {prefix}{" "}
-        <Meta style={styles.link} onPress={() => void openUrl(getTermsOfServiceUrl())}>
-          Terms
-        </Meta>{" "}
-        and{" "}
-        <Meta style={styles.link} onPress={() => void openUrl(getPrivacyPolicyUrl())}>
-          Privacy Policy
-        </Meta>
-        .
-      </Meta>
+      <Meta style={styles.text}>{prefix}</Meta>
       <View style={styles.row}>
-        <Pressable onPress={() => void openUrl(getPrivacyPolicyUrl())} accessibilityRole="link">
-          <Meta style={styles.link}>Privacy Policy</Meta>
+        <Pressable onPress={() => void openUrl(getTermsOfServiceUrl())} accessibilityRole="link" hitSlop={8}>
+          <Meta style={styles.link}>Terms</Meta>
         </Pressable>
         <Meta style={styles.dot}>·</Meta>
-        <Pressable onPress={() => void openUrl(getTermsOfServiceUrl())} accessibilityRole="link">
-          <Meta style={styles.link}>Terms</Meta>
+        <Pressable onPress={() => void openUrl(getPrivacyPolicyUrl())} accessibilityRole="link" hitSlop={8}>
+          <Meta style={styles.link}>Privacy Policy</Meta>
         </Pressable>
       </View>
     </View>

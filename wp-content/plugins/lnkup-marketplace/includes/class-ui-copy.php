@@ -92,7 +92,7 @@ class LNKup_UI_Copy {
 			'empty_vendor_requests'     => __( 'No new vendor requests yet. Invite vendors or share this opportunity to start filling your roster.', 'lnkup-marketplace' ),
 			'empty_confirmed_vendors'   => __( 'No vendors confirmed yet. Approve requests or invite vendors to start building your event roster.', 'lnkup-marketplace' ),
 			'empty_financial'           => __( 'No financial activity yet. Payments will appear here once vendors start booking.', 'lnkup-marketplace' ),
-			'empty_documents'           => __( 'No documents uploaded yet. Required vendor documents will appear here for review.', 'lnkup-marketplace' ),
+			'empty_documents'           => __( 'No documents yet', 'lnkup-marketplace' ),
 			'empty_applications'        => __( 'Vendor requests will appear here once vendors apply to your opportunities.', 'lnkup-marketplace' ),
 			'empty_organizer_financial' => __( 'No financial activity yet. Payments will appear here once vendors start booking.', 'lnkup-marketplace' ),
 			'empty_organizer_intel'     => __( 'No intelligence data yet. Launch an event to start seeing funnel and benchmark insights.', 'lnkup-marketplace' ),
