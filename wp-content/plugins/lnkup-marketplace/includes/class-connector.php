@@ -961,7 +961,7 @@ class LNKup_Connector {
 		);
 		$balances = LNKup_Connector_Rewards::balances_for_connector( $connector_id );
 		$terms    = LNKup_Connector_Rewards::terms();
-		$payable  = (float) $balances['approved'] + (float) $balances['awaiting_approval'] + (float) $balances['pending_hold'];
+		$payable  = (float) $balances['approved'];
 		$activated = (int) ( $connector['activated_organizer_count'] ?? 0 );
 		if ( $activated < 1 ) {
 			$activated = self::count_activated_organizers( $connector_id );
@@ -1224,7 +1224,7 @@ class LNKup_Connector {
 					'title'      => __( 'Become eligible for first payout', 'lnkup-marketplace' ),
 					'description'=> sprintf(
 						/* translators: %s dollar amount */
-						__( 'Approved and held earnings must reach the %s minimum. Admin still reviews each reward.', 'lnkup-marketplace' ),
+						__( 'Approved earnings must reach the %s minimum. Earnings are approved after the refund hold and LNKup review.', 'lnkup-marketplace' ),
 						'$' . number_format_i18n( (float) $terms['minimum_payout'], 0 )
 					),
 					'status'     => $payable >= (float) $terms['minimum_payout'] ? 'complete' : 'waiting',
@@ -1568,15 +1568,15 @@ class LNKup_Connector {
 		$vendors    = array();
 		$opps       = 0;
 		$activated  = 0;
-		$rewards    = LNKup_Connector_Rewards::list_for_connector( $connector_id );
+		$rewards    = LNKup_Connector_Rewards::status_rows( $connector_id );
 		$by_ref     = array();
 		foreach ( $rewards as $reward ) {
 			$rid = (int) ( $reward['referral_id'] ?? 0 );
 			if ( ! isset( $by_ref[ $rid ] ) ) {
 				$by_ref[ $rid ] = array( 'estimated' => 0.0, 'approved' => 0.0, 'pending' => false, 'paid' => false );
 			}
-			$st = $reward['display_status'];
-			$amt = (float) $reward['amount'];
+			$st  = LNKup_Connector_Rewards::display_status( $reward );
+			$amt = LNKup_Connector_Rewards::net_amount( $reward );
 			if ( in_array( $st, array( 'approved', 'paid' ), true ) ) {
 				$by_ref[ $rid ]['approved'] += $amt;
 			}
@@ -1673,15 +1673,19 @@ class LNKup_Connector {
 	}
 
 	/**
-	 * Earnings payload for the Earnings view.
+	 * Earnings payload for the Earnings view. Balances, the next payable date and the estimate
+	 * cover every commission; only the ledger list is paged.
 	 *
 	 * @param int $connector_id Connector ID.
+	 * @param int $page         Ledger page (1-based).
+	 * @param int $per_page     Ledger rows per page (1-100).
 	 */
-	public static function get_earnings( $connector_id ) {
+	public static function get_earnings( $connector_id, $page = 1, $per_page = 50 ) {
 		global $wpdb;
-		$ledger  = LNKup_Connector_Rewards::list_for_connector( $connector_id );
-		$next    = '';
-		$next_ts = 0;
+		$page      = max( 1, (int) $page );
+		$per_page  = max( 1, min( 100, (int) $per_page ) );
+		$summary   = LNKup_Connector_Rewards::ledger_summary( $connector_id );
+		$ledger    = LNKup_Connector_Rewards::list_for_connector( $connector_id, $per_page, ( $page - 1 ) * $per_page );
 		$ref_table = LNKup_Treasury_Tables::referrals_table();
 		foreach ( $ledger as $i => $row ) {
 			$ref_id = (int) ( $row['referral_id'] ?? 0 );
@@ -1702,25 +1706,23 @@ class LNKup_Connector {
 			}
 			$pay_id = (int) ( $row['payment_id'] ?? 0 );
 			$ledger[ $i ]['booking_amount'] = $pay_id ? LNKup_Connector_Rewards::booth_gmv( $pay_id ) : 0;
-			$status = $row['display_status'] ?? '';
-			$avail  = strtotime( (string) ( $row['available_at'] ?? '' ) );
-			if ( in_array( $status, array( 'pending_hold', 'awaiting_approval', 'approved' ), true ) && $avail && ( ! $next_ts || $avail < $next_ts ) ) {
-				$next_ts = $avail;
-				$next    = date_i18n( get_option( 'date_format' ), $avail );
-			}
 		}
 		$balances = LNKup_Connector_Rewards::balances_for_connector( $connector_id );
 		$gmv      = 0.0;
-		foreach ( $ledger as $row ) {
-			$gmv += (float) ( $row['booking_amount'] ?? 0 );
+		foreach ( $summary['payment_ids'] as $pay_id ) {
+			$gmv += (float) LNKup_Connector_Rewards::booth_gmv( $pay_id );
 		}
 		$balances['estimated'] = LNKup_Connector_Rewards::estimate_from_gmv_total( $gmv, $connector_id );
 		return array(
-			'terms'       => LNKup_Connector_Rewards::terms( $connector_id ),
-			'balances'    => $balances,
-			'ledger'      => $ledger,
-			'example'     => LNKup_Connector_Rewards::estimate_earnings( 250, 1, 1, $connector_id ),
-			'next_payout' => $next ? $next : __( 'After LNKup approval', 'lnkup-marketplace' ),
+			'terms'           => LNKup_Connector_Rewards::terms( $connector_id ),
+			'balances'        => $balances,
+			'ledger'          => $ledger,
+			'ledger_total'    => $summary['total'],
+			'ledger_page'     => $page,
+			'ledger_per_page' => $per_page,
+			'ledger_has_more' => $page * $per_page < $summary['total'],
+			'example'         => LNKup_Connector_Rewards::estimate_earnings( 250, 1, 1, $connector_id ),
+			'next_payout'     => $summary['next_available'] ? date_i18n( get_option( 'date_format' ), $summary['next_available'] ) : __( 'After LNKup approval', 'lnkup-marketplace' ),
 		);
 	}
 

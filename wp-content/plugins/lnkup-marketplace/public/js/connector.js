@@ -2153,15 +2153,41 @@
           '<option value="all">All</option>' +
           '<option value="pending_hold">Pending hold</option>' +
           '<option value="awaiting_approval">Awaiting approval</option>' +
+          '<option value="on_hold">Under review</option>' +
           '<option value="approved">Approved</option>' +
           '<option value="paid">Paid</option>' +
           '<option value="reversed">Reversed</option>' +
           '</select>' +
-          '<div data-ledger-mount>' + renderLedger(data.ledger) + '</div></section>' +
+          '<div data-ledger-mount>' + renderLedger(data.ledger) + '</div>' +
+          (data.ledger_has_more ? '<button type="button" class="lnkup-btn lnkup-btn--outline" data-ledger-more data-testid="lnkup-connector-ledger-more">Show older commissions</button>' : '') +
+          '</section>' +
           '</div>';
         var select = panel.querySelector('[data-ledger-filter]');
         if (select) {
           select._rows = data.ledger || [];
+          select._page = data.ledger_page || 1;
+        }
+        var more = panel.querySelector('[data-ledger-more]');
+        if (more && select) {
+          more.addEventListener('click', function () {
+            more.disabled = true;
+            safeFetch('/connector/earnings?page=' + (select._page + 1)).then(function (next) {
+              select._rows = select._rows.concat(next.ledger || []);
+              select._page = next.ledger_page || select._page + 1;
+              var mount = panel.querySelector('[data-ledger-mount]');
+              if (mount) {
+                mount.innerHTML = renderLedger(select._rows, select.value);
+              }
+              if (next.ledger_has_more) {
+                more.disabled = false;
+              } else {
+                more.remove();
+              }
+            }).catch(function () {
+              more.disabled = false;
+              more.textContent = 'Could not load older commissions. Try again';
+            });
+          });
         }
       });
     } else if (view === 'resources') {

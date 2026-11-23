@@ -337,6 +337,108 @@ class LNKup_Partnerships {
 	}
 
 	/**
+	 * Which partners drove paid bookings across a tour's stops. Every count is by payment ID, so
+	 * a booking with two commission rows (connector plus vendor credit) is one booking, and the
+	 * same booking never counts at two stops. Admin only: organizers never see partner money.
+	 *
+	 * @return array<string, mixed>|WP_Error
+	 */
+	public static function tour_attribution( int $tour_id ) {
+		global $wpdb;
+		if ( 'lnkup_tour' !== get_post_type( $tour_id ) ) {
+			return new WP_Error( 'lnkup_not_found', __( 'Tour not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		$stops = class_exists( 'LNKup_Tours' ) ? LNKup_Tours::stop_event_ids( $tour_id ) : array();
+		$out   = array(
+			'tour_id'  => $tour_id,
+			'title'    => get_the_title( $tour_id ),
+			'stops'    => array(),
+			'partners' => array(),
+			'totals'   => array( 'paid_bookings' => 0, 'attributed_bookings' => 0, 'attributed_share' => 0.0, 'attributed_booth_gmv' => 0.0, 'commission_net' => 0.0 ),
+			'basis'    => __( 'Paid bookings are payments that were ever paid at a tour stop; a later refund reverses the commission, not the booking. Each payment counts once.', 'lnkup-marketplace' ),
+		);
+		if ( ! $stops ) {
+			return $out;
+		}
+		$paid_in  = "'" . implode( "','", LNKup_Opportunity_Funnel::PAID_STATUSES ) . "'";
+		$payments = (array) $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			"SELECT p.ID AS payment_id, e.meta_value AS event_id FROM {$wpdb->posts} p
+			INNER JOIN {$wpdb->postmeta} e ON e.post_id = p.ID AND e.meta_key = '_lnkup_event_id'
+			INNER JOIN {$wpdb->postmeta} s ON s.post_id = p.ID AND s.meta_key = '_lnkup_payment_status'
+			WHERE p.post_type = 'lnkup_payment' AND s.meta_value IN ({$paid_in}) AND e.meta_value IN (" . implode( ',', array_map( 'absint', $stops ) ) . ')',
+			ARRAY_A
+		);
+		$event_of = array();
+		foreach ( $payments as $row ) {
+			$event_of[ (int) $row['payment_id'] ] = (int) $row['event_id'];
+		}
+		$stop_rows = array();
+		foreach ( $stops as $event_id ) {
+			$stop_rows[ $event_id ] = array( 'event_id' => $event_id, 'title' => get_the_title( $event_id ), 'paid_bookings' => 0, 'attributed_bookings' => 0, 'attributed_booth_gmv' => 0.0 );
+		}
+		foreach ( $event_of as $event_id ) {
+			++$stop_rows[ $event_id ]['paid_bookings'];
+		}
+		$out['totals']['paid_bookings'] = count( $event_of );
+
+		$rewards = $event_of ? (array) $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			'SELECT * FROM ' . LNKup_Treasury_Tables::referral_rewards_table() . ' WHERE payment_id IN (' . implode( ',', array_keys( $event_of ) ) . ')',
+			ARRAY_A
+		) : array();
+		$partners   = array();
+		$attributed = array();
+		foreach ( $rewards as $raw ) {
+			$row     = self::present_reward( $raw );
+			$pay     = (int) $row['payment_id'];
+			$key     = $row['program'] . ':' . ( $row['connector_id'] ?: 'u' . $row['earner_user_id'] );
+			if ( ! isset( $partners[ $key ] ) ) {
+				$partners[ $key ] = array(
+					'program'       => $row['program'],
+					'program_label' => $row['program_label'],
+					'earner'        => $row['earner'],
+					'connector_id'  => $row['connector_id'],
+					'payments'      => array(),
+					'commission'    => array( 'pending' => 0.0, 'approved' => 0.0, 'paid' => 0.0, 'reversed' => 0.0, 'net' => 0.0 ),
+				);
+			}
+			$partners[ $key ]['payments'][ $pay ] = true;
+			$attributed[ $pay ]                   = true;
+			$status                               = (string) $row['display_status'];
+			$bucket = in_array( $status, array( 'approved', 'paid' ), true ) ? $status : ( 'reversed' === $status || 'expired' === $status ? 'reversed' : 'pending' );
+			if ( 'reversed' !== $bucket ) {
+				$partners[ $key ]['commission'][ $bucket ] += $row['net_amount'];
+				$partners[ $key ]['commission']['net']     += $row['net_amount'];
+			}
+			$partners[ $key ]['commission']['reversed'] += 'reversed' === $bucket && $row['reversed_amount'] <= 0 ? $row['amount'] : $row['reversed_amount'];
+		}
+		foreach ( array_keys( $attributed ) as $pay ) {
+			$gmv = LNKup_Connector_Rewards::booth_gmv( $pay );
+			++$stop_rows[ $event_of[ $pay ] ]['attributed_bookings'];
+			$stop_rows[ $event_of[ $pay ] ]['attributed_booth_gmv'] += $gmv;
+			$out['totals']['attributed_booth_gmv']                  += $gmv;
+		}
+		foreach ( $partners as $partner ) {
+			$gmv = 0.0;
+			foreach ( array_keys( $partner['payments'] ) as $pay ) {
+				$gmv += LNKup_Connector_Rewards::booth_gmv( $pay );
+			}
+			$partner['bookings']   = count( $partner['payments'] );
+			$partner['booth_gmv']  = round( $gmv, 2 );
+			$partner['commission'] = array_map( static fn( $v ) => round( (float) $v, 2 ), $partner['commission'] );
+			unset( $partner['payments'] );
+			$out['totals']['commission_net'] += $partner['commission']['net'];
+			$out['partners'][]                = $partner;
+		}
+		usort( $out['partners'], static fn( $a, $b ) => $b['bookings'] <=> $a['bookings'] );
+		$out['stops']                          = array_values( array_map( static function ( $s ) { $s['attributed_booth_gmv'] = round( $s['attributed_booth_gmv'], 2 ); return $s; }, $stop_rows ) );
+		$out['totals']['attributed_bookings']  = count( $attributed );
+		$out['totals']['attributed_share']     = $out['totals']['paid_bookings'] ? round( count( $attributed ) / $out['totals']['paid_bookings'], 4 ) : 0.0;
+		$out['totals']['attributed_booth_gmv'] = round( $out['totals']['attributed_booth_gmv'], 2 );
+		$out['totals']['commission_net']       = round( $out['totals']['commission_net'], 2 );
+		return $out;
+	}
+
+	/**
 	 * Apply an admin ledger action to a manually settled (connector) reward.
 	 *
 	 * @return true|WP_Error

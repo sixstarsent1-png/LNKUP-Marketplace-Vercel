@@ -118,6 +118,9 @@ export type PartnerEarnings = {
   terms: PartnerTerms
   balances: PartnerBalances
   ledger: PartnerLedgerRow[]
+  ledgerTotal: number
+  ledgerPage: number
+  ledgerHasMore: boolean
   nextPayout: string
 }
 
@@ -356,6 +359,9 @@ export function normalizeEarnings(raw: unknown): PartnerEarnings {
     terms: normalizeTerms(e.terms),
     balances: normalizeBalances(e.balances),
     ledger,
+    ledgerTotal: num(e.ledger_total) || ledger.length,
+    ledgerPage: Math.max(1, num(e.ledger_page)),
+    ledgerHasMore: e.ledger_has_more === true,
     nextPayout: str(e.next_payout),
   }
 }
@@ -508,9 +514,9 @@ export async function fetchPartnerReferrals(auth: WpAuth | undefined): Promise<P
   return normalizeReferrals(await wpFetchJson<unknown>("/connector/funnel", { auth }))
 }
 
-export async function fetchPartnerEarnings(auth: WpAuth | undefined): Promise<PartnerEarnings> {
+export async function fetchPartnerEarnings(auth: WpAuth | undefined, page = 1): Promise<PartnerEarnings> {
   if (!isLiveApiEnabled()) return normalizeEarnings(MOCK_EARNINGS)
-  return normalizeEarnings(await wpFetchJson<unknown>("/connector/earnings", { auth }))
+  return normalizeEarnings(await wpFetchJson<unknown>("/connector/earnings", { auth, query: { page } }))
 }
 
 export async function fetchPartnerLeads(auth: WpAuth | undefined, page = 1): Promise<PartnerLeads> {

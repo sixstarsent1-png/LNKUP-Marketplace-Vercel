@@ -6,7 +6,7 @@ test.describe('City Connector program', () => {
     expect(response?.status()).toBe(200);
     await expect(page.getByTestId('lnkup-connector-interest-form')).toBeVisible();
     await expect(page.getByLabel('Email')).toBeEditable();
-    await expect(page.getByText(/Charlotte/i)).toBeVisible();
+    await expect(page.getByText(/Charlotte/i).filter({ visible: true }).first()).toBeVisible();
   });
 
   test('market page connector CTA links to interest form with market', async ({ page }) => {

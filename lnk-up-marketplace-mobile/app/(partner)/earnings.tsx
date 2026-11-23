@@ -1,10 +1,11 @@
-import { useCallback } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { StyleSheet, View } from "react-native"
 
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { Screen } from "@/components/screen"
 import { AppText as Text } from "@/components/ui/app-text"
 import { InlineBanner } from "@/components/ui/banner"
+import { Button } from "@/components/ui/button"
 import { StatGrid, StatTile } from "@/components/ui/stat-tile"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Meta, SectionTitle } from "@/components/ui/typography"
@@ -19,6 +20,7 @@ import {
 import { useAuth } from "@/lib/auth/auth-context"
 import { formatShortDate } from "@/lib/format/date"
 import { useFocusResource } from "@/lib/hooks/use-focus-resource"
+import { openExternalUrl } from "@/lib/navigation/open-external-url"
 import { colors, radii, spacing, type StatusTone, typeScale } from "@/lib/theme"
 
 const STATUS_TONES: Record<string, StatusTone> = {
@@ -66,6 +68,30 @@ export default function PartnerEarningsScreen() {
   const { auth } = useAuth()
   const fetcher = useCallback(() => fetchPartnerEarnings(auth), [auth])
   const { data, loading, refreshing, error, reload } = useFocusResource(fetcher)
+  const [older, setOlder] = useState<{ rows: PartnerLedgerRow[]; page: number; hasMore: boolean } | null>(null)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [olderError, setOlderError] = useState(false)
+
+  useEffect(() => {
+    setOlder(null)
+  }, [data])
+
+  const handleLoadOlder = useCallback(async () => {
+    if (!data) return
+    setLoadingOlder(true)
+    setOlderError(false)
+    try {
+      const next = await fetchPartnerEarnings(auth, (older?.page ?? data.ledgerPage) + 1)
+      setOlder((prev) => ({ rows: [...(prev?.rows ?? []), ...next.ledger], page: next.ledgerPage, hasMore: next.ledgerHasMore }))
+    } catch {
+      setOlderError(true)
+    } finally {
+      setLoadingOlder(false)
+    }
+  }, [auth, data, older?.page])
+
+  const ledger = data ? [...data.ledger, ...(older?.rows ?? [])] : []
+  const hasMore = older ? older.hasMore : (data?.ledgerHasMore ?? false)
 
   return (
     <Screen
@@ -101,18 +127,36 @@ export default function PartnerEarningsScreen() {
             {data.terms.minimumPayout > 0 ? (
               <Meta>LNKup pays approved commissions once they reach {formatMoneyOrZero(data.terms.minimumPayout)}.</Meta>
             ) : null}
+            {data.terms.termsUrl ? (
+              <Button
+                label="Read program terms"
+                variant="ghost"
+                icon="document-text-outline"
+                onPress={() => void openExternalUrl(data.terms.termsUrl, "program terms")}
+                testID="partner-program-terms"
+              />
+            ) : null}
           </View>
 
           <SectionTitle>Commission history</SectionTitle>
-          {data.ledger.length === 0 ? (
+          {ledger.length === 0 ? (
             <EmptyPanel
               title="No commissions yet"
               message="Commissions are recorded when someone you referred completes a qualifying paid booking."
               icon="wallet-outline"
             />
           ) : (
-            data.ledger.map((row) => <LedgerRow key={row.id} row={row} />)
+            ledger.map((row) => <LedgerRow key={row.id} row={row} />)
           )}
+          {hasMore ? (
+            <Button
+              label={olderError ? "Couldn't load. Try again" : "Show older commissions"}
+              variant="secondary"
+              loading={loadingOlder}
+              onPress={() => void handleLoadOlder()}
+              testID="partner-ledger-more"
+            />
+          ) : null}
         </View>
       ) : null}
     </Screen>
