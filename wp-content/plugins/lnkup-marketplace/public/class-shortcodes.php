@@ -1021,11 +1021,11 @@ class LNKup_Shortcodes {
 				<div class="lnkup-public-event-main">
 					<article class="lnkup-surface--primary lnkup-public-event lnkup-event-hero">
 						<div class="lnkup-event-hero__media">
-							<?php if ( $image ) : ?>
-								<img src="<?php echo esc_url( $image ); ?>" alt="<?php echo esc_attr( $display_title ); ?>" width="960" height="540" decoding="async" fetchpriority="high" />
-							<?php else : ?>
-								<div class="lnkup-event-hero__placeholder" aria-hidden="true">LNKup</div>
-							<?php endif; ?>
+							<?php
+							echo function_exists( 'lnkup_event_art_html' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+								? lnkup_event_art_html( array( 'img' => $image, 'img_alt' => $display_title, 'title' => $display_title, 'featured_image_id' => $image_id ), 'eager' )
+								: '';
+							?>
 						</div>
 						<div class="lnkup-event-hero__copy">
 							<p class="lnkup-public-event__state"><?php echo esc_html( $availability['label'] ); ?></p>
@@ -1039,6 +1039,7 @@ class LNKup_Shortcodes {
 								<?php if ( $date ) : ?><li><?php echo esc_html( date_i18n( 'M j, Y', strtotime( $date ) ) ); ?></li><?php endif; ?>
 								<?php if ( $hours_label ) : ?><li><?php echo esc_html( $hours_label ); ?></li><?php endif; ?>
 								<?php if ( $location['where'] ) : ?><li><?php echo esc_html( $location['where'] ); ?></li><?php endif; ?>
+								<?php if ( $earliest_deadline && ! $unclaimed && $open_spots > 0 ) : ?><li class="lnkup-event-hero__deadline"><?php echo esc_html( sprintf( /* translators: %s: application deadline */ __( 'Apply by %s', 'lnkup-marketplace' ), date_i18n( 'M j', strtotime( $earliest_deadline ) ) ) ); ?></li><?php endif; ?>
 								<?php if ( $type_names ) : ?><li><?php echo esc_html( implode( ' · ', $type_names ) ); ?></li><?php endif; ?>
 								<?php if ( '' !== $attendance && '0' !== $attendance ) : ?><li><?php echo esc_html( sprintf( __( 'Expected attendance %s', 'lnkup-marketplace' ), $attendance ) ); ?></li><?php endif; ?>
 							</ul>
@@ -1211,15 +1212,26 @@ class LNKup_Shortcodes {
 				<?php endif; ?>
 			</div>
 			<?php if ( ! $unclaimed ) : ?>
+				<?php
+				// One open booth type: the bar applies to it. Several: it summarizes the event and
+				// sends the vendor to choose; picking a spot then turns it into that spot's Apply.
+				$open_types = count( array_filter( wp_list_pluck( $spot_cards, 'can_apply' ) ) );
+				$bar_single = ( 1 === $open_types && $selected_spot && ! empty( $selected_spot['can_apply'] ) );
+				if ( $bar_single ) {
+					$bar_text = $selected_spot['label'] . ( $selected_spot['fee'] ? ' · ' . $selected_spot['fee'] : '' );
+				} elseif ( $open_types > 1 ) {
+					$bar_text = trim( $starting_fee . ' · ' . sprintf( /* translators: %d: open booth types */ _n( '%d booth type', '%d booth types', $open_types, 'lnkup-marketplace' ), $open_types ), ' ·' );
+				} else {
+					$bar_text = $availability['label'];
+				}
+				?>
 				<div class="lnkup-public-event-bar" id="lnkup-public-event-bar" data-label-apply="<?php esc_attr_e( 'Apply', 'lnkup-marketplace' ); ?>" data-label-spots="<?php esc_attr_e( 'View spots', 'lnkup-marketplace' ); ?>">
-					<p class="lnkup-public-event-bar__slot" id="lnkup-public-event-bar-slot"><?php
-					if ( $selected_spot ) {
-						echo esc_html( $selected_spot['label'] . ( $selected_spot['fee'] ? ' · ' . $selected_spot['fee'] : '' ) );
-					}
-					?></p>
+					<p class="lnkup-public-event-bar__slot" id="lnkup-public-event-bar-slot"><?php echo esc_html( $bar_text ); ?></p>
 					<?php if ( $deadline_note ) : ?><p class="lnkup-public-event__urgency lnkup-public-event-bar__urgency"><?php echo esc_html( $deadline_note ); ?></p><?php endif; ?>
-					<?php if ( $selected_spot && ! empty( $selected_spot['can_apply'] ) ) : ?>
+					<?php if ( $bar_single ) : ?>
 						<a class="lnkup-btn lnkup-btn--primary" id="lnkup-public-event-bar-apply" href="<?php echo esc_url( $selected_spot['apply_url'] ); ?>"><?php esc_html_e( 'Apply', 'lnkup-marketplace' ); ?></a>
+					<?php elseif ( $open_types > 1 ) : ?>
+						<a class="lnkup-btn lnkup-btn--primary" id="lnkup-public-event-bar-apply" href="#lnkup-vendor-options"><?php esc_html_e( 'Choose a spot', 'lnkup-marketplace' ); ?></a>
 					<?php else : ?>
 						<a class="lnkup-btn lnkup-btn--primary" id="lnkup-public-event-bar-apply" href="#lnkup-vendor-options"><?php esc_html_e( 'View spots', 'lnkup-marketplace' ); ?></a>
 					<?php endif; ?>

@@ -287,7 +287,7 @@ class LNKup_Portfolio_Public {
 								<?php echo $interest && $interest['interested'] ? esc_html__( 'Interested in this tour', 'lnkup-marketplace' ) : esc_html__( 'I\'m interested in the whole tour', 'lnkup-marketplace' ); ?>
 							</button>
 						<?php elseif ( ! $user_id ) : ?>
-							<a class="lnkup-btn lnkup-btn--outline" href="<?php echo esc_url( lnkup_login_url_for( $tour['url'] ) ); ?>"><?php esc_html_e( 'Log in as a vendor to apply', 'lnkup-marketplace' ); ?></a>
+							<a class="lnkup-tour-public__login" href="<?php echo esc_url( lnkup_login_url_for( $tour['url'] ) ); ?>"><?php esc_html_e( 'Already a vendor? Log in', 'lnkup-marketplace' ); ?></a>
 						<?php endif; ?>
 					</div>
 					<p class="lnkup-tour-public__status" role="status" aria-live="polite" data-tour-interest-status hidden></p>
@@ -339,16 +339,27 @@ class LNKup_Portfolio_Public {
 										<span><?php echo esc_html( $stop['date'] ? wp_date( 'D, Y', strtotime( $stop['date'] . ' 12:00:00' ) ) : '' ); ?></span>
 									</div>
 									<div class="lnkup-tour-stop-card__where">
-										<h3><?php echo esc_html( trim( $stop['city'] . ( $stop['state'] ? ', ' . $stop['state'] : '' ) ) ?: $stop['title'] ); ?></h3>
+										<p class="lnkup-tour-stop-card__state lnkup-tour-stop-card__state--<?php echo ! empty( $stop['accepting'] ) ? 'open' : 'closed'; ?>"><?php echo ! empty( $stop['accepting'] ) ? esc_html__( 'Accepting vendors', 'lnkup-marketplace' ) : esc_html__( 'Not accepting', 'lnkup-marketplace' ); ?></p>
+										<h3>
+											<?php $stop_name = trim( $stop['city'] . ( $stop['state'] ? ', ' . $stop['state'] : '' ) ) ?: $stop['title']; ?>
+											<?php if ( ! empty( $stop['event_url'] ) ) : ?>
+												<a href="<?php echo esc_url( $stop['event_url'] ); ?>"><?php echo esc_html( $stop_name ); ?></a>
+											<?php else : ?>
+												<?php echo esc_html( $stop_name ); ?>
+											<?php endif; ?>
+										</h3>
 										<p class="lnkup-muted"><?php echo esc_html( $stop['venue_name'] ); ?></p>
 										<?php if ( $stop['opportunities'] ) : ?>
 											<ul class="lnkup-tour-stop-card__booths">
 												<?php foreach ( $stop['opportunities'] as $opp ) : ?>
 													<li>
 														<span><?php echo esc_html( $opp['title'] ); ?></span>
-														<span><?php echo esc_html( $opp['vendor_fee'] > 0 ? '$' . number_format_i18n( $opp['vendor_fee'], 2 ) : __( 'Free', 'lnkup-marketplace' ) ); ?></span>
+														<span><?php echo esc_html( $opp['vendor_fee'] > 0 ? ( function_exists( 'lnkup_public_money' ) ? lnkup_public_money( $opp['vendor_fee'] ) : '$' . number_format_i18n( $opp['vendor_fee'], 2 ) ) : __( 'Free', 'lnkup-marketplace' ) ); ?></span>
+														<?php if ( $opp['is_open'] && empty( $opp['spots_unlimited'] ) ) : ?>
+															<small class="lnkup-tour-stop-card__left<?php echo (int) $opp['spots_remaining'] <= 5 ? ' is-urgent' : ''; ?>"><?php echo esc_html( sprintf( /* translators: %d: spots left */ _n( '%d spot left', '%d spots left', (int) $opp['spots_remaining'], 'lnkup-marketplace' ), (int) $opp['spots_remaining'] ) ); ?></small>
+														<?php endif; ?>
 														<?php if ( $opp['application_status'] ) : ?>
-															<span class="lnkup-badge"><?php echo esc_html( ucwords( str_replace( '_', ' ', $opp['application_status'] ) ) ); ?></span>
+															<span class="lnkup-badge"><?php echo esc_html( function_exists( 'lnkup_application_status_label' ) ? lnkup_application_status_label( $opp['application_status'] ) : ucwords( str_replace( '_', ' ', $opp['application_status'] ) ) ); ?></span>
 														<?php elseif ( $opp['is_open'] ) : ?>
 															<a class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" href="<?php echo esc_url( $opp['apply_url'] ); ?>"><?php esc_html_e( 'Apply', 'lnkup-marketplace' ); ?></a>
 														<?php else : ?>

@@ -1539,7 +1539,7 @@
     el.hidden = !value;
   }
 
-  function selectSlot(card) {
+  function selectSlot(card, initial) {
     Array.prototype.forEach.call(cards, function (item) {
       var selected = item === card;
       item.classList.toggle('is-selected', selected);
@@ -1564,6 +1564,8 @@
       applyBtn.hidden = !(open && applyUrl);
       if (open && applyUrl) applyBtn.setAttribute('href', applyUrl);
     }
+    // The server renders the bar for the whole event; it follows a spot once the vendor picks one.
+    if (initial) return;
     var barSlot = document.getElementById('lnkup-public-event-bar-slot');
     if (barSlot) barSlot.textContent = fee ? label + ' · ' + fee : label;
     var bar = document.getElementById('lnkup-public-event-bar');
@@ -1593,5 +1595,5 @@
   });
 
   var current = page.querySelector('.lnkup-spot-card.is-selected') || cards[0];
-  if (current) selectSlot(current);
+  if (current) selectSlot(current, true);
 })();

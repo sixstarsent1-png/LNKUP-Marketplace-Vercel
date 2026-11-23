@@ -52,6 +52,9 @@ Rule for this pass: on those files, put the visual change in a new partial, styl
 |---|---|---|
 | `includes/helpers.php` | `lnkup_render_homepage_event_card()` now calls `lnkup_render_event_card_from_summary( lnkup_event_card_summary() )` (216 lines replaced by 1). `lnkup_sanitize_card_image_url()` checks same-site URLs before the Eventbrite rules. | Every public card goes through this function. The card logic moved, unchanged in meaning, to `includes/presentation/event-card-summary.php`. The image check fixes same-site uploads being upgraded to https, which broke them on http staging and local sites. |
 | `lnkup-marketplace.php` | One line: load `includes/presentation/event-card-summary.php` after `helpers.php`. | Bootstrap file list. |
+| `public/class-shortcodes.php` (`render_public_event`) | The hero art uses `lnkup_event_art_html()`. The hero facts include "Apply by …". The phone bar text is computed per event (one open booth: that booth's Apply; several: "From $X · N booth types" with "Choose a spot"). | The markup lives only in this function. No change to which spots can be applied to. |
+| `public/js/marketplace-v2.js` | `selectSlot( card, initial )`: the automatic first selection no longer overwrites the bar. | The bar text was set by this function on load. |
+| `includes/portfolio/class-portfolio-public.php` (`render`) | Stop cards show status, spots left and a link to the stop's event page. They use `lnkup_public_money()` and `lnkup_application_status_label()`. The logged-out "Log in" is a text link. | Stop markup lives only here. Uses the existing `data()` fields. |
 
 ## Baseline review
 
@@ -212,6 +215,43 @@ After views are in `docs/design-pass/after/` (`home-*-top`, the `home-*-sN` sect
 - **Verification:**
   - Phone and desktop captures of the homepage, sign up, log in, the Charlotte city page, organizers and a storefront.
   - Playwright `landing-launch`, `public-pages`, `market-pages`: 19 passed, 10 skipped (Chromium).
+
+## Step 3: Explore, event detail and tours
+
+- **Explore:**
+  - A compact search bar: search, city, Search and Filters on desktop; search, then city plus Filters on phone.
+  - Date and sort sit as pills in one scrollable row.
+  - Quick chips scroll in one row.
+  - Active filters are lime chips, next to an ink "Clear all".
+  - "Save this search" is a readable text link.
+  - The floating menu button (a duplicate of Filters) is gone.
+- **Filter drawer** (`public/js/explore-ux.js`):
+  - It works as a sheet: dialog role and label, a close button, Escape, backdrop click, focus kept inside, focus back on Filters.
+  - Side sheet on desktop, bottom sheet on phone, with the Apply and Clear actions kept in view.
+  - The Filters button shows the active count.
+- **Return position:**
+  - Filters already lived in the URL; the page and scroll position now come back too.
+  - Checked with `scripts/design/return-check.mjs`: Explore filtered to Charlotte, then an event, then back. Same URL, `y` 1467 before and after.
+- **Empty results:** a bordered panel with "Clear all filters" and, when a city caused it, "Search all cities". Suggestions follow.
+- **External listings:** "External listing" badge, "Fee set by the organizer", "Listed from the organizer's site", and only "View event". External listings stay off unless the vendor turns them on (unchanged).
+- **Canonical categories and bookable first:** the cards read `lnkup_canonical_category_label()`. Feed order is unchanged.
+- **Event detail:**
+  - The flyer is shown whole: contain over blur, 4:3 on phone and 4:5 on desktop.
+  - A display-weight title.
+  - The state pill.
+  - Facts as chips, including "Apply by".
+  - On desktop the sticky summary card is the one primary action (the hero's duplicate is hidden).
+  - Spot cards have a clear selected ring.
+  - The phone bar matches the page ("From $150 · 3 booth types" → "Choose a spot"), clears the home indicator, and the app bar never stacks on it.
+  - The page starts right under the header (about 100 px of empty space removed).
+- **Tour page:**
+  - Each stop shows "Accepting vendors" or "Not accepting", its city linking to the stop's event page, each booth's fee and spots left, the deadline, and Apply or the vendor's status.
+  - Without a description, the stops fill the width as a grid.
+- **Checks:**
+  - Captures: `explore`, `explore-city`, `explore-empty`, `explore-sheet`, `event-flyer`, `event-no-art`, `tour` at 390 and 1440 px.
+  - Playwright (Chromium): `marketplace-v2` 12 passed, 2 skipped, after two spec updates (the floating menu button is replaced by Filters; Apply links are now named "Apply to {event}").
+  - `apply-with-profile`, `apply-draft-resume`, `portfolio-os`, `tour-multi-apply`, `matching`, `vendor-journey`: passed.
+  - `external-events` (6) and `saved-searches:83` fail on the `phase/1-release-checks` baseline too (pre-existing).
 
 ## Handoffs
 
