@@ -7,6 +7,7 @@
 
 $roots = array(
 	'/var/www/html/wp-content/plugins/lnkup-marketplace',
+	'/var/www/html/wp-content/plugins/lnkup-communications',
 	'/var/www/html/wp-content/themes/lnkup-theme',
 );
 $count = 0;

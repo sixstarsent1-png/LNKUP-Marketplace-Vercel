@@ -381,6 +381,7 @@ class LNKup_Organizer_Activation {
 				break;
 			}
 		}
+		$unfilled = self::unfilled_categories( $f );
 		$to_event = array( 'organization', 'first_event', 'publication' );
 		$to_paid  = self::STAGES;
 		$pct      = static fn( array $keys ): int => (int) round( 100 * count( array_filter( $keys, static fn( $k ) => 'complete' === $by_key[ $k ]['status'] ) ) / count( $keys ) );
@@ -393,12 +394,108 @@ class LNKup_Organizer_Activation {
 			'percent'                        => (int) round( 100 * $done / count( $stages ) ),
 			'current_stage'                  => $next ? $next['stage'] : 'activated',
 			'next_action'                    => $next,
+			'next_step'                      => $next ?: self::ongoing_step( $f, $unfilled, $view ),
+			'unfilled_categories'            => $unfilled,
 			'progress_to_first_event'        => $pct( $to_event ),
 			'progress_to_first_paid_booking' => $pct( $to_paid ),
 			'share'                          => $by_key['publication']['share'],
 			'is_activated'                   => null === $next,
 			'generated_at'                   => current_time( 'mysql' ),
 		);
+	}
+
+	/**
+	 * After setup, the one thing most worth doing next, from the organizer's own records:
+	 * applicants waiting, a draft event to finish, then a category nobody has applied for.
+	 *
+	 * @param array    $f        Facts.
+	 * @param array    $unfilled Unfilled categories.
+	 * @param callable $view     Dashboard URL builder.
+	 * @return array<string, mixed>|null
+	 */
+	private static function ongoing_step( array $f, array $unfilled, callable $view ): ?array {
+		$waiting = count( array_filter( $f['app_statuses'], static fn( $s ) => in_array( $s, array( 'submitted', 'under_review' ), true ) ) );
+		if ( $waiting ) {
+			return array(
+				'stage'   => 'review_applications',
+				/* translators: %d: number of applications */
+				'title'   => sprintf( _n( '%d application is waiting for your review', '%d applications are waiting for your review', $waiting, 'lnkup-marketplace' ), $waiting ),
+				'label'   => __( 'Review applications', 'lnkup-marketplace' ),
+				'url'     => $view( 'applications' ),
+				'missing' => array(),
+			);
+		}
+		$today = current_time( 'Y-m-d' );
+		foreach ( array_reverse( (array) $f['events'] ) as $event ) {
+			$date = (string) get_post_meta( $event->ID, '_lnkup_event_date', true );
+			if ( 'draft' === (string) get_post_meta( $event->ID, '_lnkup_event_status', true ) && ( '' === $date || $date >= $today ) ) {
+				return array(
+					'stage'   => 'publish_draft',
+					/* translators: %s: event title */
+					'title'   => sprintf( __( 'Finish and publish %s', 'lnkup-marketplace' ), get_the_title( $event ) ),
+					'label'   => __( 'Finish setup', 'lnkup-marketplace' ),
+					'url'     => $view( 'events', array( 'event' => (int) $event->ID ) ),
+					'missing' => array(),
+				);
+			}
+		}
+		if ( $unfilled ) {
+			$gap = $unfilled[0];
+			return array(
+				'stage'   => 'fill_category',
+				/* translators: 1: vendor category, 2: event title */
+				'title'   => sprintf( __( 'No %1$s vendors have applied to %2$s yet', 'lnkup-marketplace' ), $gap['category'], $gap['event_title'] ),
+				'label'   => __( 'Invite vendors', 'lnkup-marketplace' ),
+				'url'     => $view( 'vendors', array( 'event' => (int) $gap['event_id'] ) ),
+				'missing' => array(),
+			);
+		}
+		return null;
+	}
+
+	/**
+	 * Vendor categories on open booths for upcoming events that have no active application.
+	 *
+	 * @param array $f Facts.
+	 * @return array<int, array{event_id:int,event_title:string,opportunity_id:int,category:string}>
+	 */
+	public static function unfilled_categories( array $f ): array {
+		$today  = current_time( 'Y-m-d' );
+		$active = array();
+		foreach ( (array) $f['apps'] as $app ) {
+			$status = (string) get_post_meta( $app->ID, '_lnkup_application_status', true );
+			if ( in_array( $status, array( 'rejected', 'cancelled', 'draft', '' ), true ) ) {
+				continue;
+			}
+			$opp_id              = (int) get_post_meta( $app->ID, '_lnkup_opportunity_id', true );
+			$active[ $opp_id ][] = strtolower( (string) get_post_meta( $app->ID, '_lnkup_selected_category', true ) );
+		}
+		$out = array();
+		foreach ( (array) $f['opps'] as $opp ) {
+			if ( 'open' !== (string) get_post_meta( $opp->ID, '_lnkup_opportunity_status', true ) ) {
+				continue;
+			}
+			$event_id = (int) get_post_meta( $opp->ID, '_lnkup_event_id', true );
+			$date     = (string) get_post_meta( $event_id, '_lnkup_event_date', true );
+			if ( '' === $date || $date < $today ) {
+				continue;
+			}
+			$names = wp_get_object_terms( $opp->ID, 'lnkup_vendor_category', array( 'fields' => 'names' ) );
+			foreach ( is_wp_error( $names ) ? array() : (array) $names as $name ) {
+				if ( ! in_array( strtolower( (string) $name ), $active[ (int) $opp->ID ] ?? array(), true ) ) {
+					$out[] = array(
+						'event_id'       => $event_id,
+						'event_title'    => get_the_title( $event_id ),
+						'opportunity_id' => (int) $opp->ID,
+						'category'       => function_exists( 'lnkup_canonical_category_label' ) ? lnkup_canonical_category_label( (string) $name ) : (string) $name,
+					);
+				}
+			}
+			if ( count( $out ) >= 5 ) {
+				break;
+			}
+		}
+		return array_slice( $out, 0, 5 );
 	}
 
 	/**

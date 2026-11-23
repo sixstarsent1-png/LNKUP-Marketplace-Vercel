@@ -93,7 +93,10 @@ class LNKup_Comms_Listen_Applications {
 				}
 				$payment = class_exists( 'LNKup_Payments' ) ? LNKup_Payments::get_for_application( $app_id ) : null;
 				$due     = LNKup_Comms_Context::payment_due( $app_id, $payment ? (int) $payment->ID : 0 );
-				LNKup_Comms_Engine::dispatch( 'v_application_approved', $vendor, $ctx, array( 'variant' => $due ? 'payment' : 'free', 'source' => 'application_approved' ) );
+				// A waitlist offer sends its own message with the offer deadline (v_waitlist_offer).
+				if ( ! LNKup_Applications::approved_by_waitlist_offer( $app_id ) ) {
+					LNKup_Comms_Engine::dispatch( 'v_application_approved', $vendor, $ctx, array( 'variant' => $due ? 'payment' : 'free', 'source' => 'application_approved' ) );
+				}
 				if ( $due ) {
 					self::schedule_payment_reminders( $app_id, $vendor );
 				}

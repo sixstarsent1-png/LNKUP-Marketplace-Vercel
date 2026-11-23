@@ -60,7 +60,72 @@ class LNKup_Comms_Delegation {
 			'saved_search_match'                     => array( array( 'flow_discovery' ), array( __CLASS__, 'adapt_saved_search_match' ) ),
 			'favorite_deadline_reminder'             => array( array( 'flow_discovery' ), array( __CLASS__, 'adapt_favorite_deadline' ) ),
 			'vendor_invite'                          => array( array( 'flow_discovery' ), array( __CLASS__, 'adapt_vendor_invite' ) ),
+			'waitlist_offer_made'                    => array( array( 'flow_applications' ), array( __CLASS__, 'adapt_waitlist_offer' ) ),
+			'waitlist_offer_expired'                 => array( array( 'flow_applications' ), array( __CLASS__, 'adapt_waitlist_offer_expired' ) ),
+			'review_assigned'                        => array( array( 'flow_applications' ), array( __CLASS__, 'adapt_review_assigned' ) ),
+			'task_assigned'                          => array( array( 'flow_operations' ), array( __CLASS__, 'adapt_task_assigned' ) ),
 		);
+	}
+
+	/**
+	 * Core waitlist offer (vendor). The status listener skips its generic "approved" message
+	 * while an offer is open, so the vendor gets this one message with the deadline.
+	 * Args: application_id, expires (UTC).
+	 */
+	public static function adapt_waitlist_offer( array $args ): bool {
+		$app_id = absint( $args[0] ?? 0 );
+		$user   = (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true );
+		if ( ! $app_id || ! $user || ! LNKup_Comms_Settings::enabled_for( 'flow_applications', $user ) ) {
+			return false;
+		}
+		$expires = sanitize_text_field( (string) ( $args[1] ?? '' ) );
+		LNKup_Comms_Engine::dispatch( 'v_waitlist_offer', $user, array( 'application_id' => $app_id ), array( 'window' => 'o' . md5( $expires ), 'source' => 'waitlist_offer' ) );
+		return true;
+	}
+
+	/**
+	 * Core waitlist offer expiry (organizer). Args: application_id.
+	 */
+	public static function adapt_waitlist_offer_expired( array $args ): bool {
+		$app_id = absint( $args[0] ?? 0 );
+		$user   = (int) get_post_meta( $app_id, '_lnkup_organizer_user_id', true );
+		return self::dispatch_for_organizer( 'o_waitlist_offer_expired', $user, array( 'application_id' => $app_id ), 'e' . gmdate( 'YmdH' ), 'waitlist_offer_expired' );
+	}
+
+	/**
+	 * Core reviewer assignment. Args: application_id, reviewer user ID.
+	 */
+	public static function adapt_review_assigned( array $args ): bool {
+		$app_id = absint( $args[0] ?? 0 );
+		return self::dispatch_for_organizer( 'o_review_assigned', absint( $args[1] ?? 0 ), array( 'application_id' => $app_id ), 'r' . $app_id, 'review_assigned' );
+	}
+
+	/**
+	 * Core event task assignment. Args: task ID, assignee user ID.
+	 */
+	public static function adapt_task_assigned( array $args ): bool {
+		$task_id  = absint( $args[0] ?? 0 );
+		$row      = $task_id && class_exists( 'LNKup_Event_Tasks' ) ? LNKup_Event_Tasks::get_row( $task_id ) : null;
+		$event_id = $row ? (int) $row['event_id'] : 0;
+		if ( ! $event_id ) {
+			return false;
+		}
+		return self::dispatch_for_organizer( 'o_task_assigned', absint( $args[1] ?? 0 ), array( 'event_id' => $event_id, 'task_title' => (string) $row['title'] ), 't' . $task_id, 'task_assigned', 'flow_operations' );
+	}
+
+	/**
+	 * Dispatch an organizer-side message only when the engine would deliver it; team members
+	 * without an organizer account (for example a one-event reviewer) keep the plain email.
+	 */
+	private static function dispatch_for_organizer( string $trigger, int $user, array $ctx, string $window, string $source, string $flag = 'flow_applications' ): bool {
+		if ( ! $user || ! LNKup_Comms_Settings::enabled_for( $flag, $user ) ) {
+			return false;
+		}
+		if ( '' !== LNKup_Comms_Engine::authorize( 'organizer', $user, LNKup_Comms_Context::build( $ctx ) ) ) {
+			return false;
+		}
+		LNKup_Comms_Engine::dispatch( $trigger, $user, $ctx, array( 'window' => $window, 'source' => $source ) );
+		return true;
 	}
 
 	/**

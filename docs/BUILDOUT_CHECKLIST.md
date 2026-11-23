@@ -270,13 +270,50 @@ Short paths: `P/` = `wp-content/plugins/lnkup-marketplace/`, `C/` = `wp-content/
 
 - **Regression:** `portfolio-os-test`, `organizer-os-test`, `organizer-os-wave2-test`, `trust-safety-test` pass. `organizer-integrity` 5/5, `organizer-review`, `portfolio-os` pass. Expo typecheck 0, jest 24 suites.
 
+## Phase 4 results: acquisition, discovery, communications, analytics
+
+### Communications
+- **Fixed double send:** a waitlist offer sent the vendor two messages in both modes ("approved" or "payment due", plus "a spot opened up").
+  - Core now skips the generic approval and payment-due emails for an offer (`LNKup_Applications::approve_for_waitlist_offer()`).
+  - The Communications listener skips `v_application_approved` when the approval came from an offer. Payment reminders before the offer deadline are still scheduled.
+  - The vendor now gets the offer message plus the invoice document.
+- **Organizer OS sends are claimable:** the six raw `LNKup_Notifications::send()` calls in waitlist offers, reviewer assignment, event tasks and organizer documents now go through `send_keyed()` (keys listed in `LNKup_Notifications::KEYED_MESSAGES`), so Communications can claim them.
+  - New triggers: `v_waitlist_offer`, `o_waitlist_offer_expired`, `o_review_assigned`, `o_task_assigned`.
+  - They reuse existing link and push types, so app routing is unchanged.
+  - Organizer-side adapters decline when the engine could not deliver (for example a one-event reviewer without an organizer account), so core still emails them.
+  - `task_digest` and `organizer_document_update` stay plain email until a flow covers them.
+- **Evidence:** `comms-organizer-os-test.php` (flows on and off; organizer-account vs team-only recipients). All 12 comms suites pass, including `comms-schema-test`.
+
+### Organizer progress
+- **`organizer/activation` now returns `next_step`.** During setup it is the setup step; after activation it is the most useful ongoing action, in this order:
+  1. Applicants waiting for review.
+  2. A draft event to finish.
+  3. A category nobody has applied for on an upcoming booth.
+- **`unfilled_categories`** lists those gaps per booth, using canonical category labels.
+- **WordPress Get started** shows the ongoing step after setup. Expo Home already shows Communications next steps (`NextStepsCard`).
+- **House vs independent** comes from `org_growth_house_organizer_ids` and is shared with the funnel.
+- **Evidence:** `organizer-next-step-test.php`. `organizer-activation-test` and the Organizer Growth runner pass.
+
+### Analytics
+- **`GET /admin/analytics/funnel` (manage-all):** views → apply started → submitted → approved → paid → checked in, with drop-off per step, days to first paid booking, repeat vendors, and open vs filled slots. It returns the requested scope plus a house vs independent comparison.
+- **Sources and counting rules** are returned with the numbers:
+  - Paid comes only from payment records, and a later refund does not undo it.
+  - Apply start comes from draft rows (`_lnkup_draft_started_at`) plus direct submits.
+  - An `apply_started` analytics event is now also recorded when a draft is first saved.
+- **One exclusion list** (`LNKup_Analytics_Exclusions`) removes test and demo accounts as vendors and as organizers: `analytics_excluded_user_ids`, users flagged `_lnkup_test_account`, and Communications test recipients.
+- **Evidence:** `opportunity-funnel-test.php`.
+
+### Discovery
+- **Verified unchanged:** saved-search alerts (`matching-alerts-test`), reapply rules (`reapply-policy-test`), match funnel (`match-funnel-test`).
+- **Not built:** an external-listing label and claim path in Next.js and Expo. External listings stay off by default (redesign decision), and the apps never show them, so nothing is mislabeled. WordPress keeps the opt-in filter and claim route.
+
 ## Running checklist
 
 - [x] **Phase 0:** integration branch, bootstrap files tracked, lint, activation, typechecks ([PR #9](https://github.com/sixstarsent1-png/LNKUP-Marketplace-Vercel/pull/9))
 - [x] **Phase 1:** matrix, release checks, private-upload probe. Open: Vercel Root Directory (project owner), SiteGround Direct Delivery (hosting), PR #7 merge.
 - [x] **Phase 2:** booking journey and financial integrity. Open: Expo drafts list ships with PR #10; live Stripe test-mode card run needs staging keys.
 - [x] **Phase 3:** organizer management, tours, event day. Open: shared team CRM, waitlist offers in the apps, `$request['id']` audit outside operations.
-- [ ] **Phase 4:** acquisition, discovery, communications, analytics
+- [x] **Phase 4:** acquisition, discovery, communications, analytics. Open: external listings in the apps; `task_digest` and document updates through Communications; no live sends in this pass.
 - [ ] **Phase 5:** internal operations workspace
 - [ ] **Phase 6:** partnerships and rollout plan
 - [ ] **Phase 7:** demonstrations and handoff

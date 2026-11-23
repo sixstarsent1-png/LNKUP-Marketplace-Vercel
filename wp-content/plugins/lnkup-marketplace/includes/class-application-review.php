@@ -922,7 +922,9 @@ class LNKup_Application_Review {
 		$label    = self::bulk_label( $app_id );
 		$assigner = get_userdata( absint( $actor ) );
 		$url      = add_query_arg( array( 'view' => 'applications', 'assigned' => 'me', 'group' => 'pending', 'app' => $app_id ), lnkup_page_url_helper( 'organizer-dashboard' ) );
-		LNKup_Notifications::send(
+		LNKup_Notifications::send_keyed(
+			'review_assigned',
+			array( (int) $app_id, (int) $reviewer_id ),
 			$reviewer->user_email,
 			/* translators: %s: event name */
 			sprintf( __( 'Application to review for %s', 'lnkup-marketplace' ), $label['event'] ),

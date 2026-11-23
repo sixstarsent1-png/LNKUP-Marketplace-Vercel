@@ -1208,7 +1208,11 @@ class LNKup_Applications {
 		}
 
 		if ( 'approved' === $status ) {
-			LNKup_Notifications::send_application_approved( $app_id );
+			// A waitlist offer sends its own message with the offer deadline; a second
+			// "approved" email would tell the vendor the same thing twice.
+			if ( 'waitlist_offer' !== (string) ( $extra['source'] ?? '' ) ) {
+				LNKup_Notifications::send_application_approved( $app_id );
+			}
 			if ( $payment_id ) {
 				LNKup_Financial_Service::maybe_finalize_zero_amount( (int) $payment_id, 'free_booth' );
 			}
@@ -1264,6 +1268,29 @@ class LNKup_Applications {
 
 	/** Set only by return_to_waitlist(); never reachable from request input. */
 	private static $allow_offer_return = false;
+
+	/** True while approve_for_waitlist_offer() runs, so the offer email is the vendor's only "pay now" message. */
+	private static $approving_waitlist_offer = false;
+
+	/**
+	 * Approve a waitlisted application as a waitlist offer (payment deadline in $extra).
+	 *
+	 * @param int   $app_id Application ID.
+	 * @param array $extra  payment_due_at.
+	 * @return mixed transition() result.
+	 */
+	public static function approve_for_waitlist_offer( $app_id, array $extra ) {
+		self::$approving_waitlist_offer = true;
+		try {
+			return self::transition( $app_id, 'approved', array_merge( $extra, array( 'source' => 'waitlist_offer' ) ) );
+		} finally {
+			self::$approving_waitlist_offer = false;
+		}
+	}
+
+	public static function is_approving_waitlist_offer() {
+		return self::$approving_waitlist_offer;
+	}
 
 	/**
 	 * Put an unpaid waitlist offer back on the waitlist (offer expired or withdrawn).
@@ -1376,6 +1403,21 @@ class LNKup_Applications {
 	}
 
 	const HISTORY_META = '_lnkup_status_history';
+
+	/**
+	 * Whether the application's most recent approval came from a waitlist offer.
+	 *
+	 * @param int $app_id Application ID.
+	 */
+	public static function approved_by_waitlist_offer( $app_id ) {
+		$history = get_post_meta( absint( $app_id ), self::HISTORY_META, true );
+		foreach ( array_reverse( is_array( $history ) ? $history : array() ) as $entry ) {
+			if ( 'approved' === ( $entry['to'] ?? '' ) ) {
+				return 'waitlist_offer' === ( $entry['source'] ?? '' );
+			}
+		}
+		return false;
+	}
 
 	/**
 	 * Append one status change to the application's timeline (capped at 100 entries).
