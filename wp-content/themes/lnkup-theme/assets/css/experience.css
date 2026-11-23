@@ -1,0 +1,1211 @@
+/*
+ * LNKup experience layer.
+ *
+ * Loaded after the theme (lnkup.css, components.css) and plugin stylesheets. Holds the shared
+ * public look: header, homepage stage, event cards and artwork, fee chips, discovery sections,
+ * focus and motion. Colors come from the theme tokens in assets/src/main.css.
+ */
+
+:root {
+	--x-ink: #0b0c0f;
+	--x-ink-2: #16181d;
+	--x-ink-3: #22252c;
+	--x-paper: #fafaf7;
+	--x-line: rgba(11, 12, 15, 0.1);
+	--x-line-strong: rgba(11, 12, 15, 0.18);
+	--x-muted: #5b606b;
+	--x-lime: var(--accent, #c4f04a);
+	--x-lime-ink: #1d2a05;
+	--x-card-radius: 20px;
+	--x-control-radius: 12px;
+	--x-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--x-fast: 160ms;
+	--x-med: 260ms;
+	--x-shadow: 0 1px 2px rgba(11, 12, 15, 0.06), 0 8px 24px -12px rgba(11, 12, 15, 0.18);
+	--x-shadow-lift: 0 2px 4px rgba(11, 12, 15, 0.06), 0 18px 40px -18px rgba(11, 12, 15, 0.35);
+}
+
+/* ------------------------------------------------------------------ Focus, press, motion */
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+	outline: 3px solid var(--x-lime);
+	outline-offset: 2px;
+	box-shadow: 0 0 0 5px var(--x-ink);
+	border-radius: 10px;
+}
+
+.lnkup-btn {
+	transition: transform var(--x-fast) var(--x-ease), background-color var(--x-fast) var(--x-ease), box-shadow var(--x-fast) var(--x-ease), border-color var(--x-fast) var(--x-ease);
+}
+
+.lnkup-btn:active {
+	transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+
+	.lnkup-btn:active,
+	.lnkup-event-card--x:hover,
+	.lnkup-poster:hover,
+	.lnkup-poster__link:focus-visible {
+		transform: none !important;
+	}
+}
+
+/* ------------------------------------------------------------------ Header */
+
+.lnkup-header__nav a,
+.lnkup-header__nav .lnkup-header__text-link {
+	display: inline-flex;
+	align-items: center;
+	min-height: 2.75rem;
+	padding: 0 0.25rem;
+	font-weight: 600;
+	color: inherit;
+	text-decoration: none;
+	border-bottom: 2px solid transparent;
+	transition: border-color var(--x-fast) var(--x-ease), color var(--x-fast) var(--x-ease);
+}
+
+.lnkup-header__nav a:hover {
+	border-bottom-color: var(--x-lime);
+}
+
+.lnkup-header__nav {
+	align-items: center;
+}
+
+.lnkup-header__actions {
+	align-items: center;
+}
+
+/* "Get the app" in the header is a quiet link, so Sign up stays the one filled action. */
+.lnkup-header__actions .lnkup-app-download__link.lnkup-btn--accent {
+	background: transparent;
+	color: #fff;
+	border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+/*
+ * components.css makes every ghost button on the public site white, which is only right on the
+ * dark header and dark bands. On light content they read as ink.
+ */
+.lnkup-site .lnkup-btn--ghost {
+	color: var(--x-ink);
+}
+
+.lnkup-site .lnkup-header .lnkup-btn--ghost,
+.lnkup-site .lnkup-hero .lnkup-btn--ghost,
+.lnkup-site .lnkup-footer .lnkup-btn--ghost,
+.lnkup-site .lnkup-section--organizers .lnkup-btn--ghost,
+.lnkup-site .lnkup-section--cta .lnkup-btn--ghost {
+	color: #fff;
+}
+
+.lnkup-site .lnkup-btn--ghost:hover {
+	background: rgba(11, 12, 15, 0.06);
+}
+
+.lnkup-site .lnkup-header .lnkup-btn--ghost:hover {
+	background: rgba(255, 255, 255, 0.08);
+}
+
+.lnkup-header__actions .lnkup-app-download__link.lnkup-btn--accent:hover {
+	border-color: var(--x-lime);
+}
+
+/* ------------------------------------------------------------------ Sign up and log in */
+
+.lnkup-signup-page__benefits {
+	display: grid;
+	gap: 0.6rem;
+	margin: 1.25rem 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.lnkup-signup-page__benefits li {
+	position: relative;
+	padding-left: 1.85rem;
+	font-weight: 500;
+	color: #343842;
+}
+
+.lnkup-signup-page__benefits li::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 0.1rem;
+	width: 1.25rem;
+	height: 1.25rem;
+	border-radius: 999px;
+	background: var(--x-lime) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d2a05' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 0.8rem no-repeat;
+}
+
+.lnkup-signup-form__role-option {
+	border-radius: 14px;
+	border: 1.5px solid var(--x-line-strong);
+	background: #fff;
+	transition: border-color var(--x-fast) var(--x-ease), box-shadow var(--x-fast) var(--x-ease), background-color var(--x-fast) var(--x-ease);
+	cursor: pointer;
+}
+
+.lnkup-signup-form__role-option.is-active,
+.lnkup-signup-form__role-option:has(input:checked) {
+	border-color: var(--x-ink);
+	background: #fff;
+	box-shadow: 0 0 0 3px var(--x-lime);
+}
+
+.lnkup-signup-form__role-option:focus-within {
+	box-shadow: 0 0 0 3px var(--x-lime), 0 0 0 5px var(--x-ink);
+}
+
+/* ------------------------------------------------------------------ Homepage stage */
+
+.lnkup-hero--stage {
+	min-height: auto;
+	overflow: hidden;
+}
+
+.lnkup-hero--stage .lnkup-hero__wash {
+	background:
+		linear-gradient(90deg, rgba(5, 6, 7, 0.96) 0%, rgba(5, 6, 7, 0.86) 42%, rgba(5, 6, 7, 0.55) 100%),
+		linear-gradient(0deg, rgba(5, 6, 7, 0.9) 0%, rgba(5, 6, 7, 0) 40%);
+}
+
+.lnkup-hero--stage .lnkup-hero__grid {
+	padding-block: 2.5rem 3rem;
+	gap: 2rem;
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.lnkup-hero--stage .lnkup-heading--hero {
+	font-family: "Sora", "Inter", system-ui, sans-serif;
+	font-weight: 700;
+	font-size: clamp(2.6rem, 11vw, 6rem);
+	line-height: 0.92;
+	letter-spacing: -0.045em;
+	max-width: 11ch;
+	margin: 0.9rem 0 0;
+	color: #fff;
+	text-wrap: balance;
+}
+
+.lnkup-hero--stage .lnkup-hero__lead {
+	max-width: 34rem;
+	margin-top: 1rem;
+	font-size: clamp(1rem, 2.6vw, 1.175rem);
+	line-height: 1.55;
+	color: rgba(244, 244, 245, 0.82);
+}
+
+.lnkup-hero--cinematic .lnkup-pill.lnkup-pill--live {
+	font-family: "Inter", system-ui, sans-serif;
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+.lnkup-pill--live {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.4rem 0.8rem;
+	border-radius: 999px;
+	background: rgba(196, 240, 74, 0.12);
+	border: 1px solid rgba(196, 240, 74, 0.35);
+	color: #e8ffc0;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+}
+
+.lnkup-pill--live .lnkup-pill__dot {
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 999px;
+	background: var(--x-lime);
+	box-shadow: 0 0 0 0 rgba(196, 240, 74, 0.6);
+	animation: lnkup-x-pulse 2.4s var(--x-ease) infinite;
+}
+
+@keyframes lnkup-x-pulse {
+	0% { box-shadow: 0 0 0 0 rgba(196, 240, 74, 0.55); }
+	70% { box-shadow: 0 0 0 10px rgba(196, 240, 74, 0); }
+	100% { box-shadow: 0 0 0 0 rgba(196, 240, 74, 0); }
+}
+
+.lnkup-hero--stage .lnkup-hero-search {
+	display: flex;
+	align-items: stretch;
+	gap: 0.5rem;
+	max-width: 34rem;
+	margin-top: 1.5rem;
+	padding: 0.5rem;
+	border-radius: 18px;
+	background: #fff;
+	box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.6);
+}
+
+.lnkup-hero-search__field {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	justify-content: center;
+	min-width: 0;
+	padding: 0.25rem 0.75rem;
+	margin: 0;
+}
+
+.lnkup-hero-search__label {
+	font-size: 0.6875rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--x-muted);
+}
+
+.lnkup-hero--stage .lnkup-hero-search input {
+	width: 100%;
+	min-height: 2rem;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	font-size: 1.0625rem;
+	font-weight: 600;
+	color: var(--x-ink);
+	box-shadow: none;
+	outline: none;
+}
+
+.lnkup-hero--stage .lnkup-hero-search input::placeholder {
+	color: #8b9099;
+	font-weight: 500;
+}
+
+.lnkup-hero--stage .lnkup-hero-search:focus-within {
+	box-shadow: 0 0 0 3px var(--x-lime), 0 20px 60px -20px rgba(0, 0, 0, 0.6);
+}
+
+.lnkup-hero--stage .lnkup-hero-search .lnkup-hero-search__field {
+	flex: 1 1 auto;
+	gap: 0.1rem;
+}
+
+.lnkup-hero--stage .lnkup-hero-search input {
+	min-height: 2rem;
+	border: 0;
+	padding: 0;
+	border-radius: 0;
+}
+
+.lnkup-hero--stage .lnkup-hero-search .lnkup-btn {
+	flex: 0 0 auto;
+	width: auto;
+	grid-column: auto;
+	min-height: 3.25rem;
+	padding-inline: 1.35rem;
+	border-radius: 13px;
+	font-size: 1rem;
+	white-space: nowrap;
+}
+
+.lnkup-hero__cities {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	margin-top: 1rem;
+}
+
+.lnkup-hero__cities a {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	min-height: 2.5rem;
+	padding: 0 0.85rem;
+	border-radius: 999px;
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	color: #f4f4f5;
+	font-size: 0.875rem;
+	font-weight: 600;
+	text-decoration: none;
+	transition: background-color var(--x-fast) var(--x-ease), border-color var(--x-fast) var(--x-ease);
+}
+
+.lnkup-hero__cities a span {
+	color: var(--x-lime);
+	font-variant-numeric: tabular-nums;
+}
+
+.lnkup-hero__cities a:hover {
+	background: rgba(255, 255, 255, 0.08);
+	border-color: rgba(255, 255, 255, 0.35);
+}
+
+.lnkup-hero__cities .lnkup-hero__cities-all {
+	border-color: transparent;
+	color: rgba(244, 244, 245, 0.8);
+}
+
+/* Poster stack: horizontal strip on phones, a fanned stack on wide screens. */
+.lnkup-hero__stack {
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: minmax(11.5rem, 62%);
+	gap: 0.85rem;
+	margin: 0 -1rem;
+	padding: 0.25rem 1rem 0.5rem;
+	overflow-x: auto;
+	scroll-snap-type: x mandatory;
+	list-style: none;
+	scrollbar-width: none;
+}
+
+.lnkup-hero__stack::-webkit-scrollbar {
+	display: none;
+}
+
+.lnkup-poster {
+	scroll-snap-align: start;
+	margin: 0;
+}
+
+.lnkup-poster__link {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+	border-radius: 18px;
+	background: var(--x-ink-2);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	color: #fff;
+	text-decoration: none;
+	transition: transform var(--x-med) var(--x-ease), box-shadow var(--x-med) var(--x-ease), border-color var(--x-med) var(--x-ease);
+}
+
+.lnkup-poster__link:hover,
+.lnkup-poster__link:focus-visible {
+	border-color: rgba(196, 240, 74, 0.6);
+}
+
+.lnkup-poster__art {
+	position: relative;
+	display: block;
+	aspect-ratio: 4 / 5;
+	overflow: hidden;
+	background: var(--x-ink-3);
+}
+
+.lnkup-poster__blur,
+.lnkup-art__blur {
+	position: absolute;
+	inset: -12%;
+	width: 124%;
+	height: 124%;
+	object-fit: cover;
+	filter: blur(22px) saturate(1.2) brightness(0.6);
+}
+
+.lnkup-poster__img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+.lnkup-poster__date,
+.lnkup-event-card__date {
+	position: absolute;
+	top: 0.65rem;
+	left: 0.65rem;
+	z-index: 2;
+	display: grid;
+	min-width: 3rem;
+	padding: 0.35rem 0.5rem;
+	border-radius: 10px;
+	background: #fff;
+	color: var(--x-ink);
+	font-family: "Sora", "Inter", sans-serif;
+	font-size: 0.875rem;
+	font-weight: 700;
+	line-height: 1.05;
+	text-align: center;
+	box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.45);
+}
+
+.lnkup-poster__date span,
+.lnkup-event-card__date span {
+	font-family: "Inter", sans-serif;
+	font-size: 0.625rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--x-muted);
+}
+
+.lnkup-poster__body {
+	display: grid;
+	gap: 0.2rem;
+	padding: 0.75rem 0.85rem 0.9rem;
+}
+
+.lnkup-poster__title {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	font-family: "Sora", "Inter", sans-serif;
+	font-size: 0.95rem;
+	font-weight: 700;
+	line-height: 1.2;
+}
+
+.lnkup-poster__meta {
+	font-size: 0.8125rem;
+	color: rgba(244, 244, 245, 0.7);
+}
+
+.lnkup-poster__fee {
+	justify-self: start;
+	margin-top: 0.35rem;
+}
+
+@media (min-width: 1024px) {
+	.lnkup-hero--stage.has-stack .lnkup-hero__grid {
+		grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+		align-items: center;
+		padding-block: 4.5rem 5rem;
+		gap: 3rem;
+	}
+
+	.lnkup-hero__stack {
+		position: relative;
+		display: block;
+		height: 34rem;
+		margin: 0;
+		padding: 0;
+		overflow: visible;
+	}
+
+	.lnkup-poster {
+		position: absolute;
+		width: 16.5rem;
+	}
+
+	.lnkup-poster--1 {
+		top: 1.5rem;
+		left: 50%;
+		z-index: 3;
+		transform: translateX(-50%) rotate(-1deg);
+	}
+
+	.lnkup-poster--2 {
+		top: 4rem;
+		left: 2%;
+		z-index: 2;
+		transform: rotate(-7deg);
+	}
+
+	.lnkup-poster--3 {
+		top: 4.5rem;
+		right: 2%;
+		z-index: 1;
+		transform: rotate(6deg);
+	}
+
+	.lnkup-poster:hover {
+		z-index: 4;
+	}
+
+	.lnkup-poster__link {
+		box-shadow: 0 30px 60px -24px rgba(0, 0, 0, 0.8);
+	}
+
+	.lnkup-poster:hover .lnkup-poster__link,
+	.lnkup-poster__link:focus-visible {
+		transform: translateY(-8px);
+	}
+}
+
+/* ------------------------------------------------------------------ App prompt bar */
+
+.lnkup-app-sheet--bar {
+	position: fixed;
+	inset: auto 0 0 0;
+	z-index: 70;
+	display: block;
+	padding: 0 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
+	pointer-events: none;
+}
+
+.lnkup-app-sheet--bar[hidden] {
+	display: none;
+}
+
+.lnkup-app-sheet--bar .lnkup-app-sheet__panel {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	max-width: 32rem;
+	margin: 0 auto;
+	padding: 0.6rem 0.6rem 0.6rem 0.75rem;
+	border-radius: 16px;
+	background: var(--x-ink);
+	color: #fff;
+	box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.6);
+	pointer-events: auto;
+	animation: lnkup-x-rise var(--x-med) var(--x-ease);
+}
+
+.lnkup-app-sheet__icon {
+	display: inline-flex;
+	flex: 0 0 auto;
+}
+
+.lnkup-app-sheet__icon svg,
+.lnkup-app-sheet__icon img {
+	width: 2.25rem;
+	height: 2.25rem;
+}
+
+.lnkup-app-sheet__text {
+	display: grid;
+	flex: 1;
+	min-width: 0;
+	margin: 0;
+	font-size: 0.8125rem;
+	line-height: 1.3;
+}
+
+.lnkup-app-sheet__text span {
+	color: rgba(244, 244, 245, 0.72);
+}
+
+.lnkup-app-sheet__close {
+	display: inline-grid;
+	place-items: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	border: 0;
+	border-radius: 12px;
+	background: transparent;
+	color: rgba(244, 244, 245, 0.8);
+	font-size: 1.5rem;
+	cursor: pointer;
+}
+
+@keyframes lnkup-x-rise {
+	from { transform: translateY(16px); opacity: 0; }
+	to { transform: none; opacity: 1; }
+}
+
+/* ------------------------------------------------------------------ Event artwork */
+
+.lnkup-art {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	background: var(--x-ink-2);
+}
+
+.lnkup-art__img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+.lnkup-art--fallback {
+	display: grid;
+	place-items: center;
+	background:
+		radial-gradient(120% 90% at 100% 0%, rgba(196, 240, 74, 0.28) 0%, rgba(196, 240, 74, 0) 55%),
+		repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0 2px, transparent 2px 14px),
+		var(--x-ink);
+}
+
+.lnkup-art__mark {
+	font-family: "Sora", "Inter", sans-serif;
+	font-size: clamp(2.5rem, 9vw, 3.75rem);
+	font-weight: 700;
+	letter-spacing: -0.05em;
+	color: var(--x-lime);
+	line-height: 1;
+}
+
+.lnkup-art__brand {
+	position: absolute;
+	right: 0.75rem;
+	bottom: 0.6rem;
+	font-size: 0.6875rem;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.5);
+}
+
+/* ------------------------------------------------------------------ Fee chips */
+
+.lnkup-fee {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
+	margin: 0;
+	padding: 0.25rem 0.6rem;
+	border-radius: 999px;
+	font-size: 0.8125rem;
+	font-weight: 700;
+	line-height: 1.3;
+	font-variant-numeric: tabular-nums;
+	background: rgba(11, 12, 15, 0.06);
+	color: var(--x-ink);
+}
+
+.lnkup-fee--free {
+	background: var(--x-lime);
+	color: var(--x-lime-ink);
+}
+
+.lnkup-fee--unavailable,
+.lnkup-fee--external {
+	background: transparent;
+	border: 1px dashed var(--x-line-strong);
+	color: var(--x-muted);
+	font-weight: 600;
+}
+
+.lnkup-poster .lnkup-fee {
+	background: rgba(255, 255, 255, 0.12);
+	color: #fff;
+}
+
+.lnkup-poster .lnkup-fee--free {
+	background: var(--x-lime);
+	color: var(--x-lime-ink);
+}
+
+.lnkup-poster .lnkup-fee--unavailable {
+	border-color: rgba(255, 255, 255, 0.3);
+	color: rgba(244, 244, 245, 0.75);
+}
+
+/* ------------------------------------------------------------------ Event card */
+
+.lnkup-event-card--x {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	height: 100%;
+	border-radius: var(--x-card-radius);
+	border: 1px solid var(--x-line);
+	background: #fff;
+	box-shadow: var(--x-shadow);
+	transition: transform var(--x-med) var(--x-ease), box-shadow var(--x-med) var(--x-ease), border-color var(--x-med) var(--x-ease);
+}
+
+.lnkup-event-card--x:hover {
+	transform: translateY(-3px);
+	box-shadow: var(--x-shadow-lift);
+	border-color: var(--x-line-strong);
+}
+
+.lnkup-event-card--x .lnkup-event-card__media {
+	position: relative;
+	aspect-ratio: 4 / 3;
+	height: auto;
+	min-height: 0;
+	overflow: hidden;
+	border-radius: 0;
+	background: var(--x-ink-2);
+}
+
+.lnkup-event-card--x .lnkup-event-card__media::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(180deg, rgba(0, 0, 0, 0.25) 0%, rgba(0, 0, 0, 0) 30%);
+	pointer-events: none;
+}
+
+.lnkup-event-card--x .lnkup-event-card__badges-top {
+	position: absolute;
+	top: 0.65rem;
+	right: 0.65rem;
+	left: auto;
+	z-index: 2;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 0.35rem;
+	max-width: calc(100% - 5rem);
+}
+
+.lnkup-event-card--x .lnkup-badge--status,
+.lnkup-event-card--x .lnkup-badge--mine {
+	padding: 0.25rem 0.55rem;
+	border-radius: 999px;
+	border: 0;
+	font-size: 0.75rem;
+	font-weight: 700;
+	background: #fff;
+	color: var(--x-ink);
+	box-shadow: 0 4px 12px -6px rgba(0, 0, 0, 0.4);
+}
+
+.lnkup-event-card--x .lnkup-badge--closing {
+	background: #fff4d6;
+	color: #7a4a00;
+}
+
+.lnkup-event-card--x .lnkup-badge--sold_out,
+.lnkup-event-card--x .lnkup-badge--closed {
+	background: var(--x-ink);
+	color: #fff;
+}
+
+.lnkup-event-card--x .lnkup-badge--external {
+	background: #e8ecff;
+	color: #2b3a8c;
+}
+
+.lnkup-event-card--x .lnkup-badge--mine {
+	background: var(--x-lime);
+	color: var(--x-lime-ink);
+}
+
+.lnkup-event-card--x[data-status="sold_out"] .lnkup-art__img,
+.lnkup-event-card--x[data-status="closed"] .lnkup-art__img {
+	filter: grayscale(0.7) brightness(0.8);
+}
+
+.lnkup-event-card--x .lnkup-event-card__favorite {
+	position: absolute;
+	right: 0.65rem;
+	bottom: 0.65rem;
+	top: auto;
+	z-index: 2;
+	display: inline-grid;
+	place-items: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	border: 0;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.92);
+	color: #9aa0aa;
+	cursor: pointer;
+	transition: transform var(--x-fast) var(--x-ease), color var(--x-fast) var(--x-ease);
+}
+
+.lnkup-event-card--x .lnkup-event-card__favorite.is-active {
+	color: #e0245e;
+}
+
+.lnkup-event-card--x .lnkup-event-card__favorite:active {
+	transform: scale(0.88);
+}
+
+.lnkup-event-card--x .lnkup-event-card__body {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 0.35rem;
+	padding: 0.95rem 1rem 1rem;
+}
+
+.lnkup-event-card--x .lnkup-event-card__title {
+	min-height: 0;
+	margin: 0;
+	font-family: "Sora", "Inter", sans-serif;
+	font-size: 1.0625rem;
+	font-weight: 700;
+	line-height: 1.25;
+	letter-spacing: -0.015em;
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+
+.lnkup-event-card--x .lnkup-event-card__title a {
+	color: var(--x-ink);
+	text-decoration: none;
+}
+
+.lnkup-event-card--x .lnkup-event-card__title a::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+}
+
+.lnkup-event-card--x {
+	position: relative;
+}
+
+.lnkup-event-card--x .lnkup-event-card__footer,
+.lnkup-event-card--x .lnkup-event-card__favorite,
+.lnkup-event-card--x .lnkup-event-card__badges-top {
+	position: relative;
+	z-index: 2;
+}
+
+.lnkup-event-card--x .lnkup-event-card__favorite {
+	position: absolute;
+}
+
+.lnkup-event-card--x .lnkup-event-card__badges-top {
+	position: absolute;
+}
+
+.lnkup-event-card--x .lnkup-event-card__meta {
+	margin: 0;
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: #343842;
+}
+
+.lnkup-event-card--x .lnkup-event-card__fit {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.2rem 0.5rem;
+	margin: 0;
+	font-size: 0.8125rem;
+	color: var(--x-muted);
+}
+
+.lnkup-event-card--x .lnkup-event-card__cats {
+	color: #343842;
+	font-weight: 500;
+}
+
+.lnkup-event-card--x .lnkup-event-card__deal {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4rem 0.65rem;
+	margin-top: auto;
+	padding-top: 0.5rem;
+}
+
+.lnkup-event-card--x .lnkup-event-card__slot-count {
+	margin: 0;
+	font-size: 0.8125rem;
+	color: var(--x-muted);
+}
+
+.lnkup-event-card--x .lnkup-event-card__slot-count.is-urgent {
+	color: #a23b00;
+	font-weight: 700;
+}
+
+.lnkup-event-card--x .lnkup-event-card__footer {
+	display: flex;
+	gap: 0.5rem;
+	margin-top: 0.65rem;
+}
+
+.lnkup-event-card--x .lnkup-event-card__footer .lnkup-btn {
+	flex: 1;
+	min-height: 2.75rem;
+	justify-content: center;
+}
+
+/* Homepage grid: 1 / 2 / 3 columns. */
+.lnkup-section .lnkup-event-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+	gap: 1rem;
+}
+
+@media (min-width: 1100px) {
+	.lnkup-section .lnkup-event-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 1.25rem;
+	}
+}
+
+/* Lime buttons always carry dark text (white on lime fails contrast). */
+.lnkup-btn--accent,
+.lnkup-footer .lnkup-btn--accent {
+	color: var(--x-lime-ink);
+}
+
+/* Eyebrows on light sections: lime text fails contrast on white, so use the deep lime ink. */
+.lnkup-section:not(.lnkup-section--organizers):not(.lnkup-section--cta) .lnkup-eyebrow,
+.lnkup-section:not(.lnkup-section--organizers):not(.lnkup-section--cta) .lnkup-section-kicker__label {
+	color: #3d5c00;
+}
+
+/* ------------------------------------------------------------------ Browse by city */
+
+.lnkup-browse__label {
+	margin: 1.75rem 0 0.75rem;
+	font-size: 0.8125rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--x-muted);
+}
+
+.lnkup-city-tiles {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+	gap: 0.75rem;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.lnkup-city-tile {
+	display: grid;
+	gap: 0.25rem;
+	min-height: 6.5rem;
+	align-content: end;
+	padding: 1rem;
+	border-radius: 16px;
+	background: var(--x-ink);
+	color: #fff;
+	text-decoration: none;
+	position: relative;
+	overflow: hidden;
+	transition: transform var(--x-med) var(--x-ease);
+}
+
+.lnkup-city-tile::before {
+	content: "";
+	position: absolute;
+	top: -2.5rem;
+	right: -2.5rem;
+	width: 6rem;
+	height: 6rem;
+	border-radius: 999px;
+	background: radial-gradient(circle, rgba(196, 240, 74, 0.45), rgba(196, 240, 74, 0) 70%);
+}
+
+.lnkup-city-tile:hover {
+	transform: translateY(-2px);
+}
+
+.lnkup-city-tile__name {
+	font-family: "Sora", "Inter", sans-serif;
+	font-size: 1.25rem;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+
+.lnkup-city-tile__count {
+	font-size: 0.8125rem;
+	color: var(--x-lime);
+	font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ Tours */
+
+.lnkup-tour-rail {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+	gap: 1rem;
+	margin: 1.5rem 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.lnkup-tour-tile {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	padding: 1.25rem;
+	border-radius: var(--x-card-radius);
+	border: 1px solid var(--x-line);
+	background: #fff;
+	box-shadow: var(--x-shadow);
+}
+
+.lnkup-tour-tile__kind {
+	margin: 0;
+	font-size: 0.75rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: #4b6b00;
+}
+
+.lnkup-tour-tile__title {
+	margin: 0;
+	font-family: "Sora", "Inter", sans-serif;
+	font-size: 1.25rem;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+
+.lnkup-tour-tile__title a {
+	color: var(--x-ink);
+	text-decoration: none;
+}
+
+.lnkup-tour-tile__meta {
+	margin: 0;
+	font-size: 0.875rem;
+	color: var(--x-muted);
+}
+
+.lnkup-tour-tile__stops {
+	display: grid;
+	gap: 0;
+	margin: 0.25rem 0;
+	padding: 0;
+	list-style: none;
+	border-left: 2px solid var(--x-line-strong);
+}
+
+.lnkup-tour-tile__stops li {
+	display: grid;
+	grid-template-columns: 3.5rem 1fr auto;
+	gap: 0.5rem;
+	align-items: center;
+	position: relative;
+	padding: 0.45rem 0 0.45rem 0.9rem;
+	font-size: 0.875rem;
+}
+
+.lnkup-tour-tile__stops li::before {
+	content: "";
+	position: absolute;
+	left: -6px;
+	width: 10px;
+	height: 10px;
+	border-radius: 999px;
+	background: #fff;
+	border: 2px solid var(--x-line-strong);
+}
+
+.lnkup-tour-tile__stops li.is-open::before {
+	background: var(--x-lime);
+	border-color: var(--x-ink);
+}
+
+.lnkup-tour-tile__date {
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.lnkup-tour-tile__state {
+	font-size: 0.75rem;
+	font-weight: 700;
+	color: var(--x-muted);
+}
+
+.lnkup-tour-tile__stops li.is-open .lnkup-tour-tile__state {
+	color: #3d5c00;
+}
+
+.lnkup-tour-tile__more {
+	margin: 0;
+	font-size: 0.8125rem;
+	color: var(--x-muted);
+}
+
+.lnkup-tour-tile .lnkup-btn {
+	align-self: flex-start;
+	margin-top: auto;
+}
+
+/* ------------------------------------------------------------------ Organizer band */
+
+.lnkup-section--organizers {
+	background: var(--x-ink);
+	color: #f4f4f5;
+}
+
+.lnkup-organizers {
+	display: grid;
+	gap: 2rem;
+	align-items: center;
+}
+
+.lnkup-section--organizers .lnkup-eyebrow {
+	color: var(--x-lime);
+}
+
+.lnkup-section--organizers .lnkup-heading--section {
+	color: #fff;
+	max-width: 18ch;
+}
+
+.lnkup-organizers__steps {
+	display: grid;
+	gap: 1rem;
+	margin: 1.5rem 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.lnkup-organizers__steps li {
+	display: grid;
+	grid-template-columns: 2.25rem 1fr;
+	gap: 0.85rem;
+	align-items: start;
+}
+
+.lnkup-organizers__num {
+	display: inline-grid;
+	place-items: center;
+	width: 2.25rem;
+	height: 2.25rem;
+	border-radius: 10px;
+	background: var(--x-lime);
+	color: var(--x-lime-ink);
+	font-family: "Sora", "Inter", sans-serif;
+	font-weight: 700;
+}
+
+.lnkup-organizers__steps h3 {
+	margin: 0;
+	font-size: 1.0625rem;
+	font-weight: 700;
+	color: #fff;
+}
+
+.lnkup-organizers__steps p {
+	margin: 0.2rem 0 0;
+	color: rgba(244, 244, 245, 0.72);
+	line-height: 1.5;
+}
+
+.lnkup-organizers__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	margin-top: 1.75rem;
+}
+
+.lnkup-organizers__media {
+	margin: 0;
+	overflow: hidden;
+	border-radius: 24px;
+	aspect-ratio: 4 / 3;
+}
+
+.lnkup-organizers__media img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+@media (min-width: 960px) {
+	.lnkup-organizers {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: 3.5rem;
+	}
+}

@@ -13,8 +13,22 @@ $eyebrow          = $marketplace_open
 $title            = (string) lnkup_landing_get( 'trust_title', '' );
 $lead             = (string) lnkup_landing_get( 'trust_lead', '' );
 $side_image       = lnkup_landing_image_url( 'trust_image_id', 'images/events/ghoe-market.svg' );
-$stat_rows        = lnkup_landing_trust_stats();
 $use_custom       = (bool) lnkup_landing_get( 'use_custom_stats', 0 );
+$stat_rows        = lnkup_landing_trust_stats();
+if ( $marketplace_open && ! $use_custom ) {
+	// Live totals that are still zero read as an empty marketplace; leave them out until they count.
+	$stat_rows = array_values(
+		array_filter(
+			$stat_rows,
+			static function ( $row ) {
+				return '' !== preg_replace( '/[^1-9]/', '', (string) ( $row['value'] ?? '' ) );
+			}
+		)
+	);
+	if ( count( $stat_rows ) < 2 ) {
+		return;
+	}
+}
 ?>
 <section class="lnkup-section lnkup-trust-section lnkup-reveal" data-testid="lnkup-trust-section">
 	<div class="lnkup-container">

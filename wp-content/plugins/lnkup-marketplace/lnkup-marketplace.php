@@ -197,6 +197,7 @@ $lnkup_core_files = array(
 	'includes/class-reputation-render.php',
 	'includes/class-reputation-rest.php',
 	'includes/helpers.php',
+	'includes/presentation/event-card-summary.php',
 	'includes/class-verification.php',
 	'includes/class-verification-rest.php',
 	'includes/class-seo.php',

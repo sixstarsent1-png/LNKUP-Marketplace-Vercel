@@ -12,6 +12,9 @@ $footer_title     = (string) lnkup_landing_get( 'footer_title', '' );
 $footer_blurb     = (string) lnkup_landing_get( 'footer_blurb', '' );
 $footer_cta       = (string) lnkup_landing_get( 'footer_cta', __( 'Get started free', 'lnkup-theme' ) );
 $cta_label        = is_user_logged_in() ? __( 'Complete profile', 'lnkup-theme' ) : $footer_cta;
+if ( '' === trim( $footer_blurb ) || false !== stripos( $footer_blurb, 'join thousands of vendors' ) ) {
+	$footer_blurb = __( 'Vendor spots at festivals, markets and live events. Apply for free and pay only when an organizer accepts you.', 'lnkup-theme' );
+}
 ?>
 <footer class="lnkup-footer">
 	<div class="lnkup-container">
@@ -21,7 +24,11 @@ $cta_label        = is_user_logged_in() ? __( 'Complete profile', 'lnkup-theme' 
 				<p><?php echo esc_html( $footer_blurb ); ?></p>
 				<div class="lnkup-footer__actions">
 					<a href="<?php echo esc_url( is_user_logged_in() ? lnkup_page_url( 'vendor-profile' ) : $signup_url ); ?>" class="lnkup-btn lnkup-btn--accent lnkup-btn--lg"><?php echo esc_html( $cta_label ); ?></a>
-					<?php lnkup_theme_app_store_badge( 'white', 'footer' ); ?>
+					<?php
+					if ( ! is_front_page() ) {
+						lnkup_theme_app_store_badge( 'white', 'footer' );
+					}
+					?>
 				</div>
 			</div>
 			<div class="lnkup-footer__cols">
@@ -41,7 +48,7 @@ $cta_label        = is_user_logged_in() ? __( 'Complete profile', 'lnkup-theme' 
 					<ul>
 						<li><a href="<?php echo esc_url( lnkup_page_url( 'organizer-dashboard' ) ); ?>"><?php esc_html_e( 'Organizer Home', 'lnkup-theme' ); ?></a></li>
 						<li><a href="<?php echo esc_url( function_exists( 'lnkup_organizer_view_url' ) ? lnkup_organizer_view_url( 'create' ) : lnkup_page_url( 'organizer-dashboard' ) . '?view=create' ); ?>"><?php esc_html_e( 'Create Event', 'lnkup-theme' ); ?></a></li>
-						<li><a href="<?php echo esc_url( function_exists( 'lnkup_organizer_view_url' ) ? lnkup_organizer_view_url( 'events' ) : lnkup_page_url( 'organizer-dashboard' ) . '?view=events' ); ?>"><?php esc_html_e( 'Build Opportunity', 'lnkup-theme' ); ?></a></li>
+						<li><a href="<?php echo esc_url( function_exists( 'lnkup_organizer_view_url' ) ? lnkup_organizer_view_url( 'events' ) : lnkup_page_url( 'organizer-dashboard' ) . '?view=events' ); ?>"><?php esc_html_e( 'Your events', 'lnkup-theme' ); ?></a></li>
 					</ul>
 				</div>
 				<div>

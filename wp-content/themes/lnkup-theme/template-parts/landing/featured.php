@@ -38,27 +38,15 @@ if ( function_exists( 'lnkup_get_featured_opportunities' ) ) {
 				<a href="<?php echo esc_url( $signup_url ); ?>" class="lnkup-btn lnkup-btn--primary" data-testid="lnkup-featured-signup"><?php esc_html_e( 'Create free account', 'lnkup-theme' ); ?></a>
 			<?php endif; ?>
 		</div>
-		<?php
-		$city_counts = function_exists( 'lnkup_homepage_city_counts' ) ? lnkup_homepage_city_counts() : array();
-		if ( $marketplace_open && $city_counts ) :
-			?>
-			<ul class="lnkup-hero-cities lnkup-hero-cities--section">
-				<?php foreach ( $city_counts as $city_row ) : ?>
-					<li>
-						<a href="<?php echo esc_url( $city_row['url'] ); ?>">
-							<?php echo esc_html( $city_row['label'] ); ?>
-							<span><?php echo esc_html( sprintf( _n( '%d open', '%d open', (int) $city_row['count'], 'lnkup-theme' ), (int) $city_row['count'] ) ); ?></span>
-						</a>
-					</li>
-				<?php endforeach; ?>
-			</ul>
-		<?php endif; ?>
 		<div class="lnkup-event-grid<?php echo $marketplace_open ? '' : ' lnkup-event-grid--preview'; ?>">
 			<?php if ( ! empty( $featured ) ) : ?>
 				<?php
 				$featured_groups = function_exists( 'lnkup_group_opportunities_by_event' )
 					? lnkup_group_opportunities_by_event( $featured )
 					: array();
+				// Full rows only on the three-column grid, so no card sits alone.
+				$group_count     = count( $featured_groups );
+				$featured_groups = array_slice( $featured_groups, 0, $group_count >= 6 ? 6 : ( $group_count >= 3 ? 3 : $group_count ) );
 				foreach ( $featured_groups as $slots ) :
 					?>
 					<div class="lnkup-featured-card-wrap<?php echo $marketplace_open ? '' : ' is-locked'; ?>" data-testid="lnkup-featured-card">

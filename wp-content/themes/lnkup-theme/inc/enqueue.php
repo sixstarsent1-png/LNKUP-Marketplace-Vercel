@@ -89,3 +89,26 @@ add_action(
 		}
 	}
 );
+
+/*
+ * Experience layer: shared public look (header, homepage, cards, focus, motion). Registered late
+ * and made to depend on every LNKup stylesheet already queued, so it always prints after them.
+ */
+add_action(
+	'wp_enqueue_scripts',
+	function () {
+		$deps = array( 'lnkup-components' );
+		foreach ( wp_styles()->queue as $handle ) {
+			if ( 0 === strpos( $handle, 'lnkup-' ) && ! in_array( $handle, array( 'lnkup-fonts', 'lnkup-experience' ), true ) ) {
+				$deps[] = $handle;
+			}
+		}
+		wp_enqueue_style(
+			'lnkup-experience',
+			LNKUP_THEME_URI . '/assets/css/experience.css',
+			array_values( array_unique( $deps ) ),
+			LNKUP_THEME_VERSION . '.' . (string) filemtime( LNKUP_THEME_DIR . '/assets/css/experience.css' )
+		);
+	},
+	99
+);
