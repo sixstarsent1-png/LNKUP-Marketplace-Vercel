@@ -6,6 +6,7 @@ import { IsoDatePickerField } from "@/components/iso-date-picker-field"
 import { OrganizerRequestCard } from "@/components/organizer-vendors/organizer-request-card"
 import { vendorProfileHref } from "@/components/organizer-vendors/vendor-queue"
 import { PacketForm } from "@/components/organizer-workspace/packet-form"
+import { EventDayOps } from "@/components/organizer-workspace/event-day-ops"
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { Screen } from "@/components/screen"
 import { AppText as Text } from "@/components/ui/app-text"
@@ -634,6 +635,7 @@ export default function OrganizerEventWorkspaceScreen() {
                 </Meta>
                 <Button label="Open check-in" icon="qr-code-outline" onPress={() => router.push(`/(organizer)/events/checkin?eventId=${id}` as Href)} />
               </Surface>
+              <EventDayOps eventId={id} auth={auth} />
               <ListGroup title="More tools">
                 <ListRow icon="map-outline" title="Maps, staff and incidents" meta="On LNKup web" onPress={event.wordpressUrl ? () => void openExternalUrl(event.wordpressUrl!, "event operations") : undefined} />
               </ListGroup>

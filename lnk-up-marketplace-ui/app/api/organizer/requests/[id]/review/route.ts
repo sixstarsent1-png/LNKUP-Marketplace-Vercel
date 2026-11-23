@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
-import { WpFetchError, wpFetchJson } from "@/lib/api/wp-fetch"
+import { WpFetchError } from "@/lib/api/wp-fetch"
+import { type DecisionAction, recordOrganizerDecision } from "@/lib/api/organizer-decision"
 import type { OrganizerReviewAction } from "@/lib/api/organizer-requests"
 import { fetchOrganizerRequestById } from "@/lib/api/organizer-request-server"
 import { authRequiredResponse, toErrorResponse } from "@/lib/api/normalize-wp-error"
@@ -49,21 +50,13 @@ export async function POST(request: Request, context: RouteContext) {
       )
     }
 
-    const payload: Record<string, unknown> = {
-      application_ids: [Number(id)],
-      action,
-    }
-    if (body.reason) {
-      payload.rejection_reason = body.reason
-    }
-    if (body.internalNote) {
-      payload.internal_note = body.internalNote
-    }
-
-    await wpFetchJson<{ success?: boolean }>(
-      `/crm/events/${vendorRequest.eventId}/roster/bulk`,
-      { method: "POST", auth, body: payload },
-    )
+    await recordOrganizerDecision(auth, {
+      applicationId: id,
+      eventId: String(vendorRequest.eventId),
+      action: action as DecisionAction,
+      reason: body.reason,
+      internalNote: body.internalNote,
+    })
 
     return NextResponse.json({
       code: "review_updated",

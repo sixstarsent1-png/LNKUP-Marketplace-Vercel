@@ -8,6 +8,7 @@ import {
 } from "@/lib/api/request-cache"
 import type { WpAuth } from "@/lib/api/wp-client"
 import { wpFetchJson } from "@/lib/api/wp-client"
+import { WpFetchError } from "@/lib/api/errors"
 import { MOCK_ORGANIZER_REQUESTS } from "@/lib/data/fixtures"
 import { formatShortDate } from "@/lib/format/date"
 import {
@@ -159,6 +160,12 @@ export function subscribeOrganizerRequests(
   return subscribeCache<OrganizerRequestsResult>(organizerRequestsCacheKey(auth), listener)
 }
 
+/**
+ * Whether the server has the review workspace (`/applications/{id}/decision`): unknown until the
+ * first decision, then remembered for the session so a site without it costs one extra call.
+ */
+let reviewWorkspaceAvailable: boolean | undefined
+
 export async function reviewOrganizerRequest(
   request: OrganizerVendorRequest,
   action: OrganizerReviewAction,
@@ -179,6 +186,23 @@ export async function reviewOrganizerRequest(
 
   if (action === "reject" && !reason?.trim()) {
     throw new Error("Please provide a reason when rejecting.")
+  }
+
+  if (reviewWorkspaceAvailable !== false) {
+    try {
+      await wpFetchJson(`/applications/${encodeURIComponent(request.id)}/decision`, {
+        method: "POST",
+        auth,
+        body: { action, rejection_reason: reason ?? "" },
+      })
+      reviewWorkspaceAvailable = true
+      invalidateOrganizerRequests()
+      invalidateCache("organizer.events:")
+      return { success: true }
+    } catch (error) {
+      if (!(error instanceof WpFetchError) || error.code !== "lnkup_feature_off") throw error
+      reviewWorkspaceAvailable = false
+    }
   }
 
   const payload: Record<string, unknown> = {

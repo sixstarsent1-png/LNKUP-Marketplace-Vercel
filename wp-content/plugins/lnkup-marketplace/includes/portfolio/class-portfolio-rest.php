@@ -40,6 +40,29 @@ class LNKup_Portfolio_REST {
 	}
 
 	/**
+	 * Read access to the {id} tour: the owner, or a team member whose membership covers the
+	 * tour and can view the roster. Portfolio OS must be on for the tour's owner.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public static function tour_view_permission( WP_REST_Request $request ) {
+		$user_id = get_current_user_id();
+		if ( ! $user_id ) {
+			return new WP_Error( 'rest_forbidden', __( 'Log in to continue.', 'lnkup-marketplace' ), array( 'status' => 401 ) );
+		}
+		$tour_id = absint( $request['id'] );
+		$owner   = (int) get_post_meta( $tour_id, '_lnkup_organizer_user_id', true );
+		if ( ! $owner || ! LNKup_Capabilities::tour_staff_can( $tour_id, 'view_roster', $user_id ) ) {
+			return new WP_Error( 'lnkup_not_found', __( 'Tour not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		if ( ! LNKup_Feature_Flags::portfolio( $owner ) ) {
+			return new WP_Error( 'lnkup_feature_disabled', __( 'Tours & Series is not available on your account yet.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		return true;
+	}
+
+	/**
 	 * Organizer who owns the {id} tour.
 	 *
 	 * @param WP_REST_Request $request Request.
@@ -91,12 +114,13 @@ class LNKup_Portfolio_REST {
 		$stop     = $id . '/stops/(?P<event_id>\d+)';
 		$org      = array( __CLASS__, 'organizer_permission' );
 		$owner    = array( __CLASS__, 'tour_permission' );
+		$viewer   = array( __CLASS__, 'tour_view_permission' );
 		$stop_ok  = array( __CLASS__, 'stop_permission' );
 		$routes   = array(
 			array( '/portfolio/overview', 'GET', 'overview', $org ),
 			array( '/portfolio/tours', 'GET', 'list_tours', $org ),
 			array( '/portfolio/tours', 'POST', 'create_tour', $org ),
-			array( $id, 'GET', 'get_tour', $owner ),
+			array( $id, 'GET', 'get_tour', $viewer ),
 			array( $id, 'PATCH', 'update_tour', $owner ),
 			array( $id, 'DELETE', 'delete_tour', $owner ),
 			array( $id . '/archive', 'POST', 'archive_tour', $owner ),
@@ -117,8 +141,8 @@ class LNKup_Portfolio_REST {
 			array( $id . '/defaults', 'PUT', 'save_defaults', $owner ),
 			array( $id . '/bulk/preview', 'POST', 'bulk_preview', $owner ),
 			array( $id . '/bulk/apply', 'POST', 'bulk_apply', $owner ),
-			array( $id . '/summary', 'GET', 'summary', $owner ),
-			array( $id . '/applications', 'GET', 'applications', $owner ),
+			array( $id . '/summary', 'GET', 'summary', $viewer ),
+			array( $id . '/applications', 'GET', 'applications', $viewer ),
 			array( $id . '/applications/bulk', 'POST', 'applications_bulk', $owner ),
 			array( $id . '/interest', 'GET', 'interest_list', $owner ),
 			array( $id . '/invite', 'POST', 'invite', $owner ),
@@ -384,7 +408,16 @@ class LNKup_Portfolio_REST {
 	}
 
 	public static function summary( WP_REST_Request $request ) {
-		return rest_ensure_response( LNKup_Portfolio_Reporting::summary( self::tour_id( $request ) ) );
+		$tour_id = self::tour_id( $request );
+		$summary = LNKup_Portfolio_Reporting::summary( $tour_id );
+		if ( ! LNKup_Capabilities::tour_staff_can( $tour_id, 'view_financials', self::uid() ) ) {
+			unset( $summary['money'] );
+			foreach ( $summary['stops'] as $i => $stop ) {
+				unset( $summary['stops'][ $i ]['money'] );
+			}
+			$summary['money_hidden'] = true;
+		}
+		return rest_ensure_response( $summary );
 	}
 
 	public static function applications( WP_REST_Request $request ) {

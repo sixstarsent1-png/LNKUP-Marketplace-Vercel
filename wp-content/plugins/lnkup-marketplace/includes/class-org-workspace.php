@@ -72,8 +72,10 @@ class LNKup_Org_Workspace {
 				if ( 'home' === $item['view'] ) {
 					$item['label'] = __( 'My work', 'lnkup-marketplace' );
 				} elseif ( 'applications' === $item['view'] ) {
+					// Owners reach Applications from More; for reviewers it is the main job.
 					$item['label'] = __( 'Review', 'lnkup-marketplace' );
 					$item['badge'] = 0;
+					$item['tier']  = 'primary';
 				}
 				$out[] = $item;
 			}

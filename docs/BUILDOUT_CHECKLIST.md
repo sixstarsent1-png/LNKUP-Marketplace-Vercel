@@ -230,12 +230,52 @@ Short paths: `P/` = `wp-content/plugins/lnkup-marketplace/`, `C/` = `wp-content/
   - Contract: platform fees $17.99, net $194.27, pending $178.60, reserve $9.40.
   - No repair was needed.
 
+## Phase 3 results: organizer management, tours, event day
+
+### Team access
+- **Event-scoped CRM routes** (roster, roster bulk, check-in, no-show, applicant intel, compare) now admit organization team members. Each event is still checked with `staff_can()`, and intel and compare read the event owner's CRM records.
+- **Organization-wide CRM** (lists, invites, tags, notes, imports) stays owner-only. It is keyed by the owner's user ID, so a shared team CRM would be a separate change.
+- **Tours:** `GET /portfolio/tours/{id}`, `/summary` and `/applications` admit team members whose membership covers the tour, through `LNKup_Capabilities::tour_staff_can()`.
+  - Event-only members are not tour viewers.
+  - Tour money is removed for roles without `view_financials` (`money_hidden: true`).
+  - Editing a tour stays owner-only.
+- **Fixed:** team-only reviewers lost their "Review" link when the redesign moved Applications into More. Team members now get it in the primary nav.
+- **Evidence:** `team-scope-rollup-test.php` passes 30/30 checks: one-event reviewer, one-event ops staff, tour finance, tour ops, another organizer, the owner. `organizer-team` spec 3/3.
+
+### Tour overview
+- **Per stop**, each stop in `LNKup_Portfolio_Reporting::summary()` now reports:
+  - `operations`: readiness %, next actions, open and overdue tasks, outstanding documents, checked-in count. A value is `null` when its feature is off.
+  - `data_warnings`: `no_event_date`, `no_vendor_slots`, `unlimited_capacity`, `paid_without_payment_record`.
+- **Tour tasks** add overdue tasks, outstanding documents and stops with incomplete data.
+- **Money** still comes only from payment records, counted once by payment ID, and the existing stop-vs-tour reconciliation flag is kept.
+
+### Event day and surface split
+- **Fixed:** editing a booth or parking spot from organizer operations returned "Event not found". WordPress resolves `$request['id']` from the JSON body (the booth) before the URL (the event). `LNKup_Operations_REST` now reads `{id}` from the URL in all 37 places. The same pattern exists elsewhere and is not yet audited.
+- **Review decisions:** both apps use `POST /applications/{id}/decision` (review workspace: per-event team permissions, decision history) and fall back to roster bulk on `lnkup_feature_off`.
+  - Fixed: the Next.js route reported success when the bulk route refused a decision.
+- **Expo Day-of tab:** a Readiness and tasks panel shows readiness %, next actions and open tasks, and lets staff mark a task done. It is hidden when Organizer OS is off (jest 4/4).
+- **Division of work:**
+  - Mobile covers field work: decisions, info requests, check-in, booth assignment, readiness, tasks.
+  - LNKup web stays the home for templates, recurrence, documents, bulk work, readiness marks and task editing, and the mobile panel says so.
+  - Waitlist offers are not yet in either app.
+
+### Fixtures
+| Scenario | Fixture |
+|---|---|
+| Single-event organizer | `seed.php` (`e2e_org_a`, `e2e_org_b`) |
+| Multi-city tour | `seed.php` (`PLAYWRIGHT_TOUR_ID`) |
+| Recurring series | `seed-portfolio.php` (`PLAYWRIGHT_SERIES_ID`, 4 weekly dates, idempotent) |
+| One-event team account | `seed-organizer-os.php` (`e2e_reviewer`) |
+| Interrupted setup | `seed-onboarding.php` (`e2e_org_onb`); the resume-in-another-session spec passes |
+
+- **Regression:** `portfolio-os-test`, `organizer-os-test`, `organizer-os-wave2-test`, `trust-safety-test` pass. `organizer-integrity` 5/5, `organizer-review`, `portfolio-os` pass. Expo typecheck 0, jest 24 suites.
+
 ## Running checklist
 
 - [x] **Phase 0:** integration branch, bootstrap files tracked, lint, activation, typechecks ([PR #9](https://github.com/sixstarsent1-png/LNKUP-Marketplace-Vercel/pull/9))
 - [x] **Phase 1:** matrix, release checks, private-upload probe. Open: Vercel Root Directory (project owner), SiteGround Direct Delivery (hosting), PR #7 merge.
 - [x] **Phase 2:** booking journey and financial integrity. Open: Expo drafts list ships with PR #10; live Stripe test-mode card run needs staging keys.
-- [ ] **Phase 3:** organizer management, tours, event day
+- [x] **Phase 3:** organizer management, tours, event day. Open: shared team CRM, waitlist offers in the apps, `$request['id']` audit outside operations.
 - [ ] **Phase 4:** acquisition, discovery, communications, analytics
 - [ ] **Phase 5:** internal operations workspace
 - [ ] **Phase 6:** partnerships and rollout plan

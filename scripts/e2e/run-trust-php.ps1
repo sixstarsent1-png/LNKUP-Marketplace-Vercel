@@ -3,6 +3,7 @@
 $tests = @(
   'trust-safety-test',
   'trust-admin-render-check',
+  'team-scope-rollup-test',
   'vendor-passport-test',
   'private-uploads-probe-test'
 )
