@@ -16,7 +16,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 
-const STEPS: VendorOnboardingStep[] = [
+const STEPS: Exclude<VendorOnboardingStep, "complete">[] = [
   "business",
   "categories",
   "service_area",
@@ -35,7 +35,7 @@ export function VendorOnboardingStepper({
   onSave: (step: VendorOnboardingStep, action: "complete" | "skip") => Promise<void>
 }) {
   const current = state.currentStep === "complete" ? "first_search" : state.currentStep
-  const stepIndex = STEPS.indexOf(current as VendorOnboardingStep)
+  const stepIndex = STEPS.indexOf(current as Exclude<VendorOnboardingStep, "complete">)
   const progress = state.currentStep === "complete" ? 100 : Math.round(((stepIndex + 1) / STEPS.length) * 100)
   const meta = ONBOARDING_STEP_META[current as keyof typeof ONBOARDING_STEP_META]
   const wpProfile = getPublicWpSiteUrl()

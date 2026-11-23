@@ -24,11 +24,21 @@ async function captureAnalytics(page: Page) {
   return events;
 }
 
-function expectEventWithShape(
+/**
+ * Wait until the analytics event has been sent, then assert its required fields.
+ * Tracking is fire-and-forget, so the request can land after the page settles.
+ */
+async function expectEventWithShape(
   events: AnalyticsBody[],
   eventName: string,
   required: Array<keyof AnalyticsBody>,
 ) {
+  await expect
+    .poll(() => events.some((entry) => entry.event === eventName), {
+      message: `missing analytics event ${eventName}`,
+      timeout: 10_000,
+    })
+    .toBe(true);
   const payload = events.find((entry) => entry.event === eventName);
   expect(payload, `missing analytics event ${eventName}`).toBeTruthy();
   for (const field of required) {
@@ -51,23 +61,20 @@ test.describe('Phase 14 analytics verification', () => {
   test('tracks deep_opportunity_opened', async ({ page }) => {
     const events = await captureAnalytics(page);
     await page.goto(`${appBase}/vendor/find?opportunityId=charlotte-night-market`);
-    await page.waitForTimeout(500);
-    expectEventWithShape(events, 'deep_opportunity_opened', ['source', 'opportunityId']);
+    await expectEventWithShape(events, 'deep_opportunity_opened', ['source', 'opportunityId']);
   });
 
   test('tracks share_link_copied', async ({ page }) => {
     const events = await captureAnalytics(page);
     await page.goto(`${appBase}/organizer/events/charlotte-night-market`);
     await page.getByTestId('copy-application-link').click();
-    await page.waitForTimeout(500);
-    expectEventWithShape(events, 'share_link_copied', ['source', 'eventId', 'opportunityId']);
+    await expectEventWithShape(events, 'share_link_copied', ['source', 'eventId', 'opportunityId']);
   });
 
   test('tracks payment return landed and confirmed', async ({ page }) => {
     const events = await captureAnalytics(page);
     await page.goto(`${appBase}/vendor/requests?applicationId=req-1&payment=success`);
-    await page.waitForTimeout(1000);
-    expectEventWithShape(events, 'payment_return_landed', ['source', 'requestId']);
-    expectEventWithShape(events, 'payment_return_confirmed', ['source', 'requestId']);
+    await expectEventWithShape(events, 'payment_return_landed', ['source', 'requestId']);
+    await expectEventWithShape(events, 'payment_return_confirmed', ['source', 'requestId']);
   });
 });

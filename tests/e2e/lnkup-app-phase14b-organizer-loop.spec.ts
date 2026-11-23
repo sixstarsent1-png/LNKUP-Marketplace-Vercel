@@ -17,7 +17,9 @@ test.describe('Phase 14B — Organizer loop', () => {
     await page.getByRole('tab', { name: 'Vendor Requests' }).click();
     await expect(page.getByRole('button', { name: 'View full request queue' })).toBeVisible();
     await page.getByRole('tab', { name: 'Opportunities' }).click();
-    await expect(page.getByRole('button', { name: 'Add opportunity' })).toBeVisible();
+    const addOpportunity = page.getByTestId('lnkup-app-add-opportunity');
+    await expect(addOpportunity).toBeVisible();
+    await expect(addOpportunity.getByRole('button', { name: 'Add', exact: true })).toBeVisible();
   });
 
   test('organizer can approve a pending vendor request in app', async ({ page }) => {

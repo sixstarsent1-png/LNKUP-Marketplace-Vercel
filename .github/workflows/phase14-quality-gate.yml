@@ -9,25 +9,42 @@ jobs:
   phase14-critical:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      CI: "true"
+      # Fixture mode: the web app serves its demo data; no WordPress backend in CI.
+      SESSION_SECRET: ci-only-session-secret-not-used-in-production
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: npm
+          node-version: "24"
+          cache: pnpm
 
-      - name: Install dependencies
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install web app dependencies
         run: npm ci
+        working-directory: lnk-up-marketplace-ui
+
+      - name: Build web app
+        run: npm run build
+        working-directory: lnk-up-marketplace-ui
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Phase 14 blocking suites
         run: >
-          npx playwright test
+          pnpm exec playwright test
           tests/e2e/lnkup-app-phase14a-journey-handoffs.spec.ts
           tests/e2e/lnkup-app-phase14b-organizer-loop.spec.ts
           tests/e2e/lnkup-app-phase14c-wallet-polish.spec.ts
@@ -36,6 +53,14 @@ jobs:
 
       - name: Run critical pre-merge smoke
         run: >
-          npx playwright test
+          pnpm exec playwright test
           tests/e2e/lnkup-app-phase14a-journey-handoffs.spec.ts
           --project=lnkup-app
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase14-playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
