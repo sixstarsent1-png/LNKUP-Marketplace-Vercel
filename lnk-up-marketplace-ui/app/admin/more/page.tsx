@@ -25,6 +25,7 @@ const groups: SettingsGroup[] = [
   {
     title: "Operations",
     items: [
+      { icon: Bell, label: "Operations queue", hint: "Exceptions to review", href: "/admin/ops" },
       { icon: Users, label: "Admin team", hint: "5 members" },
       { icon: FileText, label: "Audit log" },
       { icon: Database, label: "Data & exports" },
