@@ -132,7 +132,65 @@ class LNKup_Financial_Reports {
 		}, $rows );
 	}
 
-	public static function organizer_report( $user_id ) {
+	/**
+	 * LNKup platform fees on an organizer's paid bookings (transactions ledger).
+	 *
+	 * @param int $user_id Organizer user ID.
+	 * @return float
+	 */
+	public static function organizer_platform_fees( $user_id ) {
+		global $wpdb;
+		$table = LNKup_Financial_Tables::transactions_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return 0.0;
+		}
+		return round( (float) $wpdb->get_var(
+			$wpdb->prepare( "SELECT COALESCE(SUM(platform_fee), 0) FROM {$table} WHERE organizer_user_id = %d AND type = 'payment' AND status = 'paid'", absint( $user_id ) ) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		), 2 );
+	}
+
+	/**
+	 * LNKup platform fees on one event's paid bookings.
+	 *
+	 * @param int $event_id Event ID.
+	 * @return float
+	 */
+	public static function event_platform_fees( $event_id ) {
+		global $wpdb;
+		$table = LNKup_Financial_Tables::transactions_table();
+		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
+			return 0.0;
+		}
+		return round( (float) $wpdb->get_var(
+			$wpdb->prepare( "SELECT COALESCE(SUM(platform_fee), 0) FROM {$table} WHERE event_id = %d AND type = 'payment' AND status = 'paid'", absint( $event_id ) ) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		), 2 );
+	}
+
+	/**
+	 * Organizer report.
+	 *
+	 * @param int  $user_id    Organizer user ID.
+	 * @param bool $after_fees Organizer-facing: money amounts are after LNKup fees and no fee totals are
+	 *                         returned. Tax and admin callers keep the raw ledger (false).
+	 */
+	public static function organizer_report( $user_id, $after_fees = false ) {
+		$report = self::organizer_report_raw( $user_id );
+		if ( ! $after_fees ) {
+			return $report;
+		}
+		$fees      = (float) ( $report['platform_fees'] ?? 0 );
+		$collected = max( 0, round( (float) ( $report['collected'] ?? 0 ) - $fees, 2 ) );
+		unset( $report['platform_fees'] );
+		$report['revenue']          = $collected;
+		$report['gross_revenue']    = $collected;
+		$report['collected']        = $collected;
+		$report['by_event']         = self::revenue_by_event( $user_id, true );
+		$report['revenue_by_event'] = $report['by_event'];
+		$report['by_month']         = self::revenue_by_month( $user_id, 12, true );
+		return $report;
+	}
+
+	private static function organizer_report_raw( $user_id ) {
 		global $wpdb;
 		$table = LNKup_Financial_Tables::transactions_table();
 		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
@@ -214,11 +272,17 @@ class LNKup_Financial_Reports {
 		);
 	}
 
-	public static function revenue_by_month( $organizer_id, $months = 12 ) {
-		$from_payments = self::revenue_by_month_from_payments( $organizer_id, $months );
+	/**
+	 * @param int  $organizer_id Organizer user ID.
+	 * @param int  $months       Lookback in months.
+	 * @param bool $after_fees   Subtract LNKup platform fees (organizer-facing).
+	 */
+	public static function revenue_by_month( $organizer_id, $months = 12, $after_fees = false ) {
+		$from_payments = self::revenue_by_month_from_payments( $organizer_id, $months, $after_fees );
 		if ( $from_payments ) {
 			return $from_payments;
 		}
+		$amount_sql = $after_fees ? 'SUM(amount - platform_fee)' : 'SUM(amount)';
 		global $wpdb;
 		$table = LNKup_Financial_Tables::transactions_table();
 		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
@@ -227,7 +291,7 @@ class LNKup_Financial_Reports {
 		$since = gmdate( 'Y-m-d', strtotime( '-' . absint( $months ) . ' months' ) );
 		$rows  = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT DATE_FORMAT(created_at, '%%Y-%%m') as month_key, SUM(amount) as total FROM {$table} WHERE organizer_user_id = %d AND type = 'payment' AND status = 'paid' AND created_at >= %s GROUP BY month_key ORDER BY month_key ASC",
+				"SELECT DATE_FORMAT(created_at, '%%Y-%%m') as month_key, {$amount_sql} as total FROM {$table} WHERE organizer_user_id = %d AND type = 'payment' AND status = 'paid' AND created_at >= %s GROUP BY month_key ORDER BY month_key ASC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$organizer_id,
 				$since . ' 00:00:00'
 			),
@@ -247,7 +311,7 @@ class LNKup_Financial_Reports {
 	 * @param int $months       Lookback in months.
 	 * @return array<int, array{month: string, revenue: float}>
 	 */
-	private static function revenue_by_month_from_payments( $organizer_id, $months = 12 ) {
+	private static function revenue_by_month_from_payments( $organizer_id, $months = 12, $after_fees = false ) {
 		if ( ! function_exists( 'lnkup_get_payments_for_user' ) || ! class_exists( 'LNKup_Financial' ) ) {
 			return array();
 		}
@@ -263,10 +327,14 @@ class LNKup_Financial_Reports {
 		}
 		// Every paid payment is money collected; no grouping, so two bookings never merge.
 		$rows = array_map(
-			static function ( $payment ) {
+			static function ( $payment ) use ( $after_fees ) {
+				$amount = LNKup_Financial::payment_booth_amount( $payment->ID );
+				if ( $after_fees ) {
+					$amount = max( 0, $amount - (float) get_post_meta( $payment->ID, '_lnkup_lnkup_fee', true ) );
+				}
 				return array(
 					'payment' => $payment,
-					'amount'  => LNKup_Financial::payment_booth_amount( $payment->ID ),
+					'amount'  => $amount,
 				);
 			},
 			$paid
@@ -354,15 +422,20 @@ class LNKup_Financial_Reports {
 		) );
 	}
 
-	public static function revenue_by_event( $organizer_id ) {
+	/**
+	 * @param int  $organizer_id Organizer user ID.
+	 * @param bool $after_fees   Subtract LNKup platform fees (organizer-facing).
+	 */
+	public static function revenue_by_event( $organizer_id, $after_fees = false ) {
 		global $wpdb;
 		$table = LNKup_Financial_Tables::transactions_table();
 		if ( ! LNKup_Financial_Tables::table_exists( $table ) ) {
 			return array();
 		}
+		$amount_sql = $after_fees ? 'SUM(amount - platform_fee)' : 'SUM(amount)';
 		$rows  = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT event_id, SUM(amount) as total, COUNT(*) as cnt FROM {$table} WHERE organizer_user_id = %d AND type = 'payment' AND status = 'paid' AND event_id > 0 GROUP BY event_id ORDER BY total DESC LIMIT 20",
+				"SELECT event_id, {$amount_sql} as total, COUNT(*) as cnt FROM {$table} WHERE organizer_user_id = %d AND type = 'payment' AND status = 'paid' AND event_id > 0 GROUP BY event_id ORDER BY total DESC LIMIT 20", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$organizer_id
 			),
 			ARRAY_A
@@ -380,11 +453,16 @@ class LNKup_Financial_Reports {
 		return $out;
 	}
 
+	/**
+	 * Event money for the organizer; collected amounts are after LNKup platform fees.
+	 *
+	 * @param int $event_id Event ID.
+	 */
 	public static function for_event( $event_id ) {
 		global $wpdb;
 		$event_id  = absint( $event_id );
 		$table     = LNKup_Financial_Tables::transactions_table();
-		$collected = LNKup_Financial::event_collected_revenue( $event_id );
+		$collected = max( 0, LNKup_Financial::event_collected_revenue( $event_id ) - self::event_platform_fees( $event_id ) );
 
 		$pending = 0.0;
 		if ( LNKup_Financial_Tables::table_exists( $table ) ) {

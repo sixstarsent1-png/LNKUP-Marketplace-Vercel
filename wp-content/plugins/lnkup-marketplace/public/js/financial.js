@@ -54,7 +54,6 @@
     available_balance: 0,
     pending_balance: 0,
     wallet_pending: 0,
-    platform_fees: 0,
     payouts_paid: 0,
     refunds: 0,
     wallet: { available: 0, pending: 0, processing: 0, reserve_hold: 0 },
@@ -216,10 +215,9 @@
   function moneyContractGrid(money) {
     var m = money.metrics || {};
     var rows = [
-      ['collected', 'Gross collected', 'What vendors paid, before fees and refunds.'],
-      ['platform_fees', 'Platform fees', 'LNKup fees on those bookings.'],
+      ['net_earnings', 'Earnings', 'What you\'ve earned from paid booths, after refunds.'],
+      ['collected', 'Collected', 'Booth payments you\'ve received, before refunds.'],
       ['refunds', 'Refunds', 'Money returned to vendors.'],
-      ['net_earnings', 'Net earnings', 'Collected minus platform fees and refunds.'],
       ['pending', 'Pending', 'Still settling. Not available to cash out yet.'],
       ['available', 'Available to cash out', 'Ready to send to your bank.'],
       ['in_transit', 'In transit', 'On the way to your bank.'],
@@ -267,7 +265,6 @@
       dash.money = Object.assign({}, walletData.money, {
         metrics: Object.assign({}, (dash.money && dash.money.metrics) || {}, walletData.money.metrics || {}, dash.money && dash.money.metrics ? {
           collected: dash.money.metrics.collected,
-          platform_fees: dash.money.metrics.platform_fees,
           refunds: dash.money.metrics.refunds,
           net_earnings: dash.money.metrics.net_earnings
         } : {})
@@ -1105,22 +1102,36 @@
     }
     var rows = [
       ['Booth fee (stored)', '$' + Number(audit.booth_fee_stored || 0).toFixed(2)],
-      ['Booth fee (opportunity)', '$' + Number(audit.booth_fee_opportunity || 0).toFixed(2)],
-      ['Vendor checkout fee', '$' + Number(audit.vendor_checkout_fee || 0).toFixed(2)],
-      ['Vendor checkout fee (current settings)', '$' + Number(audit.vendor_checkout_fee_current != null ? audit.vendor_checkout_fee_current : audit.vendor_checkout_fee || 0).toFixed(2)],
-      ['Organizer commission', '$' + Number(audit.organizer_commission || 0).toFixed(2)],
-      ['Platform fee total', '$' + Number(audit.platform_fee || 0).toFixed(2)],
-      ['Processing fee', '$' + Number(audit.processing_fee || 0).toFixed(2)],
-      ['Organizer net', '$' + Number(audit.organizer_net || 0).toFixed(2)],
-      ['Total charged', '$' + Number(audit.total_charged || 0).toFixed(2)],
-      ['Fee payer', escapeHtml(audit.fee_payer_mode || 'vendor')],
+      ['Booth fee (opportunity)', '$' + Number(audit.booth_fee_opportunity || 0).toFixed(2)]
+    ];
+    // Fee breakdown rows only render when the server sends them (admins); organizers never receive these fields.
+    [
+      ['vendor_checkout_fee', 'Vendor checkout fee'],
+      ['organizer_commission', 'Organizer commission'],
+      ['platform_fee', 'Platform fee total'],
+      ['processing_fee', 'Processing fee'],
+      ['organizer_net', 'Organizer net'],
+      ['total_charged', 'Total charged']
+    ].forEach(function (field) {
+      if (audit[field[0]] != null) {
+        rows.push([field[1], '$' + Number(audit[field[0]] || 0).toFixed(2)]);
+      }
+    });
+    if (audit.fee_payer_mode) {
+      rows.push(['Fee payer', escapeHtml(audit.fee_payer_mode)]);
+    }
+    rows = rows.concat([
       ['Settlement mode', escapeHtml(audit.settlement_mode || '—')],
       ['Payment reference', escapeHtml(audit.stripe_payment_intent || '—')],
-      ['Payment status', escapeHtml(audit.stripe_intent_status || '—')],
-      ['Application fee (cents)', String(audit.application_fee_cents || 0)],
-      ['Destination gross', '$' + Number(audit.destination_amount || 0).toFixed(2)],
-      ['Ledger settled', audit.ledger_connect_settlement ? 'Yes' : 'No']
-    ];
+      ['Payment status', escapeHtml(audit.stripe_intent_status || '—')]
+    ]);
+    if (audit.application_fee_cents != null) {
+      rows.push(['Application fee (cents)', String(audit.application_fee_cents || 0)]);
+    }
+    if (audit.destination_amount != null) {
+      rows.push(['Destination gross', '$' + Number(audit.destination_amount || 0).toFixed(2)]);
+    }
+    rows.push(['Ledger settled', audit.ledger_connect_settlement ? 'Yes' : 'No']);
     if (audit.booth_fee_mismatch) {
       rows.unshift(['⚠ Booth mismatch', 'Payment meta differs from opportunity fee']);
     }
@@ -1351,10 +1362,9 @@
         html += moneyCategoryGrid(dash.money_categories, balances);
       } else {
         html += kpiGrid([
-          { label: 'Gross collected', value: '$' + gross.toFixed(2) },
+          { label: 'Collected', value: '$' + gross.toFixed(2) },
           { label: 'Available to cash out', value: '$' + balances.available.toFixed(2) },
           { label: 'Pending', value: '$' + balances.pending.toFixed(2) },
-          { label: 'Platform fees', value: '$' + Number(dash.platform_fees || 0).toFixed(2) },
           { label: 'Paid out', value: '$' + Number(dash.payouts_paid || 0).toFixed(2) },
           { label: 'Refunds', value: '$' + Number(dash.refunds || 0).toFixed(2) }
         ]);
@@ -1857,7 +1867,7 @@
       } else if (balances.isDest && balances.stripeSynced && Number(balances.platformRecoverable) > 0) {
         html += '<p class="lnkup-muted">Includes $' + Number(balances.platformRecoverable).toFixed(2) + ' held on LNKup that will move to your payout account when you cash out.</p>';
       } else if (balances.isDest && balances.stripeSynced && maxCashout <= 0) {
-        html += '<p class="lnkup-muted">Available is your Connect payout balance. Main Stripe may hold LNKup fees plus other organizers\' funds — not withdrawable here.</p>';
+        html += '<p class="lnkup-muted">Available is your payout account balance. New card payments usually become available within a few days.</p>';
       } else if (balances.isDest && balances.stripeSynced) {
         html += '<p class="lnkup-muted">Max cashout uses your live available balance in destination mode.</p>';
       }

@@ -76,8 +76,6 @@ export type MoneyContract = {
 
 /** Category keys from `money_categories` → contract metric keys. */
 const CONTRACT_METRIC_FOR_CATEGORY: Record<string, string> = {
-  gross: "collected",
-  fees: "platform_fees",
   refunds: "refunds",
   net: "net_earnings",
   pending: "pending",
@@ -189,9 +187,8 @@ export function payoutStatusLabel(
   }
 }
 
+/** Organizers only see earnings after LNKup fees: "gross" and "fees" rows are never shown. */
 const MONEY_CATEGORY_KEYS = new Set([
-  "gross",
-  "fees",
   "refunds",
   "net",
   "pending",
@@ -209,12 +206,14 @@ export function mapMoneyCategories(raw: unknown): MoneyCategory[] {
     const amount = pickNumber(row.amount)
     if (!MONEY_CATEGORY_KEYS.has(key) || amount == null) return []
     return [
-      {
-        key,
-        label: String(row.label ?? key),
-        amount,
-        hint: row.hint ? String(row.hint) : undefined,
-      },
+      key === "net"
+        ? { key, label: "Earnings", amount, hint: "What you've earned from paid booths, after refunds." }
+        : {
+            key,
+            label: String(row.label ?? key),
+            amount,
+            hint: row.hint ? String(row.hint) : undefined,
+          },
     ]
   })
 }

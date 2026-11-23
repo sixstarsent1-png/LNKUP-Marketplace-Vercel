@@ -21,9 +21,10 @@ describe("money contract v1 (shared fixture with the WordPress contract test)", 
   const summary = mapOrganizerFinancialSnapshot(payload(contract))
 
   it("uses contract cents for figures WordPress could read", () => {
-    expect(summary.collectedToDate).toBe(2667.72)
+    expect(summary.collectedToDate).toBe(2509.72)
     expect(summary.connectSettlement).toBe(920)
-    expect(summary.categories.find((c) => c.key === "gross")?.amount).toBe(2667.72)
+    expect(summary.categories.find((c) => c.key === "gross")).toBeUndefined()
+    expect(summary.categories.find((c) => c.key === "fees")).toBeUndefined()
     expect(summary.categories.find((c) => c.key === "paid_out")?.amount).toBe(920)
   })
 

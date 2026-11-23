@@ -24,10 +24,11 @@ The block is additive. Legacy fields (`available_balance`, `display_balances`, `
 
 | Key | UI label | Definition | Source |
 | --- | --- | --- | --- |
-| `collected` | Collected | What vendors paid, before fees and refunds: the booking total of `paid`, `refunded`, `partially_refunded` and `disputed` payments, plus the paid part of `partially_paid` deposits. Lost chargebacks are excluded. Refunds are their own line. | `wordpress_payments` |
-| `platform_fees` | Platform fees | LNKup fees on those payments. | `wordpress_payments` |
+| `collected` | Collected | What vendors paid **after LNKup platform fees**, before refunds: the booking total of `paid`, `refunded`, `partially_refunded` and `disputed` payments, plus the paid part of `partially_paid` deposits, minus the platform fee recorded on paid bookings. Lost chargebacks are excluded. Refunds are their own line. | `wordpress_payments` |
 | `refunds` | Refunds | Money returned to vendors. | `wordpress_payments` |
-| `net_earnings` | Net earnings | `collected − platform_fees − refunds`, floored at 0. | derived |
+| `net_earnings` | Earnings | `collected − refunds`, floored at 0. | derived |
+
+Organizers never receive platform fee amounts or pre-fee totals (12.33.3). `LNKup_Organizer_Fee_Privacy` also strips fee breakdown fields (`platform_fee`, `organizer_commission`, `organizer_net`, `total_charged`, `fee_breakdown`, …) from every organizer response under `lnkup/v1/financial/*`. Admin and vendor responses are unchanged; the raw organizer report (`organizer_report( $user_id )`, used by the Tax Center) still carries gross and fees.
 | `available` | Available | Destination mode: connected-account available balance plus ledger-capped platform recovery (same figure Cash Out uses). Treasury mode: ledger available. | `stripe_connect` / `ledger` |
 | `pending` | Pending | Destination: connected-account pending balance (charges still settling at Stripe). Treasury: ledger pending (escrow). | `stripe_connect` / `ledger` |
 | `in_transit` | In transit | Destination: Stripe payouts `pending`/`in_transit` to the bank. Treasury: LNKup cashouts processing. | `stripe_connect_payouts` / `ledger` |

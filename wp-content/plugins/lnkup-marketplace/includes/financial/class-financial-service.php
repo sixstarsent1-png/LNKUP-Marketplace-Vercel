@@ -1118,11 +1118,15 @@ class LNKup_Financial_Service {
 			);
 		};
 
+		// Organizers see collected after LNKup fees; the fee amount itself is never returned.
 		if ( ! array_key_exists( 'collected', $ledger_totals ) ) {
-			$ledger_totals['collected'] = class_exists( 'LNKup_Financial' ) ? LNKup_Financial::organizer_collected_revenue( $user_id ) : 0;
+			$gross = class_exists( 'LNKup_Financial' ) ? LNKup_Financial::organizer_collected_revenue( $user_id ) : 0;
+			$fees  = class_exists( 'LNKup_Financial_Reports' ) ? LNKup_Financial_Reports::organizer_platform_fees( $user_id ) : 0;
+			$ledger_totals['collected'] = max( 0, (float) $gross - (float) $fees );
+		} elseif ( empty( $ledger_totals['after_fees'] ) ) {
+			$ledger_totals['collected'] = max( 0, (float) $ledger_totals['collected'] - (float) ( $ledger_totals['platform_fees'] ?? 0 ) );
 		}
 		$collected = $cents( $ledger_totals['collected'] );
-		$fees      = $cents( $ledger_totals['platform_fees'] ?? 0 );
 		$refunds   = $cents( $ledger_totals['refunds'] ?? 0 );
 
 		$destination = 'destination' === $mode;
@@ -1165,9 +1169,8 @@ class LNKup_Financial_Service {
 			'payouts'         => $payouts,
 			'metrics'         => array(
 				'collected'           => $metric( $collected, 'wordpress_payments' ),
-				'platform_fees'       => $metric( $fees, 'wordpress_payments' ),
 				'refunds'             => $metric( $refunds, 'wordpress_payments' ),
-				'net_earnings'        => $metric( max( 0, $collected - $fees - $refunds ), 'wordpress_payments' ),
+				'net_earnings'        => $metric( max( 0, $collected - $refunds ), 'wordpress_payments' ),
 				'available'           => $available,
 				'pending'             => $pending,
 				'in_transit'          => $in_transit,
@@ -1695,8 +1698,7 @@ class LNKup_Financial_Service {
 		}
 
 		$reports = array(
-			'gross_revenue'   => 0,
-			'platform_fees'   => 0,
+			'collected'       => 0,
 			'refunds'         => 0,
 			'outstanding'     => 0,
 			'open_disputes'   => 0,
@@ -1706,7 +1708,8 @@ class LNKup_Financial_Service {
 			'completion_rate' => 0,
 		);
 		try {
-			$reports = LNKup_Financial_Reports::organizer_report( $uid );
+			// Organizers only ever see amounts after LNKup fees.
+			$reports = LNKup_Financial_Reports::organizer_report( $uid, true );
 		} catch ( Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -1749,13 +1752,11 @@ class LNKup_Financial_Service {
 				$health = array();
 			}
 		}
-		$gross_collected = max( (float) ( $reports['gross_revenue'] ?? 0 ), (float) ( $data['vendor_revenue'] ?? 0 ) );
-		$platform_fees   = (float) ( $reports['platform_fees'] ?? 0 );
-		$refunds_total   = (float) ( $reports['refunds'] ?? 0 );
-		$categories      = self::organizer_money_categories(
+		$collected     = (float) ( $reports['collected'] ?? 0 );
+		$refunds_total = (float) ( $reports['refunds'] ?? 0 );
+		$categories    = self::organizer_money_categories(
 			array(
-				'gross'      => $gross_collected,
-				'fees'       => $platform_fees,
+				'collected'  => $collected,
 				'refunds'    => $refunds_total,
 				'pending'    => (float) ( $display_balances['pending'] ?? $wallet['pending'] ?? 0 ),
 				'available'  => (float) ( $display_balances['available'] ?? $wallet['available'] ?? 0 ),
@@ -1768,17 +1769,17 @@ class LNKup_Financial_Service {
 			$uid,
 			$balance_payload,
 			array(
-				'collected'     => $gross_collected,
-				'platform_fees' => $platform_fees,
-				'refunds'       => $refunds_total,
+				'collected'  => $collected,
+				'after_fees' => true,
+				'refunds'    => $refunds_total,
 			)
 		);
 		return array_merge( $data, array(
 			'money'               => $money,
 			'money_categories'    => $categories,
-			'gross_revenue'       => $gross_collected,
-			'platform_fees'       => $reports['platform_fees'] ?? 0,
-			'collected'           => (float) ( $data['vendor_revenue'] ?? 0 ),
+			'vendor_revenue'      => $collected,
+			'gross_revenue'       => $collected,
+			'collected'           => $collected,
 			'refunds'             => $reports['refunds'] ?? 0,
 			'outstanding'         => $reports['outstanding'] ?? 0,
 			'pending_balance'     => (float) ( $display_balances['pending'] ?? $wallet['pending'] ?? $data['wallet_pending'] ?? 0 ),
@@ -1810,8 +1811,9 @@ class LNKup_Financial_Service {
 	}
 
 	/**
-	 * Organizer money in flow order. Values come from the booking ledger (gross, fees, refunds)
-	 * and the payout account / wallet (pending, available, in transit, paid out); nothing is estimated.
+	 * Organizer money in flow order. Values come from the booking ledger (collected after LNKup fees,
+	 * refunds) and the payout account / wallet (pending, available, in transit, paid out); nothing is
+	 * estimated. Organizers never see platform fee amounts or pre-fee totals.
 	 *
 	 * @param array<string, float|bool> $v Raw values.
 	 * @return array<int, array{key:string,label:string,amount:float,source:string,hint:string}>
@@ -1819,10 +1821,8 @@ class LNKup_Financial_Service {
 	private static function organizer_money_categories( $v ) {
 		$balance_source = ! empty( $v['synced'] ) ? 'payout_account' : 'ledger';
 		$rows           = array(
-			array( 'gross', __( 'Gross collected', 'lnkup-marketplace' ), $v['gross'], 'ledger', __( 'Booth fees vendors have paid, before fees and refunds.', 'lnkup-marketplace' ) ),
-			array( 'fees', __( 'Platform fees', 'lnkup-marketplace' ), $v['fees'], 'ledger', __( 'LNKup fees on those bookings.', 'lnkup-marketplace' ) ),
+			array( 'net', __( 'Earnings', 'lnkup-marketplace' ), max( 0, $v['collected'] - $v['refunds'] ), 'ledger', __( "What you've earned from paid booths, after refunds.", 'lnkup-marketplace' ) ),
 			array( 'refunds', __( 'Refunds', 'lnkup-marketplace' ), $v['refunds'], 'ledger', __( 'Money returned to vendors.', 'lnkup-marketplace' ) ),
-			array( 'net', __( 'Net earnings', 'lnkup-marketplace' ), max( 0, $v['gross'] - $v['fees'] - $v['refunds'] ), 'ledger', __( 'Gross collected minus platform fees and refunds.', 'lnkup-marketplace' ) ),
 			array( 'pending', __( 'Pending', 'lnkup-marketplace' ), $v['pending'], $balance_source, __( 'Still settling. Pending money is not available to cash out yet.', 'lnkup-marketplace' ) ),
 			array( 'available', __( 'Available to cash out', 'lnkup-marketplace' ), $v['available'], $balance_source, __( 'Ready to send to your bank.', 'lnkup-marketplace' ) ),
 			array( 'in_transit', __( 'In transit', 'lnkup-marketplace' ), $v['in_transit'], $balance_source, __( 'Cashouts on the way to your bank.', 'lnkup-marketplace' ) ),
@@ -1900,7 +1900,6 @@ class LNKup_Financial_Service {
 			'processing_balance' => (float) ( $display['processing'] ?? 0 ),
 			'reserve_balance'    => (float) ( $display['reserve_hold'] ?? 0 ),
 			'reserve_hold'       => (float) ( $display['reserve_hold'] ?? 0 ),
-			'platform_fees'      => 0,
 			'stripe_fees'        => 0,
 			'payouts_paid'       => 0,
 			'refunds'            => 0,

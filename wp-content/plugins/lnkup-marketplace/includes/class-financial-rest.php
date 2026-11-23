@@ -847,7 +847,7 @@ class LNKup_Financial_REST {
 				return LNKup_Financial_Reports::marketplace_summary();
 			}
 			if ( 'organizer' === self::resolve_financial_role( $request ) && 'vendor' !== $type ) {
-				return LNKup_Financial_Reports::organizer_report( $uid );
+				return LNKup_Financial_Reports::organizer_report( $uid, true );
 			}
 			if ( 'chart' === $type ) {
 				return LNKup_Financial_Reports::chart_revenue_over_time();
@@ -1150,7 +1150,7 @@ class LNKup_Financial_REST {
 	public static function reports_export( $request ) {
 		$format = $request['format'];
 		$role   = self::resolve_financial_role( $request );
-		$data   = 'organizer' === $role ? LNKup_Financial_Reports::organizer_report( get_current_user_id() ) : LNKup_Financial_Reports::vendor_report( get_current_user_id() );
+		$data   = 'organizer' === $role ? LNKup_Financial_Reports::organizer_report( get_current_user_id(), true ) : LNKup_Financial_Reports::vendor_report( get_current_user_id() );
 		if ( 'csv' === $format ) {
 			return rest_ensure_response( array( 'csv' => LNKup_Financial_Reports::to_csv( $data ) ) );
 		}

@@ -3,7 +3,7 @@
  * Plugin Name: LNKup Marketplace
  * Plugin URI: https://lnkup.com
  * Description: Custom marketplace functionality for LNKup — vendor opportunities, applications, payments, and event management.
- * Version: 12.33.2
+ * Version: 12.33.3
  * Author: LNKup
  * Author URI: https://lnkup.com
  * License: GPL v2 or later
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'LNKUP_VERSION', '12.33.2' );
+define( 'LNKUP_VERSION', '12.33.3' );
 define( 'LNKUP_PLUGIN_FILE', __FILE__ );
 define( 'LNKUP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LNKUP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -281,6 +281,7 @@ $lnkup_core_files = array(
 	'includes/class-transactions.php',
 	'includes/class-invoices.php',
 	'includes/financial/class-signed-links.php',
+	'includes/financial/class-organizer-fee-privacy.php',
 	'includes/class-receipts.php',
 	'includes/class-wallet.php',
 	'includes/class-credits.php',
@@ -427,6 +428,7 @@ function lnkup_marketplace_init() {
 	LNKup_Capabilities::init();
 	LNKup_Marketplace_Index::init();
 	LNKup_Plain_Titles::init();
+	LNKup_Organizer_Fee_Privacy::init();
 	LNKup_Marketplace_Analytics::init();
 	LNKup_Marketplace_Cron::init();
 	LNKup_Activation_Emails::init();

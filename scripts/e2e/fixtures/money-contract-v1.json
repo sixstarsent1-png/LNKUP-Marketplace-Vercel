@@ -13,8 +13,7 @@
     "cash_out_reason": "balance_unavailable"
   },
   "metrics": {
-    "collected": { "cents": 266772, "status": "ok", "source": "wordpress_payments", "synced_at": null },
-    "platform_fees": { "cents": 15800, "status": "ok", "source": "wordpress_payments", "synced_at": null },
+    "collected": { "cents": 250972, "status": "ok", "source": "wordpress_payments", "synced_at": null },
     "refunds": { "cents": 0, "status": "ok", "source": "wordpress_payments", "synced_at": null },
     "net_earnings": { "cents": 250972, "status": "ok", "source": "wordpress_payments", "synced_at": null },
     "available": { "cents": null, "status": "unavailable", "source": "stripe_connect", "synced_at": null },

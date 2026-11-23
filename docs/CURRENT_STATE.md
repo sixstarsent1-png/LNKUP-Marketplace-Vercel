@@ -6,8 +6,15 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
-**Plugin version:** 12.33.2  
+**Plugin version:** 12.33.3  
 **Theme version:** 1.6.1
+
+### v12.33.3 (Organizers no longer see LNKup platform fees)
+
+- **Money shows earnings, not fees:** organizer Money / Financial show **Earnings** (after LNKup fees and refunds), Collected (after fees, before refunds), Refunds, Pending, Available, In transit and Paid out. "Gross collected", "Platform fees" and "Net earnings" are gone on mobile and the website. Per-event collected, revenue by event / month and the organizer report (`organizer_report( $user_id, true )`) are after fees. Definitions: `docs/finance/MONEY_DEFINITIONS.md`.
+- **API:** `LNKup_Organizer_Fee_Privacy` (`rest_request_after_callbacks`) strips fee breakdown fields from every organizer response under `lnkup/v1/financial/*`; admin and vendor (`role=vendor`) responses are unchanged. Instant cash-out `fee_amount` stays.
+- **Unchanged on purpose:** Tax Center (raw `organizer_report()`, gross and fees), Portfolio "Platform fees" KPI, "Platform fee X% per booking" on Publish event.
+- **Tests:** new `organizer-fee-privacy-test.php`; shared `money-contract-v1.json` fixture updated (no `platform_fees`); financial and other PHP suites pass; Expo Jest 191/191.
 
 ### v12.33.2 (Broken app fixes: "&amp;" text, receipts, vendor switching, event passes, Home insights)
 

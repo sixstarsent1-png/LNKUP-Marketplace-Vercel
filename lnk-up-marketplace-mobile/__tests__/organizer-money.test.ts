@@ -57,14 +57,21 @@ describe("friendlyRequirement", () => {
 describe("mapMoneyCategories", () => {
   it("keeps known server categories with hints and drops malformed rows", () => {
     const rows = mapMoneyCategories([
-      { key: "gross", label: "Gross collected", amount: 120, hint: "Booth fees vendors have paid." },
       { key: "available", label: "Available to cash out", amount: "40.5" },
       { key: "mystery", label: "Unknown", amount: 1 },
-      { key: "fees", label: "Platform fees" },
+      { key: "refunds", label: "Refunds" },
+    ])
+    expect(rows).toEqual([{ key: "available", label: "Available to cash out", amount: 40.5, hint: undefined }])
+  })
+
+  it("never shows gross or platform fee rows, and labels net as Earnings", () => {
+    const rows = mapMoneyCategories([
+      { key: "gross", label: "Gross collected", amount: 120, hint: "Before fees and refunds." },
+      { key: "fees", label: "Platform fees", amount: 6, hint: "LNKup fees on those bookings." },
+      { key: "net", label: "Net earnings", amount: 114, hint: "Gross collected minus platform fees and refunds." },
     ])
     expect(rows).toEqual([
-      { key: "gross", label: "Gross collected", amount: 120, hint: "Booth fees vendors have paid." },
-      { key: "available", label: "Available to cash out", amount: 40.5, hint: undefined },
+      { key: "net", label: "Earnings", amount: 114, hint: "What you've earned from paid booths, after refunds." },
     ])
   })
 })
