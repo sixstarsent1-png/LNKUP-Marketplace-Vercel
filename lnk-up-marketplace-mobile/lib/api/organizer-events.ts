@@ -1,4 +1,5 @@
 import { getOrganizerDashboardUrl, isLiveApiEnabled } from "@/lib/api/config"
+import { withFixtureFallback } from "@/lib/api/fixture-honesty"
 import { cachedRequest, invalidateCache, type CachedRequestOptions } from "@/lib/api/request-cache"
 import type { WpAuth } from "@/lib/api/wp-client"
 import { wpFetchJson } from "@/lib/api/wp-client"
@@ -320,26 +321,29 @@ export async function fetchOrganizerEvents(
   items: OrganizerEventLite[]
   total: number
 }> {
-  if (!isLiveApiEnabled()) {
-    return buildMockOrganizerEvents()
-  }
-  if (!auth) {
-    throw new Error("Sign in as an organizer to continue.")
-  }
-  return cachedRequest(
-    `${EVENTS_CACHE_PREFIX}${auth.username}`,
+  return withFixtureFallback(
+    "organizer.events",
     async () => {
-      const inviteList = await loadInviteList(auth, { includeAll: true })
-      const baseEvents = inviteList
-        .map((item) => mapInviteOptionToEventLite(item))
-        .filter((event) => event.id)
-        .slice(0, 50)
+      if (!auth) {
+        throw new Error("Sign in as an organizer to continue.")
+      }
+      return cachedRequest(
+        `${EVENTS_CACHE_PREFIX}${auth.username}`,
+        async () => {
+          const inviteList = await loadInviteList(auth, { includeAll: true })
+          const baseEvents = inviteList
+            .map((item) => mapInviteOptionToEventLite(item))
+            .filter((event) => event.id)
+            .slice(0, 50)
 
-      const enriched = await Promise.all(baseEvents.map((event) => enrichRoster(event, auth)))
+          const enriched = await Promise.all(baseEvents.map((event) => enrichRoster(event, auth)))
 
-      return { items: enriched, total: enriched.length }
+          return { items: enriched, total: enriched.length }
+        },
+        options,
+      )
     },
-    options,
+    buildMockOrganizerEvents,
   )
 }
 

@@ -6,12 +6,15 @@ test.describe("Phase 16 return reliability", () => {
   test("shows success state after return and allows pass navigation", async ({ page }) => {
     await page.goto(`${appBase}/vendor/requests?payment=success&applicationId=req-1`)
     const successBanner = page.getByTestId("payment-return-success")
-    if (!(await successBanner.isVisible())) {
+    const bannerShown = await successBanner
+      .waitFor({ state: "visible", timeout: 10000 })
+      .then(() => true)
+      .catch(() => false)
+    if (!bannerShown) {
       test.skip()
       return
     }
-    await expect(successBanner).toBeVisible()
-    await expect(page.getByRole("link", { name: /view pass/i })).toBeVisible()
+    await expect(page.getByRole("button", { name: /view pass/i })).toBeVisible()
   })
 
   test("shows processing state during delayed confirmation", async ({ page }) => {

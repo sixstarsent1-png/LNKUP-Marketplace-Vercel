@@ -32,7 +32,11 @@ const requiredChecks = [
   },
   {
     file: "components/opportunity-card.tsx",
-    snippets: ["Surface", "expo-image", "OpportunityThumbnail", "gallery"],
+    snippets: ["Surface", "EventImage", "gallery"],
+  },
+  {
+    file: "components/ui/event-image.tsx",
+    snippets: ["expo-image", "EventImage"],
   },
   {
     file: "components/organizer-home-hero.tsx",
@@ -44,7 +48,7 @@ const requiredChecks = [
   },
   {
     file: "app/(vendor)/find.tsx",
-    snippets: ["viewToggleBtnActive", "colors.lime", "searchSurface", "components/ui/typography"],
+    snippets: ["viewToggleBtnActive", "colors.lime", "searchRow", "components/ui/typography"],
   },
 ]
 

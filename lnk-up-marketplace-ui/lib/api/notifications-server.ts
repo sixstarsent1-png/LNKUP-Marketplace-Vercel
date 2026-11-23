@@ -8,7 +8,7 @@ import {
 } from "@/lib/api/notifications"
 import { mapOrganizerHomeSummary } from "@/lib/api/organizer-home"
 import { mapOrganizerFinancialSnapshot } from "@/lib/api/organizer-financial"
-import { mapOrganizerRequestList } from "@/lib/api/organizer-requests"
+import { mapOrganizerRequestList, type WpOrganizerApplicationItem } from "@/lib/api/organizer-requests"
 import { mapSavedSearch } from "@/lib/api/saved-searches"
 import { mapVendorReadiness } from "@/lib/api/vendor-readiness"
 import { mapVendorRequestList } from "@/lib/api/vendor-requests"
@@ -62,7 +62,9 @@ export async function fetchOrganizerNotificationInputs(auth: WpAuth): Promise<Or
     wpFetchJson<Record<string, unknown>>("/crm/dashboard/widgets", { auth }).catch(() => ({})),
     wpFetchJson<unknown>("/crm/launch-checklist", { auth }).catch(() => []),
     wpFetchJson<unknown>("/financial/organizer-balances", { auth }).catch(() => null),
-    wpFetchJson<{ items?: unknown[] }>("/applications/organizer", { auth }).catch(() => ({ items: [] })),
+    wpFetchJson<{ items?: WpOrganizerApplicationItem[] }>("/applications/organizer", { auth }).catch(
+      (): { items?: WpOrganizerApplicationItem[] } => ({ items: [] }),
+    ),
   ])
 
   const summary = mapOrganizerHomeSummary(intel, widgets, checklist as never, financial)

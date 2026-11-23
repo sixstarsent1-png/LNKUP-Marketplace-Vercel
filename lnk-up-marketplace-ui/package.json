@@ -7,6 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "phase25:verify": "node scripts/phase25-verify.mjs",
     "generate-icons": "node scripts/generate-pwa-icons.mjs"
   },

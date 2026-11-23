@@ -36,7 +36,7 @@ type SaveSearchDialogProps = {
   filters: SavedSearchFilters
   isAuthenticated: boolean
   saving?: boolean
-  onSave: (name: string, frequency: SavedSearchAlertFrequency) => Promise<void>
+  onSave: (name: string, frequency: SavedSearchAlertFrequency) => Promise<unknown>
 }
 
 export function SaveSearchDialog({
@@ -173,7 +173,7 @@ export function SaveSearchButton({
   filters: SavedSearchFilters
   isAuthenticated: boolean
   saving?: boolean
-  onSave: (name: string, frequency: SavedSearchAlertFrequency) => Promise<void>
+  onSave: (name: string, frequency: SavedSearchAlertFrequency) => Promise<unknown>
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }) {
