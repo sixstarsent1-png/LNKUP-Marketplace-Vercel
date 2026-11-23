@@ -452,7 +452,7 @@ class LNKup_Organizer_CRM_REST {
 				? sprintf(
 					/* translators: %s: event title */
 					__( 'Invite: %s', 'lnkup-marketplace' ),
-					get_the_title( $event_id )
+					lnkup_plain_title( $event_id )
 				)
 				: __( 'Vendor outreach', 'lnkup-marketplace' );
 		}

@@ -14,9 +14,12 @@ import {
 } from "@/lib/api/organizer-financial"
 import {
   mapOrganizerDiagnostics,
+  mapOrganizerEventHighlights,
   mapOrganizerExperiments,
   mapOrganizerRecommendations,
+  mapOrganizerRecommendedActions,
   prioritizeOrganizerRecommendations,
+  type OrganizerEventHighlight,
   type OrganizerFunnelDiagnostic,
   type OrganizerExperimentSnapshot,
   type OrganizerRecommendation,
@@ -138,6 +141,8 @@ export type OrganizerHomeSummary = {
     diagnostics: OrganizerFunnelDiagnostic[]
     experiments: OrganizerExperimentSnapshot[]
     recommendations: OrganizerRecommendation[]
+    /** Weakest events needing attention, or the strongest when none are weak. */
+    eventHighlights?: OrganizerEventHighlight[]
   }
   wordpressUrl: string
 }
@@ -216,9 +221,11 @@ export function mapOrganizerHomeSummary(
 
   const diagnostics = mapOrganizerDiagnostics(intel.funnel_diagnostics)
   const experiments = mapOrganizerExperiments(intel.experiment_snapshots)
-  const recommendations = prioritizeOrganizerRecommendations(
-    mapOrganizerRecommendations(intel.recommendations),
-  )
+  const recommendations = prioritizeOrganizerRecommendations([
+    ...mapOrganizerRecommendations(intel.recommendations),
+    ...mapOrganizerRecommendedActions(intel.recommended_actions),
+  ])
+  const eventHighlights = mapOrganizerEventHighlights(intel.weak_events, intel.top_events)
 
   return {
     stats: {
@@ -238,6 +245,7 @@ export function mapOrganizerHomeSummary(
       diagnostics,
       experiments,
       recommendations,
+      eventHighlights,
     },
     wordpressUrl: getOrganizerDashboardUrl(),
   }

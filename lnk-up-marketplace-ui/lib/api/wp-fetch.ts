@@ -1,5 +1,6 @@
 import { getWpBaseUrl, getWpJsonBase } from "@/lib/api/config"
 import type { WpApiError } from "@/lib/api/types"
+import { decodeEntitiesDeep } from "@/lib/text/decode-entities"
 
 export type WpAuth = {
   username: string
@@ -91,7 +92,7 @@ export async function wpFetchJson<T>(
     throw parseWpError(response.status, payload ?? { message: "Invalid response from LNKup" })
   }
 
-  return payload as T
+  return decodeEntitiesDeep(payload) as T
 }
 
 export async function wpFetchMultipart<T>(
@@ -130,7 +131,7 @@ export async function wpFetchMultipart<T>(
     throw parseWpError(response.status, payload ?? { message: "Invalid response from LNKup" })
   }
 
-  return payload as T
+  return decodeEntitiesDeep(payload) as T
 }
 
 export async function wpValidateAuth(auth: WpAuth) {

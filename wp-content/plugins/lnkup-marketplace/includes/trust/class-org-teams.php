@@ -582,7 +582,7 @@ class LNKup_Org_Teams {
 		if ( 'all' === $scope_type ) {
 			return __( 'All events', 'lnkup-marketplace' );
 		}
-		$title = $scope_id ? get_the_title( $scope_id ) : '';
+		$title = $scope_id ? lnkup_plain_title( $scope_id ) : '';
 		return 'tour' === $scope_type
 			/* translators: %s: tour name */
 			? sprintf( __( 'Tour: %s', 'lnkup-marketplace' ), $title )

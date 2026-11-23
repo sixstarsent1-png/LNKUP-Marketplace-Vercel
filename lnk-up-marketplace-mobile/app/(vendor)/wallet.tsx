@@ -22,6 +22,7 @@ import { SkeletonList, SkeletonStats } from "@/components/ui/skeleton"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import type { VendorRequest } from "@/lib/api/vendor-requests"
 import {
+  fetchDocumentUrl,
   fetchVendorWallet,
   formatMoney,
   openVendorDispute,
@@ -142,9 +143,13 @@ export default function VendorWalletScreen() {
   }
 
   async function openDocument(doc: VendorInvoiceOrReceipt) {
-    const url = doc.pdfUrl || doc.wordpressUrl
-    if (!url) return
-    await WebBrowser.openBrowserAsync(url)
+    try {
+      const url = await fetchDocumentUrl(doc, auth)
+      if (!url) return
+      await WebBrowser.openBrowserAsync(url)
+    } catch (err) {
+      showToast(`Couldn't open this ${doc.type}. ${appErrorFromWp(err).message}`, "error")
+    }
   }
 
   async function promptDispute(paymentId: string, eventName?: string) {

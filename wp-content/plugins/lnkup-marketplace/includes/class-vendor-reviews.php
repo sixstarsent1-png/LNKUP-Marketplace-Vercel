@@ -732,7 +732,7 @@ class LNKup_Vendor_Reviews {
 			'under_review'           => (bool) get_post_meta( $post->ID, '_lnkup_under_dispute', true ),
 			'verified_participation' => (bool) get_post_meta( $post->ID, '_lnkup_verified_participation', true ),
 			'event_id'               => $event_id,
-			'event_title'            => $event_id ? get_the_title( $event_id ) : '',
+			'event_title'            => $event_id ? lnkup_plain_title( $event_id ) : '',
 			'organizer_name'         => $org ? $org->display_name : '',
 			'created_at'             => $post->post_date,
 			'application_id'         => (int) get_post_meta( $post->ID, '_lnkup_application_id', true ),

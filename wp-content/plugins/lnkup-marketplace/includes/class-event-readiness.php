@@ -110,7 +110,7 @@ class LNKup_Event_Readiness {
 		);
 		$result  = array(
 			'event_id'     => $event_id,
-			'event_title'  => get_the_title( $event_id ),
+			'event_title'  => lnkup_plain_title( $event_id ),
 			'event_date'   => $ctx['date'],
 			'days_until'   => $ctx['days_until'],
 			'percent'      => $counted ? (int) round( count( $done ) / count( $counted ) * 100 ) : 100,

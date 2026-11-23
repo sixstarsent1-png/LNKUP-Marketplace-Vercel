@@ -179,7 +179,7 @@ class LNKup_Match_Simulator {
 			'profile_id'     => (int) $vendor['profile_id'],
 			'opportunity_id' => (int) $opp['opportunity_id'],
 			'vendor'         => '' !== $name ? $name : sprintf( 'Vendor #%d', (int) $vendor['profile_id'] ),
-			'opportunity'    => get_the_title( (int) $opp['opportunity_id'] ) ?: sprintf( 'Opportunity #%d', (int) $opp['opportunity_id'] ),
+			'opportunity'    => lnkup_plain_title( (int) $opp['opportunity_id'] ) ?: sprintf( 'Opportunity #%d', (int) $opp['opportunity_id'] ),
 			'score_before'   => (int) $now['score'],
 			'score_after'    => (int) $new['score'],
 			'reason'         => (string) $reason,

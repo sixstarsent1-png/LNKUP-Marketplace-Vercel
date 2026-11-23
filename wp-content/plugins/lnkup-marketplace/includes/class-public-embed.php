@@ -90,8 +90,8 @@ class LNKup_Public_Embed {
 		$fee  = get_post_meta( $opp_id, '_lnkup_vendor_fee', true );
 		return array(
 			'id'             => $opp_id,
-			'title'          => html_entity_decode( get_the_title( $opp ), ENT_QUOTES, 'UTF-8' ),
-			'event_title'    => html_entity_decode( get_the_title( $event ), ENT_QUOTES, 'UTF-8' ),
+			'title'          => html_entity_decode( lnkup_plain_title( $opp ), ENT_QUOTES, 'UTF-8' ),
+			'event_title'    => html_entity_decode( lnkup_plain_title( $event ), ENT_QUOTES, 'UTF-8' ),
 			'event_date'     => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
 			'city'           => (string) get_post_meta( $event_id, '_lnkup_city', true ),
 			'state'          => (string) get_post_meta( $event_id, '_lnkup_state', true ),

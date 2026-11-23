@@ -372,7 +372,7 @@ class LNKup_Financial_Reports {
 		foreach ( $rows as $row ) {
 			$out[] = array(
 				'event_id'    => (int) $row['event_id'],
-				'event_title' => get_the_title( (int) $row['event_id'] ),
+				'event_title' => lnkup_plain_title( (int) $row['event_id'] ),
 				'revenue'     => round( (float) $row['total'], 2 ),
 				'bookings'    => (int) $row['cnt'],
 			);

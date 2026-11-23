@@ -466,7 +466,7 @@ class LNKup_Trust_REST {
 		);
 		return array_map(
 			static function ( $id ) {
-				return array( 'id' => (int) $id, 'title' => get_the_title( $id ) );
+				return array( 'id' => (int) $id, 'title' => lnkup_plain_title( $id ) );
 			},
 			$ids
 		);
@@ -487,7 +487,7 @@ class LNKup_Trust_REST {
 		);
 		return array_map(
 			static function ( $id ) {
-				return array( 'id' => (int) $id, 'title' => get_the_title( $id ) );
+				return array( 'id' => (int) $id, 'title' => lnkup_plain_title( $id ) );
 			},
 			$ids
 		);

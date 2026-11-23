@@ -113,7 +113,7 @@ class LNKup_Organizer_Documents {
 			}
 		}
 		$reviews = self::reviews_for_application( $app_id );
-		$name    = $profile_id ? ( (string) get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: get_the_title( $profile_id ) ) : '';
+		$name    = $profile_id ? ( (string) get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: lnkup_plain_title( $profile_id ) ) : '';
 		$out     = array();
 		foreach ( $required as $type ) {
 			$type   = (string) $type;
@@ -301,7 +301,7 @@ class LNKup_Organizer_Documents {
 			sprintf(
 				/* translators: 1: event, 2: document list */
 				__( 'The organizer of %1$s needs these documents from you: %2$s. Upload them and share them with the organizer from your documents page.', 'lnkup-marketplace' ),
-				get_the_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) ),
+				lnkup_plain_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) ),
 				implode( ', ', array_map( static function ( $t ) use ( $labels ) { return $labels[ $t ] ?? $t; }, $asked ) )
 			),
 			$message
@@ -362,7 +362,7 @@ class LNKup_Organizer_Documents {
 					/* translators: 1: document, 2: event */
 					__( 'The organizer reviewed your %1$s for %2$s and needs a new version.', 'lnkup-marketplace' ),
 					$current['label'],
-					get_the_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) )
+					lnkup_plain_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) )
 				),
 				$reason
 			);
@@ -440,6 +440,6 @@ class LNKup_Organizer_Documents {
 			$html .= '<blockquote>' . esc_html( $note ) . '</blockquote>';
 		}
 		$html .= '<p><a href="' . esc_url( add_query_arg( 'view', 'documents', lnkup_page_url_helper( 'vendor-dashboard' ) ) ) . '">' . esc_html__( 'Open my documents', 'lnkup-marketplace' ) . '</a></p>';
-		LNKup_Notifications::send( $vendor->user_email, sprintf( $subject, get_the_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) ) ), $html );
+		LNKup_Notifications::send( $vendor->user_email, sprintf( $subject, lnkup_plain_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) ) ), $html );
 	}
 }

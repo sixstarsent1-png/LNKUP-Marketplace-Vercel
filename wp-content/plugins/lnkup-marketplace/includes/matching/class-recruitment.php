@@ -133,7 +133,7 @@ class LNKup_Recruitment {
 		foreach ( $items as &$item ) {
 			$item['profile_id']     = (int) $item['profile_id'];
 			$item['opportunity_id'] = (int) $item['opportunity_id'];
-			$item['business_name']  = (string) ( get_post_meta( $item['profile_id'], '_lnkup_business_name', true ) ?: get_the_title( $item['profile_id'] ) );
+			$item['business_name']  = (string) ( get_post_meta( $item['profile_id'], '_lnkup_business_name', true ) ?: lnkup_plain_title( $item['profile_id'] ) );
 			$stamps                 = json_decode( (string) $item['stage_at'], true );
 			$item['stage_at']       = is_array( $stamps ) ? $stamps : array();
 		}
@@ -375,7 +375,7 @@ class LNKup_Recruitment {
 		$recipients = array();
 		$suppressed = array();
 		foreach ( $profile_ids as $index => $profile_id ) {
-			$name = (string) ( get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: get_the_title( $profile_id ) );
+			$name = (string) ( get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: lnkup_plain_title( $profile_id ) );
 			if ( $index >= $max ) {
 				$suppressed[] = array( 'profile_id' => $profile_id, 'business_name' => $name, 'reason' => 'batch_limit', 'reason_label' => self::suppression_label( 'batch_limit' ) );
 				continue;

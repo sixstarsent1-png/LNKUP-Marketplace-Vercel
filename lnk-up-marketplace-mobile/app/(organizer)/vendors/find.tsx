@@ -3,6 +3,8 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { router, useLocalSearchParams, type Href } from "expo-router"
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { Screen } from "@/components/screen"
+import { vendorProfileHref } from "@/components/organizer-vendors/vendor-queue"
+import { AppIcon } from "@/components/ui/app-icon"
 import { BackLink } from "@/components/ui/back-link"
 import { Button } from "@/components/ui/button"
 import { FilterChip } from "@/components/ui/chip"
@@ -251,17 +253,30 @@ export default function OrganizerFindVendorsScreen() {
           return (
             <Pressable
               key={vendor.profileId}
-              onPress={() => toggleSelected(vendor.profileId)}
-              onLongPress={() => router.push(`/(organizer)/vendors/${vendor.profileId}` as Href)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: isSelected }}
+              onPress={() => router.push(vendorProfileHref(String(vendor.profileId)) as Href)}
+              accessibilityRole="button"
               accessibilityLabel={`${vendor.businessName}. ${vendor.reasons.join(". ")}`}
+              accessibilityHint="Opens the vendor profile"
               testID="find-vendor-card"
             >
               <View style={[styles.card, isSelected && styles.cardSelected]}>
                 <View style={styles.cardHeader}>
                   <SectionTitle style={styles.flex}>{vendor.businessName}</SectionTitle>
                   {vendor.verified ? <Meta style={styles.verified}>Verified</Meta> : null}
+                  <Pressable
+                    onPress={() => toggleSelected(vendor.profileId)}
+                    hitSlop={10}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: isSelected }}
+                    accessibilityLabel={`Select ${vendor.businessName}`}
+                    testID="find-vendor-select"
+                  >
+                    <AppIcon
+                      name={isSelected ? "checkbox" : "square-outline"}
+                      size={22}
+                      color={isSelected ? colors.black : colors.gray700}
+                    />
+                  </Pressable>
                 </View>
                 <Meta>
                   {[vendor.primaryCategory, [vendor.city, vendor.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}

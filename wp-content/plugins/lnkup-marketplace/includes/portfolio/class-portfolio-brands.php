@@ -50,7 +50,7 @@ class LNKup_Portfolio_Brands {
 	public static function format( $brand_id ) {
 		return array(
 			'id'          => (int) $brand_id,
-			'name'        => get_the_title( $brand_id ),
+			'name'        => lnkup_plain_title( $brand_id ),
 			'description' => (string) get_post_field( 'post_content', $brand_id ),
 			'website'     => (string) get_post_meta( $brand_id, '_lnkup_brand_website', true ),
 			'logo_url'    => (string) get_the_post_thumbnail_url( $brand_id, 'thumbnail' ),

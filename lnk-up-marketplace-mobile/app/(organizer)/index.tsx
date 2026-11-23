@@ -208,7 +208,7 @@ function recommendationAction(recommendation: OrganizerRecommendation): {
   if (recommendation.href) {
     return { label: "Open LNKup web", externalUrl: recommendation.href }
   }
-  return { label: "Open organizer dashboard", href: "/(organizer)/more" }
+  return { label: "Open More", href: "/(organizer)/more" }
 }
 
 export default function OrganizerHomeScreen() {
@@ -647,6 +647,8 @@ export default function OrganizerHomeScreen() {
             experiments={summary.intelligence.experiments}
             diagnostics={summary.intelligence.diagnostics}
             recommendations={summary.intelligence.recommendations}
+            eventHighlights={summary.intelligence.eventHighlights}
+            onEventPress={(eventId) => router.push(`/(organizer)/events/${eventId}` as Href)}
             onRecommendationPress={(recommendation) => {
               const action = recommendationAction(recommendation)
               return {

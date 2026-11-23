@@ -262,7 +262,7 @@ class LNKup_Portfolio_Recurrence {
 					'timezone'   => $rule['timezone'],
 					'title'      => '' !== $rule['stop']['title']
 						? $rule['stop']['title'] . ' — ' . wp_date( 'M j, Y', strtotime( $occ['date'] . ' 12:00:00' ) )
-						: get_the_title( $tour_id ) . ' — ' . wp_date( 'M j, Y', strtotime( $occ['date'] . ' 12:00:00' ) ),
+						: lnkup_plain_title( $tour_id ) . ' — ' . wp_date( 'M j, Y', strtotime( $occ['date'] . ' 12:00:00' ) ),
 				)
 			);
 		}

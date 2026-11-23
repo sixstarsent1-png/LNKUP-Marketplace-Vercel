@@ -254,7 +254,7 @@ class LNKup_Event_Tasks {
 			'can_complete' => $can_edit || ( $assignee && $assignee === (int) $viewer ),
 		);
 		if ( $with_event ) {
-			$out['event_title'] = get_the_title( $event_id );
+			$out['event_title'] = lnkup_plain_title( $event_id );
 			$out['event_date']  = (string) get_post_meta( $event_id, '_lnkup_event_date', true );
 		}
 		return $out;
@@ -502,7 +502,7 @@ class LNKup_Event_Tasks {
 		if ( ! $user || $assignee === (int) $actor || ! class_exists( 'LNKup_Notifications' ) ) {
 			return;
 		}
-		$event = get_the_title( (int) $row['event_id'] );
+		$event = lnkup_plain_title( (int) $row['event_id'] );
 		$due   = $row['due_at'] ? wp_date( get_option( 'date_format' ), strtotime( (string) $row['due_at'] ) ) : '';
 		LNKup_Notifications::send(
 			$user->user_email,
@@ -703,7 +703,7 @@ class LNKup_Event_Tasks {
 			}
 			$lines = '';
 			foreach ( array_slice( $tasks, 0, 25 ) as $task ) {
-				$lines .= '<li>' . esc_html( $task['title'] . ' — ' . get_the_title( (int) $task['event_id'] ) . ' (' . wp_date( get_option( 'date_format' ), strtotime( (string) $task['due_at'] ) ) . ')' ) . '</li>';
+				$lines .= '<li>' . esc_html( $task['title'] . ' — ' . lnkup_plain_title( (int) $task['event_id'] ) . ' (' . wp_date( get_option( 'date_format' ), strtotime( (string) $task['due_at'] ) ) . ')' ) . '</li>';
 			}
 			LNKup_Notifications::send(
 				$user->user_email,

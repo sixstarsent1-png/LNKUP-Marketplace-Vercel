@@ -127,7 +127,7 @@ class LNKup_Portfolio_Interest {
 			$items[] = array(
 				'vendor_user_id'    => $vendor_id,
 				'vendor_profile_id' => $profile_id,
-				'business_name'     => $profile_id ? get_the_title( $profile_id ) : '',
+				'business_name'     => $profile_id ? lnkup_plain_title( $profile_id ) : '',
 				'note'              => (string) $row['note'],
 				'since'             => (string) $row['created_at'],
 				'applied_event_ids' => array_values( $applied ),
@@ -158,7 +158,7 @@ class LNKup_Portfolio_Interest {
 		}
 		foreach ( $event_ids as $event_id ) {
 			if ( ! LNKup_Capabilities::event_is_tour_stop( $tour_id, $event_id ) || 'published' !== LNKup_Portfolio_Tours::stop_state( $event_id ) ) {
-				return new WP_Error( 'lnkup_stop_not_open', sprintf( __( '"%s" is not a live stop on this tour.', 'lnkup-marketplace' ), get_the_title( $event_id ) ), array( 'status' => 400 ) );
+				return new WP_Error( 'lnkup_stop_not_open', sprintf( __( '"%s" is not a live stop on this tour.', 'lnkup-marketplace' ), lnkup_plain_title( $event_id ) ), array( 'status' => 400 ) );
 			}
 		}
 		$results = array();

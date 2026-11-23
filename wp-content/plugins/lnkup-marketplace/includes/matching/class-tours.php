@@ -127,7 +127,7 @@ class LNKup_Tours {
 				}
 				$current = (int) get_post_meta( $event_id, '_lnkup_tour_id', true );
 				if ( $current && $current !== $tour_id && 'lnkup_tour' === get_post_type( $current ) ) {
-					return new WP_Error( 'lnkup_event_in_tour', sprintf( __( '"%s" already belongs to another tour.', 'lnkup-marketplace' ), get_the_title( $event_id ) ), array( 'status' => 409 ) );
+					return new WP_Error( 'lnkup_event_in_tour', sprintf( __( '"%s" already belongs to another tour.', 'lnkup-marketplace' ), lnkup_plain_title( $event_id ) ), array( 'status' => 409 ) );
 				}
 			}
 		}
@@ -311,7 +311,7 @@ class LNKup_Tours {
 					|| ( 'rejected' === $app_status && 'allowed' === ( LNKup_Applications::reapply_state( $opp_id, $user_id )['reapply'] ?? '' ) );
 				$opps[]     = array(
 					'opportunity_id'     => $opp_id,
-					'title'              => get_the_title( $opp_id ),
+					'title'              => lnkup_plain_title( $opp_id ),
 					'vendor_fee'         => (float) $row['vendor_fee'],
 					'spots_remaining'    => (int) $row['spots_remaining'],
 					'spots_unlimited'    => $unlimited,
@@ -325,7 +325,7 @@ class LNKup_Tours {
 			}
 			$stops[] = array(
 				'event_id'      => $event_id,
-				'title'         => get_the_title( $event_id ),
+				'title'         => lnkup_plain_title( $event_id ),
 				'order'         => (int) get_post_meta( $event_id, '_lnkup_tour_stop_order', true ),
 				'date'          => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
 				'city'          => (string) get_post_meta( $event_id, '_lnkup_city', true ),

@@ -417,7 +417,7 @@ class LNKup_Vendor_Invites {
 				}
 				$opp_items[] = array(
 					'id'              => $opp->ID,
-					'label'           => $opp->post_title,
+					'label'           => lnkup_plain_title( $opp ),
 					'status'          => $status ? (string) $status : 'open',
 					'spots_total'     => (int) get_post_meta( $opp->ID, '_lnkup_spots_total', true ),
 					'spots_remaining' => (int) get_post_meta( $opp->ID, '_lnkup_spots_remaining', true ),
@@ -429,7 +429,7 @@ class LNKup_Vendor_Invites {
 			}
 			$row = array(
 				'event_id'      => $event->ID,
-				'event_title'   => $event->post_title,
+				'event_title'   => lnkup_plain_title( $event ),
 				'date'          => (string) get_post_meta( $event->ID, '_lnkup_event_date', true ),
 				'city'          => (string) get_post_meta( $event->ID, '_lnkup_city', true ),
 				'state'         => (string) get_post_meta( $event->ID, '_lnkup_state', true ),
@@ -550,7 +550,7 @@ class LNKup_Vendor_Invites {
 				'status'         => get_post_meta( $invite->ID, '_lnkup_status', true ),
 				'type'           => get_post_meta( $invite->ID, '_lnkup_type', true ),
 				'event_id'       => $event_id,
-				'event_title'    => $event_post ? $event_post->post_title : '',
+				'event_title'    => lnkup_plain_title( $event_post ),
 				'opportunity_id' => $opp_id,
 				'created'        => $invite->post_date,
 				'link'           => $link,

@@ -199,10 +199,11 @@ class LNKup_Financial_REST {
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'invoice_detail' ),
 		) ) );
-		register_rest_route( self::NS, '/financial/invoices/(?P<id>\d+)/pdf', array_merge( $fin, array(
-			'methods'  => 'GET',
-			'callback' => array( __CLASS__, 'invoice_pdf' ),
-		) ) );
+		register_rest_route( self::NS, '/financial/invoices/(?P<id>\d+)/pdf', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'invoice_pdf' ),
+			'permission_callback' => array( __CLASS__, 'invoice_document_permission' ),
+		) );
 		register_rest_route( self::NS, '/financial/invoices/(?P<id>\d+)/email', array_merge( $fin, array(
 			'methods'  => 'POST',
 			'callback' => array( __CLASS__, 'invoice_email' ),
@@ -212,10 +213,11 @@ class LNKup_Financial_REST {
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'receipt_detail' ),
 		) ) );
-		register_rest_route( self::NS, '/financial/receipts/(?P<id>\d+)/view', array_merge( $vendor, array(
-			'methods'  => 'GET',
-			'callback' => array( __CLASS__, 'receipt_view' ),
-		) ) );
+		register_rest_route( self::NS, '/financial/receipts/(?P<id>\d+)/view', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'receipt_view' ),
+			'permission_callback' => array( __CLASS__, 'receipt_document_permission' ),
+		) );
 
 		register_rest_route( self::NS, '/financial/refunds/(?P<id>\d+)/deny', array_merge( $org, array(
 			'methods'  => 'POST',
@@ -383,6 +385,43 @@ class LNKup_Financial_REST {
 
 	public static function vendor_permission() {
 		return is_user_logged_in() && ( LNKup_Roles::is_vendor() || LNKup_Capabilities::user_has_manage_all() );
+	}
+
+	/**
+	 * Receipt page: the logged-in vendor, or a signed link (apps open it in a browser with no login).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function receipt_document_permission( $request ) {
+		return self::signed_document_permission( 'receipt', $request ) || self::vendor_permission();
+	}
+
+	/**
+	 * Invoice document: a logged-in party, or a signed link.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function invoice_document_permission( $request ) {
+		return self::signed_document_permission( 'invoice', $request ) || self::financial_permission();
+	}
+
+	/**
+	 * A valid signature runs this one request as the user it was issued to; the callback's ownership
+	 * checks still apply to that user.
+	 *
+	 * @param string          $type    receipt|invoice.
+	 * @param WP_REST_Request $request Request.
+	 */
+	private static function signed_document_permission( $type, $request ) {
+		if ( is_user_logged_in() || ! class_exists( 'LNKup_Signed_Links' ) ) {
+			return false;
+		}
+		$user_id = LNKup_Signed_Links::verified_user( $type, absint( $request['id'] ), $request );
+		if ( ! $user_id || ! get_userdata( $user_id ) ) {
+			return false;
+		}
+		wp_set_current_user( $user_id );
+		return true;
 	}
 
 	public static function organizer_permission() {

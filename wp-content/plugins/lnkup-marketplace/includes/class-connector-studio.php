@@ -374,7 +374,7 @@ class LNKup_Connector_Studio {
 		$json_keys = array( 'platforms', 'shots', 'growth_styles', 'story_frames' );
 		$row       = array(
 			'id'    => (int) $post->ID,
-			'title' => get_the_title( $post ),
+			'title' => lnkup_plain_title( $post ),
 			'script'=> $post->post_content,
 		);
 		$map = array(
@@ -591,7 +591,7 @@ class LNKup_Connector_Studio {
 		$clicks = self::count_content_clicks( (int) $connector['id'], $cc );
 		return array(
 			'id'            => (int) $id,
-			'title'         => get_the_title( $id ),
+			'title'         => lnkup_plain_title( $id ),
 			'status'        => (string) get_post_meta( $id, '_lnkup_content_status', true ) ?: 'draft',
 			'platform'      => (string) get_post_meta( $id, '_lnkup_platform', true ),
 			'url'           => (string) get_post_meta( $id, '_lnkup_published_url', true ),

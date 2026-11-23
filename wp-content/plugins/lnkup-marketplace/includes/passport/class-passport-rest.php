@@ -376,7 +376,7 @@ class LNKup_Passport_REST {
 		}
 
 		if ( $updated ) {
-			update_post_meta( $profile_id, '_lnkup_business_name', (string) ( get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: get_the_title( $profile_id ) ) );
+			update_post_meta( $profile_id, '_lnkup_business_name', (string) ( get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: lnkup_plain_title( $profile_id ) ) );
 			LNKup_Passport_Projection::flush_public_cache( $profile_id );
 			LNKup_Vendor_Reputation::log_activity( 'profile_updated', $profile_id, array( 'payload' => array( 'fields' => $updated ) ) );
 			do_action( 'lnkup_vendor_passport_updated', $profile_id, $updated );

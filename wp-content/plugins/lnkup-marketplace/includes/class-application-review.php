@@ -328,7 +328,7 @@ class LNKup_Application_Review {
 		foreach ( array_slice( $scope, 0, 200 ) as $event_id ) {
 			$out[] = array(
 				'id'    => (int) $event_id,
-				'title' => get_the_title( $event_id ),
+				'title' => lnkup_plain_title( $event_id ),
 				'date'  => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
 			);
 		}
@@ -355,7 +355,7 @@ class LNKup_Application_Review {
 		$opp_id     = (int) get_post_meta( $app_id, '_lnkup_opportunity_id', true );
 		$profile_id = (int) get_post_meta( $app_id, '_lnkup_vendor_profile_id', true );
 		$vendor_id  = (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true );
-		$name       = $profile_id ? ( (string) get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: get_the_title( $profile_id ) ) : '';
+		$name       = $profile_id ? ( (string) get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: lnkup_plain_title( $profile_id ) ) : '';
 		if ( '' === $name && $vendor_id ) {
 			$user = get_userdata( $vendor_id );
 			$name = $user ? $user->display_name : '';
@@ -364,10 +364,10 @@ class LNKup_Application_Review {
 		return array(
 			'id'              => $app_id,
 			'event_id'        => $event_id,
-			'event_title'     => $event_id ? get_the_title( $event_id ) : '',
+			'event_title'     => $event_id ? lnkup_plain_title( $event_id ) : '',
 			'event_date'      => $event_id ? (string) get_post_meta( $event_id, '_lnkup_event_date', true ) : '',
 			'opportunity_id'  => $opp_id,
-			'opportunity'     => $opp_id ? get_the_title( $opp_id ) : '',
+			'opportunity'     => $opp_id ? lnkup_plain_title( $opp_id ) : '',
 			'vendor_name'     => $name,
 			'profile_id'      => $profile_id,
 			'category'        => (string) get_post_meta( $app_id, '_lnkup_selected_category', true ),
@@ -544,7 +544,7 @@ class LNKup_Application_Review {
 				$prior_state = (string) get_post_meta( $p->ID, '_lnkup_application_status', true );
 				$past[]      = array(
 					'application_id' => (int) $p->ID,
-					'event_title'    => $prior_event ? get_the_title( $prior_event ) : '',
+					'event_title'    => $prior_event ? lnkup_plain_title( $prior_event ) : '',
 					'event_date'     => $prior_event ? (string) get_post_meta( $prior_event, '_lnkup_event_date', true ) : '',
 					'status_label'   => lnkup_application_status_label( $prior_state ),
 				);
@@ -1205,8 +1205,8 @@ class LNKup_Application_Review {
 		$profile_id = (int) get_post_meta( $app_id, '_lnkup_vendor_profile_id', true );
 		$event_id   = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
 		return array(
-			'vendor' => $profile_id ? ( (string) get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: get_the_title( $profile_id ) ) : '#' . $app_id,
-			'event'  => $event_id ? get_the_title( $event_id ) : '',
+			'vendor' => $profile_id ? ( (string) get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: lnkup_plain_title( $profile_id ) ) : '#' . $app_id,
+			'event'  => $event_id ? lnkup_plain_title( $event_id ) : '',
 		);
 	}
 

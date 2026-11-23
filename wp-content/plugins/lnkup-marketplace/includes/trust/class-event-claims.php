@@ -194,7 +194,7 @@ class LNKup_Event_Claims {
 			sprintf(
 				/* translators: %s: event title */
 				__( 'LNKup confirmed that you manage "%s". Vendors can now apply and pay through LNKup.', 'lnkup-marketplace' ),
-				get_the_title( $event_id )
+				lnkup_plain_title( $event_id )
 			),
 			'trust',
 			function_exists( 'lnkup_organizer_view_url' ) ? lnkup_organizer_view_url( 'events' ) : ''

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { StyleSheet, View } from "react-native"
 
 import { AppText as Text } from "@/components/ui/app-text"
@@ -28,10 +28,14 @@ export function OrganizerPassportPanel({ profileId }: { profileId: number }) {
   const [tours, setTours] = useState<OrganizerTourOption[]>([])
   const [failed, setFailed] = useState(false)
   const [inviting, setInviting] = useState<number | null>(null)
+  const loadSeq = useRef(0)
 
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current
     setFailed(false)
+    setPassport(null)
     const [p, t] = await Promise.allSettled([fetchOrganizerPassport(profileId, auth), fetchMyTours(auth)])
+    if (seq !== loadSeq.current) return
     if (p.status === "fulfilled") setPassport(p.value)
     else setFailed(true)
     if (t.status === "fulfilled") setTours(t.value)

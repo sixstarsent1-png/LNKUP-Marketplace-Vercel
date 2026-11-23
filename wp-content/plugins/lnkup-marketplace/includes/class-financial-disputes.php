@@ -521,7 +521,7 @@ class LNKup_Financial_Disputes {
 			$evidence = array();
 		}
 		$event_id    = (int) get_post_meta( $payment_id, '_lnkup_event_id', true );
-		$event_title = $event_id ? get_the_title( $event_id ) : '';
+		$event_title = $event_id ? lnkup_plain_title( $event_id ) : '';
 		$opened_by   = (int) ( $row['opened_by'] ?? 0 );
 		$is_open     = in_array( $row['status'], self::OPEN_STATUSES, true );
 

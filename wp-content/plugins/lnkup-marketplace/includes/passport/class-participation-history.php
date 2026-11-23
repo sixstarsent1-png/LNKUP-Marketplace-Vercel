@@ -143,7 +143,7 @@ class LNKup_Participation_History {
 			}
 			$tour_id = (int) get_post_meta( $event_id, '_lnkup_tour_id', true );
 			if ( $tour_id && ! isset( $tour_titles[ $tour_id ] ) ) {
-				$tour_titles[ $tour_id ] = get_the_title( $tour_id );
+				$tour_titles[ $tour_id ] = lnkup_plain_title( $tour_id );
 			}
 			$organizer_id = (int) get_post_meta( $m['application_id'], '_lnkup_organizer_user_id', true ) ?: (int) $event->post_author;
 			$organizer    = get_userdata( $organizer_id );

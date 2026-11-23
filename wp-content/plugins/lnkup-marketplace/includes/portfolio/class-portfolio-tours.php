@@ -184,11 +184,11 @@ class LNKup_Portfolio_Tours {
 		$brand_id = (int) get_post_meta( $tour_id, '_lnkup_brand_id', true );
 		return array(
 			'id'          => (int) $tour_id,
-			'title'       => get_the_title( $tour_id ),
+			'title'       => lnkup_plain_title( $tour_id ),
 			'type'        => (string) ( get_post_meta( $tour_id, '_lnkup_tour_type', true ) ?: 'tour' ),
 			'status'      => self::tour_status( $tour_id ),
 			'season'      => (string) get_post_meta( $tour_id, '_lnkup_season', true ),
-			'brand'       => $brand_id ? array( 'id' => $brand_id, 'name' => get_the_title( $brand_id ) ) : null,
+			'brand'       => $brand_id ? array( 'id' => $brand_id, 'name' => lnkup_plain_title( $brand_id ) ) : null,
 			'cover_url'   => (string) get_the_post_thumbnail_url( $tour_id, 'medium_large' ),
 			'stop_count'  => count( $stops ),
 			'counts'      => $counts,
@@ -301,7 +301,7 @@ class LNKup_Portfolio_Tours {
 		return array(
 			'event_id'         => (int) $event_id,
 			'key'              => (string) get_post_meta( $event_id, '_lnkup_occurrence_key', true ),
-			'title'            => get_the_title( $event_id ),
+			'title'            => lnkup_plain_title( $event_id ),
 			'order'            => (int) get_post_meta( $event_id, '_lnkup_tour_stop_order', true ),
 			'event_date'       => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
 			'start_time'       => (string) get_post_meta( $event_id, '_lnkup_start_time', true ),
@@ -496,7 +496,7 @@ class LNKup_Portfolio_Tours {
 		if ( is_wp_error( $clean ) ) {
 			return array( 'index' => $index, 'result' => 'failed', 'message' => $clean->get_error_message() );
 		}
-		$title = '' !== $clean['title'] ? $clean['title'] : trim( get_the_title( $tour_id ) . ( '' !== $clean['city'] ? ' — ' . $clean['city'] : '' ) );
+		$title = '' !== $clean['title'] ? $clean['title'] : trim( lnkup_plain_title( $tour_id ) . ( '' !== $clean['city'] ? ' — ' . $clean['city'] : '' ) );
 		try {
 			$created = LNKup_Organizer_Onboarding::create_event_from_request(
 				array(
@@ -821,7 +821,7 @@ class LNKup_Portfolio_Tours {
 	private static function publish_stop( $tour_id, $event_id, $organizer_id ) {
 		$base = array(
 			'event_id' => (int) $event_id,
-			'title'    => get_the_title( $event_id ),
+			'title'    => lnkup_plain_title( $event_id ),
 			'city'     => (string) get_post_meta( $event_id, '_lnkup_city', true ),
 		);
 		if ( 'publish' === get_post_status( $event_id ) ) {
@@ -1047,7 +1047,7 @@ class LNKup_Portfolio_Tours {
 				'city'       => (string) get_post_meta( $post->ID, '_lnkup_city', true ),
 				'state_code' => (string) get_post_meta( $post->ID, '_lnkup_state', true ),
 				'state'      => self::stop_state( $post->ID ),
-				'tour'       => $event_tour && 'lnkup_tour' === get_post_type( $event_tour ) ? array( 'id' => $event_tour, 'title' => get_the_title( $event_tour ), 'type' => (string) get_post_meta( $event_tour, '_lnkup_tour_type', true ) ) : null,
+				'tour'       => $event_tour && 'lnkup_tour' === get_post_type( $event_tour ) ? array( 'id' => $event_tour, 'title' => lnkup_plain_title( $event_tour ), 'type' => (string) get_post_meta( $event_tour, '_lnkup_tour_type', true ) ) : null,
 				'manage_url' => add_query_arg( 'event', (int) $post->ID, lnkup_page_url_helper( 'organizer-dashboard' ) ),
 			);
 		}

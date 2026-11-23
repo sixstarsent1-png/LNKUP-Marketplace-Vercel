@@ -6,8 +6,17 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
-**Plugin version:** 12.33.1  
+**Plugin version:** 12.33.2  
 **Theme version:** 1.6.1
+
+### v12.33.2 (Broken app fixes: "&amp;" text, receipts, vendor switching, event passes, Home insights)
+
+- **"&" no longer shows as `&amp;` / `&#038;`:** organizer-saved titles were stored kses-encoded and `get_the_title()` added `&#038;` / `&#8217;`. New `lnkup_plain_title()` / `lnkup_plain_text()` (decode, keep `<` `>` encoded) replace `get_the_title()` across `includes/` JSON payloads; `LNKup_Plain_Titles` stops storing `&amp;` for LNKup post types and a one-time migration (`lnkup_plain_titles_migrated`, run by cron after upgrade) decodes existing titles and rebuilds the marketplace index. Expo `wpFetchJson` and Next `wpFetchJson` also decode entities in every JSON string except `html` / `*_html` fields (covers Communications-plugin text until that plugin is redeployed).
+- **Receipts / invoices open from the app:** `view_url` / `pdf_url` are now signed for one hour (`LNKup_Signed_Links`, HMAC over type, id, user, expiry). `/financial/receipts/{id}/view` and `/financial/invoices/{id}/pdf` accept a logged-in owner or a valid signature; ownership checks still run. The app fetches a fresh signed URL on tap. Fixes the same dead links on the web app and dashboard.
+- **Vendor profile switching (mobile):** `vendors/[profileId]` is keyed per vendor (stack `getId` + keyed body) with stale-response guards, so opening another vendor never shows the previous one; Find vendors opens a profile on tap with a separate select checkbox. Web drawer aborts superseded profile requests.
+- **Event passes crash fixed:** booth and load-in objects from `/operations/vendor-homes` are formatted to text; pass unlock reads `qr_pass` / `packet_status` correctly.
+- **Organizer Home insights:** the card now shows `recommended_actions` and event health from `weak_events` / `top_events` (it read keys the server never sends).
+- **Tests:** new `text-and-links-test.php` (22), Expo Jest 190/190 (new decode, operations, insights tests); directory, settings, matching, passport, trust, organizer, booking and financial suites pass.
 
 ### v12.33.1 (Organizer Vendors: settings save, Discover speed, Find Vendors gating)
 

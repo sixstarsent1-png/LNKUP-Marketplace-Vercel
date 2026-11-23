@@ -148,7 +148,7 @@ class LNKup_Org_Workspace {
 					<ul class="lnkup-staff-home__list">
 						<?php foreach ( array_slice( $roster_events, 0, 50 ) as $event_id ) : ?>
 							<li>
-								<strong><?php echo esc_html( get_the_title( $event_id ) ); ?></strong>
+								<strong><?php echo esc_html( lnkup_plain_title( $event_id ) ); ?></strong>
 								<span class="lnkup-muted"><?php echo esc_html( (string) get_post_meta( $event_id, '_lnkup_event_date', true ) ); ?></span>
 								<a href="<?php echo esc_url( add_query_arg( array( 'event' => $event_id, 'roster' => 1 ), lnkup_page_url_helper( 'organizer-dashboard' ) ) ); ?>"><?php esc_html_e( 'Roster', 'lnkup-marketplace' ); ?></a>
 								<?php if ( LNKup_Feature_Flags::organizer_ops() ) : ?>
@@ -172,6 +172,6 @@ class LNKup_Org_Workspace {
 		if ( 'all' === $scope_type ) {
 			return __( 'All events', 'lnkup-marketplace' );
 		}
-		return ( 'tour' === $scope_type ? __( 'Tour: ', 'lnkup-marketplace' ) : __( 'Event: ', 'lnkup-marketplace' ) ) . get_the_title( $scope_id );
+		return ( 'tour' === $scope_type ? __( 'Tour: ', 'lnkup-marketplace' ) : __( 'Event: ', 'lnkup-marketplace' ) ) . lnkup_plain_title( $scope_id );
 	}
 }

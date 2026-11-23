@@ -176,7 +176,7 @@ class LNKup_Vendor_Reputation {
 		if ( $slug ) {
 			return $slug;
 		}
-		$name = get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: get_the_title( $profile_id );
+		$name = get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: lnkup_plain_title( $profile_id );
 		$slug = sanitize_title( $name );
 		if ( ! $slug ) {
 			$slug = 'vendor-' . $profile_id;

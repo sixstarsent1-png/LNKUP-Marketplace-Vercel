@@ -602,7 +602,7 @@ class LNKup_Vendor_Dashboard_Data {
 		$fee      = $opp_id ? (float) get_post_meta( $opp_id, '_lnkup_vendor_fee', true ) : 0;
 		return array(
 			'event_id'       => $event_id,
-			'event_title'    => $event ? $event->post_title : $app->post_title,
+			'event_title'    => lnkup_plain_title( $event ? $event : $app ),
 			'city'           => $city,
 			'state'          => $state,
 			'date'           => $date,

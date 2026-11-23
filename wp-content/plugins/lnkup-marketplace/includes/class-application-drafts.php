@@ -111,7 +111,7 @@ class LNKup_Application_Drafts {
 							'post_type'   => 'lnkup_application',
 							'post_status' => self::POST_STATUS,
 							'post_author' => $user_id,
-							'post_title'  => sprintf( 'Draft: %s', get_the_title( $opportunity_id ) ),
+							'post_title'  => sprintf( 'Draft: %s', lnkup_plain_title( $opportunity_id ) ),
 						),
 						true
 					);
@@ -369,8 +369,8 @@ class LNKup_Application_Drafts {
 			'state'             => (string) get_post_meta( $draft_id, '_lnkup_draft_state', true ),
 			'opportunity_id'    => $opportunity_id,
 			'event_id'          => $event_id,
-			'event_name'        => $event_id ? get_the_title( $event_id ) : (string) ( $card['event_name'] ?? '' ),
-			'opportunity_title' => $opportunity_id ? get_the_title( $opportunity_id ) : '',
+			'event_name'        => $event_id ? lnkup_plain_title( $event_id ) : (string) ( $card['event_name'] ?? '' ),
+			'opportunity_title' => $opportunity_id ? lnkup_plain_title( $opportunity_id ) : '',
 			'event_date'        => (string) ( $card['event_date'] ?? '' ),
 			'location_label'    => (string) ( $card['location_label'] ?? '' ),
 			'deadline'          => (string) ( $card['deadline'] ?? '' ),

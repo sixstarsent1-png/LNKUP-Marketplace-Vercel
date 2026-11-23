@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, View } from "react-native"
 
 import type {
+  OrganizerEventHighlight,
   OrganizerExperimentSnapshot,
   OrganizerFunnelDiagnostic,
   OrganizerRecommendation,
@@ -25,18 +26,22 @@ export function OrganizerIntelligenceCard({
   experiments,
   diagnostics,
   recommendations,
+  eventHighlights = [],
   onRecommendationPress,
+  onEventPress,
 }: {
   experiments: OrganizerExperimentSnapshot[]
   diagnostics: OrganizerFunnelDiagnostic[]
   recommendations: OrganizerRecommendation[]
+  eventHighlights?: OrganizerEventHighlight[]
   onRecommendationPress: (recommendation: OrganizerRecommendation) => RecommendationAction
+  onEventPress?: (eventId: string) => void
 }) {
   const experiment = experiments[0]
   const recommendation = recommendations[0]
   const diagnosticRows = diagnostics.slice(0, 2)
 
-  if (!experiment && !recommendation && diagnosticRows.length === 0) return null
+  if (!experiment && !recommendation && diagnosticRows.length === 0 && eventHighlights.length === 0) return null
 
   const recommendationAction = recommendation ? onRecommendationPress(recommendation) : null
 
@@ -77,14 +82,39 @@ export function OrganizerIntelligenceCard({
         </Surface>
       ) : null}
 
+      {eventHighlights.length > 0 ? (
+        <Surface variant="hero" style={styles.panel} testID="organizer-mobile-event-health">
+          <Meta style={styles.panelTitle}>
+            {eventHighlights[0].tone === "attention" ? "Events that need attention" : "Your strongest event"}
+          </Meta>
+          {eventHighlights.map((event) => (
+            <Pressable
+              key={event.eventId}
+              onPress={onEventPress ? () => onEventPress(event.eventId) : undefined}
+              disabled={!onEventPress}
+              accessibilityRole={onEventPress ? "button" : undefined}
+              accessibilityLabel={`${event.title}. Health ${event.score} out of 100${event.label ? `, ${event.label}` : ""}`}
+            >
+              <Meta>
+                {event.title} · {event.score}/100{event.label ? ` · ${event.label}` : ""}
+              </Meta>
+            </Pressable>
+          ))}
+        </Surface>
+      ) : null}
+
       {recommendation && recommendationAction ? (
         <Surface variant="hero" style={styles.panel} testID="organizer-mobile-top-recommendation">
           <Meta style={styles.panelTitle}>{recommendation.issue}</Meta>
-          <Meta>{recommendation.candidateAction}</Meta>
-          <Meta>Expected impact: {recommendation.expectedMetricShift}</Meta>
-          <Meta>
-            Confidence: {humanizeKey(recommendation.confidenceLabel)} · {decisionLabel(recommendation.decision.status)}
-          </Meta>
+          {recommendation.candidateAction ? <Meta>{recommendation.candidateAction}</Meta> : null}
+          {recommendation.kind !== "action" ? (
+            <>
+              <Meta>Expected impact: {recommendation.expectedMetricShift}</Meta>
+              <Meta>
+                Confidence: {humanizeKey(recommendation.confidenceLabel)} · {decisionLabel(recommendation.decision.status)}
+              </Meta>
+            </>
+          ) : null}
           <Pressable
             style={styles.actionButton}
             onPress={recommendationAction.onPress}

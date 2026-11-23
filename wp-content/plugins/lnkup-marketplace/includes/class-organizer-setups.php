@@ -95,7 +95,7 @@ class LNKup_Organizer_Setups {
 		}
 		$slots = array();
 		foreach ( $opps as $opp ) {
-			$row = array( 'opportunity_title' => html_entity_decode( get_the_title( $opp ), ENT_QUOTES, 'UTF-8' ) );
+			$row = array( 'opportunity_title' => html_entity_decode( lnkup_plain_title( $opp ), ENT_QUOTES, 'UTF-8' ) );
 			foreach ( self::SLOT_FIELDS as $meta => $key ) {
 				$value = get_post_meta( $opp->ID, $meta, true );
 				if ( '' !== $value && null !== $value ) {
@@ -113,7 +113,7 @@ class LNKup_Organizer_Setups {
 		$name  = trim( sanitize_text_field( $name ) );
 		$setup = array(
 			'id'              => 'setup_' . wp_generate_password( 10, false, false ),
-			'name'            => '' !== $name ? substr( $name, 0, 80 ) : html_entity_decode( get_the_title( $event ), ENT_QUOTES, 'UTF-8' ),
+			'name'            => '' !== $name ? substr( $name, 0, 80 ) : html_entity_decode( lnkup_plain_title( $event ), ENT_QUOTES, 'UTF-8' ),
 			'source_event_id' => $event_id,
 			'slots'           => $slots,
 			'created_at'      => current_time( 'mysql' ),
@@ -270,7 +270,7 @@ class LNKup_Organizer_Setups {
 		return new WP_REST_Response(
 			array(
 				'items'  => array_map( array( __CLASS__, 'format' ), self::all( $user_id ) ),
-				'events' => array_map( static fn( $e ) => array( 'id' => (int) $e->ID, 'title' => html_entity_decode( get_the_title( $e ), ENT_QUOTES, 'UTF-8' ) ), $events ),
+				'events' => array_map( static fn( $e ) => array( 'id' => (int) $e->ID, 'title' => html_entity_decode( lnkup_plain_title( $e ), ENT_QUOTES, 'UTF-8' ) ), $events ),
 				'max'    => self::MAX,
 			),
 			200

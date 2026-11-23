@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { isLiveApiEnabled } from "@/lib/api/config"
 import type { OrganizerVendorProfilePreview } from "@/lib/api/organizer-vendor-profile"
 import type { OrganizerVendorNoteSummary, OrganizerVendorTimelineItem } from "@/lib/api/organizer-crm"
@@ -82,6 +82,7 @@ export function useOrganizerVendorProfile(
   const [notes, setNotes] = useState<OrganizerVendorNoteSummary[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const requestRef = useRef<AbortController | null>(null)
 
   const fetchProfile = useCallback(async () => {
     if (!profileId || !enabled) return
@@ -95,13 +96,23 @@ export function useOrganizerVendorProfile(
       return
     }
 
+    // A newer vendor selection cancels this one so a slow response can't fill the wrong drawer.
+    requestRef.current?.abort()
+    const controller = new AbortController()
+    requestRef.current = controller
+    const isCurrent = () => requestRef.current === controller
+
     setLoading(true)
     setError(null)
+    setProfile(null)
+    setTimeline([])
+    setNotes([])
 
     try {
       const params = applicationId ? `?applicationId=${encodeURIComponent(applicationId)}` : ""
-      const response = await fetch(`/api/organizer/vendors/${profileId}${params}`)
+      const response = await fetch(`/api/organizer/vendors/${profileId}${params}`, { signal: controller.signal })
       const data = await response.json()
+      if (!isCurrent()) return
 
       if (response.status === 404) {
         setProfile({
@@ -126,18 +137,24 @@ export function useOrganizerVendorProfile(
       setTimeline(payload.timeline ?? [])
       setNotes(payload.notes ?? [])
     } catch (err) {
+      if (!isCurrent()) return
       console.error("[useOrganizerVendorProfile]", err)
       setError(err instanceof Error ? err.message : "We couldn't load this vendor profile.")
       setProfile(null)
       setTimeline([])
       setNotes([])
     } finally {
-      setLoading(false)
+      if (isCurrent()) {
+        requestRef.current = null
+        setLoading(false)
+      }
     }
   }, [profileId, applicationId, enabled, live])
 
   useEffect(() => {
     if (!profileId || !enabled) {
+      requestRef.current?.abort()
+      requestRef.current = null
       setProfile(null)
       setTimeline([])
       setNotes([])
@@ -145,6 +162,8 @@ export function useOrganizerVendorProfile(
     }
     fetchProfile()
   }, [profileId, enabled, fetchProfile])
+
+  useEffect(() => () => requestRef.current?.abort(), [])
 
   return { profile, timeline, notes, loading, error, retry: fetchProfile, isLive: live }
 }

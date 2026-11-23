@@ -199,7 +199,7 @@ class LNKup_Booths {
 		$name   = '';
 		if ( $app_id ) {
 			$profile_id = (int) get_post_meta( $app_id, '_lnkup_vendor_profile_id', true );
-			$name = $profile_id ? ( get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: get_the_title( $profile_id ) ) : '';
+			$name = $profile_id ? ( get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: lnkup_plain_title( $profile_id ) ) : '';
 		}
 		return array(
 			'id'               => (int) $row['id'],

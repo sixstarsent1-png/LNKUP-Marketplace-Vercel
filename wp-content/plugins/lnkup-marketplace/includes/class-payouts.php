@@ -132,7 +132,7 @@ class LNKup_Payouts {
 		return array(
 			'id'                => (int) $row['id'],
 			'event_id'          => (int) $row['event_id'],
-			'event_title'       => (int) $row['event_id'] ? get_the_title( (int) $row['event_id'] ) : '',
+			'event_title'       => (int) $row['event_id'] ? lnkup_plain_title( (int) $row['event_id'] ) : '',
 			'gross_amount'      => (float) $row['gross_amount'],
 			'platform_fee'      => (float) $row['platform_fee'],
 			'net_amount'        => (float) $row['net_amount'],

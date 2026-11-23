@@ -579,13 +579,13 @@ class LNKup_Notifications {
 		$organizer_id   = (int) get_post_meta( $app_id, '_lnkup_organizer_user_id', true );
 		$profile_id     = (int) get_post_meta( $app_id, '_lnkup_vendor_profile_id', true );
 
-		$event_title       = $event_id ? get_the_title( $event_id ) : '';
-		$opportunity_title = $opportunity_id ? get_the_title( $opportunity_id ) : '';
+		$event_title       = $event_id ? lnkup_plain_title( $event_id ) : '';
+		$opportunity_title = $opportunity_id ? lnkup_plain_title( $opportunity_id ) : '';
 		$display_title     = $event_title ? $event_title : ( $opportunity_title ? $opportunity_title : __( 'your opportunity', 'lnkup-marketplace' ) );
 
 		$vendor_business = '';
 		if ( $profile_id ) {
-			$vendor_business = get_the_title( $profile_id );
+			$vendor_business = lnkup_plain_title( $profile_id );
 		}
 		if ( ! $vendor_business ) {
 			$vendor = get_userdata( $vendor_user_id );
@@ -1547,7 +1547,7 @@ class LNKup_Notifications {
 
 		$vendor = get_userdata( $vendor_id );
 		$profiles = array_values( array_filter( array( (int) lnkup_get_vendor_profile_id( (int) $vendor_id ) ) ) );
-		$business = ! empty( $profiles[0] ) ? get_the_title( (int) $profiles[0] ) : ( $vendor ? $vendor->display_name : '' );
+		$business = ! empty( $profiles[0] ) ? lnkup_plain_title( (int) $profiles[0] ) : ( $vendor ? $vendor->display_name : '' );
 
 		$title = (string) ( $event['title'] ?? __( 'External event', 'lnkup-marketplace' ) );
 		$subject = sprintf(
@@ -2077,7 +2077,7 @@ class LNKup_Notifications {
 			$body .= '<p>' . sprintf(
 				/* translators: %s: event title */
 				esc_html__( 'An organizer invited you regarding: %s', 'lnkup-marketplace' ),
-				esc_html( get_the_title( $event_post ) )
+				esc_html( lnkup_plain_title( $event_post ) )
 			) . '</p>';
 		}
 
@@ -2119,7 +2119,7 @@ class LNKup_Notifications {
 
 		$vendor = get_userdata( $vendor_id );
 		$profiles = array_values( array_filter( array( (int) lnkup_get_vendor_profile_id( (int) $vendor_id ) ) ) );
-		$business = ! empty( $profiles[0] ) ? get_the_title( (int) $profiles[0] ) : ( $vendor ? $vendor->display_name : '' );
+		$business = ! empty( $profiles[0] ) ? lnkup_plain_title( (int) $profiles[0] ) : ( $vendor ? $vendor->display_name : '' );
 
 		$subject = sprintf(
 			/* translators: %s: event title */
@@ -2524,7 +2524,7 @@ class LNKup_Notifications {
 			return;
 		}
 		$event_id   = absint( $event_id );
-		$title      = get_the_title( $event_id );
+		$title      = lnkup_plain_title( $event_id );
 		$ops_url    = add_query_arg( 'view', 'operations', lnkup_page_url_helper( 'vendor-dashboard' ) );
 		$body       = self::email_paragraphs( (string) $message );
 		$body      .= '<p style="margin:0 0 16px;font-weight:700;font-size:16px;">' . esc_html( $title ) . '</p>';

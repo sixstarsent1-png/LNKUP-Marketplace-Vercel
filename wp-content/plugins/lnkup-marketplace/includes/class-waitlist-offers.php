@@ -111,7 +111,7 @@ class LNKup_Waitlist_Offers {
 			$rows[]     = array(
 				'id'          => (int) $app_id,
 				'position'    => (int) get_post_meta( $app_id, self::POSITION_META, true ),
-				'vendor_name' => $profile_id ? ( (string) get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: get_the_title( $profile_id ) ) : '#' . $app_id,
+				'vendor_name' => $profile_id ? ( (string) get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: lnkup_plain_title( $profile_id ) ) : '#' . $app_id,
 				'category'    => (string) get_post_meta( $app_id, '_lnkup_selected_category', true ),
 				'added_at'    => (string) get_post_meta( $app_id, '_lnkup_decided_at', true ),
 			);
@@ -336,7 +336,7 @@ class LNKup_Waitlist_Offers {
 		if ( ! $vendor || ! class_exists( 'LNKup_Notifications' ) ) {
 			return;
 		}
-		$event    = get_the_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) );
+		$event    = lnkup_plain_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) );
 		$deadline = wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $expires . ' UTC' ) );
 		LNKup_Notifications::send(
 			$vendor->user_email,
@@ -363,7 +363,7 @@ class LNKup_Waitlist_Offers {
 		if ( ! $organizer || ! class_exists( 'LNKup_Notifications' ) ) {
 			return;
 		}
-		$event = get_the_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) );
+		$event = lnkup_plain_title( (int) get_post_meta( $app_id, '_lnkup_event_id', true ) );
 		LNKup_Notifications::send(
 			$organizer->user_email,
 			/* translators: %s: event name */

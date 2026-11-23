@@ -79,7 +79,7 @@ class LNKup_Organizer_Onboarding {
 	private static function event_create_response( int $event_id, bool $idempotent = false ): array {
 		return array(
 			'event_id'       => $event_id,
-			'event_title'    => get_the_title( $event_id ),
+			'event_title'    => lnkup_plain_title( $event_id ),
 			'event_date'     => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
 			'event_city'     => (string) get_post_meta( $event_id, '_lnkup_city', true ),
 			'view_event_url' => add_query_arg( 'event', $event_id, lnkup_page_url_helper( 'organizer-dashboard' ) ),
@@ -891,7 +891,7 @@ class LNKup_Organizer_Onboarding {
 				: __( 'Event updated.', 'lnkup-marketplace' ),
 			'vendors_notified' => $notified,
 			'event_id'       => $event_id,
-			'event_title'    => get_the_title( $event_id ),
+			'event_title'    => lnkup_plain_title( $event_id ),
 			'event_date'     => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
 			'event_city'     => (string) get_post_meta( $event_id, '_lnkup_city', true ),
 			'view_event_url' => add_query_arg( 'event', (int) $event_id, $dash_url ),
@@ -1060,7 +1060,7 @@ class LNKup_Organizer_Onboarding {
 				'opportunity_id' => (int) ( $result['opportunity_id'] ?? 0 ),
 				'vendor_fee'     => (float) ( $result['vendor_fee'] ?? 0 ),
 				'spots_total'    => (int) ( $result['spots_total'] ?? 0 ),
-				'title'          => (string) ( $result['opportunity_title'] ?? get_the_title( (int) ( $result['opportunity_id'] ?? 0 ) ) ),
+				'title'          => (string) ( $result['opportunity_title'] ?? lnkup_plain_title( (int) ( $result['opportunity_id'] ?? 0 ) ) ),
 			);
 			if ( null === $first ) {
 				$first = $result;
@@ -1134,7 +1134,7 @@ class LNKup_Organizer_Onboarding {
 					return array(
 						'message'        => __( 'This event was already duplicated.', 'lnkup-marketplace' ),
 						'event_id'       => $existing,
-						'event_title'    => get_the_title( $existing ),
+						'event_title'    => lnkup_plain_title( $existing ),
 						'event_date'     => (string) get_post_meta( $existing, '_lnkup_event_date', true ),
 						'idempotent'     => true,
 						'view_event_url' => add_query_arg( 'event', $existing, lnkup_page_url_helper( 'organizer-dashboard' ) ),

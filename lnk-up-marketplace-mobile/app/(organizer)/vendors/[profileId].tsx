@@ -106,9 +106,16 @@ export default function OrganizerVendorProfileScreen() {
     from?: string
     applicationId?: string
   }>()
-  const { auth } = useAuth()
   const id = String(profileId ?? "")
   const appId = applicationId ? String(applicationId) : undefined
+  // The stack can reuse this screen for another vendor; keying resets every piece of state.
+  return <OrganizerVendorProfile key={`${id}:${appId ?? ""}`} id={id} appId={appId} from={from} />
+}
+
+function OrganizerVendorProfile({ id, appId, from }: { id: string; appId?: string; from?: string }) {
+  const { auth } = useAuth()
+  const loadSeq = useRef(0)
+  const sideSeq = useRef(0)
   const [initialLoad, setInitialLoad] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<AppErrorShape | null>(null)
@@ -129,18 +136,23 @@ export default function OrganizerVendorProfileScreen() {
   const load = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
       if (!id) return
+      const seq = ++loadSeq.current
       if (mode === "refresh") setRefreshing(true)
       else setInitialLoad(true)
       setError(null)
       try {
         const data = await fetchOrganizerVendorProfile(id, { auth, applicationId: appId })
+        if (seq !== loadSeq.current) return
         setProfile(data)
       } catch (err) {
+        if (seq !== loadSeq.current) return
         setError(appErrorFromWp(err))
         setProfile(null)
       } finally {
-        setInitialLoad(false)
-        setRefreshing(false)
+        if (seq === loadSeq.current) {
+          setInitialLoad(false)
+          setRefreshing(false)
+        }
       }
     },
     [auth, id, appId],
@@ -152,11 +164,13 @@ export default function OrganizerVendorProfileScreen() {
 
   const loadSide = useCallback(async () => {
     if (!id) return
+    const seq = ++sideSeq.current
     setNotesError(null)
     const [notesResult, requestsResult] = await Promise.allSettled([
       fetchVendorNotes(id, auth),
       appId ? fetchOrganizerRequests(auth, { force: true }) : Promise.resolve(null),
     ])
+    if (seq !== sideSeq.current) return
     if (notesResult.status === "fulfilled") setNotes(notesResult.value)
     else setNotesError("Notes didn't load. Pull to refresh.")
     if (requestsResult.status === "fulfilled" && requestsResult.value) {

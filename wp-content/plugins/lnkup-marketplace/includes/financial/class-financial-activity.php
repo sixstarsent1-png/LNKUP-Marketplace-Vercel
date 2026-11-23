@@ -88,7 +88,7 @@ class LNKup_Financial_Activity {
 			$event_id = absint( get_post_meta( (int) $row['entity_id'], '_lnkup_event_id', true ) );
 		}
 		if ( $event_id ) {
-			$event_name = get_the_title( $event_id );
+			$event_name = lnkup_plain_title( $event_id );
 		}
 
 		$label = ! empty( $meta['label'] ) ? (string) $meta['label'] : (string) ( $row['message'] ?? '' );

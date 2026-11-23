@@ -59,6 +59,16 @@ export type OrganizerRecommendation = {
   }
   experimentId?: string
   href?: string
+  /** "action" = rule-based recommended action (no experiment impact or confidence to show). */
+  kind?: "experiment" | "action"
+}
+
+export type OrganizerEventHighlight = {
+  eventId: string
+  title: string
+  score: number
+  label: string
+  tone: "attention" | "strong"
 }
 
 function normalizeSegmentType(value: unknown): OrganizerExperimentSegmentKey {
@@ -166,6 +176,80 @@ export function mapOrganizerRecommendations(input: unknown): OrganizerRecommenda
       }
     })
     .filter((item) => item.id.length > 0)
+}
+
+const ACTION_STAGE: Record<string, string> = {
+  send_payment_reminder: "payment",
+  view_payment_funnel: "payment",
+  approve_waitlisted: "application",
+  improve_opportunity: "apply",
+}
+
+function priorityConfidence(priority: unknown): OrganizerRecommendation["confidenceLabel"] {
+  if (priority === "critical" || priority === "high") return "high"
+  if (priority === "medium") return "medium"
+  return "low"
+}
+
+/**
+ * Rule-based actions from /intelligence/organizer/summary (`recommended_actions`):
+ * { priority, action_key, title, reason, deadline, cta: { label, url } }.
+ */
+export function mapOrganizerRecommendedActions(input: unknown): OrganizerRecommendation[] {
+  if (!Array.isArray(input)) return []
+  return input
+    .map((item, index) => {
+      const value = (item ?? {}) as Record<string, unknown>
+      const key = String(value.action_key ?? "")
+      const cta = (value.cta ?? {}) as Record<string, unknown>
+      const title = String(value.title ?? "").trim()
+      const reason = String(value.reason ?? "").trim()
+      return {
+        id: `${key || "action"}-${index + 1}`,
+        issue: title || reason,
+        funnelStage: ACTION_STAGE[key] ?? key,
+        segment: { type: "city" as const, value: "all" },
+        candidateAction: reason && reason !== title ? reason : "",
+        expectedMetricShift: "",
+        confidenceLabel: priorityConfidence(value.priority),
+        decision: {
+          status: "iterate" as const,
+          dueAt: typeof value.deadline === "string" && value.deadline ? value.deadline : new Date().toISOString(),
+        },
+        href: typeof cta.url === "string" && cta.url ? cta.url : undefined,
+        kind: "action" as const,
+      }
+    })
+    .filter((item) => item.issue.length > 0)
+}
+
+function mapEventRows(input: unknown): Array<{ eventId: string; title: string; score: number; label: string }> {
+  if (!Array.isArray(input)) return []
+  return input
+    .map((item) => {
+      const value = (item ?? {}) as Record<string, unknown>
+      return {
+        eventId: String(value.event_id ?? ""),
+        title: String(value.title ?? ""),
+        score: Number(value.score ?? 0) || 0,
+        label: String(value.label ?? ""),
+      }
+    })
+    .filter((row) => row.eventId && row.title)
+}
+
+/**
+ * Event health from `weak_events` / `top_events`: up to two events that need attention (score below 70),
+ * otherwise the strongest event.
+ */
+export function mapOrganizerEventHighlights(weak: unknown, top: unknown): OrganizerEventHighlight[] {
+  const attention = mapEventRows(weak)
+    .filter((row) => row.score < 70)
+    .slice(0, 2)
+    .map((row) => ({ ...row, tone: "attention" as const }))
+  if (attention.length) return attention
+  const best = mapEventRows(top)[0]
+  return best ? [{ ...best, tone: "strong" as const }] : []
 }
 
 const confidenceRank: Record<OrganizerRecommendation["confidenceLabel"], number> = {

@@ -473,7 +473,7 @@ class LNKup_Document_Vault {
 			'expires_on'     => (string) get_post_meta( $doc_id, '_lnkup_expiration_date', true ),
 			'organizer_name' => $organizer ? $organizer->display_name : '',
 			'event_id'       => (int) $row['event_id'],
-			'event_title'    => (int) $row['event_id'] ? get_the_title( (int) $row['event_id'] ) : '',
+			'event_title'    => (int) $row['event_id'] ? lnkup_plain_title( (int) $row['event_id'] ) : '',
 			'application_id' => (int) $row['application_id'],
 			'granted_at'     => (string) $row['granted_at'],
 			'revoked_at'     => $row['revoked_at'],

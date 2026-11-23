@@ -12,7 +12,13 @@ export default function OrganizerVendorsLayout() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="find" />
-      <Stack.Screen name="[profileId]" />
+      <Stack.Screen
+        name="[profileId]"
+        getId={({ params }) => {
+          const p = params as { profileId?: string; applicationId?: string } | undefined
+          return `${p?.profileId ?? ""}:${p?.applicationId ?? ""}`
+        }}
+      />
     </Stack>
   )
 }

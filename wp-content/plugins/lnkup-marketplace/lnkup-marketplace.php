@@ -3,7 +3,7 @@
  * Plugin Name: LNKup Marketplace
  * Plugin URI: https://lnkup.com
  * Description: Custom marketplace functionality for LNKup — vendor opportunities, applications, payments, and event management.
- * Version: 12.33.1
+ * Version: 12.33.2
  * Author: LNKup
  * Author URI: https://lnkup.com
  * License: GPL v2 or later
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'LNKUP_VERSION', '12.33.1' );
+define( 'LNKUP_VERSION', '12.33.2' );
 define( 'LNKUP_PLUGIN_FILE', __FILE__ );
 define( 'LNKUP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LNKUP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -120,6 +120,7 @@ $lnkup_core_files = array(
 	'includes/class-geocoder.php',
 	'includes/class-trending.php',
 	'includes/class-marketplace-index.php',
+	'includes/class-plain-titles.php',
 	'includes/class-discovery.php',
 	'includes/class-vendor-personalization.php',
 	'includes/class-saved-searches.php',
@@ -279,6 +280,7 @@ $lnkup_core_files = array(
 	'includes/class-manual-provider.php',
 	'includes/class-transactions.php',
 	'includes/class-invoices.php',
+	'includes/financial/class-signed-links.php',
 	'includes/class-receipts.php',
 	'includes/class-wallet.php',
 	'includes/class-credits.php',
@@ -424,6 +426,7 @@ function lnkup_marketplace_init() {
 	LNKup_Meta::init();
 	LNKup_Capabilities::init();
 	LNKup_Marketplace_Index::init();
+	LNKup_Plain_Titles::init();
 	LNKup_Marketplace_Analytics::init();
 	LNKup_Marketplace_Cron::init();
 	LNKup_Activation_Emails::init();
@@ -668,6 +671,10 @@ function lnkup_maybe_upgrade_db() {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			error_log( 'LNKup connector admin role restore failed: ' . $connector_role_error->getMessage() );
 		}
+	}
+
+	if ( ! get_option( LNKup_Plain_Titles::MIGRATION_OPTION ) && ! wp_next_scheduled( 'lnkup_plain_titles_migrate' ) ) {
+		wp_schedule_single_event( time() + 30, 'lnkup_plain_titles_migrate' );
 	}
 
 	update_option( 'lnkup_db_version', LNKUP_VERSION );

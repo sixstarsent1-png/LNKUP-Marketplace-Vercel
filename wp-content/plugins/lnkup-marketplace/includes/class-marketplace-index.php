@@ -299,7 +299,7 @@ class LNKup_Marketplace_Index {
 			'opportunity_id'      => $opportunity_id,
 			'event_id'            => $event_id,
 			'organizer_user_id'   => $organizer_id,
-			'title'               => $event->post_title,
+			'title'               => lnkup_plain_title( $event ),
 			'excerpt'             => wp_trim_words( $opp->post_content ?: $event->post_content, 30 ),
 			'city'                => (string) get_post_meta( $event_id, '_lnkup_city', true ),
 			'state'               => (string) get_post_meta( $event_id, '_lnkup_state', true ),

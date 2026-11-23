@@ -400,7 +400,7 @@ class LNKup_Intelligence_REST {
 			static function ( $id ) {
 				$event_id = (int) get_post_meta( $id, '_lnkup_event_id', true );
 				return array(
-					'event'  => $event_id ? get_the_title( $event_id ) : '',
+					'event'  => $event_id ? lnkup_plain_title( $event_id ) : '',
 					'status' => lnkup_application_status_label( (string) get_post_meta( $id, '_lnkup_application_status', true ) ),
 					'date'   => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
 				);
@@ -438,7 +438,7 @@ class LNKup_Intelligence_REST {
 			$sc = LNKup_Event_Score::compute( $event_id );
 			$board[] = array(
 				'event_id' => $event_id,
-				'title'    => get_the_title( $event_id ),
+				'title'    => lnkup_plain_title( $event_id ),
 				'score'    => $sc['score'],
 				'label'    => $sc['label'],
 				'city'     => get_post_meta( $event_id, '_lnkup_city', true ),
@@ -456,7 +456,7 @@ class LNKup_Intelligence_REST {
 	private static function event_dto( $event_id ) {
 		return array(
 			'event_id'           => $event_id,
-			'title'              => get_the_title( $event_id ),
+			'title'              => lnkup_plain_title( $event_id ),
 			'score'              => LNKup_Event_Score::compute( $event_id ),
 			'application_funnel' => LNKup_Funnel_Analytics::application_funnel( $event_id ),
 			'payment_funnel'     => LNKup_Funnel_Analytics::payment_funnel( $event_id ),

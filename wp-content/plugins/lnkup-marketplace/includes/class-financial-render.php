@@ -82,7 +82,7 @@ class LNKup_Financial_Render {
 						}
 						$activity = lnkup_payment_activity_date( $payment );
 						$when     = $activity ? date_i18n( 'M j, Y', strtotime( $activity ) ) : '';
-						$meta = implode( ' · ', array_filter( array( $event_id ? get_the_title( $event_id ) : '', $when ) ) );
+						$meta = implode( ' · ', array_filter( array( $event_id ? lnkup_plain_title( $event_id ) : '', $when ) ) );
 						?>
 						<li class="lnkup-request-row">
 							<div class="lnkup-request-row__copy">

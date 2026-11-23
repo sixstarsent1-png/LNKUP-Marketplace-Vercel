@@ -414,7 +414,7 @@ class LNKup_Passport_Projection {
 			$out[]     = array(
 				'id'             => $invite->ID,
 				'event_id'       => $event_id,
-				'event_title'    => $event_id ? get_the_title( $event_id ) : '',
+				'event_title'    => $event_id ? lnkup_plain_title( $event_id ) : '',
 				'event_date'     => $event_id ? (string) get_post_meta( $event_id, '_lnkup_event_date', true ) : '',
 				'organizer_name' => $organizer ? $organizer->display_name : '',
 				'tour_id'        => (int) get_post_meta( $invite->ID, '_lnkup_tour_id', true ),
@@ -450,7 +450,7 @@ class LNKup_Passport_Projection {
 				'tag'           => (string) ( $item['tag'] ?? '' ),
 				'is_cover'      => ! empty( $item['is_cover'] ),
 				'event_id'      => $event_id,
-				'event_title'   => $event_id ? get_the_title( $event_id ) : '',
+				'event_title'   => $event_id ? lnkup_plain_title( $event_id ) : '',
 				'source'        => 'vendor_uploaded',
 			);
 		}

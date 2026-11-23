@@ -304,11 +304,25 @@ class LNKup_Invoices {
 			'paid_amount'    => (float) $row['paid_amount'],
 			'due_date'       => $row['due_date'],
 			'event_id'       => (int) $row['event_id'],
-			'event_title'    => (int) $row['event_id'] ? get_the_title( (int) $row['event_id'] ) : '',
+			'event_title'    => (int) $row['event_id'] ? lnkup_plain_title( (int) $row['event_id'] ) : '',
 			'issue_date'     => $row['issue_date'],
 			'created_at'     => $row['created_at'],
-			'pdf_url'        => rest_url( 'lnkup/v1/financial/invoices/' . (int) $row['id'] . '/pdf' ),
+			'pdf_url'        => self::signed_pdf_url( $row ),
 		);
+	}
+
+	/**
+	 * PDF URL signed for the viewer (vendor or organizer on the invoice), so it opens without a login.
+	 *
+	 * @param array $row Invoice row.
+	 * @return string
+	 */
+	public static function signed_pdf_url( $row ) {
+		$url     = rest_url( 'lnkup/v1/financial/invoices/' . (int) $row['id'] . '/pdf' );
+		$viewer  = get_current_user_id();
+		$parties = array( (int) $row['vendor_user_id'], (int) ( $row['organizer_user_id'] ?? 0 ) );
+		$user_id = in_array( $viewer, $parties, true ) ? $viewer : (int) $row['vendor_user_id'];
+		return LNKup_Signed_Links::sign_url( $url, 'invoice', (int) $row['id'], $user_id );
 	}
 
 	public static function get_items( $invoice_id ) {
@@ -331,13 +345,13 @@ class LNKup_Invoices {
 		$detail['verify_url'] = ! empty( $meta['verify_token'] )
 			? add_query_arg( 'lnkup_verify_invoice', $meta['verify_token'], home_url( '/' ) )
 			: '';
-		$detail['pdf_url'] = rest_url( 'lnkup/v1/financial/invoices/' . (int) $row['id'] . '/pdf' );
+		$detail['pdf_url'] = self::signed_pdf_url( $row );
 		return $detail;
 	}
 
 	public static function render_html( $invoice ) {
 		$items   = self::get_items( (int) $invoice['id'] );
-		$event   = (int) $invoice['event_id'] ? get_the_title( (int) $invoice['event_id'] ) : '';
+		$event   = (int) $invoice['event_id'] ? lnkup_plain_title( (int) $invoice['event_id'] ) : '';
 		$vendor  = get_userdata( (int) $invoice['vendor_user_id'] );
 		$org     = get_userdata( (int) $invoice['organizer_user_id'] );
 		$meta    = ! empty( $invoice['metadata'] ) ? json_decode( $invoice['metadata'], true ) : array();

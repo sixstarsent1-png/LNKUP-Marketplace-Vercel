@@ -85,7 +85,7 @@ class LNKup_Weather_Service {
 		}
 		$dto = self::for_event( $events[0]->ID );
 		$dto['has_event'] = true;
-		$dto['event_title'] = get_the_title( $events[0]->ID );
+		$dto['event_title'] = lnkup_plain_title( $events[0]->ID );
 		return $dto;
 	}
 
@@ -215,7 +215,7 @@ class LNKup_Weather_Service {
 		$outdoor = (bool) get_post_meta( $event_id, '_lnkup_outdoor', true );
 		return array(
 			'event_id'    => $event_id,
-			'title'       => get_the_title( $event_id ),
+			'title'       => lnkup_plain_title( $event_id ),
 			'city'        => get_post_meta( $event_id, '_lnkup_city', true ),
 			'state'       => get_post_meta( $event_id, '_lnkup_state', true ),
 			'venue'       => get_post_meta( $event_id, '_lnkup_venue_name', true ),

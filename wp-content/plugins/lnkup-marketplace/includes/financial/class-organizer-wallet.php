@@ -1060,7 +1060,7 @@ class LNKup_Organizer_Wallet {
 		$row['amount_cents'] = (int) round( (float) ( $row['amount'] ?? 0 ) * 100 );
 		$row['reference']    = array(
 			'payment_id'     => $payment_id,
-			'payment_title'  => $payment_id ? get_the_title( $payment_id ) : '',
+			'payment_title'  => $payment_id ? lnkup_plain_title( $payment_id ) : '',
 			'event_id'       => $payment_id ? (int) get_post_meta( $payment_id, '_lnkup_event_id', true ) : 0,
 			'paid_at'        => $payment_id ? (string) get_post_meta( $payment_id, '_lnkup_paid_at', true ) : '',
 			'payout_id'      => absint( $row['payout_id'] ?? 0 ),

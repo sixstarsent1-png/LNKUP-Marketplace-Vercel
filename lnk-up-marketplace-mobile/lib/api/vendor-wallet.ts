@@ -321,6 +321,19 @@ export function mergeInvoicesAndReceipts(
   return merged.slice(0, limit)
 }
 
+/**
+ * Fresh, signed URL for a receipt or invoice. The system browser that opens it has no login, so the
+ * link carries a short-lived signature; refetching on tap keeps a list left open from going stale.
+ */
+export async function fetchDocumentUrl(doc: VendorInvoiceOrReceipt, auth?: WpAuth): Promise<string | undefined> {
+  const fallback = doc.pdfUrl || doc.wordpressUrl
+  if (!isLiveApiEnabled() || !auth || !/^\d+$/.test(doc.id)) return fallback
+  const path = doc.type === "receipt" ? `/financial/receipts/${doc.id}` : `/financial/invoices/${doc.id}`
+  const data = await wpFetchJson<Record<string, unknown>>(path, { auth })
+  const fresh = mapVendorInvoiceOrReceipt(data ?? {}, doc.type, 0)
+  return fresh.pdfUrl || fresh.wordpressUrl || fallback
+}
+
 export function mapVendorDispute(item: Record<string, unknown>): VendorDispute {
   const paymentId = item.payment_id ?? item.payment_post_id ?? item.paymentId
   const status = String(item.status ?? "open")

@@ -8,6 +8,34 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
+ * Plain text for JSON payloads: decodes entities such as &amp;, &#038; and &#8217;
+ * (from kses or wptexturize) so apps show "R&B", not "R&amp;B".
+ *
+ * Angle brackets stay encoded: some dashboard scripts insert these strings as HTML.
+ *
+ * @param mixed $value Raw value.
+ * @return string
+ */
+function lnkup_plain_text( $value ) {
+	$text = html_entity_decode( (string) $value, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+	return strtr( $text, array( '<' => '&lt;', '>' => '&gt;' ) );
+}
+
+/**
+ * Untexturized, decoded post title for JSON payloads.
+ * HTML views keep get_the_title() + esc_html().
+ *
+ * @param int|WP_Post|null $post Post or ID.
+ * @return string
+ */
+function lnkup_plain_title( $post ) {
+	if ( ! $post ) {
+		return '';
+	}
+	return lnkup_plain_text( get_post_field( 'post_title', $post, 'raw' ) );
+}
+
+/**
  * Whether the public marketplace (browse/apply) is open.
  */
 function lnkup_is_marketplace_open() {
@@ -690,7 +718,7 @@ function lnkup_format_opportunity( $opp ) {
 
 	return array(
 		'id'           => $opp->ID,
-		'name'         => $event ? $event->post_title : $opp->post_title,
+		'name'         => lnkup_plain_title( $event ? $event : $opp ),
 		'city'         => $event ? get_post_meta( $event_id, '_lnkup_city', true ) : '',
 		'state'        => $event ? get_post_meta( $event_id, '_lnkup_state', true ) : '',
 		'date'         => $event ? get_post_meta( $event_id, '_lnkup_event_date', true ) : '',
@@ -2223,7 +2251,7 @@ function lnkup_get_opportunity_card_data( $opportunity_id, $row = null ) {
 
 	$item = lnkup_format_index_row( $row, true );
 	$opp_post = get_post( $opportunity_id );
-	$item['opportunity_title'] = $opp_post ? $opp_post->post_title : '';
+	$item['opportunity_title'] = lnkup_plain_title( $opp_post );
 	$item['event_name']        = $row['title'] ?? $item['name'];
 	$item['event_type']        = ! empty( $item['event_types'][0] ) ? $item['event_types'][0] : __( 'Event Opportunity', 'lnkup-marketplace' );
 	$item['event_type_label']  = $item['event_type'];
@@ -3004,7 +3032,7 @@ function lnkup_render_homepage_event_card( $slots, $context = 'home' ) {
 	$event_id = (int) ( $first['event_id'] ?? 0 );
 	$event    = $event_id ? get_post( $event_id ) : null;
 	$date     = (string) ( $first['date'] ?? '' );
-	$title    = $event ? $event->post_title : (string) ( $first['event_name'] ?? $first['name'] ?? '' );
+	$title    = $event ? lnkup_plain_title( $event ) : (string) ( $first['event_name'] ?? $first['name'] ?? '' );
 	$venue    = '';
 	$organizer_name = '';
 	if ( $event_id && ! get_post_meta( $event_id, '_lnkup_venue_hidden', true ) ) {

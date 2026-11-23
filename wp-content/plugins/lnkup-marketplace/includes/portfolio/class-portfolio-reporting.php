@@ -49,7 +49,7 @@ class LNKup_Portfolio_Reporting {
 			}
 			$stops[] = array(
 				'event_id'     => (int) $event_id,
-				'title'        => get_the_title( $event_id ),
+				'title'        => lnkup_plain_title( $event_id ),
 				'city'         => (string) get_post_meta( $event_id, '_lnkup_city', true ),
 				'event_date'   => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
 				'venue_name'   => (string) get_post_meta( $event_id, '_lnkup_venue_name', true ),
@@ -326,7 +326,7 @@ class LNKup_Portfolio_Reporting {
 				'application_id' => (int) $app->ID,
 				'event_id'       => $app_event,
 				'stop'           => trim( get_post_meta( $app_event, '_lnkup_city', true ) . ' · ' . get_post_meta( $app_event, '_lnkup_event_date', true ), ' ·' ),
-				'opportunity'    => get_the_title( (int) get_post_meta( $app->ID, '_lnkup_opportunity_id', true ) ),
+				'opportunity'    => lnkup_plain_title( (int) get_post_meta( $app->ID, '_lnkup_opportunity_id', true ) ),
 				'business_name'  => is_array( $snapshot ) ? (string) ( $snapshot['business_name'] ?? '' ) : '',
 				'vendor_profile_id' => (int) get_post_meta( $app->ID, '_lnkup_vendor_profile_id', true ),
 				'vendor_user_id' => (int) get_post_meta( $app->ID, '_lnkup_vendor_user_id', true ),

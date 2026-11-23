@@ -632,7 +632,7 @@ class LNKup_Financial_Reconciliation {
 			}
 			$rows[] = array(
 				'id'              => $id,
-				'title'           => get_the_title( $id ),
+				'title'           => lnkup_plain_title( $id ),
 				'status'          => (string) get_post_meta( $id, '_lnkup_payment_status', true ),
 				'created_at'      => $created,
 				'paid_at'         => $paid_at,

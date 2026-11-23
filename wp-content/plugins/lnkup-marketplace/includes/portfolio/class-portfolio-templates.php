@@ -58,7 +58,7 @@ class LNKup_Portfolio_Templates {
 		$config  = $version ? $version['config'] : LNKup_Portfolio_Config::sanitize_defaults( array() );
 		return array(
 			'id'         => (int) $template_id,
-			'name'       => get_the_title( $template_id ),
+			'name'       => lnkup_plain_title( $template_id ),
 			'version'    => $version ? (int) $version['version'] : 0,
 			'version_id' => $version ? (int) $version['id'] : 0,
 			'config'     => $config,
@@ -204,7 +204,7 @@ class LNKup_Portfolio_Templates {
 	 */
 	public static function duplicate( $template_id, $organizer_id, $name = '' ) {
 		$current = self::current_version( $template_id );
-		$name    = '' !== trim( (string) $name ) ? $name : sprintf( __( '%s (copy)', 'lnkup-marketplace' ), get_the_title( $template_id ) );
+		$name    = '' !== trim( (string) $name ) ? $name : sprintf( __( '%s (copy)', 'lnkup-marketplace' ), lnkup_plain_title( $template_id ) );
 		return self::create( $organizer_id, $name, $current ? $current['config'] : array() );
 	}
 

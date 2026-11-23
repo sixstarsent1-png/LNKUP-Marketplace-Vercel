@@ -237,7 +237,7 @@ class LNKup_External_Events_Dedup {
 	private static function lnk_event_shape( int $event_id ): array {
 		$source = (string) get_post_meta( $event_id, '_lnkup_external_source_url', true );
 		return array(
-			'title'          => (string) get_the_title( $event_id ),
+			'title'          => (string) lnkup_plain_title( $event_id ),
 			'venue_name'     => (string) get_post_meta( $event_id, '_lnkup_venue_name', true ),
 			'start_datetime' => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
 			'city'           => (string) get_post_meta( $event_id, '_lnkup_city', true ),

@@ -1,6 +1,7 @@
 import { getApiTimeoutMs, getWpBaseUrl, getWpJsonBase } from "@/lib/api/config"
 import { encodeBase64 } from "@/lib/api/base64"
 import { WpFetchError } from "@/lib/api/errors"
+import { decodeEntitiesDeep } from "@/lib/text/decode-entities"
 
 export type WpAuth = {
   username: string
@@ -141,7 +142,7 @@ export async function wpFetchJson<T>(
       throwParsed(response.status, payload ?? { message: "Invalid response from LNKup" })
     }
 
-    return payload as T
+    return decodeEntitiesDeep(payload) as T
   } catch (error) {
     if (error instanceof WpFetchError) {
       notifyUnauthorized(hadAuth, error)
@@ -218,7 +219,7 @@ export async function wpFetchFormData<T>(
       throwParsed(response.status, payload ?? { message: "Invalid response from LNKup" })
     }
 
-    return payload as T
+    return decodeEntitiesDeep(payload) as T
   } catch (error) {
     if (error instanceof WpFetchError) {
       notifyUnauthorized(hadAuth, error)

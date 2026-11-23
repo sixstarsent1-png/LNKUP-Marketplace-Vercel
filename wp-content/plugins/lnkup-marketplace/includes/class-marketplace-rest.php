@@ -424,7 +424,7 @@ class LNKup_Marketplace_REST {
 			array(
 				'html'           => $html,
 				'opportunity_id' => $opportunity_id,
-				'event_name'     => $event_id ? get_the_title( $event_id ) : get_the_title( $opportunity_id ),
+				'event_name'     => $event_id ? lnkup_plain_title( $event_id ) : lnkup_plain_title( $opportunity_id ),
 				'eligibility'    => $context['eligibility'],
 				'warnings'       => $context['warnings'],
 				'button_state'   => $context['button_state'],

@@ -167,7 +167,7 @@ class LNKup_Application_Groups {
 					'post_type'   => 'lnkup_application',
 					'post_status' => LNKup_Application_Drafts::POST_STATUS,
 					'post_author' => $user_id,
-					'post_title'  => sprintf( 'Tour draft: %s', get_the_title( $tour_id ) ),
+					'post_title'  => sprintf( 'Tour draft: %s', lnkup_plain_title( $tour_id ) ),
 				),
 				true
 			);
@@ -283,7 +283,7 @@ class LNKup_Application_Groups {
 		$row      = array(
 			'event_id'       => $event_id,
 			'opportunity_id' => $opp_id,
-			'event_name'     => $event_id ? get_the_title( $event_id ) : '',
+			'event_name'     => $event_id ? lnkup_plain_title( $event_id ) : '',
 			'city'           => (string) get_post_meta( $event_id, '_lnkup_city', true ),
 			'date'           => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
 		);

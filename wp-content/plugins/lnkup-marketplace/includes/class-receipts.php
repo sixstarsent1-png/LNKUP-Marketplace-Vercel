@@ -84,8 +84,8 @@ class LNKup_Receipts {
 			'status'          => $row['status'],
 			'payment_post_id' => (int) $row['payment_post_id'],
 			'created_at'      => $row['created_at'],
-			'event_title'     => $event_id ? get_the_title( $event_id ) : '',
-			'view_url'        => rest_url( 'lnkup/v1/financial/receipts/' . (int) $row['id'] . '/view' ),
+			'event_title'     => $event_id ? lnkup_plain_title( $event_id ) : '',
+			'view_url'        => LNKup_Signed_Links::sign_url( rest_url( 'lnkup/v1/financial/receipts/' . (int) $row['id'] . '/view' ), 'receipt', (int) $row['id'], (int) $row['vendor_user_id'] ),
 			'metadata'        => $meta,
 		);
 	}

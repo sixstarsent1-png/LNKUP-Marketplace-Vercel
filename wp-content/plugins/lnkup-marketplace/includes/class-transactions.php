@@ -439,7 +439,7 @@ class LNKup_Transactions {
 			'vendor_user_id'  => (int) $row['vendor_user_id'],
 			'organizer_user_id' => (int) $row['organizer_user_id'],
 			'event_id'        => (int) $row['event_id'],
-			'event_title'     => (int) $row['event_id'] ? get_the_title( (int) $row['event_id'] ) : '',
+			'event_title'     => (int) $row['event_id'] ? lnkup_plain_title( (int) $row['event_id'] ) : '',
 			'application_id'  => (int) $row['application_id'],
 			'payment_post_id' => (int) $row['payment_post_id'],
 			'invoice_id'      => (int) $row['invoice_id'],

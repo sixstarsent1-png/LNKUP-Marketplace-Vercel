@@ -325,7 +325,7 @@ class LNKup_Organizer_Activation {
 		$stage      = self::stage( 'publication', __( 'Publish and share', 'lnkup-marketplace' ), __( 'Open applications and share your apply link with vendors.', 'lnkup-marketplace' ), $items, __( 'Open applications', 'lnkup-marketplace' ), $view( 'events', array( 'event' => $event_id ) ) );
 		$stage['share'] = $live ? array(
 			'event_id'        => (int) $live->ID,
-			'event_title'     => get_the_title( $live ),
+			'event_title'     => lnkup_plain_title( $live ),
 			'event_url'       => class_exists( 'LNKup_Organizer_Onboarding' ) ? LNKup_Organizer_Onboarding::event_public_url( (int) $live->ID ) : '',
 			'application_url' => (string) ( $share[0]['url'] ?? '' ),
 			'opportunity_id'  => (int) ( $share[0]['id'] ?? 0 ),

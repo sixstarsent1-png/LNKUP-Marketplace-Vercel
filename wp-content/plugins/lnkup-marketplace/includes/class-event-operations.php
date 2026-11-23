@@ -209,7 +209,7 @@ class LNKup_Event_Operations {
 	public static function vendor_name_for_app( $app_id ) {
 		$profile_id = (int) get_post_meta( $app_id, '_lnkup_vendor_profile_id', true );
 		if ( $profile_id ) {
-			return get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: get_the_title( $profile_id );
+			return get_post_meta( $profile_id, '_lnkup_business_name', true ) ?: lnkup_plain_title( $profile_id );
 		}
 		return sprintf( __( 'App #%d', 'lnkup-marketplace' ), $app_id );
 	}
@@ -445,7 +445,7 @@ class LNKup_Event_Operations {
 			'has_event'          => true,
 			'application_id'     => $app_id,
 			'event_id'           => $event_id,
-			'event_title'        => get_the_title( $event_id ),
+			'event_title'        => lnkup_plain_title( $event_id ),
 			'event_date'         => get_post_meta( $event_id, '_lnkup_event_date', true ),
 			'readiness'          => $checklist,
 			'readiness_percent'  => $checklist['percent'] ?? 0,

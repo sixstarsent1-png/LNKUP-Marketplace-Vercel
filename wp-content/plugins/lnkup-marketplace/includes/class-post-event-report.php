@@ -97,7 +97,7 @@ class LNKup_Post_Event_Report {
 		$top     = class_exists( 'LNKup_Vendor_Reliability_Intel' ) ? LNKup_Vendor_Reliability_Intel::top_vendors( (int) get_post_meta( $event_id, '_lnkup_organizer_user_id', true ), 3 ) : array();
 		return array(
 			'event_id'    => $event_id,
-			'event_title' => get_the_title( $event_id ),
+			'event_title' => lnkup_plain_title( $event_id ),
 			'counts'      => $counts,
 			'revenue'     => $revenue,
 			'event_score' => $score,

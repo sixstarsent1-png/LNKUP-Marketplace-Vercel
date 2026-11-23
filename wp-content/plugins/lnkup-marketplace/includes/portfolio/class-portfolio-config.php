@@ -422,7 +422,7 @@ class LNKup_Portfolio_Config {
 		);
 		$row = array(
 			'event_id'       => $event_id,
-			'title'          => get_the_title( $event_id ),
+			'title'          => lnkup_plain_title( $event_id ),
 			'city'           => (string) get_post_meta( $event_id, '_lnkup_city', true ),
 			'date'           => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
 			'state'          => $state,

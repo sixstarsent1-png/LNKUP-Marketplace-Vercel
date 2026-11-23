@@ -71,7 +71,7 @@ class LNKup_Stripe_Provider extends LNKup_Payment_Provider {
 				array(
 					'price_data' => array(
 						'currency'     => 'usd',
-						'product_data' => array( 'name' => get_the_title( $payment_id ) ),
+						'product_data' => array( 'name' => lnkup_plain_title( $payment_id ) ),
 						'unit_amount'  => $amount_cents,
 					),
 					'quantity'   => 1,

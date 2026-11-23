@@ -184,7 +184,7 @@ class LNKup_Organizer_Overview {
 			}
 			$out[] = array(
 				'event_id'          => (int) $event_id,
-				'title'             => get_the_title( $event_id ),
+				'title'             => lnkup_plain_title( $event_id ),
 				'date'              => $ready['event_date'],
 				'days_until'        => $ready['days_until'],
 				'readiness_percent' => (int) $ready['percent'],

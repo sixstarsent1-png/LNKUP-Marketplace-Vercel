@@ -69,7 +69,7 @@ class LNKup_Organizer_Intelligence {
 				$scores[] = $sc['score'];
 				$row = array(
 					'event_id' => $event_id,
-					'title'    => get_the_title( $event_id ),
+					'title'    => lnkup_plain_title( $event_id ),
 					'score'    => $sc['score'],
 					'label'    => $sc['label'],
 				);
@@ -268,7 +268,7 @@ class LNKup_Organizer_Intelligence {
 			$event_date = get_post_meta( $event_id, '_lnkup_event_date', true );
 			$event_rows[] = array(
 				'event_id'     => $event_id,
-				'title'        => get_the_title( $event_id ),
+				'title'        => lnkup_plain_title( $event_id ),
 				'applications' => $app_count,
 				'date'         => $event_date,
 				'url'          => add_query_arg( 'event', $event_id, $dash_url ),
@@ -279,7 +279,7 @@ class LNKup_Organizer_Intelligence {
 					'message' => sprintf(
 						/* translators: %s: event title */
 						__( '%s has fewer than 3 applications — consider promoting the opportunity.', 'lnkup-marketplace' ),
-						get_the_title( $event_id )
+						lnkup_plain_title( $event_id )
 					),
 					'event_id' => $event_id,
 				);
@@ -364,7 +364,7 @@ class LNKup_Organizer_Intelligence {
 			$insights[] = sprintf(
 				/* translators: 1: event title, 2: application count */
 				__( 'Top event: %1$s with %2$d applications.', 'lnkup-marketplace' ),
-				get_the_title( $top_event_id ),
+				lnkup_plain_title( $top_event_id ),
 				$top_event_count
 			);
 		}

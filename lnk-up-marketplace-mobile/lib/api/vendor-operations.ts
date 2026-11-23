@@ -28,16 +28,60 @@ export type VendorOperationsEvent = {
   loadInTime?: string
 }
 
-type WpVendorHome = {
+type WpBooth = {
+  booth_number?: string | number
+  booth_type_label?: string
+  booth_size?: string
+}
+
+type WpLoadInWindow = {
+  label?: string
+  start_at?: string
+  end_at?: string
+  gate?: string
+}
+
+export type WpVendorHome = {
   has_event?: boolean
   application_id?: number
   readiness_percent?: number
   readiness?: { percent?: number }
-  booth?: string
-  loadin?: string
+  /** Formatted booth row (LNKup_Booths::format), or null when unassigned. */
+  booth?: WpBooth | string | null
+  /** Load-in window (LNKup_Loadin_Schedule::format_window), or null. */
+  loadin?: WpLoadInWindow | string | null
   load_in?: string
+  /** Display text: "Locked", "Not opened", "Rules pending", "Complete" (empty without a packet). */
   packet_status?: string
-  qr_pass?: { status?: string }
+  /** QR pass token; empty until the packet is unlocked. */
+  qr_pass?: string | { status?: string } | null
+}
+
+export function formatBooth(booth: WpVendorHome["booth"]): string | undefined {
+  if (!booth) return undefined
+  if (typeof booth === "string") return booth || undefined
+  const number = booth.booth_number != null ? String(booth.booth_number).trim() : ""
+  const details = [booth.booth_type_label, booth.booth_size].filter(Boolean).join(", ")
+  const label = [number, details ? `(${details})` : ""].filter(Boolean).join(" ")
+  return label || undefined
+}
+
+export function formatLoadIn(loadin: WpVendorHome["loadin"], fallback?: string): string | undefined {
+  if (typeof loadin === "string") return loadin || fallback || undefined
+  if (loadin && typeof loadin === "object") {
+    const window = loadin.label || [loadin.start_at, loadin.end_at].filter(Boolean).join(" – ")
+    const label = [window, loadin.gate ? `Gate ${loadin.gate}` : ""].filter(Boolean).join(" · ")
+    if (label) return label
+  }
+  return fallback || undefined
+}
+
+export function isPassUnlocked(home: WpVendorHome): boolean {
+  const qr = home.qr_pass
+  if (typeof qr === "string" && qr.trim() !== "") return true
+  if (qr && typeof qr === "object" && qr.status === "unlocked") return true
+  const packet = (home.packet_status ?? "").trim().toLowerCase()
+  return packet !== "" && packet !== "locked"
 }
 
 const OPS_STATUSES = new Set<VendorRequestStatus>([
@@ -70,18 +114,14 @@ function mapRequest(request: VendorRequest): VendorOperationsEvent {
   }
 }
 
-async function enrichWithVendorHome(
-  event: VendorOperationsEvent,
-  home: WpVendorHome,
-): Promise<VendorOperationsEvent> {
+export function enrichWithVendorHome(event: VendorOperationsEvent, home: WpVendorHome): VendorOperationsEvent {
   const percent = home.readiness_percent ?? home.readiness?.percent
-  const packetUnlocked =
-    home.packet_status === "unlocked" || home.qr_pass?.status === "unlocked"
+  const packetUnlocked = isPassUnlocked(home)
   return {
     ...event,
     readinessPercent: typeof percent === "number" ? percent : event.readinessPercent,
-    boothAssignment: home.booth || event.boothAssignment,
-    loadInTime: home.load_in || home.loadin || event.loadInTime,
+    boothAssignment: formatBooth(home.booth) ?? event.boothAssignment,
+    loadInTime: formatLoadIn(home.loadin, home.load_in) ?? event.loadInTime,
     passStatus: packetUnlocked ? "unlocked" : event.passStatus,
     status: packetUnlocked && event.status === "upcoming" ? "pass_ready" : event.status,
   }
@@ -135,13 +175,10 @@ export async function fetchVendorOperations(auth?: WpAuth): Promise<{ items: Ven
     if (appId) byApp.set(appId, home)
   }
 
-  const enriched = await Promise.all(
-    enrichable.map(async (event) => {
-      const home = byApp.get(event.requestId)
-      if (!home) return event
-      return enrichWithVendorHome(event, home)
-    }),
-  )
+  const enriched = enrichable.map((event) => {
+    const home = byApp.get(event.requestId)
+    return home ? enrichWithVendorHome(event, home) : event
+  })
   const byId = new Map(enriched.map((e) => [e.requestId, e]))
 
   return {

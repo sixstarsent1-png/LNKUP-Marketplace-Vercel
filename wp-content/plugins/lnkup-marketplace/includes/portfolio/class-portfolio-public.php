@@ -168,7 +168,7 @@ class LNKup_Portfolio_Public {
 			'eligibility'     => (string) get_post_meta( $tour_id, '_lnkup_eligibility', true ),
 			'website'         => (string) get_post_meta( $tour_id, '_lnkup_tour_website', true ),
 			'cover_url'       => (string) get_the_post_thumbnail_url( $tour_id, 'large' ),
-			'brand'           => $brand_id ? get_the_title( $brand_id ) : '',
+			'brand'           => $brand_id ? lnkup_plain_title( $brand_id ) : '',
 			'organizer'       => array(
 				'name' => $detail['organizer_name'],
 				'url'  => LNKup_Organizer_Onboarding::organizer_public_url( $organizer_id ),
