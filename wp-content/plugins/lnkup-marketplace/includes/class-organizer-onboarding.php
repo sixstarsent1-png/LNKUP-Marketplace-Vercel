@@ -159,6 +159,33 @@ class LNKup_Organizer_Onboarding {
 	 * @return array<string, mixed>|WP_Error
 	 */
 	public static function create_opportunity_for_event( int $event_id, array $input, int $organizer_id ) {
+		$client_token = isset( $input['client_token'] ) ? sanitize_text_field( (string) $input['client_token'] ) : '';
+		if ( '' === $client_token ) {
+			return self::insert_opportunity_for_event( $event_id, $input, $organizer_id );
+		}
+		// Two in-flight publishes of the same draft both reach this point after the event lock is
+		// released; holding a lock per row token makes the "already created?" check and the insert atomic.
+		global $wpdb;
+		$lock = 'lnkup_opp_' . $organizer_id . '_' . md5( $client_token );
+		if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 10)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return new WP_Error( 'busy', __( 'Your vendor spots are still being created. Refresh in a moment.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
+		}
+		try {
+			return self::insert_opportunity_for_event( $event_id, $input, $organizer_id );
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+	}
+
+	/**
+	 * Create one opportunity (or return the one an earlier request with the same token created).
+	 *
+	 * @param int                  $event_id     Event post ID.
+	 * @param array<string, mixed> $input        Opportunity fields.
+	 * @param int                  $organizer_id Organizer user ID.
+	 * @return array<string, mixed>|WP_Error
+	 */
+	private static function insert_opportunity_for_event( int $event_id, array $input, int $organizer_id ) {
 		$event = get_post( $event_id );
 		if ( ! $event || 'lnkup_event' !== $event->post_type ) {
 			return new WP_Error( 'invalid_event', __( 'Invalid event.', 'lnkup-marketplace' ) );

@@ -39,7 +39,19 @@ export type OrganizerLaunchDraft = {
   }
   status: "draft" | "ready_to_publish" | "published" | "handoff_required" | "error"
   wordpressUrl?: string
+  /** One token per draft; WordPress returns the same event and slots when a publish is retried. */
+  clientToken?: string
   raw?: unknown
+}
+
+/** A publish idempotency token in the format WordPress accepts (letters, digits, underscore). */
+export function newLaunchClientToken(): string {
+  return `launch_${crypto.randomUUID().replace(/-/g, "")}`
+}
+
+/** The draft with a client token, keeping an existing one so retries reuse it. */
+export function withLaunchClientToken(draft: OrganizerLaunchDraft): OrganizerLaunchDraft {
+  return draft.clientToken ? draft : { ...draft, clientToken: newLaunchClientToken() }
 }
 
 export type OrganizerLaunchPublishResult = {
@@ -187,6 +199,7 @@ export function draftToWpPayload(draft: OrganizerLaunchDraft): Record<string, un
     opportunity_title: primary?.opportunity_title,
     document_mode: draft.opportunity.requiredDocumentsMode ?? "platform_defaults",
     opportunities,
+    ...(draft.clientToken ? { client_token: draft.clientToken } : {}),
   }
 }
 

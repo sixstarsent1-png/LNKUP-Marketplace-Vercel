@@ -426,7 +426,7 @@ export function OpportunityCard({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
-            <Button nativeButton={false} render={<Link href={`/login?redirect=/vendor/find`} />}>
+            <Button nativeButton={false} render={<Link href={`/login?redirect=${encodeURIComponent(event.opportunityId ? `/vendor/find?opportunityId=${event.opportunityId}` : "/vendor/find")}`} />}>
               Log in
             </Button>
             <Button variant="outline" onClick={() => setSaveOpen(false)}>

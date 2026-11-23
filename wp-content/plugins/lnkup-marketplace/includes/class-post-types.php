@@ -14,6 +14,8 @@ class LNKup_Post_Types {
 	 */
 	public static function init() {
 		add_action( 'init', array( __CLASS__, 'register' ), 5 );
+		add_filter( 'rest_lnkup_event_query', array( __CLASS__, 'hide_draft_events_from_rest_query' ) );
+		add_filter( 'rest_request_before_callbacks', array( __CLASS__, 'hide_draft_event_from_rest_item' ), 10, 3 );
 	}
 
 	/**
@@ -31,6 +33,54 @@ class LNKup_Post_Types {
 	 */
 	public static function is_rest_public( $post_type ) {
 		return in_array( $post_type, self::REST_PUBLIC_TYPES, true );
+	}
+
+	/**
+	 * Organizer drafts are stored as published posts with `_lnkup_event_status = draft`; keep them
+	 * out of public wp/v2 event lists until the organizer publishes vendor spots.
+	 *
+	 * @param array<string,mixed> $args WP_Query args.
+	 * @return array<string,mixed>
+	 */
+	public static function hide_draft_events_from_rest_query( $args ) {
+		if ( current_user_can( 'edit_others_posts' ) ) {
+			return $args;
+		}
+		$args               = is_array( $args ) ? $args : array();
+		$meta_query         = isset( $args['meta_query'] ) && is_array( $args['meta_query'] ) ? $args['meta_query'] : array();
+		$meta_query[]       = array(
+			'relation' => 'OR',
+			array( 'key' => '_lnkup_event_status', 'compare' => 'NOT EXISTS' ),
+			array( 'key' => '_lnkup_event_status', 'value' => 'draft', 'compare' => '!=' ),
+		);
+		$args['meta_query'] = $meta_query; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+		return $args;
+	}
+
+	/**
+	 * A single wp/v2 GET of a draft event answers like a missing post unless the viewer owns it.
+	 *
+	 * @param WP_REST_Response|WP_HTTP_Response|WP_Error|mixed $response Short-circuit response.
+	 * @param array                                            $handler  Route handler.
+	 * @param WP_REST_Request                                  $request  Request.
+	 * @return mixed
+	 */
+	public static function hide_draft_event_from_rest_item( $response, $handler, $request ) {
+		if ( is_wp_error( $response ) || ! $request instanceof WP_REST_Request || 'GET' !== $request->get_method() ) {
+			return $response;
+		}
+		if ( ! preg_match( '#^/wp/v2/lnkup_event/(\d+)$#', (string) $request->get_route(), $match ) ) {
+			return $response;
+		}
+		$event_id = (int) $match[1];
+		if ( 'draft' !== (string) get_post_meta( $event_id, '_lnkup_event_status', true ) ) {
+			return $response;
+		}
+		$viewer = get_current_user_id();
+		if ( current_user_can( 'edit_others_posts' ) || ( $viewer && (int) get_post_meta( $event_id, '_lnkup_organizer_user_id', true ) === $viewer ) ) {
+			return $response;
+		}
+		return new WP_Error( 'rest_post_invalid_id', __( 'Invalid post ID.' ), array( 'status' => 404 ) ); // phpcs:ignore WordPress.WP.I18n.MissingArgDomain
 	}
 
 	/**

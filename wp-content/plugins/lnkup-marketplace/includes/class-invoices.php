@@ -270,16 +270,27 @@ class LNKup_Invoices {
 		);
 	}
 
+	/**
+	 * Invoices for a vendor or organizer, most recently changed first (an invoice is touched when
+	 * it is paid or refunded, so a newly paid older booking moves to the top).
+	 *
+	 * @param int    $user_id User ID.
+	 * @param string $role    vendor|organizer.
+	 * @param array  $args    per_page (or legacy limit, max 100), page (1-based).
+	 * @return array<int, array<string, mixed>>
+	 */
 	public static function list_for_user( $user_id, $role = 'vendor', $args = array() ) {
 		global $wpdb;
-		$table  = LNKup_Financial_Tables::invoices_table();
-		$col    = 'vendor' === $role ? 'vendor_user_id' : 'organizer_user_id';
-		$limit  = min( 50, max( 1, absint( $args['limit'] ?? 25 ) ) );
+		$table    = LNKup_Financial_Tables::invoices_table();
+		$col      = 'vendor' === $role ? 'vendor_user_id' : 'organizer_user_id';
+		$per_page = min( 100, max( 1, absint( $args['per_page'] ?? ( $args['limit'] ?? 25 ) ) ) );
+		$page     = max( 1, absint( $args['page'] ?? 1 ) );
 		return $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE {$col} = %d ORDER BY created_at DESC LIMIT %d",
+				"SELECT * FROM {$table} WHERE {$col} = %d ORDER BY updated_at DESC, id DESC LIMIT %d OFFSET %d",
 				$user_id,
-				$limit
+				$per_page,
+				( $page - 1 ) * $per_page
 			),
 			ARRAY_A
 		);

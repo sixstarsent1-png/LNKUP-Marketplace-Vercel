@@ -6,6 +6,7 @@ $tests = @(
   'financial-sync-test',
   'financial-contract-test',
   'financial-lists-test',
+  'vendor-money-lists-test',
   'financial-repair-test',
   'financial-cron-test',
   'financial-security-test',

@@ -17,6 +17,7 @@ import { useVendorReviewEligibility } from "@/lib/hooks/use-vendor-review-eligib
 import { submitVendorReviewFeedback } from "@/lib/vendor/review-feedback"
 import { usePanelState } from "@/lib/use-panel-state"
 import { VendorRequestCard } from "@/components/vendor/vendor-request-card"
+import { DraftResumeList } from "@/components/vendor/draft-resume-list"
 import { ReviewEligibilityBanner } from "@/components/reputation/review-eligibility-banner"
 import { PanelContent, EmptyState, SkeletonList } from "@/components/marketplace/states"
 import { PaymentReturnBanner } from "@/components/financial/payment-return-banner"
@@ -179,6 +180,8 @@ function VendorRequestsContent() {
           </Button>
         </div>
       )}
+
+      {live && !unauthenticated && !qaOverride && <DraftResumeList />}
 
       {(qaOverride || !(live && unauthenticated)) && (
         <Tabs defaultValue="all">

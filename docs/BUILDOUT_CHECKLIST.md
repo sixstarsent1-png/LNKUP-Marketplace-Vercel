@@ -182,11 +182,59 @@ Short paths: `P/` = `wp-content/plugins/lnkup-marketplace/`, `C/` = `wp-content/
 | Matching | matching flags (`LNKup_Rollout`) | `matching_reputation_signals` waits on Passport soak |
 | Communications flows | `flow_*` (`LNKup_Rollout`) | live sender configuration |
 
+## Phase 2 results: booking journey and financial integrity
+
+### A. Organizer to published opportunity
+- **Next.js publish was not retry-safe.**
+  - Fixed: Next.js publish now sends a `client_token` (one per draft, kept across failed attempts, cleared after success).
+  - Fixed: `LNKup_Organizer_Onboarding::create_opportunity_for_event` holds a lock per row token, so two in-flight publishes cannot both create a slot.
+- **Draft events were public on `wp/v2`.** Draft events (`_lnkup_event_status = draft`, stored as published posts) appeared in public `wp/v2/lnkup_event` lists and single GETs. They are now hidden from everyone except the owner and admins.
+- **Evidence:**
+  - `launch-publish-idempotency-test.php`: 21/21 (retried publish, held lock, draft visibility).
+  - `organizer-activation-test`, `portfolio-os-test`, `upsert-race-test`, `organizer-onboarding-flow-test` pass.
+
+### B. Vendor to accepted booking
+- **Already built, now covered by tests:**
+  - Price change returns `409 lnkup_price_changed`; new required questions return `422 lnkup_answers_required`.
+  - Deadline, full and closed refusals return 400 with the block code, and the draft stays open and submits once the organizer reopens (`draft-submit-changes-test.php`: 18/18).
+  - Multi-stop submit returns a result row per stop, retries idempotently per stop, and keeps the group draft until every stop succeeds.
+- **Fixed in both apps:** those block codes now close the form with specific copy ("Applications closed", "This booth is full", "Invite only") instead of a generic error (Expo `applyBlockFor`, jest 12/12; Next.js apply modal).
+- **Added in Next.js:** a "Finish your applications" list on Vendor Requests (`GET /api/applications/drafts`) with Resume and Discard. Expo's equivalent is in PR #10.
+- **Fixed sign-in return:** Next.js sign-in from Apply and Save now returns to the same opportunity (`/vendor/find?opportunityId=…&apply=1`). Redirects stay limited to safe relative `/vendor` and `/organizer` paths.
+- **Fixed in Next.js:** the Sign out button on the vendor, organizer and admin More pages and on vendor Profile had no handler.
+- **Browser check** (Next.js dev on :3005, live API against :8894):
+  - Signing in through the apply link lands on the opportunity and opens the apply modal (15–20 s in dev).
+  - The drafts list shows the draft saved from the app; Resume opens it with the saved message.
+  - Signed-out pages show the sign-in prompt.
+  - A hydration warning on `/login` was observed and not investigated.
+- **Regression:** `booking-application-os-test`, `reapply-policy-test`, `organizer-os-test` pass. `apply-draft-resume`, `apply-with-profile` and `tour-multi-apply` specs: 17/17.
+
+### C. Checkout to event-day entry
+- **Already built:**
+  - Next.js `usePaymentReturn` reconciles payment returns from the server.
+  - Expo `stripe-redirect` hands off to the Pass screen, which re-reads status from the server.
+  - Return URLs are unsigned but never trusted for booking state.
+- **Evidence:**
+  - All 14 financial PHP suites pass (webhook replay and ordering, superseded intents, refunds, chargebacks, cashouts).
+  - New `booking-lifecycle-test.php` (29/29): apply → approve (payment required, slot held) → test-mode finalize → paid → replay is a no-op and settles once → receipt and invoice equal the payment total in cents → newest invoice is first for the organizer → pass unlocks → check-in refused at another event and accepted at the assigned one → full refund marks the payment refunded, cancels the booking, locks the pass, frees the slot, reverses the ledger once, and the invoice reads refunded.
+
+### D. Money and reconciliation
+- **Missing invoices:** invoices were sorted by creation date and capped at 25. They now sort by `updated_at` (an older booking paid today comes first) and page with `page` / `per_page` up to 100, with `X-WP-Total` / `X-WP-TotalPages`. Receipts page the same way. The Next.js wallet routes read every page (with a `truncated` flag), and Expo requests 100.
+- **Payments missing from vendor totals:** `partially_paid`, `partially_refunded` and `disputed` payments were left out of the vendor money contract. They now count, so `paid` + `refunded` equals what the vendor paid (`docs/finance/MONEY_DEFINITIONS.md` updated).
+- **Wallet totals:** both vendor wallets now read `money.metrics` instead of adding up requests.
+  - A figure the server did not confirm renders "Unavailable"; a confirmed $0 stays $0.
+  - Next.js previously showed $0 for missing values and hid a real $0.
+  - Expo jest 6/6. `vendor-money-lists-test.php`: 23/23.
+- **Read-only reconciliation** (wp-env test data, organizer `e2e_org_a`, Stripe off):
+  - 0 issues. WordPress paid gross $212.26 across 2 payments.
+  - Contract: platform fees $17.99, net $194.27, pending $178.60, reserve $9.40.
+  - No repair was needed.
+
 ## Running checklist
 
 - [x] **Phase 0:** integration branch, bootstrap files tracked, lint, activation, typechecks ([PR #9](https://github.com/sixstarsent1-png/LNKUP-Marketplace-Vercel/pull/9))
 - [x] **Phase 1:** matrix, release checks, private-upload probe. Open: Vercel Root Directory (project owner), SiteGround Direct Delivery (hosting), PR #7 merge.
-- [ ] **Phase 2:** booking journey and financial integrity
+- [x] **Phase 2:** booking journey and financial integrity. Open: Expo drafts list ships with PR #10; live Stripe test-mode card run needs staging keys.
 - [ ] **Phase 3:** organizer management, tours, event day
 - [ ] **Phase 4:** acquisition, discovery, communications, analytics
 - [ ] **Phase 5:** internal operations workspace

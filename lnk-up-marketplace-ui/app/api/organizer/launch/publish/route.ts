@@ -8,6 +8,7 @@ import {
   draftToWpPayload,
   mockPublishResult,
   validateLaunchDraft,
+  withLaunchClientToken,
 } from "@/lib/api/organizer-launch"
 import {
   clearOrganizerLaunchDraftCookie,
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
     } else {
       draft = body as OrganizerLaunchDraft
     }
+    draft = withLaunchClientToken(draft)
 
     const validationErrors = validateLaunchDraft(draft)
     if (validationErrors.length > 0) {

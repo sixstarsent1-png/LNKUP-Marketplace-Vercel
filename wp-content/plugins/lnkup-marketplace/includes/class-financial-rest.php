@@ -641,20 +641,56 @@ class LNKup_Financial_REST {
 	}
 
 	public static function invoices( $request = null ) {
-		return self::respond( function () use ( $request ) {
-			$role = self::resolve_financial_role( $request );
-			$rows = LNKup_Invoices::list_for_user( get_current_user_id(), $role );
+		list( $per_page, $page ) = self::page_params( $request );
+		$role     = self::resolve_financial_role( $request );
+		$response = self::respond( function () use ( $role, $per_page, $page ) {
+			$rows = LNKup_Invoices::list_for_user( get_current_user_id(), $role, array( 'per_page' => $per_page, 'page' => $page ) );
 			$rows = is_array( $rows ) ? $rows : array();
 			return array_map( array( 'LNKup_Invoices', 'format' ), $rows );
 		} );
+		return self::with_total_headers( $response, LNKup_Invoices::count_for_user( get_current_user_id(), $role ), $per_page );
 	}
 
-	public static function receipts() {
-		return self::respond( function () {
-			$rows = LNKup_Receipts::list_for_user( get_current_user_id() );
+	public static function receipts( $request = null ) {
+		list( $per_page, $page ) = self::page_params( $request );
+		$response = self::respond( function () use ( $per_page, $page ) {
+			$rows = LNKup_Receipts::list_for_user( get_current_user_id(), $per_page, $page );
 			$rows = is_array( $rows ) ? $rows : array();
 			return array_map( array( 'LNKup_Receipts', 'format' ), $rows );
 		} );
+		return self::with_total_headers( $response, LNKup_Receipts::count_for_user( get_current_user_id() ), $per_page );
+	}
+
+	/**
+	 * `per_page` (default 25, max 100) and 1-based `page` from a list request.
+	 *
+	 * @param WP_REST_Request|null $request Request.
+	 * @return int[] [per_page, page]
+	 */
+	private static function page_params( $request ) {
+		if ( ! $request instanceof WP_REST_Request ) {
+			return array( 25, 1 );
+		}
+		return array(
+			min( 100, max( 1, absint( $request->get_param( 'per_page' ) ?: 25 ) ) ),
+			max( 1, absint( $request->get_param( 'page' ) ?: 1 ) ),
+		);
+	}
+
+	/**
+	 * Add X-WP-Total / X-WP-TotalPages to a successful list response.
+	 *
+	 * @param WP_REST_Response|WP_Error $response List response.
+	 * @param int                       $total    Total rows.
+	 * @param int                       $per_page Page size.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private static function with_total_headers( $response, $total, $per_page ) {
+		if ( $response instanceof WP_REST_Response && ! $response->is_error() ) {
+			$response->header( 'X-WP-Total', (string) (int) $total );
+			$response->header( 'X-WP-TotalPages', (string) max( 1, (int) ceil( (int) $total / max( 1, (int) $per_page ) ) ) );
+		}
+		return $response;
 	}
 
 	public static function wallet( $request = null ) {

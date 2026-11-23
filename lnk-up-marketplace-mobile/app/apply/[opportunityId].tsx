@@ -11,7 +11,7 @@ import { FormField } from "@/components/ui/form-field"
 import { SectionTitle } from "@/components/ui/typography"
 import { ApplyQuestions } from "@/components/apply/apply-questions"
 import {
-  DECLINED_MESSAGE,
+  applyBlockFor,
   fetchApplyContext,
   newIdempotencyKey,
   reapplyNote,
@@ -192,7 +192,7 @@ export default function ApplyScreen() {
       )
     } catch (err) {
       if (err instanceof WpFetchError) {
-        if (err.code === "duplicate" || err.code === "previously_declined") {
+        if (applyBlockFor(err.code)) {
           setBlockedCode(err.code)
           return
         }
@@ -215,14 +215,9 @@ export default function ApplyScreen() {
   const feeLabel =
     context?.vendorFee == null ? "Fee unavailable" : context.vendorFee > 0 ? `$${context.vendorFee}` : "Free"
   const blockReason = blockedCode ?? context?.blockReason
-  const blockedTitle =
-    blockReason === "duplicate" ? "You already applied" : blockReason === "previously_declined" ? "Application declined" : "Applications unavailable"
-  const blockedMessage =
-    blockReason === "duplicate"
-      ? "Track this application under Bookings."
-      : blockReason === "previously_declined"
-        ? DECLINED_MESSAGE
-        : "Applications are not open for this opportunity yet."
+  const block = applyBlockFor(blockReason)
+  const blockedTitle = block?.title ?? "Applications unavailable"
+  const blockedMessage = block?.message ?? "Applications are not open for this opportunity yet."
   const note = reapplyNote(context?.previousApplication ?? null)
 
   return (

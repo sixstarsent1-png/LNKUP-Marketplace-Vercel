@@ -9,6 +9,7 @@ import {
   hasMeaningfulLaunchDraft,
   launchDraftFromOnboarding,
   validateLaunchDraft,
+  withLaunchClientToken,
 } from "@/lib/api/organizer-launch"
 import {
   getOrganizerLaunchDraftCookie,
@@ -63,10 +64,10 @@ export async function POST(request: Request) {
     }
 
     const errors = validateLaunchDraft(body)
-    const draft: OrganizerLaunchDraft = {
+    const draft: OrganizerLaunchDraft = withLaunchClientToken({
       ...body,
       status: errors.length === 0 ? "ready_to_publish" : "draft",
-    }
+    })
     await setOrganizerLaunchDraftCookie(draft)
     return NextResponse.json({ ...draft, validationErrors: errors })
   } catch (error) {

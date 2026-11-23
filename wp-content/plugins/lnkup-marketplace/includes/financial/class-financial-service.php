@@ -1194,23 +1194,42 @@ class LNKup_Financial_Service {
 			'refunded'   => 0,
 		);
 		$counts = array_fill_keys( array_keys( $totals ), 0 );
-		foreach ( (array) lnkup_get_payments_for_user( absint( $user_id ), 'vendor' ) as $payment ) {
-			$id     = (int) $payment->ID;
-			$status = (string) get_post_meta( $id, '_lnkup_payment_status', true );
-			$amount = (int) round( (float) get_post_meta( $id, '_lnkup_total_amount', true ) * 100 );
-			$bucket = array(
-				'paid'       => 'paid',
-				'processing' => 'processing',
-				'pending'    => 'outstanding',
-				'failed'     => 'outstanding',
-				'refunded'   => 'refunded',
-			)[ $status ] ?? '';
-			if ( 'refunded' === $bucket ) {
-				$amount = (int) round( (float) get_post_meta( $id, '_lnkup_refund_amount', true ) * 100 ) ?: $amount;
-			}
-			if ( '' !== $bucket ) {
-				$totals[ $bucket ] += $amount;
+		$add = static function ( string $bucket, int $cents ) use ( &$totals, &$counts ) {
+			if ( $cents > 0 ) {
+				$totals[ $bucket ] += $cents;
 				++$counts[ $bucket ];
+			}
+		};
+		foreach ( (array) lnkup_get_payments_for_user( absint( $user_id ), 'vendor' ) as $payment ) {
+			$id       = (int) $payment->ID;
+			$status   = (string) get_post_meta( $id, '_lnkup_payment_status', true );
+			$amount   = (int) round( (float) get_post_meta( $id, '_lnkup_total_amount', true ) * 100 );
+			$refunded = (int) round( (float) get_post_meta( $id, '_lnkup_refund_amount', true ) * 100 );
+			switch ( $status ) {
+				case 'paid':
+				case 'disputed':
+					$add( 'paid', $amount );
+					break;
+				case 'processing':
+					$add( 'processing', $amount );
+					break;
+				case 'pending':
+				case 'failed':
+					$add( 'outstanding', $amount );
+					break;
+				case 'partially_paid':
+					$deposit = min( $amount, (int) get_post_meta( $id, '_lnkup_amount_paid_cents', true ) );
+					$add( 'paid', $deposit );
+					$add( 'outstanding', $amount - $deposit );
+					break;
+				case 'partially_refunded':
+					$refunded = min( $amount, $refunded );
+					$add( 'paid', $amount - $refunded );
+					$add( 'refunded', $refunded );
+					break;
+				case 'refunded':
+					$add( 'refunded', $refunded ?: $amount );
+					break;
 			}
 		}
 		$metrics = array();
