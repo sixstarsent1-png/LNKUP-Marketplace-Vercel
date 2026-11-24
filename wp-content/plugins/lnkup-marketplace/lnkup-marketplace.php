@@ -404,6 +404,14 @@ $lnkup_core_files = array(
 	'includes/marketing/class-app-deep-links.php',
 	'includes/marketing/class-search-console.php',
 	'admin/class-marketing-admin.php',
+	'includes/event-builder/class-event-os-flags.php',
+	'includes/event-builder/class-event-builder-schema.php',
+	'includes/event-builder/class-event-builder-drafts.php',
+	'includes/event-builder/class-event-builder-validator.php',
+	'includes/event-builder/class-event-builder-publisher.php',
+	'includes/event-builder/class-event-builder-editor.php',
+	'includes/event-builder/class-event-builder-library.php',
+	'includes/event-builder/class-event-builder-rest.php',
 	'includes/matching/class-tours.php',
 	'includes/matching/class-tours-rest.php',
 	'includes/portfolio/class-portfolio-tables.php',
@@ -621,6 +629,9 @@ function lnkup_marketplace_init() {
 	LNKup_Cohort_Landings::init();
 	LNKup_App_Deep_Links::init();
 	LNKup_Marketing_Admin::init();
+	LNKup_Event_Builder_Drafts::init();
+	LNKup_Event_Builder_Publisher::init();
+	LNKup_Event_Builder_REST::init();
 	LNKup_Tours::init();
 	LNKup_Tours_REST::init();
 	LNKup_Portfolio_Tables::maybe_upgrade();
