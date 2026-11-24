@@ -243,9 +243,13 @@ class LNKup_Comms_Templates {
 				continue;
 			}
 			$out[] = array(
-				'title' => sanitize_text_field( (string) $item['title'] ),
-				'meta'  => sanitize_text_field( (string) ( $item['meta'] ?? '' ) ),
-				'url'   => esc_url_raw( (string) ( $item['url'] ?? '' ) ),
+				'title'        => sanitize_text_field( (string) $item['title'] ),
+				'meta'         => sanitize_text_field( (string) ( $item['meta'] ?? '' ) ),
+				'url'          => esc_url_raw( (string) ( $item['url'] ?? '' ) ),
+				'image'        => esc_url_raw( (string) ( $item['image'] ?? '' ) ),
+				'badge'        => sanitize_text_field( (string) ( $item['badge'] ?? '' ) ),
+				'action_label' => sanitize_text_field( (string) ( $item['action_label'] ?? '' ) ),
+				'action_url'   => esc_url_raw( (string) ( $item['action_url'] ?? '' ) ),
 			);
 		}
 		return $out;

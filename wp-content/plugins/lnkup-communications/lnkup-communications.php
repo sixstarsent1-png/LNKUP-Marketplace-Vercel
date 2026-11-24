@@ -49,6 +49,7 @@ function lnkup_comms_files(): array {
 		'includes/class-comms-delegation.php',
 		'includes/class-comms-matching.php',
 		'includes/class-comms-audiences.php',
+		'includes/class-comms-engagement.php',
 		'includes/class-comms-next-steps.php',
 		'includes/class-comms-analytics.php',
 		'includes/class-comms-health.php',
@@ -69,6 +70,7 @@ function lnkup_comms_files(): array {
 		'includes/automations/class-comms-auto-retention.php',
 		'includes/automations/class-comms-auto-activation.php',
 		'includes/automations/class-comms-auto-matching.php',
+		'includes/automations/class-comms-auto-engagement.php',
 		'includes/class-comms-campaigns.php',
 		'includes/rest/class-comms-rest.php',
 		'includes/rest/class-comms-organizer-rest.php',
@@ -116,6 +118,7 @@ function lnkup_comms_boot(): void {
 	LNKup_Comms_Listen_Account::init();
 	LNKup_Comms_Listen_Passport::init();
 	LNKup_Comms_Listen_Partners::init();
+	LNKup_Comms_Engagement::init();
 	LNKup_Comms_Automations::init();
 	LNKup_Comms_Campaigns::init();
 	LNKup_Comms_REST::init();

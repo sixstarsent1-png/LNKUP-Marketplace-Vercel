@@ -296,6 +296,21 @@ class LNKup_Comms_Context {
 		return true;
 	}
 
+	public static function published_opportunity_count( int $event_id ): int {
+		$ids = get_posts(
+			array(
+				'post_type'      => 'lnkup_opportunity',
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_key'       => '_lnkup_event_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => (string) $event_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+		return count( (array) $ids );
+	}
+
 	public static function vendor_applied_to( int $vendor_id, int $opp_id ): bool {
 		return self::count_apps(
 			array(
@@ -448,6 +463,32 @@ class LNKup_Comms_Context {
 				break;
 			case 'event_is_draft':
 				$valid = $event && 'draft' === self::event_status( $event ) && ! self::event_is_past( $event );
+				break;
+			case 'invite_status_matches':
+				$invite = (int) ( $ctx['invite_id'] ?? 0 );
+				$valid  = 'lnkup_vendor_invite' === get_post_type( $invite ) && '' !== (string) ( $ctx['invite_status'] ?? '' )
+					&& (string) get_post_meta( $invite, '_lnkup_status', true ) === (string) $ctx['invite_status'];
+				break;
+			case 'event_has_nearby_vendors':
+				$valid = $event && 'live' === self::event_status( $event ) && ! self::event_is_past( $event )
+					&& LNKup_Comms_Matching::event_open_spots( $event ) > 0 && (int) ( $ctx['count'] ?? 0 ) > 0;
+				break;
+			case 'event_has_no_slots':
+				$valid = $event && 'publish' === get_post_status( $event ) && ! self::event_cancelled( $event ) && ! self::event_is_past( $event )
+					&& 0 === self::published_opportunity_count( $event );
+				break;
+			case 'draft_still_open':
+				$draft = (int) ( $ctx['draft_id'] ?? 0 );
+				$valid = $draft && class_exists( 'LNKup_Application_Drafts' )
+					&& LNKup_Application_Drafts::owns( $draft, (int) $ctx['vendor_user_id'] )
+					&& LNKup_Application_Drafts::STATE_OPEN === (string) get_post_meta( $draft, '_lnkup_draft_state', true )
+					&& self::opportunity_open( (int) $ctx['opportunity_id'] )
+					&& ! self::vendor_applied_to( (int) $ctx['vendor_user_id'], (int) $ctx['opportunity_id'] );
+				break;
+			case 'vendor_still_inactive':
+				$vendor = (int) $ctx['vendor_user_id'];
+				$valid  = $vendor && LNKup_Comms_Engagement::vendor_last_activity( $vendor ) <= (int) ( $ctx['last_activity_ts'] ?? 0 )
+					&& LNKup_Comms_Engagement::vendor_has_recommendations( $vendor );
 				break;
 			default:
 				$valid = true;
@@ -761,6 +802,12 @@ class LNKup_Comms_Context {
 				return $opp ? '/opportunity/' . $opp : '/(vendor)/find';
 			case 'vendor_saved_searches':
 				return '/(vendor)/saved-searches';
+			case 'vendor_invites':
+				return '/(vendor)/invitations';
+			case 'org_invites':
+				return '/(organizer)/vendors?tab=invites';
+			case 'org_find_vendors':
+				return $event ? '/(organizer)/vendors/find?event=' . $event : '/(organizer)/vendors/find';
 			case 'vendor_profile':
 				return '/(vendor)/profile';
 			case 'passport':
@@ -831,6 +878,12 @@ class LNKup_Comms_Context {
 			case 'tour':
 				$find = self::web_url( 'vendor_find', $ctx, $role );
 				return (int) ( $ctx['tour_id'] ?? 0 ) ? add_query_arg( 'tour_id', (int) $ctx['tour_id'], $find ) : $find;
+			case 'vendor_invites':
+				return add_query_arg( 'view', 'invitations', $vendor_dash );
+			case 'org_invites':
+				return $org( 'invites' );
+			case 'org_find_vendors':
+				return $org( 'vendors', array( 'recruit' => $event ? $event : '' ) );
 			case 'vendor_saved_searches':
 				return ( function_exists( 'lnkup_page_url_helper' ) ? (string) lnkup_page_url_helper( 'favorites' ) : home_url( '/favorites/' ) ) . '#lnkup-saved-searches-panel';
 			case 'vendor_profile':

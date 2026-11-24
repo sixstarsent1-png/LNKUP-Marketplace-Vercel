@@ -51,13 +51,22 @@ $lnkup_preheader = isset( $args['paragraphs'][0] ) ? (string) $args['paragraphs'
 								<?php foreach ( (array) $args['items'] as $lnkup_item ) : ?>
 									<tr>
 										<td style="padding:12px 16px;border:1px solid #e7e7e3;border-radius:12px;">
+											<?php if ( ! empty( $lnkup_item['image'] ) ) : ?>
+												<img src="<?php echo esc_url( $lnkup_item['image'] ); ?>" alt="" width="48" height="48" style="float:left;width:48px;height:48px;border-radius:10px;object-fit:cover;margin:0 12px 4px 0;">
+											<?php endif; ?>
 											<?php if ( '' !== $lnkup_item['url'] ) : ?>
 												<a href="<?php echo esc_url( $lnkup_item['url'] ); ?>" style="font-size:16px;font-weight:700;color:#0b0b0c;text-decoration:none;"><?php echo esc_html( $lnkup_item['title'] ); ?></a>
 											<?php else : ?>
 												<span style="font-size:16px;font-weight:700;color:#0b0b0c;"><?php echo esc_html( $lnkup_item['title'] ); ?></span>
 											<?php endif; ?>
+											<?php if ( ! empty( $lnkup_item['badge'] ) ) : ?>
+												<span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#c8f542;font-size:12px;font-weight:700;color:#0b0b0c;"><?php echo esc_html( $lnkup_item['badge'] ); ?></span>
+											<?php endif; ?>
 											<?php if ( '' !== $lnkup_item['meta'] ) : ?>
 												<div style="font-size:14px;line-height:20px;color:#5b5c63;margin-top:4px;"><?php echo esc_html( $lnkup_item['meta'] ); ?></div>
+											<?php endif; ?>
+											<?php if ( ! empty( $lnkup_item['action_url'] ) && ! empty( $lnkup_item['action_label'] ) ) : ?>
+												<div style="margin-top:8px;clear:both;"><a href="<?php echo esc_url( $lnkup_item['action_url'] ); ?>" style="font-size:14px;font-weight:700;color:#0b0b0c;"><?php echo esc_html( $lnkup_item['action_label'] ); ?> &rarr;</a></div>
 											<?php endif; ?>
 										</td>
 									</tr>

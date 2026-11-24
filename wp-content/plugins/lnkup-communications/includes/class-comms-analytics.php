@@ -140,10 +140,13 @@ class LNKup_Comms_Analytics {
 		if ( in_array( $trigger, array( 'v_welcome', 'v_onboarding', 'o_welcome', 'o_onboarding', 'o_event_published' ), true ) ) {
 			return 'onboarding';
 		}
-		if ( in_array( $trigger, array( 'v_opportunity_match', 'v_organizer_new_opportunity', 'digest_email', 'v_tour_match', 'v_weekly_matches', 'v_saved_search_match', 'v_saved_deadline', 'v_invited_to_apply' ), true ) ) {
+		if ( in_array( $trigger, array( 'v_opportunity_match', 'v_organizer_new_opportunity', 'digest_email', 'v_tour_match', 'v_weekly_matches', 'v_saved_search_match', 'v_saved_deadline', 'v_invited_to_apply', 'v_invite_expiring' ), true ) ) {
 			return 'discovery';
 		}
-		if ( in_array( $trigger, array( 'o_recruit_vendors', 'o_no_applications', 'o_publish_next', 'o_reactivation', 'o_open_spots', 'o_new_matching_vendors', 'o_setup_profile', 'o_setup_payouts', 'o_publish_draft', 'o_first_booking' ), true ) ) {
+		if ( in_array( $trigger, array( 'v_application_draft', 'v_inactive' ), true ) ) {
+			return 'vendor_engagement';
+		}
+		if ( in_array( $trigger, array( 'o_recruit_vendors', 'o_no_applications', 'o_publish_next', 'o_reactivation', 'o_open_spots', 'o_new_matching_vendors', 'o_new_vendors_nearby', 'o_invite_response', 'o_event_no_slots', 'o_setup_profile', 'o_setup_payouts', 'o_publish_draft', 'o_first_booking' ), true ) ) {
 			return 'organizer_activation';
 		}
 		if ( in_array( $trigger, array( 'v_event_thanks', 'o_event_completed' ), true ) ) {

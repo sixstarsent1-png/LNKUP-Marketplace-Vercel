@@ -63,10 +63,28 @@ class LNKup_Comms_Next_Steps {
 				);
 			}
 		}
+		$invites = class_exists( 'LNKup_Vendor_Invites' ) ? LNKup_Vendor_Invites::get_for_vendor( $user_id, 'open', 20 ) : array();
+		if ( $invites ) {
+			$count   = count( $invites );
+			/* translators: %d: count */
+			$steps[] = self::item( 'invitations', sprintf( _n( 'Respond to %d organizer invitation', 'Respond to %d organizer invitations', $count, 'lnkup-communications' ), $count ), (string) $invites[0]['event_title'], 'vendor_invites', LNKup_Comms_Context::build( array() ), 'vendor', 'high', $count );
+		}
+		foreach ( self::open_drafts( $user_id ) as $draft ) {
+			$steps[] = self::item( 'draft_' . $draft['draft_id'], __( 'Finish your application', 'lnkup-communications' ), $draft['title'], 'opportunity', LNKup_Comms_Context::build( array( 'opportunity_id' => $draft['opportunity_id'] ) ), 'vendor', $draft['closing'] ? 'high' : 'normal' );
+		}
 		$next = LNKup_Comms_Context::vendor_next_step( $user_id );
 		if ( '' !== $next['key'] ) {
 			$steps[] = self::item( 'profile_' . $next['key'], $next['label'], '', $next['link'], LNKup_Comms_Context::build( array() ), 'vendor', 'normal' );
 		}
+		if ( ! $upcoming && ! $invites ) {
+			$recs = LNKup_Comms_Engagement::vendor_recommendations( $user_id, 5 );
+			if ( $recs ) {
+				$count   = count( $recs );
+				/* translators: %d: count */
+				$steps[] = self::item( 'opportunities', sprintf( _n( '%d open event matches your business', '%d open events match your business', $count, 'lnkup-communications' ), $count ), (string) ( $recs[0]['event_name'] ?? '' ), 'vendor_find', LNKup_Comms_Context::build( array() ), 'vendor', 'low', $count );
+			}
+		}
+		$steps = self::rank( $steps );
 		usort(
 			$upcoming,
 			static function ( array $a, array $b ): int {
@@ -105,6 +123,16 @@ class LNKup_Comms_Next_Steps {
 				/* translators: %d: count */
 				$steps[] = self::item( 'docs_' . $event_id, sprintf( _n( '%d confirmed vendor missing documents', '%d confirmed vendors missing documents', $missing_docs, 'lnkup-communications' ), $missing_docs ), $title, 'org_event', $ctx, 'organizer', 'normal', $missing_docs );
 			}
+			if ( 'publish' === get_post_status( $event_id ) && 0 === LNKup_Comms_Context::published_opportunity_count( $event_id ) ) {
+				$steps[] = self::item( 'slots_' . $event_id, __( 'Add vendor opportunities so businesses can apply', 'lnkup-communications' ), $title, 'org_event', $ctx, 'organizer', 'high' );
+			} elseif ( class_exists( 'LNKup_Event_Fulfillment' ) ) {
+				foreach ( LNKup_Event_Fulfillment::for_event( $event_id )['actions'] as $action ) {
+					if ( in_array( $action['key'], array( 'deadline', 'find_vendors', 'share_link' ), true ) ) {
+						$steps[] = self::item( 'fill_' . $event_id, (string) $action['label'], $title, 'org_find_vendors', $ctx, 'organizer', 'deadline' === $action['key'] ? 'high' : 'normal' );
+						break;
+					}
+				}
+			}
 			$start      = LNKup_Comms_Context::event_start( $event_id );
 			$upcoming[] = array(
 				'eventId'   => $event_id,
@@ -127,6 +155,7 @@ class LNKup_Comms_Next_Steps {
 			/* translators: %d: count */
 			$steps[] = self::item( 'failed_payments', sprintf( _n( '%d vendor payment did not complete this week', '%d vendor payments did not complete this week', $failed, 'lnkup-communications' ), $failed ), '', 'org_money', LNKup_Comms_Context::build( array() ), 'organizer', 'normal', $failed );
 		}
+		$steps = self::rank( $steps );
 		usort(
 			$upcoming,
 			static function ( array $a, array $b ): int {
@@ -137,6 +166,70 @@ class LNKup_Comms_Next_Steps {
 			'steps'    => array_slice( $steps, 0, 10 ),
 			'upcoming' => array_slice( $upcoming, 0, 6 ),
 		);
+	}
+
+	/**
+	 * Stable priority order (high → normal → low); ties keep their discovery order.
+	 */
+	private static function rank( array $steps ): array {
+		$weight = array( 'high' => 0, 'normal' => 1, 'low' => 2 );
+		foreach ( $steps as $i => $step ) {
+			$steps[ $i ]['_order'] = ( $weight[ $step['priority'] ] ?? 1 ) * 1000 + $i;
+		}
+		usort(
+			$steps,
+			static function ( array $a, array $b ): int {
+				return $a['_order'] <=> $b['_order'];
+			}
+		);
+		return array_map(
+			static function ( array $step ): array {
+				unset( $step['_order'] );
+				return $step;
+			},
+			$steps
+		);
+	}
+
+	/**
+	 * Saved applications whose opportunity is still open and not applied to.
+	 *
+	 * @return array<int, array{draft_id:int,opportunity_id:int,title:string,closing:bool}>
+	 */
+	private static function open_drafts( int $user_id ): array {
+		if ( ! class_exists( 'LNKup_Application_Drafts' ) ) {
+			return array();
+		}
+		$ids = get_posts(
+			array(
+				'post_type'      => 'lnkup_application',
+				'post_status'    => LNKup_Application_Drafts::POST_STATUS,
+				'posts_per_page' => 5,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'orderby'        => 'modified',
+				'order'          => 'DESC',
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_draft_vendor_user_id', 'value' => (string) $user_id ),
+					array( 'key' => '_lnkup_draft_state', 'value' => LNKup_Application_Drafts::STATE_OPEN ),
+				),
+			)
+		);
+		$out = array();
+		foreach ( array_map( 'intval', (array) $ids ) as $draft_id ) {
+			$opp = (int) get_post_meta( $draft_id, '_lnkup_draft_opportunity_id', true );
+			if ( ! LNKup_Comms_Context::opportunity_open( $opp ) || LNKup_Comms_Context::vendor_applied_to( $user_id, $opp ) ) {
+				continue;
+			}
+			$deadline = trim( (string) get_post_meta( $opp, '_lnkup_application_deadline', true ) );
+			$out[]    = array(
+				'draft_id'       => $draft_id,
+				'opportunity_id' => $opp,
+				'title'          => (string) get_the_title( (int) get_post_meta( $opp, '_lnkup_event_id', true ) ?: $opp ),
+				'closing'        => '' !== $deadline && strtotime( substr( $deadline, 0, 10 ) ) <= strtotime( wp_date( 'Y-m-d', time() + 3 * DAY_IN_SECONDS ) ),
+			);
+		}
+		return $out;
 	}
 
 	private static function recent_failed_payments( int $organizer_id ): int {

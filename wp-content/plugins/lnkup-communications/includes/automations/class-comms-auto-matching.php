@@ -307,7 +307,7 @@ class LNKup_Comms_Auto_Matching {
 				$sent += LNKup_Comms_Engine::dispatch(
 					'o_open_spots',
 					$organizer,
-					array( 'event_id' => $event_id, 'open_spots' => (string) $open, 'days_until' => (string) $days ),
+					array( 'event_id' => $event_id, 'open_spots' => (string) $open, 'days_until' => (string) $days, 'category_summary' => LNKup_Comms_Engagement::category_summary( $event_id ) ),
 					array( 'window' => 'spots_d' . $days, 'source' => 'recruitment_updates' )
 				) ? 1 : 0;
 			}

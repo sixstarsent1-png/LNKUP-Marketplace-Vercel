@@ -110,7 +110,7 @@ class LNKup_Comms_Registry {
 				'roles'       => array( 'vendor', 'organizer' ),
 				'promotional' => false,
 				'locked'      => false,
-				'tab'         => array( 'vendor' => 'all', 'organizer' => 'all' ),
+				'tab'         => array( 'vendor' => 'account', 'organizer' => 'account' ),
 				'legacy'      => 'account',
 			),
 			'product_news'  => array(
@@ -137,7 +137,7 @@ class LNKup_Comms_Registry {
 				'roles'       => array( 'vendor', 'organizer' ),
 				'promotional' => false,
 				'locked'      => true,
-				'tab'         => array( 'vendor' => 'all', 'organizer' => 'all' ),
+				'tab'         => array( 'vendor' => 'account', 'organizer' => 'account' ),
 				'legacy'      => 'account',
 			),
 		);
@@ -151,10 +151,15 @@ class LNKup_Comms_Registry {
 			return array( 'all' );
 		}
 		if ( 'organizer' === $role ) {
-			return array( 'all', 'applications', 'payments', 'events', 'operations' );
+			return array( 'all', 'applications', 'payments', 'events', 'operations', 'invitations', 'account' );
 		}
-		return array( 'all', 'applications', 'payments', 'events', 'opportunities' );
+		return array( 'all', 'applications', 'payments', 'events', 'opportunities', 'invitations', 'account' );
 	}
+
+	/**
+	 * Notification types that belong to the Invitations tab for both roles.
+	 */
+	const INVITATION_TYPES = array( 'discovery_invite', 'discovery_invite_expiring', 'organizer_invite_response' );
 
 	/**
 	 * Trigger definitions.
@@ -225,6 +230,9 @@ class LNKup_Comms_Registry {
 			'v_saved_search_match'    => array( 'role' => 'vendor', 'category' => 'opportunities', 'priority' => 'normal', 'channels' => $all, 'flag' => 'flow_discovery', 'link' => 'vendor_saved_searches', 'type' => 'discovery_saved_search', 'expires' => 3 * $day ),
 			'v_saved_deadline'        => array( 'role' => 'vendor', 'category' => 'opportunities', 'priority' => 'normal', 'channels' => $all, 'flag' => 'flow_discovery', 'link' => 'opportunity', 'type' => 'discovery_favorite_deadline', 'validity' => 'saved_still_open', 'expires' => 2 * $day ),
 			'v_invited_to_apply'      => array( 'role' => 'vendor', 'category' => 'opportunities', 'priority' => 'normal', 'channels' => $all, 'flag' => 'flow_discovery', 'link' => 'opportunity', 'type' => 'discovery_invite', 'validity' => 'invite_still_open', 'expires' => 14 * $day ),
+			'v_invite_expiring'       => array( 'role' => 'vendor', 'category' => 'opportunities', 'priority' => 'normal', 'channels' => $all, 'flag' => 'flow_discovery', 'link' => 'vendor_invites', 'type' => 'discovery_invite_expiring', 'validity' => 'invite_still_open', 'expires' => 2 * $day ),
+			'v_application_draft'     => array( 'role' => 'vendor', 'category' => 'applications', 'priority' => 'normal', 'channels' => $all, 'flag' => 'flow_vendor_engagement', 'link' => 'opportunity', 'type' => 'application_draft', 'validity' => 'draft_still_open', 'expires' => 2 * $day ),
+			'v_inactive'              => array( 'role' => 'vendor', 'category' => 'opportunities', 'priority' => 'promotional', 'channels' => $all, 'flag' => 'flow_vendor_engagement', 'link' => 'vendor_find', 'type' => 'discovery_reactivation', 'validity' => 'vendor_still_inactive', 'expires' => 3 * $day ),
 
 			// ---------------------------------------------------------------- Organizer: applications.
 			'o_application_received'  => array( 'role' => 'organizer', 'category' => 'applications', 'priority' => 'high', 'channels' => $all, 'flag' => 'flow_applications', 'link' => 'org_review', 'type' => 'organizer_new_vendor_request', 'validity' => 'org_has_pending', 'expires' => 3 * $day ),
@@ -262,6 +270,9 @@ class LNKup_Comms_Registry {
 			'o_publish_next'          => array( 'role' => 'organizer', 'category' => 'recruitment', 'priority' => 'promotional', 'channels' => array( 'inbox', 'email' ), 'flag' => 'flow_retention', 'link' => 'org_launch', 'type' => 'activation_create_event', 'validity' => 'organizer_has_no_upcoming', 'expires' => 3 * $day ),
 			'o_open_spots'            => array( 'role' => 'organizer', 'category' => 'recruitment', 'priority' => 'normal', 'channels' => $all, 'flag' => 'flow_recruitment_updates', 'link' => 'org_vendors', 'type' => 'organizer_open_spots', 'validity' => 'event_has_open_spots', 'expires' => 2 * $day ),
 			'o_new_matching_vendors'  => array( 'role' => 'organizer', 'category' => 'recruitment', 'priority' => 'promotional', 'channels' => array( 'inbox', 'email' ), 'flag' => 'flow_recruitment_updates', 'link' => 'org_vendors', 'type' => 'organizer_recruit_vendors', 'validity' => 'event_has_new_matches', 'expires' => 3 * $day ),
+			'o_new_vendors_nearby'    => array( 'role' => 'organizer', 'category' => 'recruitment', 'priority' => 'promotional', 'channels' => $all, 'flag' => 'flow_recruitment_updates', 'link' => 'org_find_vendors', 'type' => 'organizer_new_vendors_nearby', 'validity' => 'event_has_nearby_vendors', 'expires' => 2 * $day ),
+			'o_invite_response'       => array( 'role' => 'organizer', 'category' => 'recruitment', 'priority' => 'normal', 'channels' => array( 'inbox', 'push' ), 'flag' => 'flow_recruitment_updates', 'link' => 'org_invites', 'type' => 'organizer_invite_response', 'validity' => 'invite_status_matches', 'expires' => 3 * $day ),
+			'o_event_no_slots'        => array( 'role' => 'organizer', 'category' => 'onboarding', 'priority' => 'normal', 'channels' => $all, 'flag' => 'flow_activation', 'link' => 'org_event', 'type' => 'organizer_event_no_slots', 'validity' => 'event_has_no_slots', 'expires' => 2 * $day ),
 			'o_reactivation'          => array( 'role' => 'organizer', 'category' => 'recruitment', 'priority' => 'promotional', 'channels' => array( 'email' ), 'flag' => 'flow_retention', 'link' => 'org_launch', 'type' => 'activation_create_event', 'validity' => 'organizer_has_no_upcoming', 'expires' => 3 * $day ),
 
 			// ---------------------------------------------------------------- Partner programs (City Connector, affiliate, strategic partner).
@@ -320,6 +331,9 @@ class LNKup_Comms_Registry {
 	 * Inbox tab for a stored notification type (covers core-written rows too).
 	 */
 	public static function tab_for_type( string $type, string $role ): string {
+		if ( 'partner' !== $role && in_array( $type, self::INVITATION_TYPES, true ) ) {
+			return 'invitations';
+		}
 		static $map = null;
 		if ( null === $map ) {
 			$map = array();

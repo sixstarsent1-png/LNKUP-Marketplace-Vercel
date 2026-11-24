@@ -65,7 +65,8 @@ class LNKup_Comms_Listen_Operations {
 		$app_id   = absint( $app_id );
 		$event_id = absint( $event_id );
 		$vendor   = (int) get_post_meta( $app_id, '_lnkup_vendor_user_id', true );
-		LNKup_Comms_Engine::dispatch( 'v_event_thanks', $vendor, array( 'application_id' => $app_id ), array( 'at' => time() + 6 * HOUR_IN_SECONDS, 'source' => 'event_completed' ) );
+		$first = 1 >= LNKup_Comms_Context::count_apps( array( '_lnkup_vendor_user_id' => $vendor ), LNKup_Comms_Context::CONFIRMED_BOOKING );
+		LNKup_Comms_Engine::dispatch( 'v_event_thanks', $vendor, array( 'application_id' => $app_id ), array( 'at' => time() + 6 * HOUR_IN_SECONDS, 'variant' => $first ? 'first' : '', 'source' => 'event_completed' ) );
 		$organizer = (int) get_post_meta( $event_id, '_lnkup_organizer_user_id', true );
 		// One wrap-up per event, the morning after (dedupe on the event).
 		LNKup_Comms_Engine::dispatch( 'o_event_completed', $organizer, array( 'event_id' => $event_id ), array( 'at' => time() + 12 * HOUR_IN_SECONDS, 'source' => 'event_completed' ) );

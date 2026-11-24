@@ -318,7 +318,7 @@ class LNKup_Comms_REST {
 		if ( 'partner' === $role ) {
 			return rest_ensure_response( array( 'steps' => array(), 'upcoming' => array(), 'role' => $role ) );
 		}
-		$data    = 'organizer' === $role ? LNKup_Comms_Next_Steps::organizer( $user_id ) : LNKup_Comms_Next_Steps::vendor( $user_id );
+		$data         = LNKup_Comms_Engagement::next_steps( $user_id, 'organizer' === $role ? 'organizer' : 'vendor' );
 		$data['role'] = $role;
 		return rest_ensure_response( $data );
 	}
