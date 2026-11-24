@@ -429,6 +429,26 @@ button.eb-cal__day:disabled { cursor: not-allowed; opacity: .5; }
 .eb-cal__state { font-size: 12px; font-weight: 650; color: var(--eb-muted); }
 .eb-iconbtn--xs { width: 20px; height: 20px; padding: 0; border: 0; background: transparent; display: inline-grid; place-items: center; cursor: pointer; }
 .eb-iconbtn--xs svg { width: 12px; height: 12px; }
+.eb-stops { display: grid; gap: 12px; }
+.eb-stops__meta { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 12px; }
+.eb-stop { display: grid; gap: 12px; padding: 14px 16px; border-radius: var(--eb-radius-sm); border: 1px solid var(--eb-line); background: var(--eb-surface); }
+.eb-stop[data-skip="true"] { opacity: .6; background: var(--eb-canvas); }
+.eb-stop[data-existing="true"] { background: var(--eb-surface-2); }
+.eb-stop__head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.eb-stop__head .eb-iconbtn:disabled { opacity: .35; }
+.eb-stop__grid { display: grid; gap: 10px 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.eb-stop__grid .eb-span-2 { grid-column: span 2; }
+.eb-stop__foot { display: flex; gap: 18px; flex-wrap: wrap; padding-top: 4px; border-top: 1px dashed var(--eb-line); }
+.eb-bulkbar { position: sticky; top: 64px; z-index: 5; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 12px; border-radius: var(--eb-radius-sm); background: #141414; color: #fff; }
+.eb-bulkbar .eb-btn { background: #fff; }
+.eb-bulkbar .eb-link { color: var(--eb-lime); }
+.eb-empty { text-align: center; padding: 28px 16px; }
+@media (max-width: 1100px) { .eb-stop__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) {
+  .eb-stop__grid { grid-template-columns: minmax(0, 1fr); }
+  .eb-stop__grid .eb-span-2 { grid-column: auto; }
+  .eb-bulkbar { position: static; }
+}
 .eb-bulk { display: grid; gap: 16px; padding-bottom: 24px; }
 .eb-bulk > .eb-seg { justify-self: start; max-width: 100%; }
 .eb-bulk__body { display: grid; gap: 14px; }

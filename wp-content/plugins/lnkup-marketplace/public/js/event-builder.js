@@ -840,7 +840,7 @@
     return h('div', { class: 'eb-field' + (opts.span ? ' ' + opts.span : '') + (invalid ? ' eb-field--invalid' : '') }, [
       h('label', { for: id }, [label, opts.required ? h('span', { class: 'eb-req', 'aria-hidden': 'true', text: '*' }) : null, opts.optional ? h('span', { class: 'eb-opt', text: 'Optional' }) : null]),
       input,
-      opts.help ? h('p', { class: 'eb-help', id: id + '-help', text: opts.help }) : null,
+      opts.help ? h('p', { class: 'eb-help', id: id + '-help' }, opts.help) : null,
       invalid ? h('p', { class: 'eb-error', role: 'alert', text: check.message }) : null
     ]);
   }
@@ -1536,7 +1536,8 @@
     var whenFields = h('div', { class: 'eb-grid', style: 'margin-top:10px', hidden: st.publish.when !== 'schedule' }, [
       field('Publish at', textInput('publish.at', { type: 'datetime-local' }), { help: 'Your local time.', check: 'schedule', showError: true })
     ]);
-    var attest = st.sources.length || st.import.provider ? h('label', { class: 'eb-check', style: 'margin-top:12px' }, [
+    var stopLinks = isPortfolio() && st.portfolio.stops.some(function (s) { return !!s.url; });
+    var attest = st.sources.length || st.import.provider || stopLinks ? h('label', { class: 'eb-check', style: 'margin-top:12px' }, [
       h('input', { type: 'checkbox', checked: st.publish.attest, 'data-testid': 'eb-attest', onchange: function (e) { set('publish.attest', e.target.checked, { now: true }); } }),
       h('span', {}, ['I organize this event or am authorized to manage its vendors', h('small', { text: 'Linking a listing does not prove ownership. Disputed events are reviewed by LNKup.' })])
     ]) : null;
@@ -2120,6 +2121,160 @@
     setTimeout(loadDates, 0);
     return card('Schedule', 'Set the pattern once. Review every date before anything is created.', h('div', { class: 'eb-sched' }, body), { testid: 'eb-schedule' });
   }
+
+  /* Tours & series: stop list. */
+
+  function stopKey() { return 's' + Math.random().toString(36).slice(2, 10); }
+  function blankStop() { return { key: stopKey(), event_id: 0, date: '', start_time: '', end_time: '', timezone: '', city: '', state: '', market_city: '', venue_name: '', venue_address: '', url: '', fee_override: null, spots_override: null, skip: false, confirmed: false, publish: true }; }
+
+  Builder.stopCards = function (tzSelect) {
+    var st = S.draft.state;
+    var noun = st.method === 'tour' ? 'stop' : 'event';
+    var sel = S.stopSel || (S.stopSel = {});
+    var stops = st.portfolio.stops;
+    var first = (st.options || [])[0];
+    var saveStops = function (rerender) { set('portfolio.stops', clone(stops)); if (rerender) renderBuilder(); };
+
+    var defaults = card('Default times', 'Used for every ' + noun + ' unless you set a different time on it.', h('div', { class: 'eb-grid eb-grid--3' }, [
+      field('Start time', textInput('event.start_time', { type: 'time' }), { optional: true }),
+      field('End time', textInput('event.end_time', { type: 'time' }), { optional: true }),
+      field('Time zone', tzSelect, { help: 'Stops in other time zones can set their own.' })
+    ]));
+
+    function row(s, i) {
+      var upd = function (k, v) { s[k] = v; saveStops(false); };
+      var input = function (k, attrs, label) {
+        return h('input', Object.assign({ class: 'eb-input', value: s[k] === null || s[k] === undefined ? '' : s[k], 'aria-label': label + ' for ' + noun + ' ' + (i + 1), oninput: function (e) { upd(k, e.target.value); } }, attrs || {}));
+      };
+      var head = h('div', { class: 'eb-stop__head' }, [
+        h('label', { class: 'eb-check' }, [h('input', { type: 'checkbox', checked: !!sel[s.key], 'aria-label': 'Select ' + noun + ' ' + (i + 1), onchange: function (e) { sel[s.key] = e.target.checked; renderBuilder(); } }), h('strong', { text: (noun === 'stop' ? 'Stop ' : 'Event ') + (i + 1) })]),
+        s.event_id ? h('span', { class: 'eb-badge-inherit', text: 'Existing event' }) : null,
+        s.skip ? h('span', { class: 'eb-chip eb-chip--line', text: 'Left out' }) : null,
+        h('span', { style: 'flex:1' }),
+        h('button', { type: 'button', class: 'eb-iconbtn', 'aria-label': 'Move up', disabled: i === 0, onclick: function () { stops.splice(i - 1, 0, stops.splice(i, 1)[0]); saveStops(true); } }, icon('up')),
+        h('button', { type: 'button', class: 'eb-iconbtn', 'aria-label': 'Move down', disabled: i === stops.length - 1, onclick: function () { stops.splice(i + 1, 0, stops.splice(i, 1)[0]); saveStops(true); } }, icon('down')),
+        h('button', { type: 'button', class: 'eb-iconbtn', 'aria-label': 'Remove ' + noun + ' ' + (i + 1), onclick: function () { stops.splice(i, 1); delete sel[s.key]; saveStops(true); } }, icon('trash'))
+      ]);
+      if (s.event_id) {
+        return h('div', { class: 'eb-stop', 'data-existing': 'true', 'data-testid': 'eb-stop' }, [head, h('p', { class: 'eb-help', text: [s.venue_name, s.city && (s.city + ', ' + s.state), s.date && fmtDate(s.date)].filter(Boolean).join(' · ') + ' — keeps its own vendors, prices and listing.' })]);
+      }
+      var cityBox = h('div', { class: 'eb-ac' });
+      var cityInput = h('input', { class: 'eb-input', value: s.city ? s.city + (s.state ? ', ' + s.state : '') : '', placeholder: 'City, ST', autocomplete: 'off', 'aria-label': 'City and state for ' + noun + ' ' + (i + 1) });
+      var list = h('div', { class: 'eb-ac__list', hidden: true, role: 'listbox' });
+      var suggest = debounce(function () {
+        var q = cityInput.value.trim();
+        if (q.length < 2) { list.hidden = true; return; }
+        api('locations/suggest', { query: { q: q } }).then(function (r) {
+          clear(list);
+          (r.results || []).slice(0, 6).forEach(function (c) {
+            append(list, h('button', { type: 'button', class: 'eb-ac__item', role: 'option', text: c.display, onclick: function () { s.city = c.city; s.state = c.state_code; cityInput.value = c.city + ', ' + c.state_code; list.hidden = true; saveStops(false); } }));
+          });
+          list.hidden = !list.children.length;
+        }).catch(function () { list.hidden = true; });
+      }, 250);
+      cityInput.addEventListener('input', function () {
+        var m = cityInput.value.match(/^\s*(.+?),\s*([A-Za-z]{2})\s*$/);
+        s.city = m ? m[1] : cityInput.value.trim(); s.state = m ? m[2].toUpperCase() : '';
+        saveStops(false); suggest();
+      });
+      cityInput.addEventListener('blur', function () { setTimeout(function () { list.hidden = true; }, 200); });
+      append(cityBox, [cityInput, list]);
+      var prov = s.url ? providerFor(s.url) : null;
+      return h('div', { class: 'eb-stop', 'data-skip': s.skip ? 'true' : 'false', 'data-testid': 'eb-stop' }, [
+        head,
+        h('div', { class: 'eb-stop__grid' }, [
+          field('Date', input('date', { type: 'date' }, 'Date'), { required: true }),
+          field('City & state', cityBox, { required: true }),
+          field('Venue', input('venue_name', { placeholder: 'Venue name' }, 'Venue')),
+          field('Street address', input('venue_address', { placeholder: '123 Main St' }, 'Street address')),
+          field('Starts', input('start_time', { type: 'time' }, 'Start time'), { help: st.event.start_time ? 'Default ' + st.event.start_time : '' }),
+          field('Ends', input('end_time', { type: 'time' }, 'End time')),
+          field('Booth price', h('div', { class: 'eb-prefix' }, [h('span', { text: '$' }), input('fee_override', { type: 'number', min: 0, step: '1', inputmode: 'decimal', placeholder: first ? String(first.fee) : '' }, 'Booth price')]), { help: s.fee_override === null || s.fee_override === '' ? h('span', { class: 'eb-badge-inherit', text: 'Inherits option prices' }) : h('span', { class: 'eb-badge-override', text: 'Custom price for every option here' }) }),
+          field('Spaces', input('spots_override', { type: 'number', min: 1, inputmode: 'numeric', placeholder: first ? String(first.spots) : '' }, 'Spaces'), { help: s.spots_override === null || s.spots_override === '' ? h('span', { class: 'eb-badge-inherit', text: 'Inherits' }) : h('span', { class: 'eb-badge-override', text: 'Custom' }) }),
+          field('Official listing', input('url', { type: 'url', placeholder: 'https://… (optional)' }, 'Official listing'), { span: 'eb-span-2', help: prov ? prov.label + ' listing for this ' + noun : 'Each ' + noun + ' can link its own ticketing page — POSH, Eventbrite or any site.' })
+        ]),
+        h('div', { class: 'eb-stop__foot' }, [
+          h('label', { class: 'eb-check' }, [h('input', { type: 'checkbox', checked: s.publish, onchange: function (e) { upd('publish', e.target.checked); } }), h('span', { text: 'Publish this ' + noun + ' now' })]),
+          h('label', { class: 'eb-check' }, [h('input', { type: 'checkbox', checked: s.skip, onchange: function (e) { s.skip = e.target.checked; saveStops(true); } }), h('span', { text: 'Leave out for now' })])
+        ])
+      ]);
+    }
+
+    var picked = stops.filter(function (s) { return sel[s.key]; });
+    var bulkBar = picked.length ? h('div', { class: 'eb-bulkbar', role: 'toolbar', 'aria-label': 'Selected ' + noun + 's' }, [
+      h('strong', { text: picked.length + ' selected' }),
+      h('button', { type: 'button', class: 'eb-btn eb-btn--sm', text: 'Set price', onclick: function () { bulkNumber('Booth price for ' + picked.length + ' ' + noun + '(s)', 'fee_override'); } }),
+      h('button', { type: 'button', class: 'eb-btn eb-btn--sm', text: 'Set spaces', onclick: function () { bulkNumber('Spaces for ' + picked.length + ' ' + noun + '(s)', 'spots_override'); } }),
+      h('button', { type: 'button', class: 'eb-btn eb-btn--sm', text: 'Use defaults', onclick: function () { picked.forEach(function (s) { s.fee_override = null; s.spots_override = null; s.start_time = ''; s.end_time = ''; }); saveStops(true); } }),
+      h('button', { type: 'button', class: 'eb-btn eb-btn--sm', text: 'Publish now', onclick: function () { picked.forEach(function (s) { s.publish = true; }); saveStops(true); } }),
+      h('button', { type: 'button', class: 'eb-btn eb-btn--sm', text: 'Hold back', onclick: function () { picked.forEach(function (s) { s.publish = false; }); saveStops(true); } }),
+      h('button', { type: 'button', class: 'eb-link', text: 'Clear', onclick: function () { S.stopSel = {}; renderBuilder(); } })
+    ]) : null;
+    function bulkNumber(title, key) {
+      var inp = h('input', { type: 'number', class: 'eb-input', min: 0, inputmode: 'decimal', 'aria-label': title });
+      var d = dialog({ title: title, body: [inp, h('p', { class: 'eb-help', text: 'Applies to the selected ' + noun + 's only. Leave empty to use the defaults.' })], foot: [
+        h('button', { type: 'button', class: 'eb-btn', text: 'Cancel', onclick: function () { d.close(); } }),
+        h('button', { type: 'button', class: 'eb-btn eb-btn--primary', text: 'Apply', onclick: function () { var v = inp.value === '' ? null : Number(inp.value); picked.forEach(function (s) { if (!s.event_id) s[key] = v; }); d.close(); saveStops(true); } })
+      ] });
+    }
+
+    var actions = h('div', { class: 'eb-notice__actions' }, [
+      h('button', { type: 'button', class: 'eb-btn eb-btn--dark eb-btn--sm', 'data-testid': 'eb-add-stop', text: 'Add ' + noun, onclick: function () { var last = stops[stops.length - 1]; var n = blankStop(); if (last && !last.event_id) { n.venue_name = ''; n.state = ''; } stops.push(n); saveStops(true); } }),
+      h('button', { type: 'button', class: 'eb-btn eb-btn--sm', text: 'Paste a list', onclick: pasteStops }),
+      h('button', { type: 'button', class: 'eb-btn eb-btn--sm', text: 'Add existing events', onclick: existingStops })
+    ]);
+    function pasteStops() {
+      var ta = h('textarea', { class: 'eb-input', rows: 8, placeholder: '2027-03-05, Atlanta, GA, Pullman Yards\n03/19/2027, Dallas, TX, Fair Park', 'aria-label': 'Stops, one per line' });
+      var d = dialog({ title: 'Paste ' + noun + 's', wide: true, body: [ta, h('p', { class: 'eb-help', text: 'One per line: date, city, state, venue (optional). Dates like 2027-03-05 or 03/05/2027.' })], foot: [
+        h('button', { type: 'button', class: 'eb-btn', text: 'Cancel', onclick: function () { d.close(); } }),
+        h('button', { type: 'button', class: 'eb-btn eb-btn--primary', text: 'Add', onclick: function () {
+          var added = 0;
+          ta.value.split(/\r?\n/).forEach(function (line) {
+            var p = line.split(/\t|,/).map(function (x) { return x.trim(); });
+            if (p.length < 3) return;
+            var m = p[0].match(/^(\d{4})-(\d{2})-(\d{2})$/) || p[0].match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            var date = !m ? '' : (m[1].length === 4 ? p[0] : m[3] + '-' + ('0' + m[1]).slice(-2) + '-' + ('0' + m[2]).slice(-2));
+            var n = blankStop(); n.date = date; n.city = p[1]; n.state = /^[A-Za-z]{2}$/.test(p[2]) ? p[2].toUpperCase() : ''; n.venue_name = p.slice(3).join(', ');
+            stops.push(n); added++;
+          });
+          d.close(); saveStops(true); toast(added ? added + ' ' + noun + (added === 1 ? '' : 's') + ' added. Check each one.' : 'Nothing to add — use date, city, state per line.', added ? null : 'error');
+        } })
+      ] });
+    }
+    function existingStops() {
+      var box = h('div', { class: 'eb-picks' }, h('div', { class: 'eb-skeleton' }, [h('span'), h('span')]));
+      var chosen = {};
+      var d = dialog({ title: 'Add your existing events', wide: true, body: [h('p', { class: 'eb-help', text: 'They join this ' + st.method + ' and keep their own vendors, prices and bookings.' }), box], foot: [
+        h('button', { type: 'button', class: 'eb-btn', text: 'Cancel', onclick: function () { d.close(); } }),
+        h('button', { type: 'button', class: 'eb-btn eb-btn--primary', text: 'Add selected', onclick: function () {
+          (S.stopCandidates || []).forEach(function (ev) {
+            if (!chosen[ev.id] || stops.some(function (s) { return s.event_id === ev.id; })) return;
+            var n = blankStop(); n.key = 'e' + ev.id; n.event_id = ev.id; n.date = ev.date; n.city = ev.city; n.state = ev.state; n.venue_name = ev.venue; n.publish = false;
+            stops.push(n);
+          });
+          d.close(); saveStops(true);
+        } })
+      ] });
+      api('organizer/builder/stop-candidates').then(function (r) {
+        S.stopCandidates = r.events || [];
+        clear(box);
+        if (!S.stopCandidates.length) { append(box, h('p', { class: 'eb-help', text: 'No upcoming events outside a tour or series.' })); return; }
+        S.stopCandidates.forEach(function (ev) {
+          var used = stops.some(function (s) { return s.event_id === ev.id; });
+          append(box, h('label', { class: 'eb-pick' }, [h('input', { type: 'checkbox', disabled: used, checked: used, onchange: function (e) { chosen[ev.id] = e.target.checked; } }), h('span', { class: 'eb-pick__body' }, [h('span', { class: 'eb-pick__value', text: ev.title }), h('span', { class: 'eb-help', text: [fmtDate(ev.date), [ev.city, ev.state].filter(Boolean).join(', '), ev.status === 'publish' ? 'Live' : 'Draft'].filter(Boolean).join(' · ') })])]));
+        });
+      }).catch(function (e) { clear(box); append(box, h('p', { class: 'eb-error', text: e.message })); });
+    }
+
+    var live = stops.filter(function (s) { return !s.skip; });
+    var stopsCard = card(st.method === 'tour' ? 'Tour stops' : 'Series events', st.method === 'tour' ? 'Each city is its own event with its own vendors and payments. Vendor options, applications and payments you set up apply to every stop.' : 'Related events with their own dates and venues. Shared setup applies to each.', [
+      h('div', { class: 'eb-stops__meta' }, [h('span', { class: 'eb-help', text: live.length + ' ' + noun + (live.length === 1 ? '' : 's') + ' · ' + live.filter(function (s) { return s.publish; }).length + ' to publish now' }), actions]),
+      bulkBar,
+      stops.length ? h('div', { class: 'eb-stops' }, stops.map(row)) : h('div', { class: 'eb-card eb-card--flat eb-empty' }, [h('p', { text: 'No ' + noun + 's yet.' }), h('p', { class: 'eb-help', text: 'Add them one by one, paste a list, or bring in events you already created.' })])
+    ], { testid: 'eb-stops' });
+    if (!stops.length) setTimeout(function () { var b = root.querySelector('[data-testid="eb-add-stop"]'); if (b) b.focus(); }, 0);
+    return [defaults, stopsCard];
+  };
 
   function confirmPortfolio(st, sum) {
     var d;

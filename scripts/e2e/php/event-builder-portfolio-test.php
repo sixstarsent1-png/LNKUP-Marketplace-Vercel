@@ -190,4 +190,50 @@ lnkup_t_same( array( false, false, false ), array( $bc['stop_x'] ?? null, $bc['s
 $empty = lnkup_pf_draft( $org, 'series', $base );
 lnkup_t_same( false, array_column( $empty['report']['checks'], 'ok', 'key' )['stops'] ?? null, 'a series needs at least one event' );
 
+echo "Stop candidates and per-stop listings\n";
+LNKup_Event_Import_Tables::install();
+$cand_own  = lnkup_m_event( array( 'organizer_user_id' => $org ), false, 'Candidate Event' );
+$cand_ids  = wp_list_pluck( lnkup_pf_rest( 'GET', '/stop-candidates', array(), $org )['data']['events'] ?? array(), 'id' );
+lnkup_t_assert( in_array( $cand_own['event'], $cand_ids, true ) && ! in_array( $own['event'], $cand_ids, true ) && ! in_array( $theirs['event'], $cand_ids, true ), 'candidates are my upcoming events not already in a tour' );
+$posh_url  = 'https://posh.vip/e/sneaker-summit-atl-' . wp_generate_password( 5, false, false );
+$mixed     = lnkup_pf_draft(
+	$org,
+	'series',
+	array_merge(
+		$base,
+		array(
+			'portfolio' => array(
+				'stops' => array(
+					array( 'key' => 'm1', 'date' => $d1, 'city' => 'Atlanta', 'state' => 'GA', 'venue_name' => 'Pullman Yards', 'venue_address' => '225 Rogers St NE', 'url' => $posh_url ),
+					array( 'key' => 'm2', 'date' => $d2d, 'city' => 'Austin', 'state' => 'TX', 'venue_name' => 'Fair Market', 'venue_address' => '1100 E 5th St', 'url' => 'https://www.eventbrite.com/e/summit-austin-tickets-77788899' ),
+				),
+			),
+		)
+	)
+);
+$mc = array_column( $mixed['report']['checks'], 'ok', 'key' );
+lnkup_t_same( array( false, false ), array( $mc['attest'] ?? null, $mixed['report']['publishable'] ), 'per-stop listings require the organizer confirmation' );
+$mixed = lnkup_pf_rest( 'PATCH', '/drafts/' . $mixed['draft']['id'], array( 'revision' => $mixed['draft']['revision'], 'patch' => array( 'publish' => array( 'attest' => true ) ) ), $org )['data'];
+lnkup_t_same( true, $mixed['report']['publishable'], 'confirmed mixed-provider series is publishable' );
+$mp  = lnkup_pf_rest( 'POST', '/drafts/' . $mixed['draft']['id'] . '/publish', array(), $org )['data'];
+$mtd = (int) ( $mp['tour_id'] ?? 0 );
+lnkup_pf_cleanup_tour( $mtd );
+$GLOBALS['lnkup_m_extra_cleanup'][] = static function () use ( $mtd ) {
+	global $wpdb;
+	foreach ( LNKup_Tours::stop_event_ids( $mtd ) as $e ) {
+		$wpdb->delete( LNKup_Event_Import_Tables::sources(), array( 'event_id' => (int) $e ) );
+	}
+};
+$providers = array();
+foreach ( LNKup_Tours::stop_event_ids( $mtd ) as $e ) {
+	foreach ( LNKup_Event_Sources::for_event( (int) $e ) as $src ) {
+		$providers[ (string) get_post_meta( (int) $e, '_lnkup_city', true ) ] = $src['provider'];
+	}
+}
+ksort( $providers );
+lnkup_t_same( array( 'Atlanta' => 'posh', 'Austin' => 'eventbrite' ), $providers, 'each stop keeps its own official listing (mixed providers)' );
+lnkup_t_same( 'Saturday Makers Market', lnkup_plain_title( LNKup_Tours::stop_event_ids( $mtd )[0] ?? 0 ), 'series events are not suffixed with the city' );
+$clash = lnkup_pf_draft( $other, 'series', array_merge( $base, array( 'portfolio' => array( 'stops' => array( array( 'key' => 'c1', 'date' => $d1, 'city' => 'Atlanta', 'state' => 'GA', 'url' => $posh_url ) ) ) ) ) );
+lnkup_t_same( false, array_column( $clash['report']['checks'], 'ok', 'key' )['stop_listing_c1'] ?? null, 'another organizer cannot reuse a stop listing' );
+
 lnkup_m_finish();

@@ -23,7 +23,48 @@ class LNKup_Event_Builder_Portfolio {
 	const DAYS        = array( 'sun' => 0, 'mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6 );
 
 	public static function init(): void {
-		add_action( 'lnkup_portfolio_stop_created', array( __CLASS__, 'apply_extras' ), 10, 2 );
+		add_action( 'lnkup_portfolio_stop_created', array( __CLASS__, 'apply_extras' ), 10, 3 );
+	}
+
+	/**
+	 * The organizer's upcoming events that can join a tour or series (not already in one).
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	public static function stop_candidates( int $user_id ): array {
+		$ids = get_posts(
+			array(
+				'post_type'      => 'lnkup_event',
+				'post_status'    => array( 'publish', 'draft' ),
+				'posts_per_page' => 50,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'orderby'        => 'meta_value',
+				'meta_key'       => '_lnkup_event_date', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'order'          => 'ASC',
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_organizer_user_id', 'value' => $user_id ),
+					array( 'key' => '_lnkup_event_date', 'value' => current_time( 'Y-m-d' ), 'compare' => '>=' ),
+					array(
+						'relation' => 'OR',
+						array( 'key' => '_lnkup_tour_id', 'compare' => 'NOT EXISTS' ),
+						array( 'key' => '_lnkup_tour_id', 'value' => array( '', '0' ), 'compare' => 'IN' ),
+					),
+				),
+			)
+		);
+		return array_map(
+			static fn( $id ) => array(
+				'id'     => (int) $id,
+				'title'  => lnkup_plain_title( (int) $id ),
+				'date'   => (string) get_post_meta( (int) $id, '_lnkup_event_date', true ),
+				'city'   => (string) get_post_meta( (int) $id, '_lnkup_city', true ),
+				'state'  => (string) get_post_meta( (int) $id, '_lnkup_state', true ),
+				'venue'  => (string) get_post_meta( (int) $id, '_lnkup_venue_name', true ),
+				'status' => get_post_status( (int) $id ),
+			),
+			$ids
+		);
 	}
 
 	/**
@@ -124,6 +165,9 @@ class LNKup_Event_Builder_Portfolio {
 			return $out;
 		}
 		$stops = array_values( array_filter( $state['portfolio']['stops'], static fn( $s ) => ! $s['skip'] ) );
+		if ( ! $state['sources'] && array_filter( wp_list_pluck( $stops, 'url' ) ) ) {
+			$out[] = array( 'key' => 'attest', 'step' => 'publish', 'ok' => (bool) $state['publish']['attest'], 'label' => __( 'You organize these events', 'lnkup-marketplace' ), 'message' => __( 'Confirm that you organize or are authorized to manage vendors for these events.', 'lnkup-marketplace' ) );
+		}
 		$out[] = array( 'key' => 'stops', 'step' => 'info', 'ok' => count( $stops ) > 0, 'label' => 'tour' === $state['method'] ? __( 'Tour stops', 'lnkup-marketplace' ) : __( 'Series events', 'lnkup-marketplace' ), 'message' => __( 'Add at least one date and city.', 'lnkup-marketplace' ) );
 		$today = current_time( 'Y-m-d' );
 		foreach ( $stops as $i => $s ) {
@@ -138,6 +182,12 @@ class LNKup_Event_Builder_Portfolio {
 			$out[] = array( 'key' => 'stop_' . $s['key'], 'step' => 'info', 'ok' => $ok, 'label' => $label, 'message' => __( 'Each stop needs an upcoming date, a city and a state.', 'lnkup-marketplace' ) );
 			if ( $ok && $publish_now && $s['publish'] ) {
 				$out[] = array( 'key' => 'stop_venue_' . $s['key'], 'step' => 'info', 'ok' => '' !== $s['venue_name'] && '' !== $s['venue_address'], 'label' => $label, 'message' => $venue_msg );
+			}
+			if ( '' !== $s['url'] && class_exists( 'LNKup_Event_Sources' ) ) {
+				$rel = LNKup_Event_Sources::relation( $s['url'], $user_id );
+				if ( in_array( $rel['state'], array( 'other', 'claimed_other', 'own' ), true ) ) {
+					$out[] = array( 'key' => 'stop_listing_' . $s['key'], 'step' => 'info', 'ok' => false, 'label' => $label, 'message' => 'own' === $rel['state'] ? __( 'This listing is already linked to another of your events.', 'lnkup-marketplace' ) : $rel['message'] );
+				}
 			}
 		}
 		return $out;
@@ -305,6 +355,7 @@ class LNKup_Event_Builder_Portfolio {
 				'end_time'      => '' !== $s['end_time'] ? $s['end_time'] : $ev['end_time'],
 				'timezone'      => '' !== $s['timezone'] ? $s['timezone'] : $ev['timezone'],
 				'overrides'     => $overrides ? array( 'booth_types' => $overrides ) : array(),
+				'source_url'    => $s['url'],
 			);
 		}
 		if ( $own ) {
@@ -347,10 +398,17 @@ class LNKup_Event_Builder_Portfolio {
 	/**
 	 * Copy the builder's per-event extras onto each new stop (inline or background job).
 	 */
-	public static function apply_extras( int $event_id, int $tour_id ): void {
+	public static function apply_extras( int $event_id, int $tour_id, $row = array() ): void {
 		$extras = json_decode( (string) get_post_meta( $tour_id, self::EXTRAS_META, true ), true );
 		if ( ! is_array( $extras ) ) {
 			return;
+		}
+		$url = is_array( $row ) ? esc_url_raw( (string) ( $row['source_url'] ?? '' ), array( 'http', 'https' ) ) : '';
+		if ( '' !== $url && class_exists( 'LNKup_Event_Sources' ) ) {
+			$owner = (int) get_post_meta( $tour_id, '_lnkup_organizer_user_id', true );
+			LNKup_Event_Sources::attach_from_state( $event_id, 0, LNKup_Event_Builder_Schema::normalize( array( 'sources' => array( array( 'url' => $url, 'primary' => true ) ) ) ), $owner );
+			update_post_meta( $event_id, '_lnkup_ticketing_url', $url );
+			update_post_meta( $event_id, '_lnkup_ticketing_platform', (string) ( class_exists( 'LNKup_Import_Provider_Registry' ) ? LNKup_Import_Provider_Registry::detect( $url )['key'] : 'other' ) );
 		}
 		if ( ! empty( $extras['featured_image_id'] ) ) {
 			set_post_thumbnail( $event_id, (int) $extras['featured_image_id'] );
