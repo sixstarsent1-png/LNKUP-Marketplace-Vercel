@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LNKup Communications
  * Description: Communications & Engagement OS for LNKup Marketplace — push, email, in-app inbox, automations, campaigns and delivery health. Requires LNKup Marketplace.
- * Version: 1.2.1
+ * Version: 1.3.0
  * Author: LNKup
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -16,7 +16,7 @@ declare(strict_types=1);
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'LNKUP_COMMS_VERSION', '1.2.1' );
+define( 'LNKUP_COMMS_VERSION', '1.3.0' );
 define( 'LNKUP_COMMS_DB_VERSION', '1.1.0' );
 define( 'LNKUP_COMMS_FILE', __FILE__ );
 define( 'LNKUP_COMMS_DIR', plugin_dir_path( __FILE__ ) );

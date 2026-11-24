@@ -220,7 +220,18 @@ Organizer Growth's vendor supply snapshot (SYSTEM_OVERVIEW §9.24) counts vendor
 - **City Market Pages:** each market shows a suggested launch status (`recruiting_organizers`, `recruiting_vendors`, or `active` when healthy with live booths) with the reason. Nothing changes automatically: **Apply** recomputes the suggestion server-side, saves it, and logs it (option `lnkup_market_status_log`, plus the Trust audit log). "Suggested new markets" ranks cities without a page by matched vendors plus zero-result searches, with a "Create market page" link; new pages start in Prelaunch and disabled.
 - **Tests:** `scripts/e2e/php/match-market-test.php` (66 checks).
 
-## 13. Not built in this pass
+## 13. Engagement OS: fulfillment, Find Vendors sections, invitations (Nov 2026)
+
+Full report: [ENGAGEMENT_OS.md](ENGAGEMENT_OS.md).
+
+- **Event fulfillment** (`LNKup_Event_Fulfillment`, `GET /organizer/events/{event_id}/fulfillment`, owner / staff `view_roster` / manage-all): capacity, held (inventory hold statuses — a submitted application never fills a slot), paid, awaiting payment, remaining, pending review and waitlisted per opportunity; remaining spots rolled up by vendor category; invites by status and applications from invites; nearest open deadline; count of matching discoverable vendors; ranked actions (`add_opportunity`, `review_applications`, `deadline`, `find_vendors`, `share_link`, `awaiting_payment`, `full`). Cached 5 minutes, flushed on application, opportunity, event and invite writes. Organizer Overview reads it instead of per-slot queries.
+- **Find Vendors sections** (`section=` on `/match/organizer/events/{event_id}/vendors`): `recommended` (default), `new_nearby` (first matched within 14 days), `previously_booked` (paid/completed with this organizer), `saved` (CRM favorite/preferred and the organizer's lists), `recently_viewed` (last 20 profiles opened through `/crm/vendors/{id}`, user meta `lnkup_recent_vendor_views`). All sections stay inside the event's eligible pool and the discoverable-or-related privacy rule. Unknown sections return 400. New index `match_results (event_id, first_matched_at)`.
+- **Related vendors cache:** `related_vendor_users()` is memoized per request and cached 10 minutes (`lnkup_related_vendors_{organizer}`), flushed on application submit and invite status changes.
+- **Invitations:** twice-daily expiry sweep (`lnkup_vendor_invites_expire`), `GET /vendor/invites?scope=open|all` and `POST /vendor/invites/{id}/respond` (vendor role, ownership-checked, tokens never returned).
+- **Surfaces:** WordPress organizer home "Vendor slots to fill" card and Find Vendors section select; Next.js and Expo equivalents.
+- **Tests:** `event-fulfillment-test.php` (27), `invite-expiry-test.php` (23), Find Vendors section checks in `matching-test.php` (8).
+
+## 14. Not built in this pass
 
 - Vendor centroids depend on Nominatim; profiles whose city cannot be located score geography by city/state strings only.
 - A/B testing between two rule sets (preview + versions + revert only).

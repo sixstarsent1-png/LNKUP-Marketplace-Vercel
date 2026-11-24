@@ -9,6 +9,19 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 **Plugin version:** 12.34.0  
 **Theme version:** 1.6.1
 
+### Engagement OS (lnkup-communications 1.3.0; marketplace changes ship with the next marketplace version)
+
+Reference: [ENGAGEMENT_OS.md](ENGAGEMENT_OS.md).
+
+- **Policy:** weekly push cap, per-category caps, cross-channel cooldown and measurement holdouts; defaults 1 push/day, 3 push/week, 2 promotional emails/week (saved settings kept).
+- **Event fulfillment:** remaining vendor slots by category, review backlog, invite outcomes, deadline and ranked actions (`GET /organizer/events/{id}/fulfillment`); organizer home "Vendor slots to fill" card on WordPress, Next.js and Expo.
+- **Find Vendors sections:** New near you, Previously booked, Saved, Recently viewed.
+- **New journeys (all flags off):** invitation responses, new vendors near your event with public vendor cards, deadline open spots, published events without slots, expiring invitations, unfinished applications, opportunity-led vendor reactivation, first-event congratulations. New flag `flow_vendor_engagement`.
+- **Invitations:** scheduled expiry; vendor accept/decline on WordPress (notification center), Next.js (`/vendor/invitations`) and Expo (`(vendor)/invitations`).
+- **Notification center:** WordPress `/notification-center/`; Invitations and Account tabs everywhere; server type export (`wp lnkup-comms export-types`) with drift checks in Expo Jest and Next.js; Expo route fallbacks and badge sync on launch/foreground; Next.js unread polling and per-tab mark-all.
+- **Admin:** template drafts and version history, per-user timeline, suppression list, audit logging, holdout comparison.
+- **Tests:** new PHP suites (policy 23, engagement 42, admin 34, admin render 10, invite expiry 23, fulfillment 27), Playwright `engagement.spec.ts`, Expo Jest 210/210.
+
 ### v12.34.0 (Matching Phase 7: geographic supply and demand)
 
 Reference: [MATCHING_DISCOVERY.md](MATCHING_DISCOVERY.md) §12.

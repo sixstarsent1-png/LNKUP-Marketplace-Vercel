@@ -77,6 +77,23 @@ Copy lives in `includes/templates/catalog.php` (editable in **LNKup → Communic
 | `o_publish_next` (`:recurring` / `:default`) | Organizer | – | ✓ | ✓ | 3–30 days after last event, no upcoming events | promotional | `/(organizer)/launch` | No upcoming events. "Recurring" only with ≥ 3 past events at a regular cadence |
 | `o_reactivation` | Organizer | – | ✓ | – | Last event > 60 days ago, at most once per quarter | promotional | `/(organizer)/launch` | No upcoming events |
 
+## Engagement OS additions (lnkup-communications 1.3.0)
+
+Details, journey maps and tests: [ENGAGEMENT_OS.md](ENGAGEMENT_OS.md).
+
+| Trigger | Recipient | Push | Email | In-App | Timing | Priority | Deep link | Suppression rule |
+|---|---|---|---|---|---|---|---|---|
+| `o_invite_response` (`:accepted` / `:declined`) [flow_recruitment_updates] | Organizer | ✓ | – | ✓ | Vendor answers an invitation | normal | `/(organizer)/vendors?tab=invites` | Invite status unchanged |
+| `o_new_vendors_nearby` [flow_recruitment_updates] | Organizer | ✓ | ✓ (public vendor cards) | ✓ | Hourly, ≥3 new discoverable matches, 72h cooldown per event, baseline on first run | promotional | `/(organizer)/vendors/find?event={id}` | Event live, upcoming, spots open |
+| `o_open_spots:deadline` [flow_recruitment_updates] | Organizer | ✓ | ✓ | ✓ | 7 and 2 days before the application deadline | normal | Find Vendors | Spots still open |
+| `o_event_no_slots` [flow_activation] | Organizer | ✓ | ✓ | ✓ | Published ≥1 day without a published opportunity (day 1, day 4) | normal | `/(organizer)/events/{id}` | Still no published opportunity |
+| `v_invite_expiring` [flow_discovery] | Vendor | ✓ | ✓ | ✓ | Open invite expiring in 2–3 days | normal | `/(vendor)/invitations` | Invite open, opportunity open, not applied |
+| `v_application_draft` [flow_vendor_engagement] | Vendor | ✓ | ✓ | ✓ | 24h / 72h after last edit; ≤3 days before deadline | normal | `/opportunity/{opp}` | Draft open, opportunity open, not applied. Cancelled on submit |
+| `v_inactive` [flow_vendor_engagement] | Vendor | ✓ | ✓ | ✓ | Idle 14 / 30 / 60 days, once per segment, only with live recommendations | promotional | `/(vendor)/find` | No new activity, recommendations still exist |
+| `v_event_thanks:first` [flow_post_event] | Vendor | – | ✓ | ✓ | First completed booking | normal | `/(vendor)/find` | — |
+
+Policy added in 1.3.0: weekly promotional push cap (default 3), daily push cap default 1, promotional email cap default 2/week, optional per-category caps, cross-channel cooldown (default 4h after a high, critical or promotional email/push), and measurement holdouts for engagement triggers. Inbox tabs gained **Invitations** and **Account**.
+
 ## Shared / admin
 
 | Trigger | Recipient | Push | Email | In-App | Timing | Priority | Deep link | Suppression rule |
