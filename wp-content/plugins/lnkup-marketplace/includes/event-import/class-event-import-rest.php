@@ -35,6 +35,7 @@ class LNKup_Event_Import_REST {
 	public static function routes(): void {
 		$base = array( 'permission_callback' => array( __CLASS__, 'can_import' ) );
 		register_rest_route( self::NS, self::BASE . '/providers', array_merge( $base, array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'providers' ) ) ) );
+		register_rest_route( self::NS, self::BASE . '/overview', array_merge( $base, array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'overview' ) ) ) );
 		register_rest_route( self::NS, self::BASE . '/preview', array_merge( $base, array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'preview' ) ) ) );
 		register_rest_route( self::NS, self::BASE . '/draft', array_merge( $base, array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'create_draft' ) ) ) );
 		register_rest_route( self::NS, self::BASE . '/associate', array_merge( $base, array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'associate' ) ) ) );
@@ -222,6 +223,42 @@ class LNKup_Event_Import_REST {
 	public static function eventbrite_disconnect(): WP_REST_Response {
 		LNKup_Eventbrite_Connection::disconnect( get_current_user_id() );
 		return rest_ensure_response( array( 'disconnected' => true ) );
+	}
+
+	/**
+	 * Imports Center: recent jobs, linked listings with sync state, connected accounts.
+	 */
+	public static function overview(): WP_REST_Response {
+		global $wpdb;
+		$user = get_current_user_id();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows    = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . LNKup_Event_Import_Tables::sources() . ' WHERE organizer_id = %d AND event_id > 0 ORDER BY updated_at DESC LIMIT 60', $user ), ARRAY_A );
+		$sources = array();
+		foreach ( (array) $rows as $row ) {
+			$s      = LNKup_Event_Sources::format( $row );
+			$status = get_post_status( $s['event_id'] );
+			if ( ! $status || 'trash' === $status ) {
+				continue;
+			}
+			$sources[] = array_merge(
+				array_intersect_key( $s, array_flip( array( 'id', 'event_id', 'provider', 'label', 'url', 'is_primary', 'mode', 'availability', 'last_sync_at' ) ) ),
+				array(
+					'event_title'  => lnkup_plain_title( $s['event_id'] ),
+					'event_date'   => (string) get_post_meta( $s['event_id'], '_lnkup_event_date', true ),
+					'event_status' => $status,
+					'pending'      => count( (array) ( $s['pending_changes']['changes'] ?? array() ) ),
+					'edit_url'     => self::edit_url( $s['event_id'] ),
+				)
+			);
+		}
+		return rest_ensure_response(
+			array(
+				'jobs'       => LNKup_Event_OS_Flags::enabled( 'event_import_bulk' ) ? LNKup_Import_Jobs::list_for( $user, 10 ) : array(),
+				'sources'    => $sources,
+				'eventbrite' => LNKup_Eventbrite_Connection::status( $user ),
+				'flags'      => array( 'bulk' => LNKup_Event_OS_Flags::enabled( 'event_import_bulk' ), 'sync' => LNKup_Event_OS_Flags::enabled( 'event_source_sync' ) ),
+			)
+		);
 	}
 
 	public static function providers(): WP_REST_Response {

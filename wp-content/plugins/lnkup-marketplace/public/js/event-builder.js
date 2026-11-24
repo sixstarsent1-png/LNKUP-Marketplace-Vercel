@@ -377,7 +377,10 @@
           h('h1', { text: 'How would you like to start?' }),
           h('p', { text: 'Bring in an event you already list elsewhere, or build a new one. Keep your ticketing platform — manage your vendors with LNKup.' })
         ]),
-        h('a', { class: 'eb-btn', href: cfg.urls.events, text: 'Back to events' })
+        h('div', { class: 'eb-notice__actions' }, [
+          flags.event_import_v3 && cfg.urls.imports ? h('a', { class: 'eb-btn eb-btn--ghost', href: cfg.urls.imports, text: 'Imports & listings' }) : null,
+          h('a', { class: 'eb-btn', href: cfg.urls.events, text: 'Back to events' })
+        ])
       ]),
       recoBox
     ]);
@@ -2123,6 +2126,95 @@
       }).catch(function (err) { action.disabled = false; toast(err.message, 'error'); });
     });
     setTimeout(function () { input.focus(); }, 0);
+  };
+
+  /* ------------------------------------------------------------------ imports center (Phase 14) */
+
+  var MODE_LABEL = { import: 'Imported', link: 'Linked', account: 'From account' };
+
+  Builder.screens.importsCenter = function () {
+    var flags = (S.config && S.config.flags) || cfg.flags || {};
+    var body = h('div', { class: 'eb-ic__body' }, h('div', { class: 'eb-card' }, h('div', { class: 'eb-skeleton' }, [h('span'), h('span'), h('span')])));
+    var createUrl = function (method) { return cfg.urls.create + (cfg.urls.create.indexOf('?') >= 0 ? '&' : '?') + 'method=' + method; };
+    screen(h('div', { class: 'eb-ic', 'data-testid': 'eb-imports-center' }, [
+      h('div', { class: 'eb-hero' }, [
+        h('div', {}, [h('span', { class: 'eb-eyebrow', text: 'Imports' }), h('h1', { text: 'Imports & listings' }), h('p', { text: 'Events you brought in from other platforms, the official listings linked to your LNKup events, and updates waiting for your review.' })]),
+        h('div', { class: 'eb-notice__actions' }, [
+          h('a', { class: 'eb-btn eb-btn--primary', href: createUrl('import'), text: 'Import a link' }),
+          flags.event_import_bulk ? h('a', { class: 'eb-btn', href: createUrl('bulk'), text: 'Bulk import' }) : null
+        ])
+      ]),
+      body
+    ]));
+    api('organizer/import/overview').then(function (o) {
+      clear(body);
+      var waiting = o.sources.filter(function (s) { return s.pending > 0; });
+      var reviewJobs = o.jobs.filter(function (j) { return j.status === 'review' || j.status === 'processing' || j.status === 'queued'; });
+      append(body, h('div', { class: 'eb-summary eb-ic__stats' }, [
+        h('div', {}, [h('strong', { text: String(o.sources.length) }), h('span', { text: 'linked listings' })]),
+        h('div', {}, [h('strong', { text: String(waiting.length) }), h('span', { text: 'with updates to review' })]),
+        h('div', {}, [h('strong', { text: String(reviewJobs.length) }), h('span', { text: 'imports to finish' })])
+      ]));
+
+      var eb = o.eventbrite || {};
+      append(body, h('section', { class: 'eb-card' }, [
+        h('div', { class: 'eb-card__head' }, [h('div', {}, [h('h2', { text: 'Connected accounts' }), h('p', { text: 'Bring in events straight from your ticketing account. LNKup reads events only — it never sells tickets or edits your listings.' })])]),
+        h('div', { class: 'eb-sync__row' }, [
+          h('div', { class: 'eb-sync__main' }, [h('span', { class: 'eb-provider', text: 'EB' }), h('strong', { text: 'Eventbrite' }),
+            h('span', { class: 'eb-chip ' + (eb.connected ? 'eb-chip--success' : eb.status === 'expired' ? 'eb-chip--warning' : 'eb-chip--line'), text: eb.connected ? 'Connected' + (eb.account_label ? ' · ' + eb.account_label : '') : eb.status === 'expired' ? 'Reconnect needed' : 'Not connected' })]),
+          eb.available ? h('a', { class: 'eb-btn eb-btn--sm', href: createUrl('bulk') + '&tab=eventbrite', text: eb.connected ? 'Browse events' : 'Connect' }) : h('span', { class: 'eb-help', text: 'Paste Eventbrite links instead — account import is not switched on yet.' })
+        ])
+      ]));
+
+      var rows = waiting.concat(o.sources.filter(function (s) { return s.pending === 0; }));
+      append(body, h('section', { class: 'eb-card', 'data-testid': 'eb-ic-sources' }, [
+        h('div', { class: 'eb-card__head' }, [h('div', {}, [h('h2', { text: 'Linked listings' }), h('p', { text: o.flags.sync ? 'Imported listings are checked daily. You decide which updates to bring in.' : 'Where each event\'s attendee tickets are sold.' })])]),
+        rows.length ? h('div', { class: 'eb-ic__list' }, rows.map(function (s) {
+          var a = AVAIL[s.availability] || AVAIL.unknown;
+          return h('div', { class: 'eb-ic__row' }, [
+            h('div', { class: 'eb-ic__main' }, [
+              h('strong', { text: s.event_title || 'Event' }),
+              h('span', { class: 'eb-help', text: [s.event_date ? fmtDate(s.event_date) : '', s.event_status === 'publish' ? 'Live' : 'Draft'].filter(Boolean).join(' · ') }),
+              h('span', { class: 'eb-ic__chips' }, [
+                h('span', { class: 'eb-chip eb-chip--line', text: s.label }),
+                h('span', { class: 'eb-chip', text: MODE_LABEL[s.mode] || s.mode }),
+                s.mode !== 'link' ? h('span', { class: 'eb-chip ' + a[1], text: a[0] }) : null,
+                s.is_primary ? h('span', { class: 'eb-chip eb-chip--lime', text: 'Primary' }) : null
+              ])
+            ]),
+            h('div', { class: 'eb-notice__actions' }, [
+              s.pending ? h('a', { class: 'eb-btn eb-btn--primary eb-btn--sm', href: s.edit_url, text: 'Review ' + s.pending + ' update' + (s.pending === 1 ? '' : 's') }) : h('a', { class: 'eb-btn eb-btn--sm', href: s.edit_url, text: 'Open event' }),
+              h('a', { class: 'eb-link', href: s.url, target: '_blank', rel: 'noopener noreferrer', text: 'View listing' })
+            ])
+          ]);
+        })) : h('div', { class: 'eb-empty' }, [h('p', { text: 'No linked listings yet.' }), h('p', { class: 'eb-help', text: 'Import an event or add its ticket link in the builder.' })])
+      ]));
+
+      if (o.flags.bulk) {
+        var jobBox = h('div');
+        append(body, h('section', { class: 'eb-card', 'data-testid': 'eb-ic-jobs' }, [
+          h('div', { class: 'eb-card__head' }, [h('div', {}, [h('h2', { text: 'Recent bulk imports' })])]),
+          o.jobs.length ? h('div', { class: 'eb-ic__list' }, o.jobs.map(function (j) {
+            var st = { queued: 'Starting', processing: 'Reading', review: 'Ready to review', completed: 'Done', cancelled: 'Cancelled' }[j.status] || j.status;
+            return h('div', { class: 'eb-ic__row' }, [
+              h('div', { class: 'eb-ic__main' }, [
+                h('strong', { text: ({ urls: 'Links', csv: 'Spreadsheet', ics: 'Calendar file', eventbrite: 'Eventbrite account' }[j.method] || j.method) + (j.file_name ? ' · ' + j.file_name : '') }),
+                h('span', { class: 'eb-help', text: j.total + ' event' + (j.total === 1 ? '' : 's') + ' · ' + j.counts.drafted + ' drafted · ' + ago(j.created_at) })
+              ]),
+              h('div', { class: 'eb-notice__actions' }, [
+                h('span', { class: 'eb-chip ' + (j.status === 'review' ? 'eb-chip--warning' : j.status === 'completed' ? 'eb-chip--success' : 'eb-chip--line'), text: st }),
+                h('button', { type: 'button', class: 'eb-btn eb-btn--sm', text: 'Open', onclick: function () {
+                  clear(jobBox);
+                  append(jobBox, h('div', { class: 'eb-skeleton' }, [h('span')]));
+                  api('organizer/import/bulk/jobs/' + j.id).then(function (full) { clear(jobBox); jobView(jobBox, full); jobBox.scrollIntoView({ behavior: 'smooth' }); }).catch(function (e) { clear(jobBox); append(jobBox, h('p', { class: 'eb-error', text: e.message })); });
+                } })
+              ])
+            ]);
+          })) : h('p', { class: 'eb-help', text: 'No bulk imports yet.' }),
+          jobBox
+        ]));
+      }
+    }).catch(function (e) { clear(body); append(body, errorCard(e.message, function () { Builder.screens.importsCenter(); })); });
   };
 
   /* ------------------------------------------------------------------ recurring / tours / series (Phases 9–10) */

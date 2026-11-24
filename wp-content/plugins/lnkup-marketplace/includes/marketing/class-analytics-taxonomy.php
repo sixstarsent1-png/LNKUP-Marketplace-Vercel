@@ -56,6 +56,16 @@ class LNKup_Analytics_Taxonomy {
 			'market_alert_created'       => array( 'meaning' => 'Market alert (saved search) created', 'types' => array( 'market_alert_created' ), 'status' => 'mapped' ),
 			'market_demand_signal'       => array( 'meaning' => 'Anonymous category demand tap on a market page', 'types' => array( 'market_demand_signal' ), 'status' => 'mapped' ),
 			'market_page_viewed'         => array( 'meaning' => 'City market page viewed', 'types' => array( 'market_page_view', 'market_page_viewed' ), 'status' => 'mapped' ),
+			// Event Creation OS 3.0 (data carries method, provider and counts — never page content).
+			'event_creation_method_selected' => array( 'meaning' => 'Organizer started a builder draft (method in data)', 'types' => array( 'creation_method_selected' ), 'status' => 'mapped' ),
+			'event_builder_published'    => array( 'meaning' => 'Event, recurring series, tour or series published from the builder', 'types' => array( 'event_published', 'portfolio_published' ), 'status' => 'mapped' ),
+			'event_import_previewed'     => array( 'meaning' => 'Listing link read for import (provider in data)', 'types' => array( 'import_previewed' ), 'status' => 'mapped' ),
+			'event_imported'             => array( 'meaning' => 'Draft created from an imported listing', 'types' => array( 'event_imported' ), 'status' => 'mapped' ),
+			'event_import_linked'        => array( 'meaning' => 'Listing linked to an existing LNKup event', 'types' => array( 'import_associated' ), 'status' => 'mapped' ),
+			'event_bulk_import_applied'  => array( 'meaning' => 'Drafts created from a bulk import', 'types' => array( 'bulk_import_applied' ), 'status' => 'mapped' ),
+			'event_provider_connected'   => array( 'meaning' => 'Organizer connected a ticketing account', 'types' => array( 'provider_connected' ), 'status' => 'mapped' ),
+			'event_template_saved'       => array( 'meaning' => 'Organizer saved a builder template', 'types' => array( 'template_saved' ), 'status' => 'mapped' ),
+			'official_listing_click'     => array( 'meaning' => 'Visitor opened an event\'s official ticketing listing', 'types' => array( 'official_listing_click' ), 'status' => 'mapped' ),
 		);
 	}
 

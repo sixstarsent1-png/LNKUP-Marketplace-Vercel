@@ -1088,9 +1088,7 @@ class LNKup_Shortcodes {
 									<?php echo class_exists( 'LNKup_Event_Distribution' ) ? LNKup_Event_Distribution::hero_actions( (int) $event->ID, (int) $open_spots, ! empty( $guest ) ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in hero_actions(). ?>
 								</p>
 							<?php endif; ?>
-							<?php if ( $ticketing ) : ?>
-								<p><a class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" href="<?php echo esc_url( $ticketing ); ?>" rel="noopener noreferrer"><?php esc_html_e( 'Event tickets', 'lnkup-marketplace' ); ?></a></p>
-							<?php endif; ?>
+							<?php echo class_exists( 'LNKup_Event_Official_Listing' ) ? LNKup_Event_Official_Listing::render( (int) $event->ID, $ticketing ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in render(). ?>
 						</div>
 					</article>
 

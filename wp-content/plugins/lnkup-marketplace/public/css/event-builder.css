@@ -436,6 +436,15 @@ button.eb-cal__day:disabled { cursor: not-allowed; opacity: .5; }
 .eb-cal__state { font-size: 12px; font-weight: 650; color: var(--eb-muted); }
 .eb-iconbtn--xs { width: 20px; height: 20px; padding: 0; border: 0; background: transparent; display: inline-grid; place-items: center; cursor: pointer; }
 .eb-iconbtn--xs svg { width: 12px; height: 12px; }
+.eb-ic { display: grid; gap: 16px; padding-bottom: 24px; }
+.eb-ic__body { display: grid; gap: 16px; }
+.eb-ic__stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.eb-ic__list { display: grid; gap: 8px; }
+.eb-ic__row { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 12px 14px; border-radius: var(--eb-radius-sm); border: 1px solid var(--eb-line); background: var(--eb-surface); }
+.eb-ic__main { display: grid; gap: 4px; min-width: 0; flex: 1 1 260px; }
+.eb-ic__main strong { overflow-wrap: anywhere; }
+.eb-ic__chips { display: flex; gap: 6px; flex-wrap: wrap; }
+@media (max-width: 600px) { .eb-ic__stats { grid-template-columns: minmax(0, 1fr); } }
 .eb-sync { display: grid; gap: 8px; margin-top: 14px; }
 .eb-sync:empty { display: none; }
 .eb-sync__row { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 12px; border-radius: var(--eb-radius-sm); background: var(--eb-surface-2); }

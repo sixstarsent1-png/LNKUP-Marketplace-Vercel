@@ -217,6 +217,7 @@ $lnkup_core_files = array(
 	'includes/media/class-event-media-cli.php',
 	'admin/class-media-health-admin.php',
 	'admin/class-location-health-admin.php',
+	'admin/class-event-imports-admin.php',
 	'includes/class-ui-copy.php',
 	'includes/class-vendor-dashboard-data.php',
 	'public/class-vendor-dashboard-views.php',
@@ -424,6 +425,7 @@ $lnkup_core_files = array(
 	'includes/event-import/class-event-source-sync.php',
 	'includes/event-import/class-event-sources-rest.php',
 	'public/class-event-builder-view.php',
+	'public/class-event-official-listing.php',
 	'includes/matching/class-tours.php',
 	'includes/matching/class-tours-rest.php',
 	'includes/portfolio/class-portfolio-tables.php',
@@ -646,6 +648,7 @@ function lnkup_marketplace_init() {
 	LNKup_Event_Builder_Portfolio::init();
 	LNKup_Event_Builder_REST::init();
 	LNKup_Event_Builder_View::init();
+	LNKup_Event_Official_Listing::init();
 	LNKup_Event_Import_Tables::init();
 	LNKup_Event_Import_REST::init();
 	LNKup_Import_Jobs::init();
@@ -696,6 +699,7 @@ function lnkup_marketplace_init() {
 	if ( is_admin() ) {
 		LNKup_Media_Health_Admin::init();
 		LNKup_Location_Health_Admin::init();
+		LNKup_Event_Imports_Admin::init();
 	}
 	LNKup_Meta_Measurement::init();
 	LNKup_Activator::maybe_repair_dashboard_pages();

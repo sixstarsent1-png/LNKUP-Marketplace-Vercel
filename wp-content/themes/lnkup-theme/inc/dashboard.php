@@ -171,6 +171,7 @@ function lnkup_dashboard_organizer_title() {
 		'operations'   => __( 'Operations', 'lnkup-theme' ),
 		'intelligence' => __( 'Intelligence', 'lnkup-theme' ),
 		'create'       => __( 'Launch event', 'lnkup-theme' ),
+		'imports'      => __( 'Imports & listings', 'lnkup-theme' ),
 		'help'         => __( 'Help', 'lnkup-theme' ),
 		'profile'      => __( 'Profile', 'lnkup-theme' ),
 		'team'         => __( 'Team & Trust', 'lnkup-theme' ),

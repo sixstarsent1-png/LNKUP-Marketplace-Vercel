@@ -303,8 +303,8 @@ class LNKup_Import_Jobs {
 			'total'      => (int) $job['total_items'],
 			'counts'     => $counts,
 			'progress'   => $job['total_items'] ? (int) round( 100 * ( (int) $job['total_items'] - $counts['pending'] ) / (int) $job['total_items'] ) : 100,
-			'created_at' => mysql_to_rfc3339( (string) $job['created_at'] ),
-			'updated_at' => mysql_to_rfc3339( (string) $job['updated_at'] ),
+			'created_at' => LNKup_Event_Sources::iso( $job['created_at'] ),
+			'updated_at' => LNKup_Event_Sources::iso( $job['updated_at'] ),
 		);
 		if ( $with_items ) {
 			$out['items'] = array_map(

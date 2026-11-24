@@ -312,10 +312,20 @@ class LNKup_Event_Sources {
 			'mode'              => (string) $row['mode'],
 			'ownership_state'   => (string) $row['ownership_state'],
 			'availability'      => (string) $row['availability'],
-			'last_sync_at'      => $row['last_sync_at'] ? mysql_to_rfc3339( (string) $row['last_sync_at'] ) : null,
+			'last_sync_at'      => self::iso( $row['last_sync_at'] ),
 			'pending_changes'   => $row['pending_changes'] ? json_decode( (string) $row['pending_changes'], true ) : null,
 			'provenance'        => $row['provenance'] ? json_decode( (string) $row['provenance'], true ) : array(),
 		);
+	}
+
+	/**
+	 * ISO 8601 with an explicit UTC offset for a GMT MySQL datetime (clients must not read it as local time).
+	 *
+	 * @param mixed $gmt MySQL datetime in GMT.
+	 */
+	public static function iso( $gmt ): ?string {
+		$ts = $gmt ? strtotime( (string) $gmt . ' UTC' ) : false;
+		return $ts ? gmdate( 'c', $ts ) : null;
 	}
 
 	private static function ready(): bool {

@@ -121,7 +121,7 @@ class LNKup_Eventbrite_Connection {
 			'connected'     => (bool) $row && 'active' === $row['status'],
 			'account_label' => $row ? (string) $row['account_label'] : '',
 			'status'        => $row ? (string) $row['status'] : 'not_connected',
-			'last_sync_at'  => $row && $row['last_sync_at'] ? mysql_to_rfc3339( (string) $row['last_sync_at'] ) : null,
+			'last_sync_at'  => $row ? LNKup_Event_Sources::iso( $row['last_sync_at'] ) : null,
 		);
 	}
 
