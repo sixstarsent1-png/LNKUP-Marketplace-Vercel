@@ -562,7 +562,7 @@
     var choose = h('select', { class: 'eb-input', id: 'eb-dup-event' }, [h('option', { value: '', text: 'Choose an event…' })].concat(events.map(function (e) {
       return h('option', { value: e.id, selected: e.id === eventId, text: e.title + (e.date ? ' · ' + fmtDate(e.date) : '') + (e.city ? ' · ' + e.city : '') });
     })));
-    if (!events.length && eventId) append(choose, h('option', { value: eventId, selected: true, text: 'Event #' + eventId }));
+    if (!events.length && eventId) append(choose, h('option', { value: eventId, selected: true, text: (eventId === cfg.duplicate && cfg.duplicateTitle) || 'Event #' + eventId }));
     var parts = [['description', 'Description'], ['images', 'Images'], ['category', 'Event category'], ['options', 'Vendor options and prices'], ['questions', 'Application questions'], ['documents', 'Document rules'], ['payments', 'Deposit and policies']];
     var boxes = parts.map(function (p) { return h('label', { class: 'eb-check' }, [h('input', { type: 'checkbox', checked: true, value: p[0] }), h('span', { text: p[1] })]); });
     var d = dialog({
@@ -586,7 +586,12 @@
     if (!events.length) {
       api('organizer/builder/recommendations').then(function (r) {
         S.recent = r.recent_events || [];
-        S.recent.forEach(function (e) { append(choose, h('option', { value: e.id, selected: e.id === eventId, text: e.title + (e.date ? ' · ' + fmtDate(e.date) : '') })); });
+        S.recent.forEach(function (e) {
+          var label = e.title + (e.date ? ' · ' + fmtDate(e.date) : '') + (e.city ? ' · ' + e.city : '');
+          var existing = choose.querySelector('option[value="' + e.id + '"]');
+          if (existing) existing.textContent = label;
+          else append(choose, h('option', { value: e.id, selected: e.id === eventId, text: label }));
+        });
       }).catch(function () {});
     }
     return d;
@@ -633,6 +638,31 @@
     return d;
   }
   Builder.libraryDialog = libraryDialog;
+
+  /** Save vendor options, questions, documents and deadline rules as a reusable, versioned template. */
+  function saveTemplateDialog(source, suggested) {
+    var name = h('input', { type: 'text', class: 'eb-input', id: 'eb-tpl-name', maxlength: 120, value: suggested ? suggested + ' setup' : '' });
+    var d = dialog({
+      title: 'Save as template',
+      body: [
+        h('div', { class: 'eb-field' }, [h('label', { for: 'eb-tpl-name', text: 'Template name' }), name]),
+        h('p', { class: 'eb-help', text: 'Saves vendor options, prices, spaces, application questions, document rules and the deadline. Dates, places, images, vendors and payments are never saved in a template.' })
+      ],
+      foot: [
+        h('button', { type: 'button', class: 'eb-btn', text: 'Cancel', onclick: function () { d.close(null); } }),
+        h('button', { type: 'button', class: 'eb-btn eb-btn--dark', 'data-testid': 'eb-save-template-go', text: 'Save template', onclick: function (e) {
+          if (!name.value.trim()) { name.focus(); return; }
+          e.target.disabled = true;
+          api('organizer/builder/library/templates', { method: 'POST', body: Object.assign({ name: name.value.trim() }, source) }).then(function (t) {
+            d.close(true);
+            toast('Template saved' + (t && t.version ? ' (v' + t.version + ')' : '') + '. Find it under Use a template.');
+          }).catch(function (err) { e.target.disabled = false; toast(err.message, 'error'); });
+        } })
+      ]
+    });
+    return d;
+  }
+  Builder.saveTemplateDialog = saveTemplateDialog;
 
   function applyTemplate(ref) {
     flush().then(function () {
@@ -1216,7 +1246,8 @@
         body,
         h('div', { class: 'eb-notice__actions', style: 'margin-top:12px' }, [
           h('button', { type: 'button', class: 'eb-btn', text: '+ Add a vendor option', onclick: function () { var o = newOption(''); S.openOption = o.key; setOptions(st.options.concat([o]), true); renderBuilder(); } }),
-          h('button', { type: 'button', class: 'eb-btn eb-btn--ghost', text: 'Use a template', onclick: function () { libraryDialog(true); } })
+          h('button', { type: 'button', class: 'eb-btn eb-btn--ghost', text: 'Use a template', onclick: function () { libraryDialog(true); } }),
+          st.options.length ? h('button', { type: 'button', class: 'eb-btn eb-btn--ghost', 'data-testid': 'eb-save-template', text: 'Save as template', onclick: function () { flush().then(function () { saveTemplateDialog({ draft_id: S.draft.id }, st.event.name); }); } }) : null
         ])
       ], { testid: 'eb-options-card', action: st.options.length > 2 ? viewToggle : null }),
       card('Inventory summary', null, liveBox('inventory'))
@@ -1696,7 +1727,10 @@
       h('div', {}, [h('h2', { class: 'eb-eyebrow', style: 'margin-bottom:10px', text: 'Next steps' }), h('div', { class: 'eb-next' }, actions.filter(function (a) { return a[2]; }).map(function (a) {
         return h('a', { class: 'eb-method', href: a[2] }, [h('span', { class: 'eb-method__icon' }, icon(a[3])), h('span', {}, [h('span', { class: 'eb-method__title', text: a[0] }), h('span', { class: 'eb-method__desc', text: a[1] })])]);
       }))]),
-      h('div', {}, h('a', { class: 'eb-link', href: cfg.urls.create, text: 'Create another event' }))
+      h('div', { class: 'eb-notice__actions' }, [
+        h('a', { class: 'eb-link', href: cfg.urls.create, text: 'Create another event' }),
+        h('button', { type: 'button', class: 'eb-link', text: 'Save this setup as a template', onclick: function () { saveTemplateDialog({ event_id: r.event_id }, r.title); } })
+      ])
     ]));
   }
   Builder.success = success;

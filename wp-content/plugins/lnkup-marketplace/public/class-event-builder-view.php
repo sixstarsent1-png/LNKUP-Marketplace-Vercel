@@ -54,9 +54,30 @@ class LNKup_Event_Builder_View {
 	}
 
 	public static function maybe_enqueue(): void {
-		if ( self::active() && self::on_builder_page() ) {
-			self::enqueue();
+		if ( ! self::active() ) {
+			return;
 		}
+		if ( self::on_builder_page() ) {
+			self::enqueue();
+			return;
+		}
+		if ( is_page( 'organizer-dashboard' ) && empty( $_GET['classic'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			self::enqueue_duplicate_bridge();
+		}
+	}
+
+	/**
+	 * Duplication 2.0: "Duplicate" buttons on dashboard event lists open a builder draft
+	 * (choose what to copy, confirm the new date and place) instead of the legacy dialog.
+	 */
+	private static function enqueue_duplicate_bridge(): void {
+		$create = esc_url_raw( lnkup_organizer_view_url( 'create' ) );
+		wp_register_script( 'lnkup-builder-duplicate', '', array(), LNKUP_VERSION, true );
+		wp_enqueue_script( 'lnkup-builder-duplicate' );
+		wp_add_inline_script(
+			'lnkup-builder-duplicate',
+			'document.addEventListener("click",function(e){var b=e.target.closest&&e.target.closest("[data-duplicate-event]");if(!b)return;var id=parseInt(b.getAttribute("data-duplicate-event"),10);if(!id)return;e.preventDefault();e.stopImmediatePropagation();var u=new URL(' . wp_json_encode( $create ) . ',window.location.href);u.searchParams.set("duplicate",String(id));window.location.href=u.toString();},true);'
+		);
 	}
 
 	public static function enqueue(): void {
@@ -87,6 +108,7 @@ class LNKup_Event_Builder_View {
 				'step'      => sanitize_key( $get( 'step' ) ),
 				'edit'      => absint( $get( 'edit' ) ),
 				'duplicate' => absint( $get( 'duplicate' ) ),
+				'duplicateTitle' => absint( $get( 'duplicate' ) ) && class_exists( 'LNKup_Event_Builder_Editor' ) && LNKup_Event_Builder_Editor::can_edit_event( absint( $get( 'duplicate' ) ), $user ) ? lnkup_plain_title( absint( $get( 'duplicate' ) ) ) : '',
 				'template'  => $get( 'template' ),
 				'method'    => sanitize_key( $get( 'method' ) ),
 				'importUrl' => esc_url_raw( $get( 'url' ) ),

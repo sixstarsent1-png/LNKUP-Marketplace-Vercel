@@ -1,6 +1,7 @@
 /* Event Creation OS 3.0 — builder UI on the Organizer OS 2.0 tokens. Prefix: eb- */
 
-.eb-app {
+/* Dialogs and toasts are appended to <body>, outside .eb-app, so they need the tokens too. */
+.eb-app, .eb-dialog-backdrop, .eb-toast {
   --eb-ink: var(--vos-ink, #141414);
   --eb-muted: var(--vos-muted, #62626b);
   --eb-canvas: var(--vos-canvas, #f6f5f1);
@@ -25,6 +26,12 @@
   color: var(--eb-ink);
   font-size: 15px;
   line-height: 1.5;
+}
+.eb-dialog-backdrop *, .eb-dialog-backdrop *::before, .eb-dialog-backdrop *::after { box-sizing: border-box; }
+.eb-dialog-backdrop h2, .eb-dialog-backdrop h3, .eb-dialog-backdrop p { margin: 0; }
+.eb-dialog-backdrop button { font: inherit; cursor: pointer; }
+.eb-dialog-backdrop :focus-visible { outline: none; box-shadow: var(--eb-focus); border-radius: 8px; }
+.eb-app {
   max-width: 1320px;
   margin: 0 auto;
   min-width: 0;
