@@ -193,7 +193,16 @@ class LNKup_Event_Sources {
 		$organizer = (int) get_post_meta( $event_id, '_lnkup_organizer_user_id', true ) ?: $user_id;
 		$now       = current_time( 'mysql', true );
 		$keep      = array();
-		$prov      = wp_json_encode( (array) ( $state['provenance'] ?? array() ) );
+		$origin    = (array) ( $state['provenance'] ?? array() );
+		$values    = array();
+		foreach ( $origin as $path => $how ) {
+			if ( 'imported' === $how && 0 === strpos( (string) $path, 'event.' ) && isset( $state['event'][ substr( (string) $path, 6 ) ] ) && is_scalar( $state['event'][ substr( (string) $path, 6 ) ] ) ) {
+				$values[ substr( (string) $path, 6 ) ] = (string) $state['event'][ substr( (string) $path, 6 ) ];
+			}
+		}
+		// Snapshot of what the listing said at import time; later syncs compare against it so
+		// organizer edits are recognized and never overwritten silently.
+		$prov = wp_json_encode( array( 'origin' => $origin, 'values' => $values ) );
 		foreach ( (array) $state['sources'] as $s ) {
 			$hash = self::url_hash( (string) $s['url'] );
 			if ( '' === $hash ) {
@@ -214,7 +223,7 @@ class LNKup_Event_Sources {
 				'url'               => esc_url_raw( (string) $s['url'] ),
 				'url_hash'          => $hash,
 				'is_primary'        => $s['primary'] ? 1 : 0,
-				'mode'              => $imported ? 'import' : ( 'account' === $s['mode'] ? 'account' : 'link' ),
+				'mode'              => $imported ? 'import' : ( in_array( $s['mode'], array( 'account', 'import' ), true ) ? $s['mode'] : 'link' ),
 				'ownership_state'   => 'attested',
 				'updated_at'        => $now,
 			);
@@ -247,6 +256,33 @@ class LNKup_Event_Sources {
 	/**
 	 * @param array<string,mixed> $fields Columns to update (sync bookkeeping only).
 	 */
+	public static function remove( int $id ): void {
+		global $wpdb;
+		$src = self::get( $id );
+		if ( ! $src ) {
+			return;
+		}
+		$wpdb->delete( LNKup_Event_Import_Tables::sources(), array( 'id' => $id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$left = self::for_event( $src['event_id'] );
+		if ( $src['is_primary'] && $left ) {
+			self::set_primary( $src['event_id'], $left[0]['id'] );
+		}
+		if ( (string) get_post_meta( $src['event_id'], '_lnkup_ticketing_url', true ) === $src['url'] ) {
+			update_post_meta( $src['event_id'], '_lnkup_ticketing_url', $left ? $left[0]['url'] : '' );
+		}
+	}
+
+	public static function set_primary( int $event_id, int $id ): void {
+		global $wpdb;
+		$table = LNKup_Event_Import_Tables::sources();
+		$wpdb->update( $table, array( 'is_primary' => 0 ), array( 'event_id' => $event_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update( $table, array( 'is_primary' => 1 ), array( 'id' => $id, 'event_id' => $event_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$src = self::get( $id );
+		if ( $src ) {
+			update_post_meta( $event_id, '_lnkup_ticketing_url', $src['url'] );
+		}
+	}
+
 	public static function update( int $id, array $fields ): void {
 		global $wpdb;
 		$allowed = array_intersect_key( $fields, array_flip( array( 'availability', 'last_sync_at', 'last_attempt_at', 'source_version', 'pending_changes', 'provenance' ) ) );

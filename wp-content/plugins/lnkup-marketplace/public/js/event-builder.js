@@ -1205,9 +1205,92 @@
     var flags = (S.config && S.config.flags) || {};
     return card('Official event listing', 'Where attendees buy tickets or learn more. Your external event link is separate from your LNKup vendor application.', [
       list,
+      isEdit() ? syncPanel(S.draft.source_event) : null,
       h('div', { class: 'eb-import-input', style: 'margin-top:10px' }, [input, h('button', { type: 'button', class: 'eb-btn eb-btn--dark', text: 'Add link', onclick: add })]),
       flags.event_import_v3 && Builder.importIntoDraft ? h('p', { class: 'eb-help', style: 'margin-top:8px' }, ['Want to fill in details from a link? ', h('button', { type: 'button', class: 'eb-link', text: 'Import from a link', onclick: function () { Builder.importIntoDraft(); } })]) : null
     ], { testid: 'eb-sources-card' });
+  }
+
+  /* External sources: listing updates for a live event (Phase 12). */
+
+  var SYNC_LABELS = { name: 'Name', date: 'Date', end_date: 'End date', start_time: 'Start time', end_time: 'End time', venue_name: 'Venue', venue_address: 'Address', city: 'City', state: 'State', postal_code: 'ZIP', description: 'Description' };
+  var AVAIL = { available: ['Listing available', 'eb-chip--success'], removed: ['Listing removed', 'eb-chip--danger'], cancelled: ['Cancelled on the listing', 'eb-chip--warning'], unknown: ['Not checked yet', 'eb-chip--line'] };
+
+  function syncPanel(eventId) {
+    var box = h('div', { class: 'eb-sync', 'data-testid': 'eb-sync' });
+    var base = 'organizer/events/' + eventId + '/sources';
+    function load() {
+      api(base).then(render).catch(function () { clear(box); });
+    }
+    function render(r) {
+      clear(box);
+      var synced = (r.sources || []).filter(function (s) { return s.mode === 'import' || s.mode === 'account'; });
+      if (!synced.length) return;
+      append(box, h('h3', { class: 'eb-eyebrow', text: 'Listing updates' }));
+      synced.forEach(function (s) {
+        var a = AVAIL[s.availability] || AVAIL.unknown;
+        var pending = (s.pending_changes && s.pending_changes.changes) || [];
+        append(box, h('div', { class: 'eb-sync__row' }, [
+          h('div', { class: 'eb-sync__main' }, [
+            h('strong', { text: s.label }),
+            h('span', { class: 'eb-chip ' + a[1], text: a[0] }),
+            h('span', { class: 'eb-help', text: s.last_sync_at ? 'Checked ' + ago(s.last_sync_at) : 'Never checked' })
+          ]),
+          h('div', { class: 'eb-notice__actions' }, [
+            pending.length ? h('button', { type: 'button', class: 'eb-btn eb-btn--primary eb-btn--sm', 'data-testid': 'eb-sync-review', text: 'Review ' + pending.length + ' change' + (pending.length === 1 ? '' : 's'), onclick: function () { reviewSync(s); } }) : null,
+            r.sync_enabled ? h('button', { type: 'button', class: 'eb-btn eb-btn--sm', text: 'Check for updates', onclick: function (e) {
+              e.target.disabled = true;
+              api(base + '/' + s.id + '/check', { method: 'POST', body: {} }).then(function (res) {
+                var n = ((res.source.pending_changes || {}).changes || []).length;
+                toast(n ? n + ' change' + (n === 1 ? '' : 's') + ' found on the listing.' : 'Up to date with the listing.');
+                load();
+              }).catch(function (err) { e.target.disabled = false; toast(err.message, 'error'); });
+            } }) : null
+          ])
+        ]));
+      });
+      append(box, h('p', { class: 'eb-help', text: 'LNKup never changes your event on its own. You choose which listing updates to bring in; booked vendors are told about date and place changes.' }));
+    }
+    function reviewSync(s) {
+      var picks = {};
+      var rows = s.pending_changes.changes.map(function (c) {
+        picks[c.field] = !c.edited;
+        return h('label', { class: 'eb-pick' }, [
+          h('input', { type: 'checkbox', checked: !c.edited, onchange: function (e) { picks[c.field] = e.target.checked; } }),
+          h('span', { class: 'eb-pick__body' }, [
+            h('span', { class: 'eb-pick__label' }, [SYNC_LABELS[c.field] || c.field, c.material ? h('span', { class: 'eb-prov', text: 'Affects vendors' }) : null]),
+            h('span', { class: 'eb-diff__row eb-diff__row--inline' }, [h('del', { text: (c.current || '—').slice(0, 160) }), h('ins', { text: (c.incoming || '—').slice(0, 160) })]),
+            c.edited ? h('span', { class: 'eb-pick__mine', text: 'You changed this on LNKup. Tick only if the listing should replace your version.' }) : null
+          ])
+        ]);
+      });
+      var d;
+      function send(confirm) {
+        var fields = Object.keys(picks).filter(function (k) { return picks[k]; });
+        if (!fields.length) { toast('Choose at least one change.', 'error'); return; }
+        api(base + '/' + s.id + '/apply', { method: 'POST', body: { fields: fields, confirm: confirm } }).then(function (res) {
+          d.close(true);
+          res.applied.forEach(function (f) {
+            var c = s.pending_changes.changes.filter(function (x) { return x.field === f; })[0];
+            if (c && S.draft && S.draft.state.event[f] !== undefined) set('event.' + f, c.incoming, { now: true });
+          });
+          toast('Updated from the listing.');
+          renderBuilder();
+        }).catch(function (err) {
+          if (err.status === 409 && err.data && err.data.review) {
+            confirmDialog('Notify booked vendors?', err.data.review.booked + ' booked vendor' + (err.data.review.booked === 1 ? '' : 's') + ' will be told about the new date, time or place. Existing bookings and payments stay as they are.', 'Apply and notify').then(function (ok) { if (ok) send(true); });
+            return;
+          }
+          toast(err.message, 'error');
+        });
+      }
+      d = dialog({ title: 'Updates from ' + s.label, wide: true, body: [h('div', { class: 'eb-picks' }, rows)], foot: [
+        h('button', { type: 'button', class: 'eb-btn', text: 'Keep my event as is', onclick: function () { api(base + '/' + s.id + '/dismiss', { method: 'POST', body: {} }).then(function () { d.close(false); toast('Kept your event. We will only ask again if the listing changes.'); load(); }); } }),
+        h('button', { type: 'button', class: 'eb-btn eb-btn--primary', 'data-testid': 'eb-sync-apply', text: 'Apply selected', onclick: function () { send(false); } })
+      ] });
+    }
+    load();
+    return box;
   }
 
   /* ------------------------------------------------------------------ step: options */

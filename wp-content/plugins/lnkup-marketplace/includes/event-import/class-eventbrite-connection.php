@@ -106,6 +106,7 @@ class LNKup_Eventbrite_Connection {
 			$wpdb->update( LNKup_Event_Import_Tables::connections(), array( 'account_label' => mb_substr( sanitize_text_field( $label ), 0, 190 ), 'external_org_id' => sanitize_text_field( (string) ( $me['id'] ?? '' ) ) ), array( 'organizer_id' => $user, 'provider' => self::PROVIDER ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		}
 		LNKup_Event_Builder_Publisher::track( 'provider_connected', LNKup_Event_Builder_Schema::normalize( array( 'method' => 'import', 'import' => array( 'provider' => self::PROVIDER ) ) ), 0, $user );
+		self::register_webhooks( $user );
 		$back( 'connected' );
 	}
 
@@ -124,8 +125,48 @@ class LNKup_Eventbrite_Connection {
 		);
 	}
 
+	/**
+	 * Ask Eventbrite to notify LNKup when this account's events change (documented organization
+	 * webhooks). Notifications only queue a re-check; see LNKup_Event_Sources_REST.
+	 *
+	 * @return int Webhooks registered.
+	 */
+	public static function register_webhooks( int $user_id ): int {
+		if ( ! self::available() || ! class_exists( 'LNKup_Event_Source_Sync' ) || ! LNKup_Event_Source_Sync::enabled() ) {
+			return 0;
+		}
+		$orgs = self::api( $user_id, '/users/me/organizations/' );
+		if ( is_wp_error( $orgs ) ) {
+			return 0;
+		}
+		$row   = self::row( $user_id );
+		$token = $row ? self::decrypt( (string) $row['token'] ) : '';
+		$hooks = (array) get_option( LNKup_Event_Sources_REST::WEBHOOKS, array() );
+		$count = 0;
+		foreach ( array_slice( (array) ( $orgs['organizations'] ?? array() ), 0, 5 ) as $org ) {
+			$res  = wp_safe_remote_post(
+				self::API . '/organizations/' . rawurlencode( (string) $org['id'] ) . '/webhooks/',
+				array(
+					'timeout' => 12,
+					'headers' => array( 'Authorization' => 'Bearer ' . $token, 'Content-Type' => 'application/json' ),
+					'body'    => wp_json_encode( array( 'endpoint_url' => rest_url( 'lnkup/v1/webhooks/eventbrite' ), 'actions' => 'event.updated,event.unpublished' ) ),
+				)
+			);
+			$data = is_wp_error( $res ) ? array() : json_decode( (string) wp_remote_retrieve_body( $res ), true );
+			if ( is_array( $data ) && ! empty( $data['id'] ) ) {
+				$hooks[ sanitize_text_field( (string) $data['id'] ) ] = $user_id;
+				++$count;
+			}
+		}
+		update_option( LNKup_Event_Sources_REST::WEBHOOKS, $hooks, false );
+		return $count;
+	}
+
 	public static function disconnect( int $user_id ): void {
 		global $wpdb;
+		if ( class_exists( 'LNKup_Event_Sources_REST' ) ) {
+			update_option( LNKup_Event_Sources_REST::WEBHOOKS, array_filter( (array) get_option( LNKup_Event_Sources_REST::WEBHOOKS, array() ), static fn( $owner ) => (int) $owner !== $user_id ), false );
+		}
 		$wpdb->delete( LNKup_Event_Import_Tables::connections(), array( 'organizer_id' => $user_id, 'provider' => self::PROVIDER ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		delete_transient( 'lnkup_eb_events_' . $user_id );
 	}
