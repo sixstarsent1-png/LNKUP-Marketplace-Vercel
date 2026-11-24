@@ -160,6 +160,22 @@ class LNKup_Comms_Schema {
 ) {$charset};"
 		);
 
+		$versions = self::table( 'template_versions' );
+		dbDelta(
+			"CREATE TABLE {$versions} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  template_key varchar(64) NOT NULL,
+  fields longtext NULL,
+  status varchar(16) NOT NULL DEFAULT 'draft',
+  note varchar(255) NOT NULL DEFAULT '',
+  created_by bigint(20) unsigned NOT NULL DEFAULT 0,
+  created_at datetime NOT NULL,
+  published_at datetime NULL,
+  PRIMARY KEY  (id),
+  KEY key_status (template_key,status)
+) {$charset};"
+		);
+
 		$campaigns = self::table( 'campaigns' );
 		dbDelta(
 			"CREATE TABLE {$campaigns} (

@@ -44,6 +44,13 @@ class LNKup_Comms_Admin_REST {
 			array( '/comms/admin/automations', 'GET', 'automations' ),
 			array( '/comms/admin/automations/(?P<key>[a-z0-9_]+)/(?P<action>pause|resume)', 'POST', 'automation_action' ),
 			array( '/comms/admin/test-send', 'POST', 'test_send' ),
+			array( '/comms/admin/templates/(?P<key>[a-z0-9_:]+)/versions', 'GET', 'template_versions' ),
+			array( '/comms/admin/templates/(?P<key>[a-z0-9_:]+)/draft', 'POST', 'save_template_draft' ),
+			array( '/comms/admin/templates/(?P<key>[a-z0-9_:]+)/publish', 'POST', 'publish_template_draft' ),
+			array( '/comms/admin/template-versions/(?P<id>\d+)/restore', 'POST', 'restore_template_version' ),
+			array( '/comms/admin/users/(?P<id>\d+)/timeline', 'GET', 'user_timeline' ),
+			array( '/comms/admin/suppressions', 'GET', 'suppressions' ),
+			array( '/comms/admin/suppressions/(?P<id>\d+)', 'DELETE', 'remove_suppression' ),
 		);
 		$grouped = array();
 		foreach ( $routes as $route ) {
@@ -140,7 +147,8 @@ class LNKup_Comms_Admin_REST {
 		if ( isset( $input['email_webhook_secret'] ) && '••••••••' === $input['email_webhook_secret'] ) {
 			unset( $input['email_webhook_secret'] );
 		}
-		LNKup_Comms_Settings::update( $input );
+		$before = LNKup_Comms_Settings::all();
+		LNKup_Comms_Admin_Ops::audit_settings( $before, LNKup_Comms_Settings::update( $input ) );
 		return self::get_settings();
 	}
 
@@ -164,6 +172,48 @@ class LNKup_Comms_Admin_REST {
 			return rest_ensure_response( array( 'ok' => true ) );
 		}
 		$result = LNKup_Comms_Templates::save_override( $key, (array) $request->get_json_params(), get_current_user_id() );
+		return is_wp_error( $result ) ? $result : rest_ensure_response( array( 'ok' => true ) );
+	}
+
+	public static function template_versions( WP_REST_Request $request ): WP_REST_Response {
+		$key = (string) $request['key'];
+		return rest_ensure_response( array( 'items' => LNKup_Comms_Templates::versions( $key ), 'draft' => LNKup_Comms_Templates::draft( $key ) ) );
+	}
+
+	public static function save_template_draft( WP_REST_Request $request ) {
+		$result = LNKup_Comms_Templates::save_draft( (string) $request['key'], (array) $request->get_json_params(), get_current_user_id() );
+		return is_wp_error( $result ) ? $result : rest_ensure_response( array( 'ok' => true, 'id' => $result ) );
+	}
+
+	public static function publish_template_draft( WP_REST_Request $request ) {
+		$result = LNKup_Comms_Templates::publish_draft( (string) $request['key'], get_current_user_id() );
+		return is_wp_error( $result ) ? $result : rest_ensure_response( array( 'ok' => true ) );
+	}
+
+	public static function restore_template_version( WP_REST_Request $request ) {
+		$result = LNKup_Comms_Templates::restore_version( absint( $request['id'] ), get_current_user_id() );
+		return is_wp_error( $result ) ? $result : rest_ensure_response( array( 'ok' => true ) );
+	}
+
+	/**
+	 * One user's communication history. Every view is audit-logged.
+	 */
+	public static function user_timeline( WP_REST_Request $request ) {
+		$user_id  = absint( $request['id'] );
+		$timeline = LNKup_Comms_Admin_Ops::user_timeline( $user_id );
+		if ( null === $timeline ) {
+			return new WP_Error( 'lnkup_comms_not_found', __( 'User not found.', 'lnkup-communications' ), array( 'status' => 404 ) );
+		}
+		LNKup_Comms_Admin_Ops::audit( 'comms_timeline_viewed', $user_id );
+		return rest_ensure_response( $timeline );
+	}
+
+	public static function suppressions( WP_REST_Request $request ): WP_REST_Response {
+		return rest_ensure_response( LNKup_Comms_Admin_Ops::suppressions( sanitize_email( (string) $request['email'] ), max( 1, absint( $request['page'] ?? 1 ) ) ) );
+	}
+
+	public static function remove_suppression( WP_REST_Request $request ) {
+		$result = LNKup_Comms_Admin_Ops::remove_suppression( absint( $request['id'] ), (string) $request['note'] );
 		return is_wp_error( $result ) ? $result : rest_ensure_response( array( 'ok' => true ) );
 	}
 
@@ -207,6 +257,7 @@ class LNKup_Comms_Admin_REST {
 			'rejection_reason' => '', 'event_status_note' => 'Severe weather forecast.', 'outcome_label' => 'resolved in your favor', 'cadence_label' => 'monthly',
 			'announcement_title' => 'Parking update', 'announcement_body' => 'Vendor parking moved to Lot C.', 'campaign_subject' => 'New on LNKup', 'campaign_body' => 'Sample announcement body.',
 			'campaign_cta' => 'Learn more', 'campaign_push' => 'Sample push text.', 'digest_period' => 'weekly', 'spots_remaining' => '4', 'summary_line' => 'Sample health summary.',
+			'open_spots' => '8', 'days_until' => '7', 'category_summary' => '4 Food Vendor, 2 Clothing', 'vendor_name' => 'Sample Eats Co.', 'invite_expires' => 'Jun 1',
 		);
 	}
 
@@ -252,6 +303,7 @@ class LNKup_Comms_Admin_REST {
 			array(
 				'triggers'          => LNKup_Comms_Analytics::trigger_report( $days ),
 				'funnel'            => LNKup_Comms_Analytics::marketplace_funnel( $days ),
+				'holdouts'          => LNKup_Comms_Admin_Ops::holdout_report( $days ),
 				'attribution_days'  => LNKup_Comms_Settings::int( 'attribution_days' ),
 				'note'              => __( 'Action completion is correlation within the attribution window, not proof a message caused the action.', 'lnkup-communications' ),
 			)
@@ -277,6 +329,7 @@ class LNKup_Comms_Admin_REST {
 		$paused = (array) LNKup_Comms_Settings::get( 'paused_automations' );
 		$paused = 'pause' === $request['action'] ? array_unique( array_merge( $paused, array( $key ) ) ) : array_diff( $paused, array( $key ) );
 		LNKup_Comms_Settings::update( array( 'paused_automations' => array_values( $paused ) ) );
+		LNKup_Comms_Admin_Ops::audit( 'pause' === $request['action'] ? 'comms_trigger_paused' : 'comms_trigger_resumed', $key );
 		return rest_ensure_response( array( 'ok' => true, 'paused' => array_values( $paused ) ) );
 	}
 

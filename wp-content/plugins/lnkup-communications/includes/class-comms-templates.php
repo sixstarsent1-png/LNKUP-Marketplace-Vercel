@@ -83,8 +83,140 @@ class LNKup_Comms_Templates {
 	 * @param array  $fields Raw fields.
 	 * @return true|WP_Error
 	 */
-	public static function save_override( string $key, array $fields, int $user_id ) {
+	public static function save_override( string $key, array $fields, int $user_id, string $note = '' ) {
 		global $wpdb;
+		$clean = self::validate_fields( $key, $fields );
+		if ( is_wp_error( $clean ) ) {
+			return $clean;
+		}
+		$table = LNKup_Comms_Schema::table( 'templates' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->replace(
+			$table,
+			array(
+				'template_key' => $key,
+				'fields'       => wp_json_encode( $clean ),
+				'updated_by'   => $user_id,
+				'updated_at'   => LNKup_Comms_Schema::now(),
+			)
+		);
+		wp_cache_delete( 'tpl_' . $key, 'lnkup_comms' );
+		self::record_version( $key, $clean, 'published', $user_id, $note );
+		LNKup_Comms_Admin_Ops::audit( 'comms_template_published', $key, array( 'new' => $clean, 'reason' => $note ) );
+		return true;
+	}
+
+	/**
+	 * Save (or replace) the single working draft for a template. Drafts are validated
+	 * exactly like published templates but never used for sending.
+	 *
+	 * @return int|WP_Error Draft version ID.
+	 */
+	public static function save_draft( string $key, array $fields, int $user_id ) {
+		global $wpdb;
+		$clean = self::validate_fields( $key, $fields );
+		if ( is_wp_error( $clean ) ) {
+			return $clean;
+		}
+		$table = LNKup_Comms_Schema::table( 'template_versions' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->delete( $table, array( 'template_key' => $key, 'status' => 'draft' ) );
+		return self::record_version( $key, $clean, 'draft', $user_id, '' );
+	}
+
+	/**
+	 * @return array|null Draft row with decoded fields.
+	 */
+	public static function draft( string $key ): ?array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . LNKup_Comms_Schema::table( 'template_versions' ) . " WHERE template_key = %s AND status = 'draft' ORDER BY id DESC LIMIT 1", $key ), ARRAY_A );
+		if ( ! is_array( $row ) ) {
+			return null;
+		}
+		$row['fields'] = json_decode( (string) $row['fields'], true ) ?: array();
+		return $row;
+	}
+
+	/**
+	 * Publish the working draft (re-validated at publish time).
+	 *
+	 * @return true|WP_Error
+	 */
+	public static function publish_draft( string $key, int $user_id ) {
+		global $wpdb;
+		$draft = self::draft( $key );
+		if ( ! $draft ) {
+			return new WP_Error( 'lnkup_comms_no_draft', __( 'There is no draft to publish.', 'lnkup-communications' ), array( 'status' => 404 ) );
+		}
+		$result = self::save_override( $key, (array) $draft['fields'], $user_id, __( 'Published from draft', 'lnkup-communications' ) );
+		if ( true === $result ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$wpdb->delete( LNKup_Comms_Schema::table( 'template_versions' ), array( 'id' => (int) $draft['id'] ) );
+		}
+		return $result;
+	}
+
+	/**
+	 * Republish an earlier version as a new version (history is never rewritten).
+	 *
+	 * @return true|WP_Error
+	 */
+	public static function restore_version( int $version_id, int $user_id ) {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . LNKup_Comms_Schema::table( 'template_versions' ) . ' WHERE id = %d', $version_id ), ARRAY_A );
+		if ( ! is_array( $row ) || 'draft' === $row['status'] ) {
+			return new WP_Error( 'lnkup_comms_version', __( 'That version could not be found.', 'lnkup-communications' ), array( 'status' => 404 ) );
+		}
+		$fields = json_decode( (string) $row['fields'], true ) ?: array();
+		if ( array() === $fields ) {
+			self::reset_override( (string) $row['template_key'], $user_id );
+			return true;
+		}
+		/* translators: %d: version number */
+		return self::save_override( (string) $row['template_key'], $fields, $user_id, sprintf( __( 'Restored version #%d', 'lnkup-communications' ), $version_id ) );
+	}
+
+	/**
+	 * Newest first.
+	 */
+	public static function versions( string $key, int $limit = 20 ): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (array) $wpdb->get_results( $wpdb->prepare( 'SELECT id, template_key, status, note, created_by, created_at, published_at FROM ' . LNKup_Comms_Schema::table( 'template_versions' ) . ' WHERE template_key = %s ORDER BY id DESC LIMIT %d', $key, $limit ), ARRAY_A );
+	}
+
+	private static function record_version( string $key, array $fields, string $status, int $user_id, string $note ): int {
+		global $wpdb;
+		$table = LNKup_Comms_Schema::table( 'template_versions' );
+		$now   = LNKup_Comms_Schema::now();
+		if ( 'published' === $status ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+			$wpdb->update( $table, array( 'status' => 'archived' ), array( 'template_key' => $key, 'status' => 'published' ) );
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->insert(
+			$table,
+			array(
+				'template_key' => $key,
+				'fields'       => wp_json_encode( $fields ),
+				'status'       => $status,
+				'note'         => substr( sanitize_text_field( $note ), 0, 255 ),
+				'created_by'   => $user_id,
+				'created_at'   => $now,
+				'published_at' => 'published' === $status ? $now : null,
+			)
+		);
+		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Sanitize fields and reject placeholders the message cannot resolve.
+	 *
+	 * @return array|WP_Error
+	 */
+	public static function validate_fields( string $key, array $fields ) {
 		$defaults = self::defaults();
 		if ( ! isset( $defaults[ $key ] ) ) {
 			return new WP_Error( 'lnkup_comms_template', __( 'Unknown template.', 'lnkup-communications' ), array( 'status' => 404 ) );
@@ -111,26 +243,18 @@ class LNKup_Comms_Templates {
 				array( 'status' => 400 )
 			);
 		}
-		$table = LNKup_Comms_Schema::table( 'templates' );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-		$wpdb->replace(
-			$table,
-			array(
-				'template_key' => $key,
-				'fields'       => wp_json_encode( $clean ),
-				'updated_by'   => $user_id,
-				'updated_at'   => LNKup_Comms_Schema::now(),
-			)
-		);
-		wp_cache_delete( 'tpl_' . $key, 'lnkup_comms' );
-		return true;
+		return $clean;
 	}
 
-	public static function reset_override( string $key ): void {
+	public static function reset_override( string $key, int $user_id = 0 ): void {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$wpdb->delete( LNKup_Comms_Schema::table( 'templates' ), array( 'template_key' => $key ) );
 		wp_cache_delete( 'tpl_' . $key, 'lnkup_comms' );
+		if ( isset( self::defaults()[ $key ] ) ) {
+			self::record_version( $key, array(), 'published', $user_id ?: get_current_user_id(), __( 'Reset to default', 'lnkup-communications' ) );
+			LNKup_Comms_Admin_Ops::audit( 'comms_template_reset', $key, array() );
+		}
 	}
 
 	/**

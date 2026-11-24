@@ -17,7 +17,7 @@ declare(strict_types=1);
 defined( 'ABSPATH' ) || exit;
 
 define( 'LNKUP_COMMS_VERSION', '1.2.1' );
-define( 'LNKUP_COMMS_DB_VERSION', '1.0.0' );
+define( 'LNKUP_COMMS_DB_VERSION', '1.1.0' );
 define( 'LNKUP_COMMS_FILE', __FILE__ );
 define( 'LNKUP_COMMS_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LNKUP_COMMS_URL', plugin_dir_url( __FILE__ ) );
@@ -52,6 +52,7 @@ function lnkup_comms_files(): array {
 		'includes/class-comms-engagement.php',
 		'includes/class-comms-next-steps.php',
 		'includes/class-comms-analytics.php',
+		'includes/class-comms-admin-ops.php',
 		'includes/class-comms-health.php',
 		'includes/class-comms-partners.php',
 		'includes/listeners/class-comms-listen-applications.php',

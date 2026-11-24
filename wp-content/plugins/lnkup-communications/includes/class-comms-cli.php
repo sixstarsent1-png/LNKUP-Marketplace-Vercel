@@ -113,6 +113,7 @@ class LNKup_Comms_CLI {
 		}
 		$before = LNKup_Comms_Settings::enabled( $flag );
 		LNKup_Comms_Settings::update( array( $flag => $on ) );
+		LNKup_Comms_Admin_Ops::audit( 'comms_flag_changed', $flag, array( 'prev' => $before, 'new' => $on, 'reason' => $actor ) );
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 		error_log( sprintf( 'LNKup Communications: %s %s -> %s by %s', $flag, $before ? 'on' : 'off', $on ? 'on' : 'off', $actor ) );
 		return true;

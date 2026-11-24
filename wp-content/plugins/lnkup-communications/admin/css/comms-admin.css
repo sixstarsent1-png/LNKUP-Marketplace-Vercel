@@ -24,3 +24,4 @@
 .lnkup-comms-preview { background: #f6f7f7; padding: 8px 12px; border-radius: 6px; margin: 8px 0; }
 .lnkup-comms-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
 .lnkup-comms-log td small { color: #50575e; }
+.lnkup-comms-checklist { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; max-width: 960px; }

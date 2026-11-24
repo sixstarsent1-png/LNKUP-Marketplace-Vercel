@@ -45,8 +45,10 @@ class LNKup_Comms_Admin {
 			'automations' => __( 'Automated flows', 'lnkup-communications' ),
 			'templates'   => __( 'Email & push templates', 'lnkup-communications' ),
 			'campaigns'   => __( 'Campaigns', 'lnkup-communications' ),
-			'logs'        => __( 'Delivery logs', 'lnkup-communications' ),
-			'analytics'   => __( 'Analytics', 'lnkup-communications' ),
+			'logs'         => __( 'Delivery logs', 'lnkup-communications' ),
+			'timeline'     => __( 'User timeline', 'lnkup-communications' ),
+			'suppressions' => __( 'Suppression list', 'lnkup-communications' ),
+			'analytics'    => __( 'Analytics', 'lnkup-communications' ),
 			'settings'    => __( 'Settings', 'lnkup-communications' ),
 			'health'      => __( 'System health', 'lnkup-communications' ),
 		);
@@ -225,7 +227,19 @@ class LNKup_Comms_Admin {
 			return;
 		}
 		$template = LNKup_Comms_Templates::get( $key );
-		echo '<h2>' . esc_html( $key ) . '</h2><p class="description">' . esc_html__( 'Available variables:', 'lnkup-communications' ) . ' ';
+		$draft    = LNKup_Comms_Templates::draft( $key );
+		if ( $draft ) {
+			$template = array_merge( $template, array_filter( (array) $draft['fields'], static function ( $value ) { return '' !== $value && array() !== $value; } ) );
+		}
+		echo '<h2>' . esc_html( $key ) . '</h2>';
+		if ( $draft ) {
+			echo '<div class="notice notice-info inline"><p>' . esc_html( sprintf( /* translators: %s: date */ __( 'Editing an unpublished draft saved %s UTC. Messages keep using the published version until you publish.', 'lnkup-communications' ), (string) $draft['created_at'] ) ) . '</p>';
+			self::form_open( 'publish_template', 'templates' );
+			echo '<input type="hidden" name="template" value="' . esc_attr( $key ) . '">';
+			submit_button( __( 'Publish draft', 'lnkup-communications' ), 'primary small', '', false );
+			echo '</form></div>';
+		}
+		echo '<p class="description">' . esc_html__( 'Available variables:', 'lnkup-communications' ) . ' ';
 		foreach ( LNKup_Comms_Templates::placeholders( $defaults[ $key ] ) as $var ) {
 			echo '<code>{{' . esc_html( $var ) . '}}</code> ';
 		}
@@ -236,12 +250,34 @@ class LNKup_Comms_Admin {
 			echo '<tr><th><label for="tpl-' . esc_attr( $field ) . '">' . esc_html( $field ) . '</label></th><td><input type="text" class="large-text" id="tpl-' . esc_attr( $field ) . '" name="fields[' . esc_attr( $field ) . ']" value="' . esc_attr( (string) ( $template[ $field ] ?? '' ) ) . '"></td></tr>';
 		}
 		echo '<tr><th><label for="tpl-body">body</label></th><td><textarea class="large-text" rows="6" id="tpl-body" name="fields[body]">' . esc_textarea( implode( "\n", (array) ( $template['body'] ?? array() ) ) ) . '</textarea><p class="description">' . esc_html__( 'One paragraph per line.', 'lnkup-communications' ) . '</p></td></tr></table>';
-		submit_button( __( 'Save template', 'lnkup-communications' ), 'primary', '', false );
+		submit_button( __( 'Save as draft', 'lnkup-communications' ), 'secondary', 'as_draft', false );
+		echo ' ';
+		submit_button( __( 'Save and publish', 'lnkup-communications' ), 'primary', '', false );
 		echo '</form>';
 		self::form_open( 'reset_template', 'templates' );
 		echo '<input type="hidden" name="template" value="' . esc_attr( $key ) . '">';
 		submit_button( __( 'Reset to default', 'lnkup-communications' ), 'link-delete', '', false );
 		echo '</form>';
+
+		$versions = LNKup_Comms_Templates::versions( $key );
+		echo '<h3>' . esc_html__( 'Version history', 'lnkup-communications' ) . '</h3>';
+		if ( ! $versions ) {
+			echo '<p class="description">' . esc_html__( 'This template has never been edited; the built-in default is in use.', 'lnkup-communications' ) . '</p>';
+		} else {
+			echo '<table class="widefat striped"><thead><tr><th>#</th><th>' . esc_html__( 'Status', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'By', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'When (UTC)', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'Note', 'lnkup-communications' ) . '</th><th></th></tr></thead><tbody>';
+			foreach ( $versions as $version ) {
+				$author = get_userdata( (int) $version['created_by'] );
+				echo '<tr><td>' . esc_html( (string) $version['id'] ) . '</td><td>' . esc_html( (string) $version['status'] ) . '</td><td>' . esc_html( $author ? $author->display_name : '—' ) . '</td><td>' . esc_html( (string) $version['created_at'] ) . '</td><td>' . esc_html( (string) $version['note'] ) . '</td><td>';
+				if ( 'archived' === $version['status'] ) {
+					self::form_open( 'restore_template_version', 'templates' );
+					echo '<input type="hidden" name="template" value="' . esc_attr( $key ) . '"><input type="hidden" name="version" value="' . esc_attr( (string) $version['id'] ) . '">';
+					submit_button( __( 'Restore', 'lnkup-communications' ), 'secondary small', '', false );
+					echo '</form>';
+				}
+				echo '</td></tr>';
+			}
+			echo '</tbody></table>';
+		}
 
 		$request = new WP_REST_Request( 'POST' );
 		$request->set_url_params( array( 'key' => $key ) );
@@ -373,6 +409,90 @@ class LNKup_Comms_Admin {
 		}
 	}
 
+	private static function tab_timeline(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$lookup = isset( $_GET['who'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['who'] ) ) : '';
+		echo '<form method="get" class="lnkup-comms-filters"><input type="hidden" name="page" value="' . esc_attr( self::SLUG ) . '"><input type="hidden" name="tab" value="timeline">';
+		echo '<label>' . esc_html__( 'User ID or email', 'lnkup-communications' ) . ' <input type="text" name="who" value="' . esc_attr( $lookup ) . '" class="regular-text"></label> ';
+		submit_button( __( 'Show timeline', 'lnkup-communications' ), 'secondary', '', false );
+		echo '</form><p class="description">' . esc_html__( 'Every view of a user timeline is recorded in the audit log. Message bodies are never stored.', 'lnkup-communications' ) . '</p>';
+		if ( '' === $lookup ) {
+			return;
+		}
+		$user = is_numeric( $lookup ) ? get_userdata( (int) $lookup ) : get_user_by( 'email', $lookup );
+		$data = $user ? LNKup_Comms_Admin_Ops::user_timeline( (int) $user->ID ) : null;
+		if ( ! $data ) {
+			echo '<div class="notice notice-warning inline"><p>' . esc_html__( 'No user matches that ID or email.', 'lnkup-communications' ) . '</p></div>';
+			return;
+		}
+		LNKup_Comms_Admin_Ops::audit( 'comms_timeline_viewed', (int) $user->ID );
+		echo '<div class="lnkup-comms-stats">';
+		self::stat( __( 'User', 'lnkup-communications' ), $data['user']['name'], '#' . $data['user']['id'] . ' · ' . implode( ', ', $data['user']['roles'] ) );
+		self::stat( __( 'Push devices', 'lnkup-communications' ), $data['devices'] );
+		self::stat( __( 'Tracked clicks', 'lnkup-communications' ), $data['clicks'] );
+		self::stat( __( 'Scheduled now', 'lnkup-communications' ), count( $data['scheduled'] ) );
+		self::stat( __( 'Email suppressions', 'lnkup-communications' ), count( $data['suppressions'] ), implode( ', ', wp_list_pluck( $data['suppressions'], 'scope' ) ) );
+		echo '</div><div class="lnkup-comms-cols"><div class="lnkup-comms-panel"><h2>' . esc_html__( 'Preferences', 'lnkup-communications' ) . '</h2><table class="widefat striped"><tbody>';
+		foreach ( (array) ( $data['preferences']['categories'] ?? array() ) as $cat ) {
+			echo '<tr><td>' . esc_html( (string) ( $cat['label'] ?? $cat['key'] ?? '' ) ) . '</td><td>' . esc_html( sprintf( /* translators: 1: email mode, 2: push */ __( 'Email: %1$s · Push: %2$s', 'lnkup-communications' ), (string) ( $cat['email'] ?? '' ), ! empty( $cat['push'] ) && 'off' !== $cat['push'] ? __( 'on', 'lnkup-communications' ) : __( 'off', 'lnkup-communications' ) ) ) . '</td></tr>';
+		}
+		echo '</tbody></table></div><div class="lnkup-comms-panel"><h2>' . esc_html__( 'Active journeys (scheduled)', 'lnkup-communications' ) . '</h2>';
+		if ( ! $data['scheduled'] ) {
+			echo '<p>' . esc_html__( 'Nothing is scheduled for this user.', 'lnkup-communications' ) . '</p>';
+		}
+		foreach ( $data['scheduled'] as $row ) {
+			echo '<p><code>' . esc_html( (string) $row['trigger_key'] ) . '</code> · ' . esc_html( (string) $row['scheduled_at'] ) . ' UTC</p>';
+		}
+		echo '<h2>' . esc_html__( 'Why messages were not sent', 'lnkup-communications' ) . '</h2>';
+		foreach ( $data['reasons'] as $row ) {
+			echo '<p><code>' . esc_html( (string) $row['reason'] ) . '</code> · ' . esc_html( number_format_i18n( (int) $row['c'] ) ) . '</p>';
+		}
+		echo '</div></div><h2>' . esc_html__( 'Recent messages', 'lnkup-communications' ) . '</h2><table class="widefat striped lnkup-comms-log"><thead><tr><th>#</th><th>' . esc_html__( 'Trigger', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'Title', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'Status', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'Channels', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'Created / sent (UTC)', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'Engagement', 'lnkup-communications' ) . '</th></tr></thead><tbody>';
+		if ( ! $data['messages'] ) {
+			echo '<tr><td colspan="7">' . esc_html__( 'No messages for this user.', 'lnkup-communications' ) . '</td></tr>';
+		}
+		foreach ( $data['messages'] as $row ) {
+			$channels = array();
+			foreach ( $row['deliveries'] as $d ) {
+				$channels[] = $d['channel'] . ': ' . $d['status'] . ( '' !== $d['suppression_reason'] ? ' (' . $d['suppression_reason'] . ')' : '' );
+			}
+			$engaged = array_filter( array( $row['read_at'] ? __( 'read', 'lnkup-communications' ) : '', $row['opened_at'] ? __( 'opened', 'lnkup-communications' ) : '', $row['clicked_at'] ? __( 'clicked', 'lnkup-communications' ) : '' ) );
+			echo '<tr><td>' . esc_html( (string) $row['id'] ) . '</td><td><code>' . esc_html( (string) $row['template_key'] ) . '</code><br><small>' . esc_html( $row['priority'] . ' · ' . $row['category'] ) . '</small></td><td>' . esc_html( (string) $row['title'] ) . '</td><td>' . esc_html( (string) $row['status'] ) . ( '' !== $row['suppression_reason'] ? '<br><small>' . esc_html( (string) $row['suppression_reason'] ) . '</small>' : '' ) . '</td><td><small>' . esc_html( implode( ' | ', $channels ) ) . '</small></td><td><small>' . esc_html( (string) $row['created_at'] ) . '<br>' . esc_html( (string) $row['sent_at'] ) . '</small></td><td>' . esc_html( implode( ', ', $engaged ) ) . '</td></tr>';
+		}
+		echo '</tbody></table>';
+	}
+
+	private static function tab_suppressions(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$email = isset( $_GET['email'] ) ? sanitize_email( wp_unslash( (string) $_GET['email'] ) ) : '';
+		$page  = isset( $_GET['paged_supp'] ) ? max( 1, absint( $_GET['paged_supp'] ) ) : 1;
+		// phpcs:enable
+		$data = LNKup_Comms_Admin_Ops::suppressions( $email, $page );
+		echo '<p class="description">' . esc_html__( 'Addresses are stored only as SHA-256 hashes. Search by email to find a specific address. Removing a bounce lets delivery be attempted again; it does not re-subscribe anyone to marketing.', 'lnkup-communications' ) . '</p>';
+		echo '<div class="lnkup-comms-stats">';
+		foreach ( $data['by_reason'] as $row ) {
+			self::stat( (string) $row['reason'], number_format_i18n( (int) $row['c'] ) );
+		}
+		echo '</div><form method="get" class="lnkup-comms-filters"><input type="hidden" name="page" value="' . esc_attr( self::SLUG ) . '"><input type="hidden" name="tab" value="suppressions"><label>' . esc_html__( 'Email', 'lnkup-communications' ) . ' <input type="email" name="email" value="' . esc_attr( $email ) . '" class="regular-text"></label> ';
+		submit_button( __( 'Search', 'lnkup-communications' ), 'secondary', '', false );
+		echo '</form><table class="widefat striped"><thead><tr><th>' . esc_html__( 'Address hash', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'Scope', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'Reason', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'Added (UTC)', 'lnkup-communications' ) . '</th><th></th></tr></thead><tbody>';
+		if ( ! $data['items'] ) {
+			echo '<tr><td colspan="5">' . esc_html__( 'No suppressed addresses.', 'lnkup-communications' ) . '</td></tr>';
+		}
+		foreach ( $data['items'] as $row ) {
+			echo '<tr><td><code>' . esc_html( substr( (string) $row['email_hash'], 0, 12 ) ) . '…</code></td><td>' . esc_html( (string) $row['scope'] ) . '</td><td>' . esc_html( (string) $row['reason'] ) . '</td><td>' . esc_html( (string) $row['created_at'] ) . '</td><td>';
+			self::form_open( 'remove_suppression', 'suppressions' );
+			echo '<input type="hidden" name="suppression" value="' . esc_attr( (string) $row['id'] ) . '"><input type="text" name="note" placeholder="' . esc_attr__( 'Reason (required)', 'lnkup-communications' ) . '" required> ';
+			submit_button( __( 'Remove', 'lnkup-communications' ), 'link-delete small', '', false );
+			echo '</form></td></tr>';
+		}
+		echo '</tbody></table>';
+		$pages = (int) ceil( $data['total'] / $data['per_page'] );
+		if ( $pages > 1 ) {
+			echo '<div class="tablenav"><div class="tablenav-pages">' . wp_kses_post( (string) paginate_links( array( 'base' => add_query_arg( 'paged_supp', '%#%' ), 'format' => '', 'current' => $page, 'total' => $pages ) ) ) . '</div></div>';
+		}
+	}
+
 	private static function tab_analytics(): void {
 		$days   = 30;
 		$report = LNKup_Comms_Analytics::trigger_report( $days );
@@ -395,6 +515,21 @@ class LNKup_Comms_Admin {
 				echo '<td>' . esc_html( number_format_i18n( (int) $row[ $col ] ) ) . '</td>';
 			}
 			echo '<td>' . ( null === $row['actioned'] ? '—' : esc_html( number_format_i18n( (int) $row['actioned'] ) ) . '<br><small>' . esc_html( (string) $row['action_label'] ) . '</small>' ) . '</td></tr>';
+		}
+		echo '</tbody></table>';
+
+		$holdouts = LNKup_Comms_Admin_Ops::holdout_report( $days );
+		echo '<h2>' . esc_html__( 'Holdout comparison', 'lnkup-communications' ) . '</h2><p class="description">' . esc_html__( 'Users in the measurement holdout were recorded but never messaged. The difference between groups is the observed lift for the outcome shown; groups under 100 users are too small to read.', 'lnkup-communications' ) . '</p>';
+		if ( ! $holdouts ) {
+			echo '<p>' . esc_html__( 'No holdout data yet. Choose holdout triggers and a percentage under Settings.', 'lnkup-communications' ) . '</p>';
+			return;
+		}
+		echo '<table class="widefat striped"><thead><tr><th>' . esc_html__( 'Trigger', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'Outcome', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'Messaged (rate)', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'Holdout (rate)', 'lnkup-communications' ) . '</th><th>' . esc_html__( 'Difference', 'lnkup-communications' ) . '</th></tr></thead><tbody>';
+		foreach ( $holdouts as $row ) {
+			$fmt = static function ( array $g ): string {
+				return sprintf( '%d / %d (%s)', $g['converted'], $g['users'], null === $g['rate'] ? '—' : number_format_i18n( $g['rate'] * 100, 1 ) . '%' );
+			};
+			echo '<tr><td><code>' . esc_html( $row['trigger'] ) . '</code></td><td>' . esc_html( $row['outcome'] ) . '</td><td>' . esc_html( $fmt( $row['treated'] ) ) . '</td><td>' . esc_html( $fmt( $row['holdout'] ) ) . '</td><td>' . esc_html( null === $row['difference'] ? '—' : sprintf( '%+.1f pts', $row['difference'] * 100 ) ) . ( $row['small_sample'] ? ' <small>' . esc_html__( '(small sample)', 'lnkup-communications' ) . '</small>' : '' ) . '</td></tr>';
 		}
 		echo '</tbody></table>';
 	}
@@ -497,7 +632,8 @@ class LNKup_Comms_Admin {
 				if ( isset( $input['email_webhook_secret'] ) && '' === $input['email_webhook_secret'] ) {
 					unset( $input['email_webhook_secret'] );
 				}
-				LNKup_Comms_Settings::update( $input );
+				$before = LNKup_Comms_Settings::all();
+				LNKup_Comms_Admin_Ops::audit_settings( $before, LNKup_Comms_Settings::update( $input ) );
 				self::flash( __( 'Settings saved.', 'lnkup-communications' ) );
 				break;
 			case 'pause_trigger':
@@ -516,15 +652,32 @@ class LNKup_Comms_Admin {
 			case 'save_template':
 				$key    = sanitize_text_field( wp_unslash( (string) ( $_POST['template'] ?? '' ) ) );
 				$fields = isset( $_POST['fields'] ) ? wp_unslash( (array) $_POST['fields'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized in save_override().
-				$result = LNKup_Comms_Templates::save_override( $key, $fields, $user_id );
-				self::flash( is_wp_error( $result ) ? $result->get_error_message() : __( 'Template saved.', 'lnkup-communications' ), is_wp_error( $result ) ? 'error' : 'success' );
+				$draft  = ! empty( $_POST['as_draft'] );
+				$result = $draft ? LNKup_Comms_Templates::save_draft( $key, $fields, $user_id ) : LNKup_Comms_Templates::save_override( $key, $fields, $user_id );
+				self::flash( is_wp_error( $result ) ? $result->get_error_message() : ( $draft ? __( 'Draft saved. It is not used for sending until you publish it.', 'lnkup-communications' ) : __( 'Template published.', 'lnkup-communications' ) ), is_wp_error( $result ) ? 'error' : 'success' );
+				$redirect = self::url( 'templates', array( 'template' => $key ) );
+				break;
+			case 'publish_template':
+				$key    = sanitize_text_field( wp_unslash( (string) ( $_POST['template'] ?? '' ) ) );
+				$result = LNKup_Comms_Templates::publish_draft( $key, $user_id );
+				self::flash( is_wp_error( $result ) ? $result->get_error_message() : __( 'Draft published.', 'lnkup-communications' ), is_wp_error( $result ) ? 'error' : 'success' );
+				$redirect = self::url( 'templates', array( 'template' => $key ) );
+				break;
+			case 'restore_template_version':
+				$key    = sanitize_text_field( wp_unslash( (string) ( $_POST['template'] ?? '' ) ) );
+				$result = LNKup_Comms_Templates::restore_version( absint( $_POST['version'] ?? 0 ), $user_id );
+				self::flash( is_wp_error( $result ) ? $result->get_error_message() : __( 'Version restored as the published template.', 'lnkup-communications' ), is_wp_error( $result ) ? 'error' : 'success' );
 				$redirect = self::url( 'templates', array( 'template' => $key ) );
 				break;
 			case 'reset_template':
 				$key = sanitize_text_field( wp_unslash( (string) ( $_POST['template'] ?? '' ) ) );
-				LNKup_Comms_Templates::reset_override( $key );
+				LNKup_Comms_Templates::reset_override( $key, $user_id );
 				self::flash( __( 'Template reset to default.', 'lnkup-communications' ) );
 				$redirect = self::url( 'templates', array( 'template' => $key ) );
+				break;
+			case 'remove_suppression':
+				$result = LNKup_Comms_Admin_Ops::remove_suppression( absint( $_POST['suppression'] ?? 0 ), sanitize_text_field( wp_unslash( (string) ( $_POST['note'] ?? '' ) ) ) );
+				self::flash( is_wp_error( $result ) ? $result->get_error_message() : __( 'Address removed from the suppression list.', 'lnkup-communications' ), is_wp_error( $result ) ? 'error' : 'success' );
 				break;
 			case 'create_campaign':
 				$result = LNKup_Comms_Campaigns::create_admin(

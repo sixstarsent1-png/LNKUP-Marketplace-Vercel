@@ -173,6 +173,12 @@ class LNKup_Comms_Analytics {
 			'o_setup_profile'             => __( 'Completed organization profile', 'lnkup-communications' ),
 			'o_setup_payouts'             => __( 'Finished payout setup', 'lnkup-communications' ),
 			'o_publish_draft'             => __( 'Published an event', 'lnkup-communications' ),
+			'v_application_draft'         => __( 'Submitted an application', 'lnkup-communications' ),
+			'v_inactive'                  => __( 'Submitted an application', 'lnkup-communications' ),
+			'o_new_vendors_nearby'        => __( 'Invited a vendor to the event', 'lnkup-communications' ),
+			'o_new_matching_vendors'      => __( 'Invited a vendor to the event', 'lnkup-communications' ),
+			'o_open_spots'                => __( 'Invited a vendor to the event', 'lnkup-communications' ),
+			'o_event_no_slots'            => __( 'Added a vendor opportunity', 'lnkup-communications' ),
 		);
 		return $labels[ $trigger ] ?? '';
 	}
@@ -249,6 +255,45 @@ class LNKup_Comms_Analytics {
 			case 'o_setup_payouts':
 			case 'o_publish_draft':
 				return self::activation_attributed( $trigger, $since, $window );
+			case 'v_application_draft':
+			case 'v_inactive':
+				return (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(DISTINCT m.id) FROM {$messages} m
+						INNER JOIN {$pm} v ON v.meta_key = '_lnkup_vendor_user_id' AND v.meta_value = m.recipient_user_id
+						INNER JOIN {$posts} a ON a.ID = v.post_id AND a.post_type = 'lnkup_application' AND a.post_status NOT IN ('trash','lnkup_app_draft')
+						WHERE m.trigger_key = %s AND m.created_at >= %s AND m.status IN ('sent','partial') AND a.post_date_gmt >= m.sent_at AND a.post_date_gmt <= DATE_ADD(m.sent_at, INTERVAL %d SECOND)",
+						$trigger,
+						$since,
+						$window
+					)
+				);
+			case 'o_new_vendors_nearby':
+			case 'o_new_matching_vendors':
+			case 'o_open_spots':
+				return (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(DISTINCT m.id) FROM {$messages} m
+						INNER JOIN {$pm} e ON e.meta_key = '_lnkup_event_id' AND e.meta_value = m.event_id
+						INNER JOIN {$posts} i ON i.ID = e.post_id AND i.post_type = 'lnkup_vendor_invite' AND i.post_author = m.recipient_user_id
+						WHERE m.trigger_key = %s AND m.created_at >= %s AND m.status IN ('sent','partial') AND i.post_date_gmt >= m.sent_at AND i.post_date_gmt <= DATE_ADD(m.sent_at, INTERVAL %d SECOND)",
+						$trigger,
+						$since,
+						$window
+					)
+				);
+			case 'o_event_no_slots':
+				return (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(DISTINCT m.id) FROM {$messages} m
+						INNER JOIN {$pm} e ON e.meta_key = '_lnkup_event_id' AND e.meta_value = m.event_id
+						INNER JOIN {$posts} o ON o.ID = e.post_id AND o.post_type = 'lnkup_opportunity'
+						WHERE m.trigger_key = %s AND m.created_at >= %s AND m.status IN ('sent','partial') AND o.post_date_gmt >= m.sent_at AND o.post_date_gmt <= DATE_ADD(m.sent_at, INTERVAL %d SECOND)",
+						$trigger,
+						$since,
+						$window
+					)
+				);
 			default:
 				return null;
 		}
