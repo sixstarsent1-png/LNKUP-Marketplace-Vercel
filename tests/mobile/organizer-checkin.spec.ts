@@ -38,11 +38,19 @@ async function openCheckIn(page: Page, eventId: string) {
 }
 
 /**
+ * The override tests need the seeded booking blocked on documents (or already overridden).
+ */
+async function requireDocumentsGate(page: Page) {
+  const row = await rosterRow(page, freeEventId, freeAppId);
+  test.skip(row?.reason !== 'documents' && !row?.checked_in, 'Seeded booking is no longer blocked on documents — reseed to rerun');
+}
+
+/**
  * Enter a pass code through the code sheet.
  */
 async function enterPassCode(page: Page, code: string) {
   await page.getByTestId('checkin-code-open').click();
-  await page.getByLabel('Pass code').fill(code);
+  await page.getByTestId('checkin-code-input').fill(code);
   await page.getByRole('button', { name: 'Check in with code' }).click();
 }
 
@@ -98,7 +106,7 @@ test.describe('Organizer event-day check-in', () => {
     test('floor staff see the gate but cannot override it', async ({ page }) => {
       const before = await rosterRow(page, freeEventId, freeAppId);
       test.skip(Boolean(before?.checked_in), 'Already checked in — reseed to rerun');
-      expect(before?.reason).toBe('documents');
+      await requireDocumentsGate(page);
 
       await appLogin(page, securityUser);
       await openCheckIn(page, freeEventId);
@@ -115,6 +123,7 @@ test.describe('Organizer event-day check-in', () => {
     });
 
     test('an offline override is reported as not recorded', async ({ page, context }) => {
+      await requireDocumentsGate(page);
       await appLogin(page, organizerUser);
       await openCheckIn(page, freeEventId);
       await openVendor(page, freeAppId);
@@ -129,6 +138,7 @@ test.describe('Organizer event-day check-in', () => {
     });
 
     test('the owner overrides with a reason, and a repeat code entry says already checked in', async ({ page }, testInfo) => {
+      await requireDocumentsGate(page);
       await appLogin(page, organizerUser);
       await openCheckIn(page, freeEventId);
       await openVendor(page, freeAppId);

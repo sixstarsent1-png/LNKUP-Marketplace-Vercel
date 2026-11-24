@@ -3,7 +3,8 @@ import { loginPage } from './helpers/wp-session';
 
 const organizerUser = process.env.PLAYWRIGHT_ORGANIZER_USER ?? '';
 const organizerPass = process.env.PLAYWRIGHT_ORGANIZER_PASS ?? '';
-const CREATE_URL = '/organizer-dashboard/?view=create';
+// The legacy wizard; with event_builder_v3 on, ?view=create is the Event Creation OS builder.
+const CREATE_URL = '/organizer-dashboard/?view=create&classic=1';
 
 /**
  * Fill the required Create Event fields with a unique title and one custom vendor slot.

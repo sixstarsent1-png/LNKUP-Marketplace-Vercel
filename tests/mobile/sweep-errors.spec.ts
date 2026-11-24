@@ -62,8 +62,8 @@ test.describe('Vendor error paths', () => {
 
   test('a failed save toggle puts the heart back and says why', async ({ page }) => {
     await failRoute(page, '**/wp-json/lnkup/v1/marketplace/favorites');
-    await page.goto('/opportunity/58');
-    const heart = page.getByRole('button', { name: /^(Save|Unsave) / }).first();
+    await page.goto(`/opportunity/${process.env.PLAYWRIGHT_CAPACITY_OPPORTUNITY_ID || '58'}`);
+    const heart = page.getByRole('button', { name: /^(Save |Unsave |Remove from saved)/ }).first();
     await expect(heart).toBeVisible({ timeout: 45_000 });
     const before = await heart.getAttribute('aria-label');
     await heart.click();
@@ -79,11 +79,14 @@ test.describe('Organizer error paths', () => {
     test.skip(available < 5, 'Seed did not give organizer B a test-mode balance');
     await appLogin(page, organizerB);
     const failing = await failRoute(page, '**/wp-json/lnkup/v1/financial/organizer-wallet/cashout');
-    await page.goto('/(organizer)/money');
-    await page.getByLabel('Cash out amount').fill('5');
-    await page.getByRole('button', { name: 'Cash out', exact: true }).click();
-    await page.getByRole('button', { name: 'Cash out', exact: true }).last().dblclick();
-    await expect(page.getByText(/couldn|try again|LNKup/i).first()).toBeVisible({ timeout: 45_000 });
+    test.setTimeout(150_000);
+    await page.goto('/(organizer)/money/cashout');
+    await page.getByLabel('Amount').fill('5');
+    await page.getByTestId('cashout-review').click();
+    await expect(page.getByTestId('cashout-preview')).toBeVisible({ timeout: 45_000 });
+    await page.getByTestId('cashout-confirm').dblclick();
+    await expect(page.getByText(/couldn|try again|reach LNKup/i).first()).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText('Cash out requested')).toHaveCount(0);
     await expect(page.getByText('Internal failure xyz')).toHaveCount(0);
     expect(failing.calls()).toBe(1);
     const after = await restAs(page, organizerB, 'GET', '/financial/dashboard?role=organizer');

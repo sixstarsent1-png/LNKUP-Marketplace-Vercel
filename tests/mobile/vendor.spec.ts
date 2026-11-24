@@ -69,7 +69,7 @@ test.describe('Vendor experience', () => {
     test.skip(!opportunityId, 'Vendor has no application with an event in this seed');
     await page.goto(`/opportunity/${opportunityId}`);
     await expect(page).toHaveURL(new RegExp(`/event/\\d+\\?option=${opportunityId}`), { timeout: 45_000 });
-    await expect(page.getByText('You applied to this option')).toBeVisible();
+    await expect(page.getByText('You applied to this option').first()).toBeVisible();
     await expect(page.getByRole('button', { name: /^(View booking|View application|Pay )/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /^Start application/ })).toHaveCount(0);
     await snap(page, 'opportunity-applied', testInfo);

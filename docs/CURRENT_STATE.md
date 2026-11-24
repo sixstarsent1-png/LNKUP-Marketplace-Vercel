@@ -32,6 +32,20 @@ Reference: [organizer-experience-v2/RESULTS.md](organizer-experience-v2/RESULTS.
 - **Mobile:** organizer events and event detail consume the portfolio / summary contracts (capacity bar, canonical place, gross labels).
 - **Tests:** Playwright `organizer-os.spec.ts` 18/18; organizer and vendor regression with only the pre-existing, environment-caused failures; Expo Jest 245/245.
 
+### Mobile Organizer OS 2.0 (marketplace changes ship with the next marketplace version; mobile is OTA-only)
+
+Reference: [mobile-organizer-v2/RESULTS.md](mobile-organizer-v2/RESULTS.md) (audit, data integrity, release, rollback, limitations).
+
+- **Backend (additive):**
+  - `LNKup_Organizer_Mobile_REST`: home summary, mobile events, operations and check-in summaries, application review, event score factors, invite overview / remind / cancel, and a read-only cash-out preview.
+  - `organizer_instant_fee_rate` setting (default 1.5%).
+  - `outstanding_receivables` on event financials.
+  - Self-exclusion from discovery and invites.
+  - Clone-market fix plus `audit-event-locations.php --fix-markets`.
+  - Staff access to the roster, check-in and the event summary.
+- **Mobile:** Home on one call (23 → 5 requests). Events search and filters, a five-tab event detail with in-app publish and duplicate, a native application review screen, Invitations 2.0, Money segments with a fee-preview cash-out, payout detail and event financials. Also an operations workspace, lookup-first check-in (no scanner, online-only), booths / map / logistics / packet, tours, and Organization HQ.
+- **Tests:** PHP contract (82 assertions), Expo Jest 268/268, Playwright `organizer-os-v2.spec.ts` plus updated organizer specs. The mobile Playwright config now loads seeded IDs from `scripts/e2e/.env.e2e`.
+
 ### Mobile Vendor OS 2.0 (marketplace changes ship with the next marketplace version; mobile is OTA-only)
 
 Reference: [mobile-vendor-v2/RESULTS.md](mobile-vendor-v2/RESULTS.md) (audit, data integrity, design system, release and rollback).

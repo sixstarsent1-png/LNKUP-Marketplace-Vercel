@@ -1,0 +1,137 @@
+{
+  "loginMs": 7828,
+  "metrics": [
+    {
+      "route": "/(organizer)",
+      "ms": 5814,
+      "settled": true,
+      "apiCalls": 8,
+      "calls": [
+        "GET /lnkup/v1/applications/organizer",
+        "GET /lnkup/v1/organizer/home-summary",
+        "GET /lnkup/v1/comms/inbox/count?role=organizer",
+        "GET /lnkup/v1/organizer/profile",
+        "POST /lnkup/v1/marketplace/track/event",
+        "POST /lnkup/v1/marketplace/track/event",
+        "POST /lnkup/v1/marketplace/track/event",
+        "POST /lnkup/v1/marketplace/track/event"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(organizer)/events",
+      "ms": 2254,
+      "settled": true,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/applications/organizer",
+        "GET /lnkup/v1/organizer/mobile/events"
+      ],
+      "pending": [
+        "GET /lnkup/v1/applications/organizer",
+        "GET /lnkup/v1/organizer/mobile/events"
+      ],
+      "errors": []
+    },
+    {
+      "route": "/(organizer)/vendors",
+      "ms": 6081,
+      "settled": true,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/match/organizer/status",
+        "GET /lnkup/v1/applications/organizer"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(organizer)/money",
+      "ms": 2984,
+      "settled": true,
+      "apiCalls": 6,
+      "calls": [
+        "GET /lnkup/v1/applications/organizer",
+        "GET /lnkup/v1/financial/organizer-payouts",
+        "GET /lnkup/v1/organizer/mobile/events",
+        "GET /lnkup/v1/financial/organizer-balances",
+        "GET /lnkup/v1/financial/dashboard?role=organizer",
+        "GET /lnkup/v1/financial/activity?role=organizer"
+      ],
+      "pending": [
+        "GET /lnkup/v1/applications/organizer",
+        "GET /lnkup/v1/financial/organizer-payouts",
+        "GET /lnkup/v1/organizer/mobile/events",
+        "GET /lnkup/v1/financial/organizer-balances",
+        "GET /lnkup/v1/financial/dashboard?role=organizer",
+        "GET /lnkup/v1/financial/activity?role=organizer"
+      ],
+      "errors": []
+    },
+    {
+      "route": "/(organizer)/more",
+      "ms": 6405,
+      "settled": true,
+      "apiCalls": 4,
+      "calls": [
+        "GET /lnkup/v1/financial/organizer-wallet/entries",
+        "GET /lnkup/v1/push/preferences",
+        "GET /lnkup/v1/applications/organizer",
+        "GET /lnkup/v1/organizer/profile"
+      ],
+      "pending": [
+        "GET /lnkup/v1/financial/organizer-wallet/entries"
+      ],
+      "errors": []
+    },
+    {
+      "route": "/(organizer)/launch",
+      "ms": 5540,
+      "settled": true,
+      "apiCalls": 1,
+      "calls": [
+        "GET /lnkup/v1/applications/organizer"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(organizer)/profile",
+      "ms": 6040,
+      "settled": true,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/organizer/profile",
+        "GET /lnkup/v1/applications/organizer"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(organizer)/notifications",
+      "ms": 7803,
+      "settled": true,
+      "apiCalls": 3,
+      "calls": [
+        "GET /lnkup/v1/comms/inbox?role=organizer&tab=all&page=1&per_page=20&filter=all",
+        "GET /lnkup/v1/applications/organizer",
+        "GET /lnkup/v1/comms/inbox/count?role=organizer"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(organizer)/referrals",
+      "ms": 5153,
+      "settled": true,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/applications/organizer",
+        "GET /lnkup/v1/referrals/organizer-recruit"
+      ],
+      "pending": [],
+      "errors": []
+    }
+  ]
+}

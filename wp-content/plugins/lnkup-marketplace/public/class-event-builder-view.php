@@ -38,7 +38,13 @@ class LNKup_Event_Builder_View {
 		exit;
 	}
 
+	/**
+	 * Builder replaces the legacy create/edit UI. `classic=1` keeps the previous screens reachable.
+	 */
 	public static function active(): bool {
+		if ( ! empty( $_GET['classic'] ) && ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return false;
+		}
 		return class_exists( 'LNKup_Event_Builder_REST' ) && LNKup_Event_Builder_REST::can_use();
 	}
 

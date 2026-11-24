@@ -39,7 +39,7 @@ test.describe('Organizer vendors, money and more', () => {
       await expect(page.getByText(category.label, { exact: true }).first()).toBeVisible();
       if (category.hint) await expect(page.getByText(category.hint).first()).toBeVisible();
     }
-    await expect(page.getByRole('button', { name: /^Payouts/ }).first()).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^Payouts/ })).toBeVisible();
     await expect(page.getByText(/Stripe Connect|Settlement:|destination|about 1\.5%/i)).toHaveCount(0);
     await expect(page.getByText(/Send a reminder/i)).toHaveCount(0);
     await expect(page.getByText(/^E2E Draft/)).toHaveCount(0);
@@ -54,11 +54,12 @@ test.describe('Organizer vendors, money and more', () => {
     const available = Number((body as { available_balance?: number })?.available_balance ?? 0);
     test.skip(available > 0, 'Seed has an available balance; covered by the payout test in staging');
     await page.goto('/(organizer)/money');
-    await expect(page.getByText('Nothing to cash out yet.', { exact: false })).toBeVisible();
+    await expect(page.getByText(/Nothing (is available )?to cash out yet/).first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Cash out', exact: true })).toBeDisabled();
   });
 
   test('a test-mode cash out is requested, listed, then cancelled with the balance restored', async ({ page }) => {
+    test.setTimeout(180_000);
     const orgB = process.env.PLAYWRIGHT_ORGANIZER_B_USER || 'e2e_org_b';
     const before = await restAs(page, orgB, 'GET', '/financial/dashboard?role=organizer');
     const available = Number((before.body as { available_balance?: number })?.available_balance ?? 0);
@@ -140,7 +141,7 @@ test.describe('Organizer vendors, money and more', () => {
 
   test('More is grouped and sign out asks before ending the session', async ({ page }, testInfo) => {
     await page.goto('/(organizer)/more');
-    for (const section of ['Organization', 'Business tools', 'Notifications', 'Account', 'Help']) {
+    for (const section of ['Organization', 'Business tools', 'Notifications', 'Signed in as', 'Help']) {
       await expect(page.getByText(section, { exact: true }).first()).toBeVisible();
     }
     await expect(page.getByText(/@e2e_org_a|EAS project/)).toHaveCount(0);

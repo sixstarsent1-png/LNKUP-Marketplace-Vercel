@@ -276,7 +276,11 @@ export default function OrganizerCheckInScreen() {
               {rows.length === 0 ? (
                 <EmptyPanel icon="people-outline" title="No booked vendors yet" message="Approved and paid vendors appear here on event day." />
               ) : visible.length === 0 ? (
-                <EmptyPanel icon="search-outline" title="No vendors match" message={query ? "Check the spelling or try a booth number." : "Nobody in this view right now."} />
+                <EmptyPanel
+                  icon={query ? "search-outline" : "people-outline"}
+                  title={query ? "No vendors match" : "Nobody here right now"}
+                  message={query ? "Check the spelling or try a booth number." : "Try another filter."}
+                />
               ) : null}
             </>
           ) : null}

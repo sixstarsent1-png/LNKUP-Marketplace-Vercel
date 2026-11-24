@@ -1,0 +1,61 @@
+{
+  "metrics": [
+    {
+      "tab": "Events",
+      "ms": 174,
+      "apiCalls": 1,
+      "calls": [
+        "GET /lnkup/v1/organizer/mobile/events"
+      ]
+    },
+    {
+      "tab": "Vendors",
+      "ms": 147,
+      "apiCalls": 1,
+      "calls": [
+        "GET /lnkup/v1/match/organizer/status"
+      ]
+    },
+    {
+      "tab": "Money",
+      "ms": 152,
+      "apiCalls": 4,
+      "calls": [
+        "GET /lnkup/v1/financial/organizer-payouts",
+        "GET /lnkup/v1/financial/organizer-balances",
+        "GET /lnkup/v1/financial/dashboard?role=organizer",
+        "GET /lnkup/v1/financial/activity?role=organizer"
+      ]
+    },
+    {
+      "tab": "More",
+      "ms": 162,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/push/preferences",
+        "GET /lnkup/v1/organizer/profile"
+      ]
+    },
+    {
+      "tab": "Home",
+      "ms": 126,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/comms/inbox/count?role=organizer",
+        "GET /lnkup/v1/organizer/profile"
+      ]
+    },
+    {
+      "tab": "Events",
+      "ms": 96,
+      "apiCalls": 0,
+      "calls": []
+    },
+    {
+      "tab": "Money",
+      "ms": 111,
+      "apiCalls": 0,
+      "calls": []
+    }
+  ]
+}

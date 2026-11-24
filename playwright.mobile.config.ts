@@ -2,11 +2,15 @@ import { defineConfig, devices } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** IDs written by scripts/e2e/seed.php; explicit environment variables still win. */
+/**
+ * Seeded record IDs written by scripts/e2e/seed.php. Only IDs, users and the pass code are read;
+ * URLs come from this config so a seed run against another port can't redirect the tests.
+ * Explicit environment variables still win.
+ */
 const seedEnv = path.join(__dirname, 'scripts', 'e2e', '.env.e2e');
 if (fs.existsSync(seedEnv)) {
   for (const line of fs.readFileSync(seedEnv, 'utf8').split(/\r?\n/)) {
-    const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    const match = line.match(/^(PLAYWRIGHT_[A-Z0-9_]*(?:_ID|_USER|_PASS_CODE))=(.*)$/);
     if (match && process.env[match[1]] === undefined) process.env[match[1]] = match[2];
   }
 }

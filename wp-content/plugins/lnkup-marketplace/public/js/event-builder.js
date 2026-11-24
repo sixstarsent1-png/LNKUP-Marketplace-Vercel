@@ -1074,8 +1074,9 @@
   function locationCard(quick) {
     var ev = S.draft.state.event;
     var cityWrap = h('div', { class: 'eb-ac' });
-    var cityInput = h('input', { type: 'text', value: ev.city ? ev.city + (ev.state ? ', ' + ev.state : '') : '', placeholder: 'Start typing a city', autocomplete: 'off', role: 'combobox', 'aria-expanded': 'false', 'aria-autocomplete': 'list', 'aria-required': 'true' });
-    var list = h('div', { class: 'eb-ac__list', role: 'listbox', hidden: true });
+    var listId = uid('ac');
+    var cityInput = h('input', { type: 'text', value: ev.city ? ev.city + (ev.state ? ', ' + ev.state : '') : '', placeholder: 'Start typing a city', autocomplete: 'off', role: 'combobox', 'aria-label': 'City and state', 'aria-controls': listId, 'aria-expanded': 'false', 'aria-autocomplete': 'list', 'aria-required': 'true' });
+    var list = h('div', { class: 'eb-ac__list', role: 'listbox', id: listId, 'aria-label': 'City suggestions', hidden: true });
     append(cityWrap, [cityInput, list]);
     var active = -1, items = [];
     function close() { list.hidden = true; cityInput.setAttribute('aria-expanded', 'false'); active = -1; }
@@ -1577,7 +1578,7 @@
         return h('div', { class: 'eb-linkrow', style: 'grid-template-columns:auto 1fr auto' }, [cb, h('span', { style: 'font-weight:650', text: d.label }), timing]);
       }));
     }
-    return card('Documents', 'Reusable documents in a vendor\'s Passport count automatically.', [modes, items, h('p', { class: 'eb-help', style: 'margin-top:10px', text: 'LNKup does not decide which permits your city requires. Ask vendors for what your venue and local rules need.' })]);
+    return card('Documents', 'Reusable documents in a vendor\'s Passport count automatically.', [modes, items, h('p', { class: 'eb-help', style: 'margin-top:10px', text: 'LNKup does not decide which permits your city requires. Ask vendors for what your venue and local rules need.' })], { testid: 'eb-documents' });
   }
 
   Builder.live.appPreview = function () {

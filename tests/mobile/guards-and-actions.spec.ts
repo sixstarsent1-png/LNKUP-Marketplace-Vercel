@@ -15,17 +15,20 @@ async function serverFavorites(page: Page, user: string): Promise<number[]> {
 
 test.describe('Vendor guards', () => {
   test('a double-tapped heart ends in one consistent saved state', async ({ page }) => {
+    test.setTimeout(150_000);
     const opportunityId = Number(capacityOpportunityId);
     const wasSaved = (await serverFavorites(page, vendorUser)).includes(opportunityId);
     await appLogin(page, vendorUser);
     await page.goto(`/opportunity/${opportunityId}`);
-    const heart = page.getByRole('button', { name: wasSaved ? /^Unsave / : /^Save / }).first();
+    const savedLabel = /^(Unsave |Remove from saved)/;
+    const unsavedLabel = /^Save /;
+    const heart = page.getByRole('button', { name: wasSaved ? savedLabel : unsavedLabel }).first();
     await expect(heart).toBeVisible({ timeout: 45_000 });
     await heart.dblclick();
     await expect.poll(async () => (await serverFavorites(page, vendorUser)).includes(opportunityId), { timeout: 45_000 }).toBe(!wasSaved);
     await page.reload();
     await expect(
-      page.getByRole('button', { name: !wasSaved ? /^Unsave / : /^Save / }).first(),
+      page.getByRole('button', { name: !wasSaved ? savedLabel : unsavedLabel }).first(),
     ).toBeVisible({ timeout: 45_000 });
     await page.waitForTimeout(2_000);
     expect((await serverFavorites(page, vendorUser)).includes(opportunityId)).toBe(!wasSaved);

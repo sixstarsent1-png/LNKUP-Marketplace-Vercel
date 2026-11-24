@@ -16,6 +16,17 @@ const onlyViewports = (process.env.ORG_V2_VIEWPORTS || '').split(',').filter(Boo
 const viewports = onlyViewports.length ? allViewports.filter((v) => onlyViewports.includes(v.name)) : allViewports;
 const onlyScreens = (process.env.ORG_V2_ONLY || '').split(',').filter(Boolean);
 
+/** Screens that load in steps: capture once their content (not the skeleton) is on screen. */
+const READY_TEST_IDS: Record<string, string> = {
+  home: 'organizer-home',
+  'application-review': 'application-review',
+  operations: 'operations-workspace',
+  'event-money': 'event-financials',
+  'payout-detail': 'payout-detail',
+  money: 'money-available',
+  more: 'organizer-hq',
+};
+
 type PortfolioRow = { id?: number; event_id?: number; chronology?: string };
 type Application = { application_id: number };
 type Payout = { id: number };
@@ -78,6 +89,10 @@ test.describe('Organizer OS 2.0 screenshots', () => {
       for (const screen of screens) {
         await page.goto(screen.route);
         await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => undefined);
+        const ready = READY_TEST_IDS[screen.name];
+        if (ready && label !== 'before') {
+          await page.getByTestId(ready).waitFor({ state: 'visible', timeout: 45_000 }).catch(() => undefined);
+        }
         if (label !== 'before') {
           await expect.soft(page.getByText(/EAS project ID/), `${screen.name} @ ${viewport.name}`).toHaveCount(0);
           await expect.soft(page.getByText(/\b\d{4}-\d{2}-\d{2}\b/), `raw date on ${screen.name} @ ${viewport.name}`).toHaveCount(0);

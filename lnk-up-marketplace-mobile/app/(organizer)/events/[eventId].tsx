@@ -265,7 +265,10 @@ export default function OrganizerEventWorkspaceScreen() {
   }, [tab, vendorSegment, loadRoster, loadMoney, auth, id, invites, score, ops?.can.view_intelligence])
 
   const opportunities = event ? opportunitiesFromEvent(event) : []
-  const state = event ? eventListingState(event) : "live"
+  const postState = event ? eventListingState(event) : "live"
+  // The server's publication rule (an open vendor slot) wins over the WordPress post status.
+  const isDraft = ops ? ops.event.publication === "draft" && ops.event.chronology !== "completed" : postState === "draft"
+  const state = isDraft ? "draft" : postState === "draft" ? "live" : postState
   const pendingRequests = useMemo(
     () => requests.filter((r) => r.status === "submitted" || r.status === "under_review" || r.status === "info_requested"),
     [requests],

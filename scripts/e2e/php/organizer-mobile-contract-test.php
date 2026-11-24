@@ -158,6 +158,20 @@ lnkup_t_same( 1, $body['counts']['all'] ?? null, 'filter counts ignore the searc
 list( $status, $body ) = om_rest( $org_b, 'GET', '/organizer/mobile/events' );
 lnkup_t_same( 0, count( (array) ( $body['events'] ?? array() ) ), 'another organizer sees none of these events' );
 
+echo "Application review\n";
+list( $status, $body ) = om_rest( $org_a, 'GET', "/organizer/applications/{$app_unpaid}/review" );
+lnkup_t_same( 200, $status, 'owner reads the review read model' );
+lnkup_t_same( false, (bool) ( $body['actions']['approve'] ?? true ), 'an approved, unpaid booking offers no approve action' );
+lnkup_t_assert( '' !== (string) ( $body['approve_note'] ?? '' ), 'approval consequence is explained' );
+list( $status ) = om_rest( $org_b, 'GET', "/organizer/applications/{$app_unpaid}/review" );
+lnkup_t_same( 403, $status, 'another organizer cannot read the application' );
+list( $status ) = om_rest( $parking, 'GET', "/organizer/applications/{$app_unpaid}/review" );
+lnkup_t_same( 403, $status, 'event staff cannot read application decisions' );
+list( $status, $body ) = om_rest( $org_a, 'GET', "/organizer/events/{$event}/operations-summary" );
+lnkup_t_assert( false === strpos( (string) wp_json_encode( $body['readiness'] ?? array() ), 'vendor-dashboard' ), 'readiness rows carry no vendor dashboard URLs' );
+$owners = wp_list_pluck( (array) ( $body['tasks'] ?? array() ), 'owner', 'key' );
+lnkup_t_same( 'vendor', $owners['payments'] ?? null, 'payment collection is the vendor\'s step' );
+
 echo "Event score factors\n";
 list( $status, $body ) = om_rest( $org_a, 'GET', "/organizer/events/{$event}/score" );
 lnkup_t_same( 200, $status, 'owner reads score' );

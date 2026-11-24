@@ -106,7 +106,7 @@ export default function OrganizerMoreScreen() {
             <Text style={styles.orgName} numberOfLines={2}>
               {orgName}
             </Text>
-            {!org?.name ? <Text style={styles.hint}>Add your public name so vendors recognize you</Text> : null}
+            {org && !org.name ? <Text style={styles.hint}>Add your public name so vendors recognize you</Text> : null}
           </View>
         </View>
         <View style={styles.ctaRow}>

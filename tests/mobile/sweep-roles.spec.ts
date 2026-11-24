@@ -45,7 +45,10 @@ test.describe('Role permissions behind every tab', () => {
   test("another organizer cannot read or change this organizer's event", async ({ page }) => {
     expect((await restAs(page, organizerB, 'GET', `/crm/events/${eventId}/roster`)).status).toBe(403);
     expect((await restAs(page, organizerB, 'POST', `/operations/applications/${freeAppId}/checkin`, { action: 'checked_in' })).status).toBe(403);
-    expect((await restAs(page, organizerB, 'POST', `/organizer/opportunities/59/status`, { status: 'closed' })).status).toBe(403);
+    const opportunityId = process.env.PLAYWRIGHT_FRESH_OPPORTUNITY_ID || '59';
+    expect((await restAs(page, organizerB, 'POST', `/organizer/opportunities/${opportunityId}/status`, { status: 'closed' })).status).toBe(403);
+    expect((await restAs(page, organizerB, 'GET', `/organizer/events/${eventId}/operations-summary`)).status).toBe(403);
+    expect((await restAs(page, organizerB, 'GET', `/operations/events/${eventId}/checkin-summary`)).status).toBe(403);
   });
 
   test('the owner can read their own event-day roster', async ({ page }) => {
