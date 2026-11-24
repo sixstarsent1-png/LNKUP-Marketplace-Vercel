@@ -77,8 +77,16 @@ if ( ! empty( $card['media'] ) && function_exists( 'lnkup_event_media_html' ) ) 
 			<a class="lp-event__tour lp-link" href="<?php echo esc_url( (string) $card['tour']['url'] ); ?>"><?php echo esc_html( (string) $card['tour']['label'] ); ?></a>
 		<?php endif; ?>
 		<div class="lp-event__foot">
-			<span class="lp-event__price"><?php echo esc_html( (string) $card['fee_label'] ); ?></span>
-			<span class="lp-event__spots"><?php echo esc_html( sprintf( /* translators: %d: open vendor spots */ _n( '%d spot open', '%d spots open', (int) $card['spots'], 'lnkup-theme' ), (int) $card['spots'] ) ); ?></span>
+			<?php if ( ! empty( $card['access']['gated'] ) ) : ?>
+				<span class="lp-event__status"><?php echo esc_html( (string) ( $card['status_label'] ?? __( 'Vendor applications open', 'lnkup-theme' ) ) ); ?></span>
+				<a class="lp-event__gate" data-testid="lp-event-gate" data-lnkup-gate="card" href="<?php echo esc_url( (string) $card['access']['cta']['sign_in_url'] ); ?>">
+					<?php echo lnkup_public_icon( 'lock' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<span><?php esc_html_e( 'Sign in to view pricing', 'lnkup-theme' ); ?></span>
+				</a>
+			<?php else : ?>
+				<span class="lp-event__price"><?php echo esc_html( (string) $card['fee_label'] ); ?></span>
+				<span class="lp-event__spots"><?php echo esc_html( sprintf( /* translators: %d: open vendor spots */ _n( '%d spot open', '%d spots open', (int) $card['spots'], 'lnkup-theme' ), (int) $card['spots'] ) ); ?></span>
+			<?php endif; ?>
 		</div>
 	</div>
 </article>

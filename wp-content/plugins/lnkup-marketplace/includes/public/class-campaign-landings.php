@@ -431,7 +431,9 @@ class LNKup_Campaign_Landings {
 			return new WP_Error( 'lnkup_landing_slug', __( 'Use a short slug with letters, numbers, and dashes.', 'lnkup-marketplace' ) );
 		}
 		$audience = in_array( $raw['audience'] ?? '', array( 'organizer', 'vendor' ), true ) ? (string) $raw['audience'] : 'vendor';
-		$state    = strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) ( $raw['state'] ?? '' ) ) );
+		$state    = function_exists( 'lnkup_canonical_state_code' )
+			? lnkup_canonical_state_code( (string) ( $raw['state'] ?? '' ) )
+			: strtoupper( substr( preg_replace( '/[^A-Za-z]/', '', (string) ( $raw['state'] ?? '' ) ), 0, 2 ) );
 		return array(
 			'slug'      => $slug,
 			'audience'  => $audience,
@@ -442,7 +444,7 @@ class LNKup_Campaign_Landings {
 			'subhead'   => substr( sanitize_textarea_field( (string) ( $raw['subhead'] ?? '' ) ), 0, 280 ),
 			'cta_label' => substr( sanitize_text_field( (string) ( $raw['cta_label'] ?? '' ) ), 0, 40 ),
 			'city'      => substr( sanitize_text_field( (string) ( $raw['city'] ?? '' ) ), 0, 80 ),
-			'state'     => substr( $state, 0, 2 ),
+			'state'     => $state,
 			'category'  => substr( sanitize_text_field( (string) ( $raw['category'] ?? '' ) ), 0, 60 ),
 			'image_id'  => absint( $raw['image_id'] ?? 0 ),
 			'indexable' => empty( $raw['indexable'] ) ? 0 : 1,

@@ -3,7 +3,7 @@
  * Plugin Name: LNKup Marketplace
  * Plugin URI: https://lnkup.com
  * Description: Custom marketplace functionality for LNKup — vendor opportunities, applications, payments, and event management.
- * Version: 12.37.0
+ * Version: 12.38.0
  * Author: LNKup
  * Author URI: https://lnkup.com
  * License: GPL v2 or later
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'LNKUP_VERSION', '12.37.0' );
+define( 'LNKUP_VERSION', '12.38.0' );
 define( 'LNKUP_PLUGIN_FILE', __FILE__ );
 define( 'LNKUP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LNKUP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -110,6 +110,12 @@ $lnkup_core_files = array(
 	'includes/class-organizer-launch-checklist.php',
 	'includes/class-organizer-activation.php',
 	'includes/class-organizer-onboarding-flow.php',
+	'includes/location/class-location-service.php',
+	'includes/location/class-location-rest.php',
+	'includes/location/class-location-migration.php',
+	'includes/location/class-location-cli.php',
+	'includes/access/class-access-policy.php',
+	'includes/access/class-access-cache.php',
 	'includes/class-public-embed.php',
 	'includes/class-organizer-setups.php',
 	'includes/class-vendor-getting-started.php',
@@ -195,6 +201,13 @@ $lnkup_core_files = array(
 	'includes/class-reputation-render.php',
 	'includes/class-reputation-rest.php',
 	'includes/helpers.php',
+	'includes/class-vendor-presentation.php',
+	'includes/class-vendor-booking-contract.php',
+	'includes/class-event-groups.php',
+	'includes/class-organizer-mobile-rest.php',
+	'includes/class-os-ui.php',
+	'includes/class-vendor-ui.php',
+	'includes/class-organizer-presentation.php',
 	'includes/class-verification.php',
 	'includes/class-verification-rest.php',
 	'includes/class-seo.php',
@@ -203,10 +216,12 @@ $lnkup_core_files = array(
 	'includes/media/class-event-cover-svg.php',
 	'includes/media/class-event-media-cli.php',
 	'admin/class-media-health-admin.php',
+	'admin/class-location-health-admin.php',
 	'includes/class-ui-copy.php',
 	'includes/class-vendor-dashboard-data.php',
 	'public/class-vendor-dashboard-views.php',
 	'public/class-organizer-dashboard-views.php',
+	'public/class-organizer-workspace-view.php',
 	'public/class-shortcodes.php',
 	'public/class-registration.php',
 	'admin/class-admin.php',
@@ -523,6 +538,10 @@ function lnkup_marketplace_init() {
 	LNKup_Organizer_Launch_REST::init();
 	LNKup_Organizer_Activation::init();
 	LNKup_Organizer_Onboarding_Flow::init();
+	LNKup_Location_REST::init();
+	LNKup_Location_CLI::init();
+	LNKup_Access_Policy::init();
+	LNKup_Access_Cache::init();
 	LNKup_Public_Embed::init();
 	LNKup_Organizer_Setups::init();
 	LNKup_Organizer_CRM_Admin::init();
@@ -641,8 +660,11 @@ function lnkup_marketplace_init() {
 	LNKup_SEO::init();
 	LNKup_Event_Media::init();
 	LNKup_Event_Media_CLI::init();
+	LNKup_Vendor_Booking_Contract::init();
+	LNKup_Organizer_Mobile_REST::init();
 	if ( is_admin() ) {
 		LNKup_Media_Health_Admin::init();
+		LNKup_Location_Health_Admin::init();
 	}
 	LNKup_Meta_Measurement::init();
 	LNKup_Activator::maybe_repair_dashboard_pages();
@@ -880,6 +902,7 @@ function lnkup_get_settings() {
 		'organizer_commission_percent' => 6,
 		'connect_express_enabled'      => true,
 		'connect_instant_payouts_enabled' => false,
+		'organizer_instant_fee_rate'   => 0.015,
 		'connect_manual_fallback'      => true,
 		'connect_payout_schedule'      => 'manual',
 		'connect_return_url'           => '',

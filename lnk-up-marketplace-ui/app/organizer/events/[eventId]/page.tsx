@@ -19,6 +19,7 @@ import { PaymentActivityList } from "@/components/financial/payment-activity-lis
 import { MoneyStatCard } from "@/components/financial/money-stat-card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { LocationField, isLocationSubmittable, type LocationStatus } from "@/components/forms/location-field"
 import { useOrganizerRequests } from "@/lib/hooks/use-organizer-requests"
 import { OrganizerVendorRequestCard } from "@/components/organizer/organizer-vendor-request-card"
 import { parseApiResponse } from "@/lib/api/parse-api-error"
@@ -37,6 +38,7 @@ function EventDetailsEditor({
   const [city, setCity] = useState(workspace.city ?? "")
   const [state, setState] = useState(workspace.state ?? "")
   const [venue, setVenue] = useState(workspace.venue ?? "")
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>("")
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -95,16 +97,22 @@ function EventDetailsEditor({
           <span className="text-muted-foreground">Venue</span>
           <Input value={venue} onChange={(e) => setVenue(e.target.value)} />
         </label>
-        <label className="grid gap-1 text-sm">
-          <span className="text-muted-foreground">City</span>
-          <Input value={city} onChange={(e) => setCity(e.target.value)} />
-        </label>
-        <label className="grid gap-1 text-sm">
-          <span className="text-muted-foreground">State</span>
-          <Input value={state} onChange={(e) => setState(e.target.value)} maxLength={2} />
-        </label>
+        <LocationField
+          city={city}
+          state={state}
+          onChange={(next) => {
+            setCity(next.city)
+            setState(next.state)
+          }}
+          onStatusChange={setLocationStatus}
+        />
         <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
-          <Button type="button" onClick={handleSave} disabled={saving || !title.trim()} data-testid="lnkup-app-edit-event-save">
+          <Button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !title.trim() || !isLocationSubmittable(locationStatus)}
+            data-testid="lnkup-app-edit-event-save"
+          >
             {saving ? "Saving…" : "Save event"}
           </Button>
           {message && <p className="text-sm text-emerald-700">{message}</p>}

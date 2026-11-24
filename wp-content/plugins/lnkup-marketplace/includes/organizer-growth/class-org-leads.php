@@ -78,6 +78,17 @@ class LNKup_Org_Leads {
 		if ( isset( $out['state'] ) ) {
 			$out['state'] = strtoupper( substr( (string) $out['state'], 0, 32 ) );
 		}
+		if ( class_exists( 'LNKup_Location_Service' ) && ( ! empty( $out['city'] ) || ! empty( $out['state'] ) ) ) {
+			$location = LNKup_Location_Service::canonical_profile_location( (string) ( $out['city'] ?? '' ), (string) ( $out['state'] ?? '' ), '', 'lenient' );
+			if ( is_array( $location ) ) {
+				if ( isset( $out['city'] ) ) {
+					$out['city'] = $location['city'];
+				}
+				if ( isset( $out['state'] ) ) {
+					$out['state'] = $location['state'];
+				}
+			}
+		}
 		return $out;
 	}
 

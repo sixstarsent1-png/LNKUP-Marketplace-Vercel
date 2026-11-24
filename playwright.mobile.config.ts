@@ -1,4 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
+
+/** IDs written by scripts/e2e/seed.php; explicit environment variables still win. */
+const seedEnv = path.join(__dirname, 'scripts', 'e2e', '.env.e2e');
+if (fs.existsSync(seedEnv)) {
+  for (const line of fs.readFileSync(seedEnv, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
+    if (match && process.env[match[1]] === undefined) process.env[match[1]] = match[2];
+  }
+}
 
 const appUrl = process.env.PLAYWRIGHT_MOBILE_APP_URL || 'http://localhost:8081';
 

@@ -106,6 +106,21 @@ class LNKup_Organizer_Profile_REST {
 			update_user_meta( $user_id, '_lnkup_organizer_category', $category );
 		}
 
+		if ( class_exists( 'LNKup_Location_Service' ) && ( array_key_exists( 'city', $body ) || array_key_exists( 'state', $body ) ) ) {
+			$city     = array_key_exists( 'city', $body ) ? (string) $body['city'] : (string) get_user_meta( $user_id, '_lnkup_organizer_city', true );
+			$state    = array_key_exists( 'state', $body ) ? (string) $body['state'] : (string) get_user_meta( $user_id, '_lnkup_organizer_state', true );
+			$same     = 0 === strcasecmp( trim( $city ), (string) get_user_meta( $user_id, '_lnkup_organizer_city', true ) )
+				&& 0 === strcasecmp( trim( $state ), (string) get_user_meta( $user_id, '_lnkup_organizer_state', true ) );
+			if ( ! $same ) {
+				$location = LNKup_Location_Service::canonical_profile_location( $city, $state );
+				if ( is_wp_error( $location ) ) {
+					return $location;
+				}
+				$body['city']  = $location['city'];
+				$body['state'] = $location['state'];
+			}
+		}
+
 		foreach ( $map as $key => $meta_key ) {
 			if ( ! array_key_exists( $key, $body ) ) {
 				continue;

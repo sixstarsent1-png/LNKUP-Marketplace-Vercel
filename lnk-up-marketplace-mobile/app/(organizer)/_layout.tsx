@@ -4,19 +4,12 @@ import { Redirect, Tabs, useGlobalSearchParams, useSegments } from "expo-router"
 import * as Linking from "expo-linking"
 
 import { tabIcon, useTabBarScreenOptions } from "@/components/tab-bar"
-import {
-  fetchOrganizerRequests,
-  subscribeOrganizerRequests,
-  type OrganizerVendorRequest,
-} from "@/lib/api/organizer-requests"
+import { awaitingReviewCount as countPending } from "@/components/organizer-vendors/vendor-queue"
+import { fetchOrganizerRequests, subscribeOrganizerRequests } from "@/lib/api/organizer-requests"
 import { useAuth } from "@/lib/auth/auth-context"
 import { shellReturnTo } from "@/lib/navigation/current-href"
 
 const BADGE_REFRESH_MS = 60_000
-
-function countPending(items: OrganizerVendorRequest[]): number {
-  return items.filter((i) => i.status === "submitted" || i.status === "under_review").length
-}
 
 export default function OrganizerLayout() {
   const { isAuthenticated, isOrganizer, isVendor, isPartner, auth } = useAuth()
@@ -103,6 +96,8 @@ export default function OrganizerLayout() {
         <Tabs.Screen name="referrals" options={{ href: null }} />
         <Tabs.Screen name="packet" options={{ href: null }} />
         <Tabs.Screen name="profile" options={{ href: null }} />
+        <Tabs.Screen name="tours" options={{ href: null }} />
+        <Tabs.Screen name="team" options={{ href: null }} />
       </Tabs>
     </View>
   )

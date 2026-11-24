@@ -17,6 +17,7 @@ async function fillEvent(page: Page, title: string) {
   await next.click();
   await page.getByTestId('lnkup-event-date').fill('2027-06-15');
   await page.locator('#event_city').fill('Austin');
+  await page.locator('#event_state').fill('TX');
   await next.click();
   await page.locator('.lnkup-fee-row__custom').first().fill('E2E Food');
   await page.getByTestId('lnkup-create-opp-fee').fill('125');

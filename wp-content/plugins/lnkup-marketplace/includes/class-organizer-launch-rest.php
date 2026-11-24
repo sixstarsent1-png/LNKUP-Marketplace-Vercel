@@ -184,12 +184,14 @@ class LNKup_Organizer_Launch_REST {
 		$opp_id = (int) $request['id'];
 		$fee    = array_key_exists( 'vendor_fee', $body ) ? $body['vendor_fee'] : null;
 		$spots  = array_key_exists( 'spots_total', $body ) ? absint( $body['spots_total'] ) : null;
+		$title  = isset( $body['title'] ) ? sanitize_text_field( (string) $body['title'] ) : '';
 
 		$result = LNKup_Organizer_Onboarding::update_opportunity_pricing(
 			$opp_id,
 			$fee,
 			$spots,
-			get_current_user_id()
+			get_current_user_id(),
+			$title
 		);
 
 		if ( is_wp_error( $result ) ) {
@@ -397,6 +399,9 @@ class LNKup_Organizer_Launch_REST {
 			'end_time'               => 'end_time',
 			'city'                   => 'city',
 			'state'                  => 'state',
+			'country'                => 'country',
+			'location_confirmed'     => 'location_confirmed',
+			'keep_location'          => 'keep_location',
 			'venue_name'             => 'venue_name',
 			'venue_address'          => 'venue_address',
 			'event_type'             => 'event_type',
@@ -444,7 +449,11 @@ class LNKup_Organizer_Launch_REST {
 	 * @return WP_Error
 	 */
 	private static function error_response( WP_Error $error ): WP_Error {
-		$code   = $error->get_error_code();
+		$code = $error->get_error_code();
+		if ( 'lnkup_location_needs_confirmation' === $code ) {
+			// Keep status 422 and the suggestions so clients can offer "Did you mean …?".
+			return $error;
+		}
 		$status = 400;
 		if ( 'forbidden' === $code || 'rest_forbidden' === $code ) {
 			$status = 403;

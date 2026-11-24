@@ -47,7 +47,7 @@
       container.innerHTML = '<div class="lnkup-weather-card lnkup-weather-card--' + escapeHtml(dto.status) + '" data-testid="lnkup-ops-weather" data-event-id="' + escapeHtml(String(dto.event_id || '')) + '">' +
         '<h3 class="lnkup-weather-card__title">Weather Readiness</h3>' +
         '<p class="lnkup-alert lnkup-alert--info">' + escapeHtml(dto.message) + '</p>' +
-        '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline lnkup-weather-refresh" data-event-id="' + escapeHtml(String(dto.event_id || '')) + '">Retry</button></div>';
+        (dto.status === 'unconfigured' ? '' : '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline lnkup-weather-refresh" data-event-id="' + escapeHtml(String(dto.event_id || '')) + '">Retry</button>') + '</div>';
       return;
     }
     var risks = dto.risks || {};

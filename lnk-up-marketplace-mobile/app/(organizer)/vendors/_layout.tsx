@@ -12,6 +12,7 @@ export default function OrganizerVendorsLayout() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="find" />
+      <Stack.Screen name="review/[applicationId]" getId={({ params }) => String((params as { applicationId?: string } | undefined)?.applicationId ?? "")} />
       <Stack.Screen
         name="[profileId]"
         getId={({ params }) => {

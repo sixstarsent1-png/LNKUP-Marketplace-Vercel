@@ -613,12 +613,22 @@
         html += '</div></section>';
       }
       if (data.predictions) {
-        html += '<section><h3>Predictions</h3><p class="lnkup-muted">' + escapeHtml(data.predictions.disclaimer || '') + '</p>';
-        html += '<ul><li>Predicted applications: ' + escapeHtml(String(data.predictions.predicted_application_volume || '—')) + '</li>';
-        html += '<li>Predicted payment completion: ' + escapeHtml(String(data.predictions.predicted_payment_completion || '—')) + '</li></ul></section>';
+        html += '<section data-testid="lnkup-intel-projections"><h3>Projections <span class="lnkup-intel-drawer__badge lnkup-intel-drawer__badge--default">Projection, not a measured result</span></h3>' +
+          '<p class="lnkup-muted">' + escapeHtml(data.predictions.disclaimer || 'Estimated from this event’s applications and payments so far.') + '</p>';
+        html += '<ul><li>Projected applications: ' + escapeHtml(String(data.predictions.predicted_application_volume || '—')) + '</li>';
+        html += '<li>Projected payment completion: ' + escapeHtml(String(data.predictions.predicted_payment_completion || '—')) + '</li></ul></section>';
       }
-      if (data.report && data.report.report) {
-        html += '<section><h3>Post-Event Report</h3><pre class="lnkup-muted" style="white-space:pre-wrap;font-size:0.8125rem;">' + escapeHtml(JSON.stringify(data.report.report, null, 2)) + '</pre></section>';
+      if (data.report && data.report.report && typeof data.report.report === 'object') {
+        html += '<section><h3>Post-event report</h3><dl class="vos-kv">';
+        Object.keys(data.report.report).forEach(function (key) {
+          var value = data.report.report[key];
+          var label = key.replace(/_/g, ' ').replace(/^\w/, function (c) { return c.toUpperCase(); });
+          var text = value !== null && typeof value === 'object'
+            ? Object.keys(value).map(function (k) { return k.replace(/_/g, ' ') + ': ' + (typeof value[k] === 'object' ? '…' : value[k]); }).join(' · ')
+            : String(value);
+          html += '<dt>' + escapeHtml(label) + '</dt><dd>' + escapeHtml(text) + '</dd>';
+        });
+        html += '</dl></section>';
       }
       container.innerHTML = html;
     }).catch(function () {

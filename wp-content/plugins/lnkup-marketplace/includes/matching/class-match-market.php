@@ -37,7 +37,21 @@ class LNKup_Match_Market {
 	}
 
 	public static function key( $city, $state ) {
-		return strtolower( trim( (string) $city ) ) . '|' . strtoupper( trim( (string) $state ) );
+		static $memo = array();
+		$raw = (string) $city . '|' . (string) $state;
+		if ( isset( $memo[ $raw ] ) ) {
+			return $memo[ $raw ];
+		}
+		if ( class_exists( 'LNKup_Location_Service' ) ) {
+			// "Atlanta, Georgia" and "atlanta ga" share Atlanta's key; uncertain values stay as typed.
+			$r = LNKup_Location_Service::resolve( (string) $city, (string) $state );
+			if ( in_array( $r['status'], array( LNKup_Location_Service::VERIFIED, LNKup_Location_Service::NORMALIZED ), true ) && '' !== $r['state_code'] ) {
+				$city  = $r['city'];
+				$state = $r['state_code'];
+			}
+		}
+		$memo[ $raw ] = strtolower( trim( (string) $city ) ) . '|' . strtoupper( trim( (string) $state ) );
+		return $memo[ $raw ];
 	}
 
 	/**

@@ -11,22 +11,19 @@ test.describe('Organizer event workspace', () => {
     await loginPage(page, organizerUser, organizerPass);
   });
 
-  test('shows event sections with Financials and highlights Events in the nav', async ({ page }) => {
+  test('shows event sections and highlights Events in the nav', async ({ page }) => {
     await page.goto(`/organizer-dashboard/?event=${eventId}`);
     const tabs = page.getByTestId('lnkup-event-workspace-tabs');
     await expect(tabs).toBeVisible();
-    for (const name of ['Overview', 'Opportunities', 'Applications', 'Confirmed', 'Financials', 'Operations', 'Check-in']) {
-      await expect(tabs.getByRole('link', { name: new RegExp(name, 'i') })).toBeVisible();
+    for (const name of ['Overview', 'Inventory', 'Applications', 'Confirmed vendors', 'Money', 'Operations', 'Check-in', 'Marketing', 'Settings']) {
+      await expect(tabs.getByRole('link', { name: new RegExp(`^${name}`, 'i') })).toBeVisible();
     }
     await expect(page.locator('.lnkup-dashboard__nav-link.is-active[data-view="events"]')).toHaveCount(1);
-    await expect(page.locator('.lnkup-dashboard__nav-link[data-view="applications"]').first()).toHaveAttribute(
-      'href',
-      new RegExp(`event_filter=${eventId}`),
-    );
   });
 
-  test('Opportunities tab shows ledger inventory and a vendor preview', async ({ page }) => {
+  test('legacy slots tab key opens Inventory with ledger counts and a vendor preview', async ({ page }) => {
     await page.goto(`/organizer-dashboard/?event=${eventId}&tab=slots`);
+    await expect(page.getByTestId('lnkup-event-workspace-tabs').getByRole('link', { name: 'Inventory' })).toHaveAttribute('aria-current', 'page');
     const inventory = page.getByTestId('lnkup-slot-inventory').first();
     await expect(inventory).toContainText(/open · \d+ held · \d+ paid · \d+ waitlisted/);
     await expect(page.getByTestId('lnkup-slot-preview').first()).toHaveAttribute('href', /.+/);
@@ -34,7 +31,8 @@ test.describe('Organizer event workspace', () => {
 
   test('application drawer offers decisions for an open request', async ({ page }) => {
     await page.goto(`/organizer-dashboard/?view=applications&mode=classic&filter=pending&event_filter=${eventId}`);
-    await page.getByRole('button', { name: /view details for/i }).first().click();
+    await page.getByRole('button', { name: /^Review / }).first().click();
+    await page.locator('#oos-app-drawer').getByRole('button', { name: /view details for/i }).click();
     await expect(page.getByTestId('lnkup-intel-decide')).toBeVisible();
     await expect(page.getByTestId('lnkup-intel-decide').getByRole('button', { name: /accept/i })).toBeVisible();
   });

@@ -24,6 +24,14 @@ export const colors = {
   green200: "#BBF7D0",
   green700: "#15803D",
   overlay: "rgba(0, 0, 0, 0.4)",
+  /** Vendor OS tokens shared with the WordPress design layer (vendor-os.css). */
+  canvas: "#F6F5F1",
+  surfaceMuted: "#FAF9F6",
+  line: "#E7E5DF",
+  lineStrong: "#D6D3CB",
+  ink: "#141414",
+  inkMuted: "#62626B",
+  shell: "#121212",
 } as const
 
 export const fonts = {
@@ -132,7 +140,7 @@ export function surfaceStyle(variant: SurfaceVariant = "default"): ViewStyle {
     default:
       return {
         backgroundColor: colors.white,
-        borderColor: colors.gray200,
+        borderColor: colors.line,
       }
   }
 }

@@ -49,7 +49,7 @@ class LNKup_Growth_Recommendations {
 			$rules[] = array(
 				'action_key' => 'add_category',
 				'title'      => sprintf( __( 'Add %s category', 'lnkup-marketplace' ), $cat ),
-				'reason'     => __( 'This category is trending and underrepresented in your profile.', 'lnkup-marketplace' ),
+				'reason'     => __( 'Open opportunities use this category, and it is not on your profile yet.', 'lnkup-marketplace' ),
 				'priority'   => 70,
 			);
 		}
@@ -140,7 +140,7 @@ class LNKup_Growth_Recommendations {
 			$insights[] = sprintf( __( '%s is your highest-performing city.', 'lnkup-marketplace' ), $by_city[0]['label'] );
 		}
 		if ( ( $kpis['growth_rate'] ?? 0 ) > 0 ) {
-			$insights[] = sprintf( __( 'Revenue grew %s%% this period.', 'lnkup-marketplace' ), $kpis['growth_rate'] );
+			$insights[] = sprintf( __( 'Event investment changed %s%% this period.', 'lnkup-marketplace' ), $kpis['growth_rate'] );
 		}
 		if ( ( $kpis['organizer_favorites'] ?? 0 ) > 0 ) {
 			$insights[] = sprintf( __( '%d organizers have favorited you.', 'lnkup-marketplace' ), $kpis['organizer_favorites'] );
@@ -169,15 +169,42 @@ class LNKup_Growth_Recommendations {
 		}
 		$trending_cities = class_exists( 'LNKup_Market_Trends' ) ? LNKup_Market_Trends::cities( array( 'limit' => 10 ) ) : array();
 		$suggested_cities = array();
+		$seen_cities      = array();
 		foreach ( $trending_cities as $tc ) {
 			$city = $tc['city'] ?? $tc['label'] ?? '';
 			if ( ! $city || $city === $home_city || isset( $served[ $city ] ) ) {
 				continue;
 			}
+			$state_code = (string) ( $tc['state'] ?? '' );
+			$seen_key   = strtolower( trim( (string) $city ) );
+			if ( isset( $seen_cities[ $seen_key ] ) ) {
+				continue;
+			}
+			$seen_cities[ $seen_key ] = true;
+			$place      = function_exists( 'lnkup_display_place' ) ? lnkup_display_place( (string) $city, $state_code ) : (string) $city;
+			$home_label = function_exists( 'lnkup_display_label' ) ? lnkup_display_label( (string) $home_city ) : (string) $home_city;
+			$same_city  = $home_label && 0 === strcasecmp( (string) $place, $home_label );
+			$open_count = (int) ( $tc['applications'] ?? $tc['count'] ?? 0 );
+			$reason     = $same_city
+				? __( 'Open opportunities in your home market.', 'lnkup-marketplace' )
+				: sprintf(
+					/* translators: %s: vendor home city */
+					__( 'Outside %s. Shown because the marketplace has activity there, not because it is nearby.', 'lnkup-marketplace' ),
+					$home_label ? $home_label : __( 'your home market', 'lnkup-marketplace' )
+				);
+			if ( $open_count > 0 ) {
+				$reason = sprintf(
+					/* translators: 1: count, 2: reason */
+					__( '%1$d open opportunities. %2$s', 'lnkup-marketplace' ),
+					$open_count,
+					$reason
+				);
+			}
 			$suggested_cities[] = array(
-				'city'   => $city,
-				'state'  => $tc['state'] ?? '',
-				'reason' => sprintf( __( 'Fast-growing market near your success in %s', 'lnkup-marketplace' ), $home_city ?: __( 'your region', 'lnkup-marketplace' ) ),
+				'city'   => function_exists( 'lnkup_display_label' ) ? lnkup_display_label( (string) $city ) : $city,
+				'state'  => function_exists( 'lnkup_display_state' ) ? lnkup_display_state( $state_code ) : $state_code,
+				'place'  => $place,
+				'reason' => $reason,
 			);
 			if ( count( $suggested_cities ) >= 5 ) {
 				break;
@@ -215,12 +242,40 @@ class LNKup_Growth_Recommendations {
 
 	public static function market_insights() {
 		$summary = class_exists( 'LNKup_Financial_Reports' ) ? LNKup_Financial_Reports::marketplace_summary() : array();
+		$fastest = class_exists( 'LNKup_Trending' ) ? LNKup_Trending::get_section( 'trending', 8 ) : array();
+		$seen    = array();
+		$clean   = array();
+		foreach ( (array) $fastest as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$event_id = (int) ( $row['event_id'] ?? 0 );
+			$key      = $event_id > 0 ? 'e' . $event_id : strtolower( (string) ( $row['name'] ?? $row['title'] ?? '' ) );
+			if ( '' === $key || isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			if ( class_exists( 'LNKup_Vendor_Presentation' ) && LNKup_Vendor_Presentation::exclude_fixtures_from_reporting() && LNKup_Vendor_Presentation::is_e2e_fixture( $event_id ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+			if ( isset( $row['name'] ) ) {
+				$row['name'] = function_exists( 'lnkup_plain_text' ) ? lnkup_plain_text( (string) $row['name'] ) : (string) $row['name'];
+			}
+			if ( isset( $row['title'] ) ) {
+				$row['title'] = function_exists( 'lnkup_plain_text' ) ? lnkup_plain_text( (string) $row['title'] ) : (string) $row['title'];
+			}
+			$clean[] = $row;
+			if ( count( $clean ) >= 5 ) {
+				break;
+			}
+		}
 		return array(
 			'avg_vendor_fee'       => $summary['avg_vendor_fee'] ?? 0,
 			'trending_cities'    => class_exists( 'LNKup_Market_Trends' ) ? LNKup_Market_Trends::cities( array( 'limit' => 5 ) ) : array(),
 			'trending_categories'=> class_exists( 'LNKup_Market_Trends' ) ? LNKup_Market_Trends::categories( array( 'limit' => 5 ) ) : array(),
-			'fastest_growing'    => class_exists( 'LNKup_Trending' ) ? LNKup_Trending::get_section( 'trending', 5 ) : array(),
-			'best_seasons'       => array( __( 'Summer', 'lnkup-marketplace' ), __( 'Fall', 'lnkup-marketplace' ) ),
+			'fastest_growing'    => $clean,
+			'best_seasons'       => array(),
+			'fastest_growing_note' => __( 'Listed from marketplace activity. This is not a growth-rate ranking.', 'lnkup-marketplace' ),
 		);
 	}
 

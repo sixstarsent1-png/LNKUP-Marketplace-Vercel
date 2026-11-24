@@ -304,7 +304,7 @@ class LNKup_Invoices {
 			'paid_amount'    => (float) $row['paid_amount'],
 			'due_date'       => $row['due_date'],
 			'event_id'       => (int) $row['event_id'],
-			'event_title'    => (int) $row['event_id'] ? lnkup_plain_title( (int) $row['event_id'] ) : '',
+			'event_title'    => (int) $row['event_id'] ? ( class_exists( 'LNKup_Vendor_Presentation' ) ? LNKup_Vendor_Presentation::customer_event_title( (int) $row['event_id'] ) : lnkup_plain_title( (int) $row['event_id'] ) ) : '',
 			'issue_date'     => $row['issue_date'],
 			'created_at'     => $row['created_at'],
 			'pdf_url'        => self::signed_pdf_url( $row ),

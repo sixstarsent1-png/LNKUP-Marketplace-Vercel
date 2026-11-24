@@ -120,6 +120,12 @@ class LNKup_Organizer_Onboarding_Flow {
 		if ( '' === $fields['city'] || '' === $fields['state'] ) {
 			return new WP_Error( 'location_required', __( 'Add the city and state where you mainly hold events.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
+		if ( class_exists( 'LNKup_Location_Service' ) ) {
+			$location = LNKup_Location_Service::canonical_profile_location( $fields['city'], $fields['state'] );
+			if ( is_wp_error( $location ) ) {
+				return $location;
+			}
+		}
 		return true;
 	}
 
@@ -131,6 +137,13 @@ class LNKup_Organizer_Onboarding_Flow {
 	 * @param array $fields  sanitize_signup() output.
 	 */
 	public static function save_signup( int $user_id, array $fields ): void {
+		if ( class_exists( 'LNKup_Location_Service' ) && ( '' !== $fields['city'] || '' !== $fields['state'] ) ) {
+			$location = LNKup_Location_Service::canonical_profile_location( $fields['city'], $fields['state'], '', 'lenient' );
+			if ( is_array( $location ) ) {
+				$fields['city']  = $location['city'];
+				$fields['state'] = $location['state'];
+			}
+		}
 		$map = array(
 			'organization_name' => '_lnkup_organizer_public_name',
 			'city'              => '_lnkup_organizer_city',

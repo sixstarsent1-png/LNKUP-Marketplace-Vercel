@@ -1,0 +1,59 @@
+{
+  "metrics": [
+    {
+      "tab": "Explore",
+      "ms": 166,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/marketplace/favorites",
+        "GET /lnkup/v1/marketplace/search?per_page=20&page=1&include_external=false&sort=recommended&group_by=event"
+      ]
+    },
+    {
+      "tab": "Bookings",
+      "ms": 131,
+      "apiCalls": 0,
+      "calls": []
+    },
+    {
+      "tab": "Wallet",
+      "ms": 149,
+      "apiCalls": 5,
+      "calls": [
+        "GET /lnkup/v1/financial/summary?role=vendor",
+        "GET /lnkup/v1/financial/transactions?role=vendor&limit=50",
+        "GET /lnkup/v1/financial/invoices?role=vendor",
+        "GET /lnkup/v1/financial/receipts?role=vendor",
+        "GET /lnkup/v1/financial/disputes?role=vendor"
+      ]
+    },
+    {
+      "tab": "Profile",
+      "ms": 144,
+      "apiCalls": 3,
+      "calls": [
+        "GET /lnkup/v1/push/preferences",
+        "GET /lnkup/v1/vendor/profile",
+        "GET /lnkup/v1/verification/vendor"
+      ]
+    },
+    {
+      "tab": "Home",
+      "ms": 123,
+      "apiCalls": 0,
+      "calls": []
+    },
+    {
+      "tab": "Explore",
+      "ms": 90,
+      "apiCalls": 0,
+      "calls": []
+    },
+    {
+      "tab": "Bookings",
+      "ms": 106,
+      "apiCalls": 0,
+      "calls": []
+    }
+  ]
+}

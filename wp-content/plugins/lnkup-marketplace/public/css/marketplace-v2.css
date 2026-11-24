@@ -2074,3 +2074,8 @@ a.lnkup-event-card__status:hover { text-decoration: underline; }
 #lnkup-marketplace .lnkup-mp-v2__toolbar--desktop #lnkup-filter-event-type-hint { display: none; }
 #lnkup-results-grid .lnkup-event-card--v2 { border-radius: 1.25rem; }
 #lnkup-results-grid .lnkup-event-card__media img { object-position: top center; }
+/* Guest card gate (LNKup_Access_Policy): one lock CTA in place of booth fee and capacity. */
+.lnkup-card-gate { position: relative; z-index: 2; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: #0b0b0c; color: #c8f542; font-size: 12px; font-weight: 700; text-decoration: none; line-height: 1.2; }
+.lnkup-card-gate:hover { background: #232529; color: #c8f542; }
+.lnkup-card-gate svg { width: 14px; height: 14px; flex: none; }
+.lnkup-card-gate:focus-visible { outline: 2px solid #3b6fe0; outline-offset: 2px; }

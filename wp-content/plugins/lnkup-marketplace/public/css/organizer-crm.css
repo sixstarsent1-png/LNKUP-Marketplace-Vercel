@@ -3761,6 +3761,11 @@
   border-radius: 1rem;
 }
 
+/* The media column is hidden above, so the card must not keep the media + body grid. */
+.lnkup-organizer-event-grid.lnkup-events-example .lnkup-organizer-event-card.lnkup-organizer-event-card--v4 {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .lnkup-event-edit__meta {
   display: flex;
   flex-wrap: wrap;

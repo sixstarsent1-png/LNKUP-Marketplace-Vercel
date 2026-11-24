@@ -93,6 +93,9 @@ class LNKup_Organizer_Dashboard_Views {
 				case 'team':
 					echo self::render_team(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					break;
+				case 'settings':
+					echo self::render_settings(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					break;
 				case 'tasks':
 					echo self::render_my_tasks(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					break;
@@ -142,7 +145,6 @@ class LNKup_Organizer_Dashboard_Views {
 			'in_progress' => __( 'In progress', 'lnkup-marketplace' ),
 			'not_started' => __( 'To do', 'lnkup-marketplace' ),
 		);
-		$embed_src = LNKUP_PLUGIN_URL . 'public/js/embed.js';
 		$v2        = class_exists( 'LNKup_Organizer_Onboarding_Flow' ) && LNKup_Organizer_Onboarding_Flow::enabled();
 		$flow      = $v2 ? LNKup_Organizer_Onboarding_Flow::for_user( $user_id ) : null;
 		$focus     = isset( $_GET['step'] ) ? sanitize_key( wp_unslash( (string) $_GET['step'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -225,8 +227,8 @@ class LNKup_Organizer_Dashboard_Views {
 						<?php if ( 'organization' === $stage['key'] ) : ?>
 							<form class="lnkup-start__form" data-start-profile data-testid="lnkup-start-profile">
 								<label><?php esc_html_e( 'Organization name', 'lnkup-marketplace' ); ?><input type="text" name="public_name" value="<?php echo esc_attr( $get( 'public_name' ) ); ?>" required></label>
-								<label><?php esc_html_e( 'City', 'lnkup-marketplace' ); ?><input type="text" name="city" value="<?php echo esc_attr( $get( 'city' ) ); ?>" required></label>
-								<label><?php esc_html_e( 'State', 'lnkup-marketplace' ); ?><input type="text" name="state" value="<?php echo esc_attr( $get( 'state' ) ); ?>" maxlength="32" required></label>
+								<label><?php esc_html_e( 'City', 'lnkup-marketplace' ); ?><input type="text" name="city" data-lnkup-location-city value="<?php echo esc_attr( $get( 'city' ) ); ?>" required></label>
+								<label><?php esc_html_e( 'State', 'lnkup-marketplace' ); ?><input type="text" name="state" data-lnkup-location-state value="<?php echo esc_attr( $get( 'state' ) ); ?>" maxlength="32" required></label>
 								<label><?php esc_html_e( 'Website', 'lnkup-marketplace' ); ?><input type="url" name="website" value="<?php echo esc_attr( $get( 'website' ) ); ?>" placeholder="https://"></label>
 								<label class="lnkup-start__wide"><?php esc_html_e( 'Short description', 'lnkup-marketplace' ); ?><textarea name="bio" rows="3"><?php echo esc_textarea( $get( 'bio' ) ); ?></textarea></label>
 								<label><?php esc_html_e( 'Logo', 'lnkup-marketplace' ); ?><input type="file" name="logo" accept="image/*"></label>
@@ -290,9 +292,14 @@ class LNKup_Organizer_Dashboard_Views {
 									<label><?php esc_html_e( 'Your vendor apply link', 'lnkup-marketplace' ); ?>
 										<span class="lnkup-start__copy"><input type="text" readonly value="<?php echo esc_attr( $share['application_url'] ); ?>" data-copy-source><button type="button" class="lnkup-btn" data-copy><?php esc_html_e( 'Copy link', 'lnkup-marketplace' ); ?></button></span>
 									</label>
-									<label><?php esc_html_e( 'Add an Apply button to your website', 'lnkup-marketplace' ); ?>
-										<span class="lnkup-start__copy"><textarea readonly rows="2" data-copy-source><?php echo esc_textarea( '<div data-lnkup-apply="' . (int) $share['opportunity_id'] . '"></div><script src="' . esc_url( $embed_src ) . '" async></script>' ); ?></textarea><button type="button" class="lnkup-btn" data-copy><?php esc_html_e( 'Copy code', 'lnkup-marketplace' ); ?></button></span>
-									</label>
+									<p class="lnkup-muted" data-testid="lnkup-start-embed-link">
+										<?php
+										$embed_href = class_exists( 'LNKup_Organizer_Marketing' ) && LNKup_Organizer_Marketing::enabled()
+											? lnkup_organizer_view_url( 'marketing', array( 'om_tab' => 'embed' ) )
+											: add_query_arg( array( 'event' => (int) get_post_meta( (int) $share['opportunity_id'], '_lnkup_event_id', true ), 'tab' => 'marketing' ), lnkup_page_url_helper( 'organizer-dashboard' ) );
+										?>
+										<a class="vos-link" href="<?php echo esc_url( $embed_href ); ?>"><?php esc_html_e( 'Get an Apply button for your website', 'lnkup-marketplace' ); ?></a> — <?php esc_html_e( 'embed codes, QR codes and tracked links live in Marketing.', 'lnkup-marketplace' ); ?>
+									</p>
 									<p class="lnkup-muted"><?php esc_html_e( 'Your organizer page:', 'lnkup-marketplace' ); ?> <a href="<?php echo esc_url( $share['organizer_url'] ); ?>"><?php echo esc_html( $share['organizer_url'] ); ?></a></p>
 									<?php if ( $v2 ) : ?>
 										<?php foreach ( self::published_tour_links( $user_id ) as $tour_link ) : ?>
@@ -447,6 +454,9 @@ class LNKup_Organizer_Dashboard_Views {
 	 * @return string
 	 */
 	private static function render_home() {
+		if ( class_exists( 'LNKup_Organizer_Presentation' ) && class_exists( 'LNKup_OS_UI' ) ) {
+			return self::render_home_os();
+		}
 		if ( LNKup_Feature_Flags::organizer_ops() && LNKup_Organizer_OS_Tables::ready( '2' ) ) {
 			return self::render_home_v2();
 		}
@@ -629,6 +639,585 @@ class LNKup_Organizer_Dashboard_Views {
 			}
 			?>
 		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Organizer Home command center (Organizer Experience OS 2.0).
+	 *
+	 * Every count comes from LNKup_Organizer_Presentation and links to the filtered screen
+	 * that shows the same number.
+	 */
+	private static function render_home_os(): string {
+		$user_id   = get_current_user_id();
+		$ui        = 'LNKup_OS_UI';
+		$rows      = LNKup_Organizer_Presentation::portfolio_rows( $user_id );
+		$active    = array_values(
+			array_filter(
+				$rows,
+				static function ( $row ) {
+					return 'completed' !== $row['chronology'];
+				}
+			)
+		);
+		$pending   = LNKup_Organizer_Presentation::count_applications( $user_id, LNKup_Organizer_Presentation::PENDING_STATUSES );
+		$unpaid    = LNKup_Organizer_Presentation::count_applications( $user_id, LNKup_Organizer_Presentation::HELD_STATUSES );
+		$confirmed = LNKup_Organizer_Presentation::count_applications( $user_id, LNKup_Organizer_Presentation::CONFIRMED_STATUSES );
+		$open      = 0;
+		foreach ( $active as $row ) {
+			$open += (int) $row['capacity']['open'];
+		}
+		$money   = LNKup_Organizer_Presentation::financial_summary( $user_id );
+		$queue   = LNKup_Organizer_Presentation::action_queue( $user_id );
+		$next    = $active ? $active[0] : null;
+		$metrics = array(
+			array( 'label' => __( 'Upcoming events', 'lnkup-marketplace' ), 'value' => (string) count( $active ), 'href' => lnkup_organizer_view_url( 'events', array( 'chronology' => 'active' ) ), 'key' => 'upcoming' ),
+			array( 'label' => __( 'Applications to review', 'lnkup-marketplace' ), 'value' => (string) $pending, 'href' => lnkup_organizer_view_url( 'applications', array( 'filter' => 'pending' ) ), 'key' => 'pending', 'tone' => $pending ? 'warning' : '' ),
+			array( 'label' => __( 'Approved, unpaid', 'lnkup-marketplace' ), 'value' => (string) $unpaid, 'href' => lnkup_organizer_view_url( 'applications', array( 'filter' => 'approved', 'group' => 'booking' ) ), 'key' => 'unpaid' ),
+			array( 'label' => __( 'Confirmed vendors', 'lnkup-marketplace' ), 'value' => (string) $confirmed, 'hint' => __( 'Paid, all events', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'applications', array( 'filter' => 'paid', 'group' => 'confirmed' ) ), 'key' => 'confirmed' ),
+			array( 'label' => __( 'Open spaces', 'lnkup-marketplace' ), 'value' => (string) $open, 'hint' => __( 'Across upcoming events', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'events', array( 'chronology' => 'active' ) ), 'key' => 'open' ),
+			array( 'label' => __( 'Collected', 'lnkup-marketplace' ), 'value' => $ui::money( (float) $money['collected'] ), 'hint' => $money['label'], 'href' => lnkup_organizer_view_url( 'financial' ), 'key' => 'collected' ),
+		);
+		foreach ( $metrics as $i => $m ) {
+			if ( empty( $m['tone'] ) ) {
+				unset( $metrics[ $i ]['tone'] );
+			}
+		}
+		ob_start();
+		?>
+		<section class="oos-home lnkup-organizer-overview lnkup-organizer-section" id="overview" data-testid="lnkup-overview-v2">
+			<?php echo self::render_home_org_head( $user_id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php echo self::render_home_onboarding( $user_id, count( $rows ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php if ( ! $rows ) : ?>
+				<?php echo $ui::empty_state( __( 'Create your first event', 'lnkup-marketplace' ), __( 'Add the event and its booth types. Vendors apply, you approve, and they pay through LNKup.', 'lnkup-marketplace' ), __( 'Create event', 'lnkup-marketplace' ), lnkup_organizer_view_url( 'create' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php else : ?>
+				<?php echo $ui::metrics( $metrics, 'lnkup-organizer-metrics' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php endif; ?>
+			<div class="vos-layout">
+				<div class="vos-main">
+					<?php if ( $next ) : ?>
+						<?php echo self::render_home_spotlight( $next ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<?php endif; ?>
+					<?php echo self::render_home_action_center( $queue ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<?php if ( $rows ) : ?>
+						<?php echo self::render_home_portfolio( $active ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php echo self::render_home_recent_applications( $user_id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<?php endif; ?>
+				</div>
+				<aside class="vos-rail" aria-label="<?php esc_attr_e( 'Summary', 'lnkup-marketplace' ); ?>">
+					<?php if ( $rows ) : ?>
+						<?php echo self::render_home_money( $money ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<?php endif; ?>
+					<?php echo $next ? self::render_home_recruitment( (int) $next['id'] ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<?php echo self::render_home_activity( $user_id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<?php echo self::render_home_quick_actions( $next ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<?php
+					if ( class_exists( 'LNKup_App_Promo' ) ) {
+						echo LNKup_App_Promo::render_card( 'organizer' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					}
+					?>
+				</aside>
+			</div>
+		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Organization header: logo, name, verification, Create event.
+	 *
+	 * @param int $user_id Organizer.
+	 */
+	private static function render_home_org_head( int $user_id ): string {
+		$card     = function_exists( 'lnkup_dashboard_organizer_user_card' ) ? lnkup_dashboard_organizer_user_card() : array();
+		$name     = (string) get_user_meta( $user_id, '_lnkup_organizer_public_name', true );
+		$name     = '' !== $name ? $name : (string) wp_get_current_user()->display_name;
+		$name     = function_exists( 'lnkup_plain_text' ) ? lnkup_plain_text( $name ) : $name;
+		$logo     = (string) ( $card['logo'] ?? '' );
+		$verified = class_exists( 'LNKup_Organizer_Verification' ) ? (bool) LNKup_Organizer_Verification::is_verified( $user_id ) : false;
+		$public   = class_exists( 'LNKup_Organizer_Onboarding' ) ? LNKup_Organizer_Onboarding::organizer_public_url( $user_id ) : '';
+		$actions  = LNKup_OS_UI::menu(
+			__( 'New', 'lnkup-marketplace' ),
+			self::new_menu_items(),
+			array( 'class' => 'lnkup-btn lnkup-btn--outline', 'testid' => 'lnkup-home-new-menu' )
+		);
+		$actions .= '<a class="lnkup-btn lnkup-btn--primary" href="' . esc_url( lnkup_organizer_view_url( 'create' ) ) . '">' . esc_html__( 'Create event', 'lnkup-marketplace' ) . '</a>';
+		ob_start();
+		?>
+		<header class="oos-org-head" data-testid="lnkup-organizer-home-welcome">
+			<div class="oos-org-head__id">
+				<span class="oos-org-head__logo" aria-hidden="true"><?php echo $logo ? '<img src="' . esc_url( $logo ) . '" alt="" width="52" height="52" decoding="async" />' : esc_html( LNKup_OS_UI::initials( $name ) ); ?></span>
+				<div>
+					<p class="vos-eyebrow"><?php esc_html_e( 'Welcome back', 'lnkup-marketplace' ); ?></p>
+					<h1 class="oos-org-head__name"><?php echo esc_html( $name ); ?></h1>
+					<p class="oos-org-head__meta">
+						<?php echo $verified ? LNKup_OS_UI::status( __( 'Verified organizer', 'lnkup-marketplace' ), 'success' ) : '<a class="vos-link" href="' . esc_url( lnkup_organizer_view_url( 'team' ) ) . '">' . esc_html__( 'Get verified', 'lnkup-marketplace' ) . '</a>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php if ( $public ) : ?>
+							<a class="vos-link" href="<?php echo esc_url( $public ); ?>"><?php esc_html_e( 'Public page', 'lnkup-marketplace' ); ?></a>
+						<?php endif; ?>
+					</p>
+				</div>
+			</div>
+			<div class="oos-org-head__actions"><?php echo $actions; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
+		</header>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Items for the unified "New" menu.
+	 *
+	 * @return array<int,array{label:string,href?:string,hint?:string,attrs?:string}>
+	 */
+	private static function new_menu_items(): array {
+		$items = array(
+			array( 'label' => __( 'Single event', 'lnkup-marketplace' ), 'hint' => __( 'Event and its booth types', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'create' ) ),
+			array( 'label' => __( 'Duplicate an event', 'lnkup-marketplace' ), 'hint' => __( 'New date and location required', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'events', array( 'duplicate' => 1 ) ) ),
+			array( 'label' => __( 'From a saved setup', 'lnkup-marketplace' ), 'hint' => __( 'Reuse booth types and questions', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'start', array( 'step' => 'first_event' ) ) . '#lnkup-start-setups' ),
+		);
+		if ( class_exists( 'LNKup_Feature_Flags' ) && LNKup_Feature_Flags::portfolio() ) {
+			$items[] = array( 'label' => __( 'Tour', 'lnkup-marketplace' ), 'hint' => __( 'Several cities, one brand', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'tours', array( 'new' => 'tour' ) ) );
+			$items[] = array( 'label' => __( 'Recurring market', 'lnkup-marketplace' ), 'hint' => __( 'Same venue on a schedule', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'tours', array( 'new' => 'series' ) ) );
+		}
+		return $items;
+	}
+
+	/**
+	 * Setup progress shared by Home and Settings: guided flow when onboarding v2 is on, else activation.
+	 *
+	 * @param int $user_id Organizer.
+	 * @return array{percent:int,title:string,url:string}|null Null when setup is complete or dismissed.
+	 */
+	private static function setup_progress( int $user_id ): ?array {
+		if ( self::onboarding_v2() ) {
+			$flow = LNKup_Organizer_Onboarding_Flow::for_user( $user_id );
+			if ( $flow['is_complete'] || $flow['state']['dismissed'] || ! $flow['next_step'] ) {
+				return null;
+			}
+			return array(
+				'percent' => (int) $flow['percent'],
+				'title'   => (string) $flow['next_step']['title'],
+				'url'     => (string) $flow['resume_url'],
+			);
+		}
+		if ( ! class_exists( 'LNKup_Organizer_Activation' ) ) {
+			return null;
+		}
+		$activation = LNKup_Organizer_Activation::for_user( $user_id );
+		if ( $activation['is_activated'] ) {
+			return null;
+		}
+		return array(
+			'percent' => (int) $activation['percent'],
+			'title'   => $activation['next_action'] ? (string) $activation['next_action']['title'] : '',
+			'url'     => lnkup_organizer_view_url( 'start' ),
+		);
+	}
+
+	/**
+	 * Compact Getting Started module: the next unfinished step only. Hidden when complete.
+	 *
+	 * @param int $user_id     Organizer.
+	 * @param int $event_count Owned events.
+	 */
+	private static function render_home_onboarding( int $user_id, int $event_count ): string {
+		$setup = self::setup_progress( $user_id );
+		if ( ! $setup ) {
+			return '';
+		}
+		$percent = $setup['percent'];
+		$title   = $setup['title'];
+		$url     = $setup['url'];
+		ob_start();
+		?>
+		<div class="oos-onboarding lnkup-start-banner" data-testid="lnkup-start-banner">
+			<div>
+				<p><strong><?php echo esc_html( 0 === $event_count ? __( 'Get set up to book vendors', 'lnkup-marketplace' ) : sprintf( /* translators: %d: percent */ __( 'Setup %d%% complete', 'lnkup-marketplace' ), $percent ) ); ?></strong></p>
+				<?php if ( '' !== $title ) : ?>
+					<p class="lnkup-muted"><?php echo esc_html( sprintf( /* translators: %s: step */ __( 'Next: %s', 'lnkup-marketplace' ), $title ) ); ?></p>
+				<?php endif; ?>
+			</div>
+			<?php echo LNKup_OS_UI::progress( $percent, __( 'Setup progress', 'lnkup-marketplace' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<a class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" href="<?php echo esc_url( $url ); ?>"><?php esc_html_e( 'Continue setup', 'lnkup-marketplace' ); ?></a>
+		</div>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Lifecycle-aware primary action for one event.
+	 *
+	 * @param array $event Event summary.
+	 * @return array{label:string,href:string}
+	 */
+	public static function event_primary_action( array $event ): array {
+		$dash = lnkup_page_url_helper( 'organizer-dashboard' );
+		$base = add_query_arg( 'event', (int) $event['id'], $dash );
+		if ( 'completed' === $event['chronology'] ) {
+			return array( 'label' => __( 'View results', 'lnkup-marketplace' ), 'href' => add_query_arg( 'tab', 'money', $base ) );
+		}
+		if ( (int) $event['capacity']['booth_types'] < 1 ) {
+			return array( 'label' => __( 'Add booth types', 'lnkup-marketplace' ), 'href' => add_query_arg( 'tab', 'inventory', $base ) );
+		}
+		if ( 'live' !== $event['publication'] ) {
+			return array( 'label' => __( 'Publish event', 'lnkup-marketplace' ), 'href' => add_query_arg( 'edit', 1, $base ) );
+		}
+		if ( (int) $event['applications']['pending'] > 0 ) {
+			return array(
+				/* translators: %d: applications */
+				'label' => sprintf( _n( 'Review %d application', 'Review %d applications', (int) $event['applications']['pending'], 'lnkup-marketplace' ), (int) $event['applications']['pending'] ),
+				'href'  => add_query_arg( 'tab', 'applications', $base ),
+			);
+		}
+		if ( 'today' === $event['chronology'] || ( null !== $event['days_until'] && (int) $event['days_until'] <= 1 ) ) {
+			return array( 'label' => __( 'Open check-in', 'lnkup-marketplace' ), 'href' => add_query_arg( 'scan', 1, $base ) );
+		}
+		if ( (int) $event['capacity']['held'] > 0 ) {
+			return array( 'label' => __( 'Follow up on unpaid vendors', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'applications', array( 'filter' => 'unpaid', 'event_filter' => (int) $event['id'] ) ) );
+		}
+		return array( 'label' => __( 'Invite vendors', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'vendors', array( 'recruit' => (int) $event['id'] ) ) );
+	}
+
+	/**
+	 * Next-event spotlight.
+	 *
+	 * @param array $event Event summary.
+	 */
+	private static function render_home_spotlight( array $event ): string {
+		$readiness = class_exists( 'LNKup_Vendor_Readiness' ) ? LNKup_Vendor_Readiness::event_readiness_summary( (int) $event['id'] ) : array();
+		$action    = self::event_primary_action( $event );
+		$days      = $event['days_until'];
+		ob_start();
+		?>
+		<section class="vos-card oos-spotlight" data-testid="lnkup-home-spotlight" aria-labelledby="lnkup-home-spotlight-title">
+			<h2 class="vos-sr" id="lnkup-home-spotlight-title"><?php esc_html_e( 'Next event', 'lnkup-marketplace' ); ?></h2>
+			<div class="oos-spotlight__top">
+				<?php echo LNKup_OS_UI::event_identity( $event, array( 'size' => 'lg', 'href' => $event['url'], 'heading' => 'h3' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+				<?php if ( null !== $days ) : ?>
+					<div class="oos-spotlight__countdown">
+						<span class="oos-spotlight__days"><?php echo esc_html( 0 === (int) $days ? __( 'Today', 'lnkup-marketplace' ) : (string) (int) $days ); ?></span>
+						<?php if ( 0 !== (int) $days ) : ?>
+							<span class="lnkup-muted"><?php echo esc_html( _n( 'day to go', 'days to go', (int) $days, 'lnkup-marketplace' ) ); ?></span>
+						<?php endif; ?>
+					</div>
+				<?php endif; ?>
+			</div>
+			<?php echo LNKup_OS_UI::capacity_bar( $event['capacity'], __( 'Vendor spaces', 'lnkup-marketplace' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<dl class="oos-spotlight__facts">
+				<div>
+					<dt><?php esc_html_e( 'Vendor readiness', 'lnkup-marketplace' ); ?></dt>
+					<dd><?php echo empty( $readiness['vendor_count'] ) ? esc_html__( 'No booked vendors yet', 'lnkup-marketplace' ) : esc_html( sprintf( /* translators: 1: ready, 2: booked vendors */ __( '%1$d of %2$d booked ready', 'lnkup-marketplace' ), (int) $readiness['ready_count'], (int) $readiness['vendor_count'] ) ); ?></dd>
+				</div>
+				<div>
+					<dt><?php esc_html_e( 'Applications to review', 'lnkup-marketplace' ); ?></dt>
+					<dd><?php echo esc_html( (string) (int) $event['applications']['pending'] ); ?></dd>
+				</div>
+				<div>
+					<dt><?php esc_html_e( 'Outstanding fees', 'lnkup-marketplace' ); ?></dt>
+					<dd><?php echo esc_html( LNKup_OS_UI::money( (float) ( $event['money']['outstanding'] ?? 0 ) ) ); ?></dd>
+				</div>
+			</dl>
+			<div class="oos-spotlight__actions">
+				<a class="lnkup-btn lnkup-btn--primary" href="<?php echo esc_url( $action['href'] ); ?>" data-testid="lnkup-home-spotlight-action"><?php echo esc_html( $action['label'] ); ?></a>
+				<a class="lnkup-btn lnkup-btn--outline" href="<?php echo esc_url( $event['url'] ); ?>"><?php esc_html_e( 'Open event', 'lnkup-marketplace' ); ?></a>
+			</div>
+		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Action Center grouped by reason.
+	 *
+	 * @param array $queue LNKup_Organizer_Presentation::action_queue().
+	 */
+	private static function render_home_action_center( array $queue ): string {
+		$groups = array_filter(
+			$queue,
+			static function ( $group ) {
+				return $group['count'] > 0 && $group['rows'];
+			}
+		);
+		ob_start();
+		?>
+		<section class="vos-card lnkup-organizer-attention" data-testid="lnkup-organizer-attention" aria-labelledby="lnkup-home-attention-title">
+			<?php echo LNKup_OS_UI::section_head( __( 'Needs attention', 'lnkup-marketplace' ), '', '', 'lnkup-home-attention-title' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<p class="vos-sr"><?php esc_html_e( 'Action center', 'lnkup-marketplace' ); ?></p>
+			<?php if ( ! $groups ) : ?>
+				<p class="lnkup-muted"><?php esc_html_e( 'Nothing needs your attention right now.', 'lnkup-marketplace' ); ?></p>
+			<?php else : ?>
+				<div class="oos-actions">
+					<?php foreach ( $groups as $key => $group ) : ?>
+						<div class="oos-actions__group" data-attention="<?php echo esc_attr( $key ); ?>">
+							<div class="oos-actions__head">
+								<span><?php echo esc_html( $group['label'] ); ?></span>
+								<span class="vos-count"><?php echo esc_html( (string) $group['count'] ); ?></span>
+							</div>
+							<?php foreach ( array_slice( $group['rows'], 0, 4 ) as $row ) : ?>
+								<div class="oos-actions__row">
+									<p class="oos-actions__row-title"><?php echo esc_html( $row['title'] ); ?></p>
+									<p class="oos-actions__row-meta"><?php echo esc_html( $row['meta'] ); ?></p>
+									<span class="oos-actions__row-cta">
+										<?php foreach ( $row['actions'] as $i => $act ) : ?>
+											<a class="lnkup-btn lnkup-btn--sm <?php echo 0 === $i ? 'lnkup-btn--outline' : 'lnkup-btn--ghost'; ?>" href="<?php echo esc_url( $act['href'] ); ?>"><?php echo esc_html( $act['label'] ); ?></a>
+										<?php endforeach; ?>
+									</span>
+								</div>
+							<?php endforeach; ?>
+							<?php if ( $group['count'] > 4 ) : ?>
+								<p class="oos-actions__more"><a class="vos-link" href="<?php echo esc_url( $group['href'] ); ?>"><?php echo esc_html( sprintf( /* translators: %d: total */ __( 'See all %d', 'lnkup-marketplace' ), (int) $group['count'] ) ); ?></a></p>
+							<?php endif; ?>
+						</div>
+					<?php endforeach; ?>
+				</div>
+			<?php endif; ?>
+		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Portfolio snapshot table (upcoming events).
+	 *
+	 * @param array<int,array> $events Active event summaries.
+	 */
+	private static function render_home_portfolio( array $events ): string {
+		$columns = array(
+			'event'     => array( 'label' => __( 'Event', 'lnkup-marketplace' ), 'lead' => true ),
+			'apps'      => array( 'label' => __( 'To review', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+			'confirmed' => array( 'label' => __( 'Confirmed', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+			'open'      => array( 'label' => __( 'Open spaces', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+			'collected' => array( 'label' => __( 'Gross booth fees', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+		);
+		$rows    = array();
+		foreach ( array_slice( $events, 0, 5 ) as $event ) {
+			$rows[] = array(
+				'id'    => $event['id'],
+				'cells' => array(
+					'event'     => LNKup_OS_UI::event_identity( $event, array( 'href' => $event['url'], 'status' => false ) ),
+					'apps'      => esc_html( (string) $event['applications']['pending'] ),
+					'confirmed' => esc_html( (string) $event['capacity']['confirmed'] ),
+					'open'      => esc_html( (string) $event['capacity']['open'] ),
+					'collected' => esc_html( LNKup_OS_UI::money( (float) ( $event['money']['collected_gross'] ?? 0 ) ) ),
+				),
+			);
+		}
+		ob_start();
+		?>
+		<section class="vos-section" data-testid="lnkup-overview-upcoming" aria-labelledby="lnkup-home-upcoming-title">
+			<?php echo LNKup_OS_UI::section_head( __( 'Upcoming events', 'lnkup-marketplace' ), __( 'All events', 'lnkup-marketplace' ), lnkup_organizer_view_url( 'events' ), 'lnkup-home-upcoming-title' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php
+			echo LNKup_OS_UI::data_table( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				$columns,
+				$rows,
+				array(
+					'caption' => __( 'Upcoming events', 'lnkup-marketplace' ),
+					'empty'   => LNKup_OS_UI::empty_state( __( 'No upcoming events', 'lnkup-marketplace' ), __( 'Past events are on the Events page.', 'lnkup-marketplace' ), __( 'Create event', 'lnkup-marketplace' ), lnkup_organizer_view_url( 'create' ) ),
+				)
+			);
+			?>
+		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Five most recent applications across events.
+	 *
+	 * @param int $user_id Organizer.
+	 */
+	private static function render_home_recent_applications( int $user_id ): string {
+		$apps = get_posts(
+			array(
+				'post_type'      => 'lnkup_application',
+				'post_status'    => array( 'publish', 'draft', 'pending', 'private' ),
+				'posts_per_page' => 5,
+				'orderby'        => 'date',
+				'order'          => 'DESC',
+				'meta_key'       => '_lnkup_organizer_user_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => (string) $user_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			)
+		);
+		if ( ! $apps ) {
+			return '';
+		}
+		$labels = array(
+			'submitted'        => array( __( 'New', 'lnkup-marketplace' ), 'info' ),
+			'under_review'     => array( __( 'In review', 'lnkup-marketplace' ), 'info' ),
+			'info_requested'   => array( __( 'Info requested', 'lnkup-marketplace' ), 'warning' ),
+			'approved'         => array( __( 'Approved, unpaid', 'lnkup-marketplace' ), 'warning' ),
+			'payment_required' => array( __( 'Approved, unpaid', 'lnkup-marketplace' ), 'warning' ),
+			'paid'             => array( __( 'Confirmed', 'lnkup-marketplace' ), 'success' ),
+			'completed'        => array( __( 'Completed', 'lnkup-marketplace' ), 'success' ),
+			'waitlisted'       => array( __( 'Waitlisted', 'lnkup-marketplace' ), 'neutral' ),
+			'rejected'         => array( __( 'Declined', 'lnkup-marketplace' ), 'danger' ),
+			'cancelled'        => array( __( 'Cancelled', 'lnkup-marketplace' ), 'danger' ),
+		);
+		$rows   = array();
+		foreach ( $apps as $app ) {
+			$status   = (string) get_post_meta( $app->ID, '_lnkup_application_status', true );
+			$event_id = (int) get_post_meta( $app->ID, '_lnkup_event_id', true );
+			$label    = $labels[ $status ] ?? array( ucwords( str_replace( '_', ' ', $status ) ), 'neutral' );
+			$rows[]   = array(
+				'id'    => $app->ID,
+				'cells' => array(
+					'vendor' => '<a class="vos-table__primary" href="' . esc_url( lnkup_organizer_view_url( 'applications', array( 'event_filter' => $event_id, 'app' => $app->ID ) ) ) . '">' . esc_html( LNKup_Organizer_Presentation::vendor_name( (int) $app->ID ) ) . '</a>',
+					'event'  => esc_html( $event_id ? LNKup_Organizer_Presentation::title( $event_id ) : '' ),
+					'status' => LNKup_OS_UI::status( $label[0], $label[1] ),
+					'when'   => LNKup_OS_UI::relative_time( (int) get_post_time( 'U', false, $app ) ),
+				),
+			);
+		}
+		ob_start();
+		?>
+		<section class="vos-section" data-testid="lnkup-home-applications" aria-labelledby="lnkup-home-apps-title">
+			<?php echo LNKup_OS_UI::section_head( __( 'Recent applications', 'lnkup-marketplace' ), __( 'All applications', 'lnkup-marketplace' ), lnkup_organizer_view_url( 'applications' ), 'lnkup-home-apps-title' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php
+			echo LNKup_OS_UI::data_table( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				array(
+					'vendor' => array( 'label' => __( 'Vendor', 'lnkup-marketplace' ), 'lead' => true ),
+					'event'  => array( 'label' => __( 'Event', 'lnkup-marketplace' ) ),
+					'status' => array( 'label' => __( 'Status', 'lnkup-marketplace' ) ),
+					'when'   => array( 'label' => __( 'Applied', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+				),
+				$rows,
+				array( 'caption' => __( 'Recent applications', 'lnkup-marketplace' ) )
+			);
+			?>
+		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Financial snapshot: the same figures and labels as Money.
+	 *
+	 * @param array $money LNKup_Organizer_Presentation::financial_summary().
+	 */
+	private static function render_home_money( array $money ): string {
+		ob_start();
+		?>
+		<section class="vos-card" data-testid="lnkup-home-money" aria-labelledby="lnkup-home-money-title">
+			<?php echo LNKup_OS_UI::section_head( __( 'Money', 'lnkup-marketplace' ), __( 'Open Money', 'lnkup-marketplace' ), lnkup_organizer_view_url( 'financial' ), 'lnkup-home-money-title' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<dl class="vos-kv">
+				<dt><?php esc_html_e( 'Collected', 'lnkup-marketplace' ); ?></dt>
+				<dd data-money="collected"><?php echo esc_html( LNKup_OS_UI::money( (float) $money['collected'] ) ); ?></dd>
+				<dt><?php esc_html_e( 'Refunds', 'lnkup-marketplace' ); ?></dt>
+				<dd><?php echo esc_html( LNKup_OS_UI::money( (float) $money['refunds'] ) ); ?></dd>
+				<dt><?php esc_html_e( 'Available to cash out', 'lnkup-marketplace' ); ?></dt>
+				<dd><?php echo null === $money['available'] ? esc_html__( 'Not synced yet', 'lnkup-marketplace' ) : esc_html( LNKup_OS_UI::money( (float) $money['available'] ) ); ?></dd>
+				<dt><?php esc_html_e( 'Pending', 'lnkup-marketplace' ); ?></dt>
+				<dd><?php echo null === $money['pending'] ? esc_html__( 'Not synced yet', 'lnkup-marketplace' ) : esc_html( LNKup_OS_UI::money( (float) $money['pending'] ) ); ?></dd>
+			</dl>
+			<p class="vos-footnote"><?php echo esc_html( $money['label'] . '. ' . __( 'Same figures as Money → Overview.', 'lnkup-marketplace' ) ); ?></p>
+		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Open spaces per category for the spotlight event, each linking to Find Vendors.
+	 *
+	 * @param int $event_id Event ID.
+	 */
+	private static function render_home_recruitment( int $event_id ): string {
+		if ( ! class_exists( 'LNKup_Event_Fulfillment' ) ) {
+			return '';
+		}
+		$fill = LNKup_Event_Fulfillment::for_event( $event_id );
+		if ( is_wp_error( $fill ) || ! is_array( $fill ) ) {
+			return '';
+		}
+		$cats = array_values(
+			array_filter(
+				(array) ( $fill['categories'] ?? array() ),
+				static function ( $cat ) {
+					return ! empty( $cat['open'] ) && ( (int) $cat['remaining'] > 0 || ! empty( $cat['unlimited'] ) );
+				}
+			)
+		);
+		if ( ! $cats ) {
+			return '';
+		}
+		ob_start();
+		?>
+		<section class="vos-card" data-testid="lnkup-home-recruit" aria-labelledby="lnkup-home-recruit-title">
+			<?php echo LNKup_OS_UI::section_head( __( 'Spaces to fill', 'lnkup-marketplace' ), __( 'Find vendors', 'lnkup-marketplace' ), lnkup_organizer_view_url( 'vendors', array( 'recruit' => $event_id ) ), 'lnkup-home-recruit-title' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<p class="lnkup-muted"><?php echo esc_html( LNKup_Organizer_Presentation::title( $event_id ) ); ?></p>
+			<ul class="oos-recruit">
+				<?php foreach ( array_slice( $cats, 0, 6 ) as $cat ) : ?>
+					<li>
+						<span><?php echo esc_html( wp_specialchars_decode( (string) $cat['label'], ENT_QUOTES ) ); ?></span>
+						<span class="oos-recruit__open"><?php echo esc_html( ! empty( $cat['unlimited'] ) ? __( 'Open', 'lnkup-marketplace' ) : sprintf( /* translators: %d: open spaces */ _n( '%d open', '%d open', (int) $cat['remaining'], 'lnkup-marketplace' ), (int) $cat['remaining'] ) ); ?></span>
+						<a class="vos-link" href="<?php echo esc_url( lnkup_organizer_view_url( 'vendors', array( 'recruit' => $event_id, 'category' => wp_specialchars_decode( (string) $cat['label'], ENT_QUOTES ) ) ) ); ?>" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: category */ __( 'Find %s vendors', 'lnkup-marketplace' ), wp_specialchars_decode( (string) $cat['label'], ENT_QUOTES ) ) ); ?>"><?php esc_html_e( 'Find', 'lnkup-marketplace' ); ?></a>
+					</li>
+				<?php endforeach; ?>
+			</ul>
+		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Activity timeline with relative times and the exact time in a title attribute.
+	 *
+	 * @param int $user_id Organizer.
+	 */
+	private static function render_home_activity( int $user_id ): string {
+		$items = self::recent_activity_items( $user_id, 6 );
+		if ( ! $items ) {
+			return '';
+		}
+		ob_start();
+		?>
+		<section class="vos-card" data-testid="lnkup-organizer-recent-activity" aria-labelledby="lnkup-home-activity-title">
+			<?php echo LNKup_OS_UI::section_head( __( 'Recent activity', 'lnkup-marketplace' ), '', '', 'lnkup-home-activity-title' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<ol class="vos-timeline">
+				<?php foreach ( $items as $item ) : ?>
+					<li>
+						<?php if ( $item['href'] ) : ?>
+							<a href="<?php echo esc_url( $item['href'] ); ?>"><?php echo esc_html( $item['title'] ); ?></a>
+						<?php else : ?>
+							<span><?php echo esc_html( $item['title'] ); ?></span>
+						<?php endif; ?>
+						<?php echo LNKup_OS_UI::relative_time( (int) $item['ts'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php if ( $item['meta'] ) : ?>
+							<span class="vos-timeline__meta"><?php echo esc_html( $item['meta'] ); ?></span>
+						<?php endif; ?>
+					</li>
+				<?php endforeach; ?>
+			</ol>
+		</section>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Shortcuts for common jobs.
+	 *
+	 * @param array|null $next Next event summary.
+	 */
+	private static function render_home_quick_actions( ?array $next ): string {
+		$dash  = lnkup_page_url_helper( 'organizer-dashboard' );
+		$quick = array(
+			array( 'label' => __( 'Review applications', 'lnkup-marketplace' ), 'url' => lnkup_organizer_view_url( 'applications', array( 'filter' => 'pending', 'group' => 'pending' ) ) ),
+			array( 'label' => __( 'Invite vendors', 'lnkup-marketplace' ), 'url' => lnkup_organizer_view_url( 'invites' ) ),
+		);
+		if ( $next ) {
+			$quick[] = array( 'label' => __( 'Open operations', 'lnkup-marketplace' ), 'url' => add_query_arg( array( 'event' => (int) $next['id'], 'ops' => 1 ), $dash ) );
+			$quick[] = array( 'label' => __( 'Export contacts', 'lnkup-marketplace' ), 'url' => LNKup_Shortcodes::organizer_vendor_export_url( (int) $next['id'] ) );
+		}
+		ob_start();
+		?>
+		<nav class="vos-card" aria-label="<?php esc_attr_e( 'Quick actions', 'lnkup-marketplace' ); ?>" data-testid="lnkup-organizer-quick-actions">
+			<?php echo LNKup_OS_UI::section_head( __( 'Shortcuts', 'lnkup-marketplace' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<div class="vos-chips">
+				<?php foreach ( $quick as $action ) : ?>
+					<a class="vos-chip" href="<?php echo esc_url( $action['url'] ); ?>"><?php echo esc_html( $action['label'] ); ?></a>
+				<?php endforeach; ?>
+			</div>
+		</nav>
 		<?php
 		return (string) ob_get_clean();
 	}
@@ -1094,6 +1683,9 @@ class LNKup_Organizer_Dashboard_Views {
 	 * @return string
 	 */
 	private static function render_events() {
+		if ( class_exists( 'LNKup_Organizer_Presentation' ) && class_exists( 'LNKup_OS_UI' ) ) {
+			return self::render_events_os();
+		}
 		$actions  = '<a class="lnkup-btn lnkup-btn--outline" href="' . esc_url( lnkup_organizer_view_url( 'profile' ) ) . '">' . esc_html__( 'Edit profile', 'lnkup-marketplace' ) . '</a>';
 		$actions .= self::launch_event_button();
 		ob_start();
@@ -1103,6 +1695,290 @@ class LNKup_Organizer_Dashboard_Views {
 		echo LNKup_Shortcodes::organizer_section_card_close(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		echo self::render_tours(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Events portfolio: filters, table (default above 6 events) or image grid, New menu.
+	 * Rows come from LNKup_Organizer_Presentation::portfolio_rows().
+	 */
+	private static function render_events_os(): string {
+		$user_id = get_current_user_id();
+		$get     = static function ( string $key ): string {
+			return isset( $_GET[ $key ] ) ? sanitize_text_field( wp_unslash( (string) $_GET[ $key ] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		};
+		$filters = array(
+			'publication'  => in_array( $get( 'publication' ), array( 'live', 'draft' ), true ) ? $get( 'publication' ) : '',
+			'chronology'   => in_array( $get( 'chronology' ), array( 'active', 'upcoming', 'in_progress', 'completed' ), true ) ? $get( 'chronology' ) : '',
+			'applications' => in_array( $get( 'applications' ), array( 'open', 'closed' ), true ) ? $get( 'applications' ) : '',
+			'tour'         => (string) absint( $get( 'tour' ) ),
+			'market'       => $get( 'market' ),
+			'from'         => preg_match( '/^\d{4}-\d{2}-\d{2}$/', $get( 'from' ) ) ? $get( 'from' ) : '',
+			'to'           => preg_match( '/^\d{4}-\d{2}-\d{2}$/', $get( 'to' ) ) ? $get( 'to' ) : '',
+			'q'            => $get( 'q' ),
+		);
+		$filters['tour'] = '0' === $filters['tour'] ? '' : $filters['tour'];
+		$all             = LNKup_Organizer_Presentation::portfolio_rows( $user_id );
+		$args            = $filters;
+		if ( 'active' === $args['chronology'] ) {
+			$args['chronology'] = '';
+		}
+		$rows = LNKup_Organizer_Presentation::portfolio_rows( $user_id, $args );
+		if ( 'active' === $filters['chronology'] ) {
+			$rows = array_values(
+				array_filter(
+					$rows,
+					static function ( $row ) {
+						return 'completed' !== $row['chronology'];
+					}
+				)
+			);
+		}
+		$tours  = array();
+		$places = array();
+		foreach ( $all as $row ) {
+			if ( $row['tour_id'] ) {
+				$tours[ (int) $row['tour_id'] ] = $row['tour_title'];
+			}
+			if ( '' !== $row['place'] ) {
+				$places[ $row['place'] ] = $row['place'];
+			}
+		}
+		ksort( $places );
+		$layout_default = count( $all ) > 6 ? 'table' : 'grid';
+		$base           = lnkup_organizer_view_url( 'events' );
+		$active_filters = array_filter( $filters );
+		$actions        = LNKup_OS_UI::menu( __( 'New', 'lnkup-marketplace' ), self::new_menu_items(), array( 'class' => 'lnkup-btn lnkup-btn--outline', 'testid' => 'lnkup-events-new-menu' ) );
+		$actions       .= '<a class="lnkup-btn lnkup-btn--primary" href="' . esc_url( lnkup_organizer_view_url( 'create' ) ) . '">' . esc_html__( 'Create event', 'lnkup-marketplace' ) . '</a>';
+		$chron_tabs     = array(
+			''            => __( 'All', 'lnkup-marketplace' ),
+			'active'      => __( 'Upcoming & live', 'lnkup-marketplace' ),
+			'in_progress' => __( 'Today', 'lnkup-marketplace' ),
+			'completed'   => __( 'Completed', 'lnkup-marketplace' ),
+		);
+		$chron_counts   = array(
+			''            => count( $all ),
+			'active'      => 0,
+			'in_progress' => 0,
+			'completed'   => 0,
+		);
+		foreach ( $all as $row ) {
+			if ( 'completed' === $row['chronology'] ) {
+				$chron_counts['completed']++;
+			} else {
+				$chron_counts['active']++;
+			}
+			if ( 'today' === $row['chronology'] ) {
+				$chron_counts['in_progress']++;
+			}
+		}
+		ob_start();
+		echo LNKup_OS_UI::page_header( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			array(
+				'title'    => __( 'Events', 'lnkup-marketplace' ),
+				'subtitle' => __( 'Every event you run, with applications, confirmed vendors, open spaces and fees in one place.', 'lnkup-marketplace' ),
+				'actions'  => $actions,
+				'testid'   => 'lnkup-events-header',
+			)
+		);
+		if ( ! $all ) {
+			echo LNKup_OS_UI::empty_state( __( 'Create your first event', 'lnkup-marketplace' ), __( 'Add the event and its booth types, then share the application link with vendors.', 'lnkup-marketplace' ), __( 'Create event', 'lnkup-marketplace' ), lnkup_organizer_view_url( 'create' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			echo self::render_tours(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			return (string) ob_get_clean();
+		}
+		?>
+		<section class="oos-filters" data-testid="lnkup-events-filters" aria-label="<?php esc_attr_e( 'Filter events', 'lnkup-marketplace' ); ?>">
+			<nav class="vos-chips" aria-label="<?php esc_attr_e( 'When', 'lnkup-marketplace' ); ?>">
+				<?php foreach ( $chron_tabs as $key => $label ) : ?>
+					<?php $href = add_query_arg( array_filter( array_merge( $filters, array( 'chronology' => $key ) ) ), $base ); ?>
+					<a class="vos-chip" href="<?php echo esc_url( $href ); ?>"<?php echo $filters['chronology'] === $key ? ' aria-current="true"' : ''; ?>><?php echo esc_html( $label ); ?> <span class="vos-chip__count"><?php echo esc_html( (string) $chron_counts[ $key ] ); ?></span></a>
+				<?php endforeach; ?>
+			</nav>
+			<form class="vos-toolbar" method="get" action="<?php echo esc_url( lnkup_page_url_helper( 'organizer-dashboard' ) ); ?>" data-testid="lnkup-events-filter-form">
+				<input type="hidden" name="view" value="events" />
+				<?php if ( $filters['chronology'] ) : ?>
+					<input type="hidden" name="chronology" value="<?php echo esc_attr( $filters['chronology'] ); ?>" />
+				<?php endif; ?>
+				<label class="vos-sr" for="lnkup-events-q"><?php esc_html_e( 'Search events', 'lnkup-marketplace' ); ?></label>
+				<input type="search" id="lnkup-events-q" name="q" value="<?php echo esc_attr( $filters['q'] ); ?>" placeholder="<?php esc_attr_e( 'Search name, city or venue', 'lnkup-marketplace' ); ?>" />
+				<label class="vos-sr" for="lnkup-events-publication"><?php esc_html_e( 'Publication', 'lnkup-marketplace' ); ?></label>
+				<select id="lnkup-events-publication" name="publication">
+					<option value=""><?php esc_html_e( 'Published and drafts', 'lnkup-marketplace' ); ?></option>
+					<option value="live"<?php selected( $filters['publication'], 'live' ); ?>><?php esc_html_e( 'Published', 'lnkup-marketplace' ); ?></option>
+					<option value="draft"<?php selected( $filters['publication'], 'draft' ); ?>><?php esc_html_e( 'Drafts', 'lnkup-marketplace' ); ?></option>
+				</select>
+				<label class="vos-sr" for="lnkup-events-applications"><?php esc_html_e( 'Applications', 'lnkup-marketplace' ); ?></label>
+				<select id="lnkup-events-applications" name="applications">
+					<option value=""><?php esc_html_e( 'Applications open or closed', 'lnkup-marketplace' ); ?></option>
+					<option value="open"<?php selected( $filters['applications'], 'open' ); ?>><?php esc_html_e( 'Accepting applications', 'lnkup-marketplace' ); ?></option>
+					<option value="closed"<?php selected( $filters['applications'], 'closed' ); ?>><?php esc_html_e( 'Not accepting applications', 'lnkup-marketplace' ); ?></option>
+				</select>
+				<?php if ( $tours ) : ?>
+					<label class="vos-sr" for="lnkup-events-tour"><?php esc_html_e( 'Tour or series', 'lnkup-marketplace' ); ?></label>
+					<select id="lnkup-events-tour" name="tour">
+						<option value=""><?php esc_html_e( 'Any tour or series', 'lnkup-marketplace' ); ?></option>
+						<?php foreach ( $tours as $tour_id => $tour_title ) : ?>
+							<option value="<?php echo esc_attr( (string) $tour_id ); ?>"<?php selected( $filters['tour'], (string) $tour_id ); ?>><?php echo esc_html( $tour_title ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				<?php endif; ?>
+				<label class="vos-sr" for="lnkup-events-market"><?php esc_html_e( 'City', 'lnkup-marketplace' ); ?></label>
+				<select id="lnkup-events-market" name="market">
+					<option value=""><?php esc_html_e( 'Any city', 'lnkup-marketplace' ); ?></option>
+					<?php foreach ( $places as $place ) : ?>
+						<option value="<?php echo esc_attr( $place ); ?>"<?php selected( $filters['market'], $place ); ?>><?php echo esc_html( $place ); ?></option>
+					<?php endforeach; ?>
+				</select>
+				<label class="vos-sr" for="lnkup-events-from"><?php esc_html_e( 'From date', 'lnkup-marketplace' ); ?></label>
+				<input type="date" id="lnkup-events-from" name="from" value="<?php echo esc_attr( $filters['from'] ); ?>" aria-label="<?php esc_attr_e( 'From date', 'lnkup-marketplace' ); ?>" />
+				<label class="vos-sr" for="lnkup-events-to"><?php esc_html_e( 'To date', 'lnkup-marketplace' ); ?></label>
+				<input type="date" id="lnkup-events-to" name="to" value="<?php echo esc_attr( $filters['to'] ); ?>" aria-label="<?php esc_attr_e( 'To date', 'lnkup-marketplace' ); ?>" />
+				<button type="submit" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm"><?php esc_html_e( 'Apply', 'lnkup-marketplace' ); ?></button>
+				<?php if ( $active_filters ) : ?>
+					<a class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" href="<?php echo esc_url( $base ); ?>"><?php esc_html_e( 'Clear', 'lnkup-marketplace' ); ?></a>
+				<?php endif; ?>
+				<span class="vos-toolbar__spacer"></span>
+				<span class="vos-segmented" role="group" aria-label="<?php esc_attr_e( 'Layout', 'lnkup-marketplace' ); ?>" data-oos-layout-toggle data-default="<?php echo esc_attr( $layout_default ); ?>">
+					<button type="button" data-layout="table" aria-pressed="<?php echo 'table' === $layout_default ? 'true' : 'false'; ?>"><?php esc_html_e( 'Table', 'lnkup-marketplace' ); ?></button>
+					<button type="button" data-layout="grid" aria-pressed="<?php echo 'grid' === $layout_default ? 'true' : 'false'; ?>"><?php esc_html_e( 'Grid', 'lnkup-marketplace' ); ?></button>
+				</span>
+			</form>
+			<p class="lnkup-muted" role="status" data-testid="lnkup-events-count"><?php echo esc_html( sprintf( /* translators: 1: shown, 2: total */ __( 'Showing %1$d of %2$d events', 'lnkup-marketplace' ), count( $rows ), count( $all ) ) ); ?></p>
+		</section>
+		<?php
+		if ( ! $rows ) {
+			echo LNKup_OS_UI::empty_state( __( 'No events match these filters', 'lnkup-marketplace' ), __( 'Change a filter or clear them to see every event.', 'lnkup-marketplace' ), __( 'Clear filters', 'lnkup-marketplace' ), $base ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		} else {
+			echo '<div data-oos-layout="table"' . ( 'table' === $layout_default ? '' : ' hidden' ) . '>' . self::render_events_table( $rows ) . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			echo '<div data-oos-layout="grid"' . ( 'grid' === $layout_default ? '' : ' hidden' ) . '>' . self::render_events_grid( $rows ) . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		}
+		echo self::render_duplicate_picker( $all ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		echo LNKup_Shortcodes::render_duplicate_event_dialog(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		if ( ! LNKup_Feature_Flags::portfolio() ) {
+			echo self::render_tours(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		}
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Attributes the existing duplicate dialog reads (marketplace.js).
+	 *
+	 * @param array $row Event summary.
+	 */
+	private static function duplicate_attrs( array $row ): string {
+		$id = (int) $row['id'];
+		return 'data-duplicate-event="' . esc_attr( (string) $id ) . '" data-event-name="' . esc_attr( $row['title'] ) . '" data-city="' . esc_attr( (string) get_post_meta( $id, '_lnkup_city', true ) ) . '" data-state="' . esc_attr( (string) get_post_meta( $id, '_lnkup_state', true ) ) . '" data-venue="' . esc_attr( (string) $row['venue'] ) . '"';
+	}
+
+	/**
+	 * Row overflow menu for one event.
+	 *
+	 * @param array $row Event summary.
+	 */
+	private static function event_row_menu( array $row ): string {
+		$dash = lnkup_page_url_helper( 'organizer-dashboard' );
+		$id   = (int) $row['id'];
+		return LNKup_OS_UI::menu(
+			__( 'More', 'lnkup-marketplace' ),
+			array(
+				array( 'label' => __( 'Edit event', 'lnkup-marketplace' ), 'href' => add_query_arg( array( 'event' => $id, 'edit' => 1 ), $dash ) ),
+				array( 'label' => __( 'Duplicate', 'lnkup-marketplace' ), 'attrs' => self::duplicate_attrs( $row ) ),
+				array( 'label' => __( 'Roster', 'lnkup-marketplace' ), 'href' => add_query_arg( array( 'event' => $id, 'roster' => 1 ), $dash ) ),
+				array( 'label' => __( 'Operations', 'lnkup-marketplace' ), 'href' => add_query_arg( array( 'event' => $id, 'ops' => 1 ), $dash ) ),
+				array( 'label' => __( 'Export contacts', 'lnkup-marketplace' ), 'href' => LNKup_Shortcodes::organizer_vendor_export_url( $id ) ),
+			),
+			array( 'class' => 'lnkup-btn lnkup-btn--ghost lnkup-btn--sm', 'aria_label' => sprintf( /* translators: %s: event */ __( 'More actions for %s', 'lnkup-marketplace' ), $row['title'] ) )
+		);
+	}
+
+	/**
+	 * Portfolio table.
+	 *
+	 * @param array<int,array> $rows Event summaries.
+	 */
+	private static function render_events_table( array $rows ): string {
+		$columns = array(
+			'event'     => array( 'label' => __( 'Event', 'lnkup-marketplace' ), 'lead' => true ),
+			'date'      => array( 'label' => __( 'Date', 'lnkup-marketplace' ), 'class' => 'vos-nowrap' ),
+			'place'     => array( 'label' => __( 'Place', 'lnkup-marketplace' ), 'class' => 'vos-nowrap' ),
+			'tour'      => array( 'label' => __( 'Tour', 'lnkup-marketplace' ) ),
+			'status'    => array( 'label' => __( 'Status', 'lnkup-marketplace' ) ),
+			'apps'      => array( 'label' => __( 'Applications', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+			'confirmed' => array( 'label' => __( 'Confirmed', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+			'open'      => array( 'label' => __( 'Open spaces', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+			'collected' => array( 'label' => __( 'Gross booth fees', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+			'actions'   => array( 'label' => __( 'Actions', 'lnkup-marketplace' ), 'class' => 'vos-actions' ),
+		);
+		$out     = array();
+		foreach ( $rows as $row ) {
+			$pending = (int) $row['applications']['pending'];
+			$apps    = esc_html( (string) $row['applications']['total'] );
+			if ( $pending ) {
+				$apps .= ' · <a class="vos-link" href="' . esc_url( add_query_arg( 'tab', 'applications', $row['url'] ) ) . '">' . esc_html( sprintf( /* translators: %d: to review */ __( '%d to review', 'lnkup-marketplace' ), $pending ) ) . '</a>';
+			}
+			$out[] = array(
+				'id'    => $row['id'],
+				'attrs' => 'data-chronology="' . esc_attr( $row['chronology'] ) . '" data-publication="' . esc_attr( $row['publication'] ) . '"',
+				'cells' => array(
+					'event'     => '<a class="vos-table__primary" href="' . esc_url( $row['url'] ) . '">' . esc_html( $row['title'] ) . '</a>' . ( $row['venue'] ? '<span class="vos-table__sub">' . esc_html( $row['venue'] ) . '</span>' : '' ),
+					'date'      => esc_html( '' !== $row['date'] ? (string) date_i18n( 'M j, Y', (int) strtotime( $row['date'] ) ) : __( 'No date', 'lnkup-marketplace' ) ),
+					'place'     => esc_html( '' !== $row['place'] ? $row['place'] : '—' ),
+					'tour'      => esc_html( '' !== $row['tour_title'] ? $row['tour_title'] : '—' ),
+					'status'    => LNKup_OS_UI::status( $row['publication_label'], $row['publication_tone'] ) . ' ' . LNKup_OS_UI::status( $row['chronology_label'], $row['chronology_tone'] ),
+					'apps'      => $apps,
+					'confirmed' => esc_html( (string) $row['capacity']['confirmed'] ),
+					'open'      => esc_html( (string) $row['capacity']['open'] ),
+					'collected' => esc_html( LNKup_OS_UI::money( (float) ( $row['money']['collected_gross'] ?? 0 ) ) ),
+					'actions'   => '<a class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" href="' . esc_url( $row['url'] ) . '">' . esc_html__( 'Open', 'lnkup-marketplace' ) . '</a> ' . self::event_row_menu( $row ),
+				),
+			);
+		}
+		return LNKup_OS_UI::data_table(
+			$columns,
+			$out,
+			array(
+				'caption' => __( 'Your events', 'lnkup-marketplace' ),
+				'testid'  => 'lnkup-events-table',
+			)
+		);
+	}
+
+	/**
+	 * Portfolio image grid.
+	 *
+	 * @param array<int,array> $rows Event summaries.
+	 */
+	private static function render_events_grid( array $rows ): string {
+		$html = '<div class="oos-portfolio-grid" data-testid="lnkup-events-grid">';
+		foreach ( $rows as $row ) {
+			$html .= '<article class="oos-event-card" data-chronology="' . esc_attr( $row['chronology'] ) . '">';
+			$html .= '<div class="oos-event-card__media">' . LNKup_OS_UI::event_image( (int) $row['id'], $row['title'] ) . LNKup_OS_UI::status( $row['publication_label'], $row['publication_tone'] ) . '</div>';
+			$html .= '<div class="oos-event-card__body">';
+			$html .= '<h3 class="oos-event-card__title"><a href="' . esc_url( $row['url'] ) . '">' . esc_html( $row['title'] ) . '</a></h3>';
+			$html .= '<p class="oos-event-card__meta">' . esc_html( implode( ' · ', array_filter( array( $row['date_label'], $row['place'] ) ) ) ) . '</p>';
+			$html .= LNKup_OS_UI::capacity_bar( $row['capacity'] );
+			$html .= '<dl class="oos-event-card__stats"><div><dt>' . esc_html__( 'To review', 'lnkup-marketplace' ) . '</dt><dd>' . esc_html( (string) $row['applications']['pending'] ) . '</dd></div>';
+			$html .= '<div><dt>' . esc_html__( 'Confirmed', 'lnkup-marketplace' ) . '</dt><dd>' . esc_html( (string) $row['capacity']['confirmed'] ) . '</dd></div>';
+			$html .= '<div><dt>' . esc_html__( 'Gross fees', 'lnkup-marketplace' ) . '</dt><dd>' . esc_html( LNKup_OS_UI::money( (float) ( $row['money']['collected_gross'] ?? 0 ) ) ) . '</dd></div></dl>';
+			$action = self::event_primary_action( $row );
+			$html  .= '<div class="oos-event-card__actions"><a class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" href="' . esc_url( $action['href'] ) . '">' . esc_html( $action['label'] ) . '</a>' . self::event_row_menu( $row ) . '</div>';
+			$html  .= '</div></article>';
+		}
+		return $html . '</div>';
+	}
+
+	/**
+	 * "Duplicate an event" picker opened from the New menu. Picking an event opens the
+	 * existing duplicate dialog, which requires a date and a location.
+	 *
+	 * @param array<int,array> $rows All event summaries.
+	 */
+	private static function render_duplicate_picker( array $rows ): string {
+		$items = '';
+		foreach ( array_slice( $rows, 0, 60 ) as $row ) {
+			$items .= '<li><button type="button" class="vos-menu__item" data-vos-close ' . self::duplicate_attrs( $row ) . '>' . esc_html( $row['title'] ) . '<span class="vos-menu__hint">' . esc_html( implode( ' · ', array_filter( array( $row['date_label'], $row['place'] ) ) ) ) . '</span></button></li>';
+		}
+		$body = '<p class="lnkup-muted">' . esc_html__( 'Choose the event to copy. Booth types, fees, documents and questions are copied. Vendors, applications and payments are not.', 'lnkup-marketplace' ) . '</p><ul class="oos-picker" style="list-style:none;margin:0;padding:0;display:grid;gap:4px">' . $items . '</ul>';
+		return LNKup_OS_UI::dialog_shell( 'lnkup-duplicate-picker', __( 'Duplicate an event', 'lnkup-marketplace' ), $body, '', array( 'testid' => 'lnkup-duplicate-picker' ) );
 	}
 
 	/**
@@ -1300,11 +2176,11 @@ class LNKup_Organizer_Dashboard_Views {
 			<div class="lnkup-grid lnkup-grid--2">
 				<div class="lnkup-form-row">
 					<label for="lnkup-organizer-city"><?php esc_html_e( 'Base city', 'lnkup-marketplace' ); ?></label>
-					<input type="text" id="lnkup-organizer-city" name="city" value="<?php echo esc_attr( $public_city ); ?>" />
+					<input type="text" id="lnkup-organizer-city" name="city" data-lnkup-location-city value="<?php echo esc_attr( $public_city ); ?>" />
 				</div>
 				<div class="lnkup-form-row">
 					<label for="lnkup-organizer-state"><?php esc_html_e( 'State', 'lnkup-marketplace' ); ?></label>
-					<input type="text" id="lnkup-organizer-state" name="state" value="<?php echo esc_attr( $public_state ); ?>" />
+					<input type="text" id="lnkup-organizer-state" name="state" data-lnkup-location-state value="<?php echo esc_attr( $public_state ); ?>" />
 				</div>
 			</div>
 			<div class="lnkup-form-row">
@@ -1491,6 +2367,8 @@ class LNKup_Organizer_Dashboard_Views {
 						'compact'   => true,
 					)
 				);
+			} elseif ( class_exists( 'LNKup_OS_UI' ) ) {
+				echo self::render_application_table( $result['posts'], (bool) $event_filter ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			} else {
 				echo LNKup_Shortcodes::render_applications_manager( $result['posts'], array( 'selectable' => true ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			}
@@ -1500,6 +2378,113 @@ class LNKup_Organizer_Dashboard_Views {
 		echo lnkup_organizer_pagination_nav( (int) $result['total'], self::PER_PAGE, 'applications', $args ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		echo LNKup_Shortcodes::organizer_section_card_close(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Shared application table (Organizations-wide Applications and the event Applications tab).
+	 *
+	 * Row checkboxes use the existing bulk flow (organizer-requests.js → CRM roster bulk). Each row
+	 * opens one review drawer that shows the existing application card, so decisions keep their
+	 * server-validated handlers; Previous/Next walk the rows on screen.
+	 *
+	 * @param WP_Post[] $apps        Applications on this page.
+	 * @param bool      $event_scope Hide the Event column.
+	 */
+	public static function render_application_table( array $apps, bool $event_scope = false ): string {
+		if ( ! $apps ) {
+			return LNKup_OS_UI::empty_state( __( 'No applications here', 'lnkup-marketplace' ), __( 'Try another view or clear your search.', 'lnkup-marketplace' ) );
+		}
+		$status_tone = array(
+			'submitted'        => array( __( 'New', 'lnkup-marketplace' ), 'info' ),
+			'under_review'     => array( __( 'In review', 'lnkup-marketplace' ), 'info' ),
+			'info_requested'   => array( __( 'Info requested', 'lnkup-marketplace' ), 'warning' ),
+			'approved'         => array( __( 'Approved', 'lnkup-marketplace' ), 'warning' ),
+			'payment_required' => array( __( 'Approved', 'lnkup-marketplace' ), 'warning' ),
+			'paid'             => array( __( 'Confirmed', 'lnkup-marketplace' ), 'success' ),
+			'completed'        => array( __( 'Completed', 'lnkup-marketplace' ), 'success' ),
+			'waitlisted'       => array( __( 'Waitlisted', 'lnkup-marketplace' ), 'neutral' ),
+			'rejected'         => array( __( 'Declined', 'lnkup-marketplace' ), 'danger' ),
+			'cancelled'        => array( __( 'Cancelled', 'lnkup-marketplace' ), 'danger' ),
+		);
+		$doc_labels  = array(
+			'none_required' => array( __( 'Not required', 'lnkup-marketplace' ), 'neutral' ),
+			'ready'         => array( __( 'Approved', 'lnkup-marketplace' ), 'success' ),
+			'pending'       => array( __( 'To review', 'lnkup-marketplace' ), 'warning' ),
+			'missing'       => array( __( 'Missing', 'lnkup-marketplace' ), 'danger' ),
+		);
+		$columns     = array(
+			'select' => array( 'label' => __( 'Select', 'lnkup-marketplace' ), 'class' => 'vos-check' ),
+			'vendor' => array( 'label' => __( 'Vendor', 'lnkup-marketplace' ), 'lead' => true ),
+		);
+		if ( ! $event_scope ) {
+			$columns['event'] = array( 'label' => __( 'Event', 'lnkup-marketplace' ) );
+		}
+		$columns += array(
+			'booth'   => array( 'label' => __( 'Booth type', 'lnkup-marketplace' ) ),
+			'fee'     => array( 'label' => __( 'Fee', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+			'status'  => array( 'label' => __( 'Application', 'lnkup-marketplace' ) ),
+			'payment' => array( 'label' => __( 'Payment', 'lnkup-marketplace' ) ),
+			'docs'    => array( 'label' => __( 'Documents', 'lnkup-marketplace' ) ),
+			'applied' => array( 'label' => __( 'Applied', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+		);
+		$open_cache = array();
+		$rows       = array();
+		foreach ( $apps as $app ) {
+			$app_id   = (int) $app->ID;
+			$event_id = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
+			$opp_id   = (int) get_post_meta( $app_id, '_lnkup_opportunity_id', true );
+			$status   = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+			$label    = $status_tone[ $status ] ?? array( ucwords( str_replace( '_', ' ', $status ) ), 'neutral' );
+			$paid     = class_exists( 'LNKup_Vendor_Readiness' ) ? LNKup_Vendor_Readiness::application_payment_satisfied( $app_id, $status ) : in_array( $status, array( 'paid', 'completed' ), true );
+			$doc_ctx  = class_exists( 'LNKup_Verification' ) ? LNKup_Verification::get_application_document_context( $app_id ) : array();
+			$doc      = $doc_labels[ (string) ( $doc_ctx['code'] ?? 'none_required' ) ] ?? $doc_labels['none_required'];
+			$name     = LNKup_Organizer_Presentation::vendor_name( $app_id );
+			$is_open  = in_array( $status, array( 'submitted', 'under_review', 'info_requested' ), true );
+			if ( $event_id && ! isset( $open_cache[ $event_id ] ) ) {
+				$open_cache[ $event_id ] = LNKup_Organizer_Presentation::capacity( $event_id )['open'];
+			}
+			if ( in_array( $status, array( 'approved', 'payment_required' ), true ) ) {
+				$payment = $paid ? LNKup_OS_UI::status( __( 'Paid', 'lnkup-marketplace' ), 'success' ) : LNKup_OS_UI::status( __( 'Awaiting payment', 'lnkup-marketplace' ), 'warning' );
+			} elseif ( in_array( $status, array( 'paid', 'completed' ), true ) ) {
+				$payment = LNKup_OS_UI::status( __( 'Paid', 'lnkup-marketplace' ), 'success' );
+			} else {
+				$payment = '<span class="lnkup-muted">' . esc_html__( 'Not due yet', 'lnkup-marketplace' ) . '</span>';
+			}
+			$cells = array(
+				'select'  => $is_open && $event_id ? '<input type="checkbox" data-request-select value="' . esc_attr( (string) $app_id ) . '" data-event-id="' . esc_attr( (string) $event_id ) . '" data-event-title="' . esc_attr( LNKup_Organizer_Presentation::title( $event_id ) ) . '" data-open-spaces="' . esc_attr( (string) (int) $open_cache[ $event_id ] ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: vendor */ __( 'Select %s', 'lnkup-marketplace' ), $name ) ) . '" />' : '',
+				'vendor'  => '<button type="button" class="vos-table__primary oos-linkbtn" data-oos-app-open="' . esc_attr( (string) $app_id ) . '" aria-label="' . esc_attr( sprintf( /* translators: %s: vendor */ __( 'Review %s', 'lnkup-marketplace' ), $name ) ) . '">' . esc_html( $name ) . '</button>',
+				'booth'   => esc_html( $opp_id ? lnkup_plain_title( $opp_id ) : '—' ),
+				'fee'     => esc_html( LNKup_OS_UI::money( $opp_id ? (float) get_post_meta( $opp_id, '_lnkup_vendor_fee', true ) : 0.0 ) ),
+				'status'  => LNKup_OS_UI::status( $label[0], $label[1] ),
+				'payment' => $payment,
+				'docs'    => LNKup_OS_UI::status( $doc[0], $doc[1] ),
+				'applied' => LNKup_OS_UI::relative_time( (int) get_post_time( 'U', false, $app ) ),
+			);
+			if ( ! $event_scope ) {
+				$cells['event'] = esc_html( $event_id ? LNKup_Organizer_Presentation::title( $event_id ) : '' );
+			}
+			$rows[] = array(
+				'id'    => $app_id,
+				'attrs' => 'data-app-row="' . esc_attr( (string) $app_id ) . '"',
+				'cells' => $cells,
+			);
+		}
+		$bulk  = '<div class="vos-bulk-bar" data-request-bulk hidden role="region" aria-label="' . esc_attr__( 'Bulk actions', 'lnkup-marketplace' ) . '">';
+		$bulk .= '<span class="vos-bulk-bar__count" data-request-bulk-count aria-live="polite"></span>';
+		$bulk .= '<span class="oos-bulk-check" data-oos-bulk-check aria-live="polite"></span>';
+		$bulk .= '<button type="button" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" data-request-bulk-action="approve" disabled>' . esc_html__( 'Approve', 'lnkup-marketplace' ) . '</button>';
+		$bulk .= '<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" data-request-bulk-action="waitlist" disabled>' . esc_html__( 'Waitlist', 'lnkup-marketplace' ) . '</button>';
+		$bulk .= '<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" data-request-bulk-action="reject" disabled>' . esc_html__( 'Decline', 'lnkup-marketplace' ) . '</button>';
+		$bulk .= '<button type="button" class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" data-request-bulk-clear>' . esc_html__( 'Clear', 'lnkup-marketplace' ) . '</button></div>';
+
+		$drawer_foot = '<span class="vos-drawer__foot-start"><button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" data-oos-app-nav="prev" data-testid="lnkup-app-prev">' . esc_html__( '← Previous', 'lnkup-marketplace' ) . '</button><span class="lnkup-muted" data-oos-app-pos></span><button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" data-oos-app-nav="next" data-testid="lnkup-app-next">' . esc_html__( 'Next →', 'lnkup-marketplace' ) . '</button></span><button type="button" class="lnkup-btn lnkup-btn--ghost" data-vos-close>' . esc_html__( 'Close', 'lnkup-marketplace' ) . '</button>';
+
+		return '<div class="oos-app-table" data-testid="lnkup-application-table">'
+			. LNKup_OS_UI::data_table( $columns, $rows, array( 'caption' => __( 'Applications', 'lnkup-marketplace' ) ) )
+			. $bulk
+			. '</div>'
+			. '<div class="oos-app-cards" data-oos-app-cards hidden>' . LNKup_Shortcodes::render_applications_manager( $apps, array( 'selectable' => false ) ) . '</div>'
+			. LNKup_OS_UI::drawer_shell( 'oos-app-drawer', __( 'Application', 'lnkup-marketplace' ), '<div data-oos-app-slot></div>', $drawer_foot, array( 'wide' => true, 'testid' => 'lnkup-application-drawer' ) );
 	}
 
 	/**
@@ -1799,10 +2784,62 @@ class LNKup_Organizer_Dashboard_Views {
 	 *
 	 * @return string
 	 */
+	/**
+	 * Vendors workspace header and section tabs, shared by Vendors, Lists and Invitations.
+	 *
+	 * @param string $active discover|event|my|lists|imported|invitations.
+	 */
+	private static function vendors_workspace_header( string $active ): string {
+		$matching = class_exists( 'LNKup_Match_Settings' ) && LNKup_Match_Settings::enabled( 'matching_organizer_discovery_enabled' );
+		$tabs     = array(
+			array( 'id' => 'discover', 'label' => __( 'Discover', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'vendors' ) ),
+		);
+		if ( $matching ) {
+			$tabs[] = array( 'id' => 'event', 'label' => __( 'For this event', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'vendors', array( 'section' => 'event' ) ) );
+		}
+		$tabs[] = array( 'id' => 'my', 'label' => __( 'My vendors', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'vendors', array( 'scope' => 'my' ) ) );
+		$tabs[] = array( 'id' => 'lists', 'label' => __( 'Lists', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'lists' ) );
+		$tabs[] = array( 'id' => 'imported', 'label' => __( 'Imported', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'vendors', array( 'scope' => 'imported' ) ) );
+		$tabs[] = array( 'id' => 'invitations', 'label' => __( 'Invitations', 'lnkup-marketplace' ), 'href' => lnkup_organizer_view_url( 'invites' ) );
+		$actions = '<button type="button" class="lnkup-btn lnkup-btn--outline" data-oos-import>' . esc_html__( 'Import vendors', 'lnkup-marketplace' ) . '</button>'
+			. '<a class="lnkup-btn lnkup-btn--primary" href="' . esc_url( $matching ? lnkup_organizer_view_url( 'vendors', array( 'section' => 'event' ) ) : lnkup_organizer_view_url( 'invites' ) ) . '">' . esc_html__( 'Invite vendors', 'lnkup-marketplace' ) . '</a>';
+		return LNKup_OS_UI::page_header(
+			array(
+				'title'    => __( 'Vendors', 'lnkup-marketplace' ),
+				'subtitle' => __( 'Find vendors, keep the ones you work with, organize lists and track invitations.', 'lnkup-marketplace' ),
+				'actions'  => $actions,
+				'testid'   => 'lnkup-vendors-header',
+			)
+		) . lnkup_dash_tabs(
+			$tabs,
+			$active,
+			array(
+				'variant' => 'underline',
+				'label'   => __( 'Vendor sections', 'lnkup-marketplace' ),
+				'testid'  => 'lnkup-vendors-tabs',
+			)
+		);
+	}
+
 	private static function render_vendors() {
+		$section = isset( $_GET['section'] ) ? sanitize_key( wp_unslash( $_GET['section'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$scope   = isset( $_GET['scope'] ) ? sanitize_key( wp_unslash( $_GET['scope'] ) ) : 'discover'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$scope   = in_array( $scope, array( 'discover', 'my', 'imported' ), true ) ? $scope : 'discover';
+		if ( ! empty( $_GET['recruit'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$section = 'event';
+		}
 		ob_start();
-		echo self::page_header( __( 'Vendors', 'lnkup-marketplace' ), __( 'Discover vendors, track the ones you work with, and import your own list.', 'lnkup-marketplace' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-		echo self::render_find_vendors(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		if ( class_exists( 'LNKup_OS_UI' ) ) {
+			$find = 'event' === $section ? self::render_find_vendors() : '';
+			echo self::vendors_workspace_header( '' !== $find ? 'event' : $scope ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			if ( '' !== $find ) {
+				echo $find; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				return (string) ob_get_clean();
+			}
+		} else {
+			echo self::page_header( __( 'Vendors', 'lnkup-marketplace' ), __( 'Discover vendors, track the ones you work with, and import your own list.', 'lnkup-marketplace' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			echo self::render_find_vendors(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		}
 		echo LNKup_Shortcodes::organizer_module_card_open( 'vendors', '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		?>
 		<label class="screen-reader-text" for="lnkup-crm-vendor-search"><?php esc_html_e( 'Search vendors', 'lnkup-marketplace' ); ?></label>
@@ -1819,7 +2856,7 @@ class LNKup_Organizer_Dashboard_Views {
 						array( 'id' => 'my', 'label' => __( 'My Vendors', 'lnkup-marketplace' ), 'attrs' => array( 'data-crm-scope' => 'my' ) ),
 						array( 'id' => 'imported', 'label' => __( 'Imported', 'lnkup-marketplace' ), 'attrs' => array( 'data-crm-scope' => 'imported' ) ),
 					),
-					'discover',
+					$scope,
 					array(
 						'class' => 'lnkup-crm-toolbar__tabs',
 						'label' => __( 'Vendor scope', 'lnkup-marketplace' ),
@@ -2066,10 +3103,13 @@ class LNKup_Organizer_Dashboard_Views {
 					<select id="lnkup-find-vendors-category" class="lnkup-crm-search">
 						<option value=""><?php esc_html_e( 'All matching categories', 'lnkup-marketplace' ); ?></option>
 						<?php
-						$cats = get_terms( array( 'taxonomy' => 'lnkup_vendor_category', 'hide_empty' => false ) );
+						$cats      = get_terms( array( 'taxonomy' => 'lnkup_vendor_category', 'hide_empty' => false ) );
+						$cat_param = isset( $_GET['category'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['category'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 						foreach ( is_wp_error( $cats ) ? array() : $cats as $cat ) :
+							$cat_name = wp_specialchars_decode( (string) $cat->name, ENT_QUOTES );
+							$is_cat   = '' !== $cat_param && ( (string) $cat->term_id === $cat_param || 0 === strcasecmp( $cat_name, $cat_param ) );
 							?>
-							<option value="<?php echo esc_attr( (string) $cat->term_id ); ?>"><?php echo esc_html( $cat->name ); ?></option>
+							<option value="<?php echo esc_attr( (string) $cat->term_id ); ?>"<?php selected( $is_cat ); ?>><?php echo esc_html( $cat_name ); ?></option>
 						<?php endforeach; ?>
 					</select>
 					<label class="screen-reader-text" for="lnkup-find-vendors-section"><?php esc_html_e( 'Show', 'lnkup-marketplace' ); ?></label>
@@ -2110,11 +3150,15 @@ class LNKup_Organizer_Dashboard_Views {
 	 */
 	private static function render_lists() {
 		ob_start();
-		echo self::page_header( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-			__( 'Vendor Lists', 'lnkup-marketplace' ),
-			__( 'Save vendors from Discover, then invite the list to an event.', 'lnkup-marketplace' ),
-			'<a class="lnkup-btn lnkup-btn--outline" href="' . esc_url( lnkup_organizer_view_url( 'vendors' ) ) . '">' . esc_html__( 'Discover vendors', 'lnkup-marketplace' ) . '</a>'
-		);
+		if ( class_exists( 'LNKup_OS_UI' ) ) {
+			echo self::vendors_workspace_header( 'lists' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		} else {
+			echo self::page_header( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				__( 'Vendor Lists', 'lnkup-marketplace' ),
+				__( 'Save vendors from Discover, then invite the list to an event.', 'lnkup-marketplace' ),
+				'<a class="lnkup-btn lnkup-btn--outline" href="' . esc_url( lnkup_organizer_view_url( 'vendors' ) ) . '">' . esc_html__( 'Discover vendors', 'lnkup-marketplace' ) . '</a>'
+			);
+		}
 		echo LNKup_Shortcodes::organizer_module_card_open( 'lists', '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		?>
 		<p id="lnkup-organizer-lists-summary" class="lnkup-muted" aria-live="polite"></p>
@@ -2143,7 +3187,11 @@ class LNKup_Organizer_Dashboard_Views {
 	 */
 	private static function render_invites() {
 		ob_start();
-		echo self::page_header( __( 'Invites', 'lnkup-marketplace' ), __( 'Invite vendors to a specific event. Each invite is tracked.', 'lnkup-marketplace' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		if ( class_exists( 'LNKup_OS_UI' ) ) {
+			echo self::vendors_workspace_header( 'invitations' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		} else {
+			echo self::page_header( __( 'Invites', 'lnkup-marketplace' ), __( 'Invite vendors to a specific event. Each invite is tracked.', 'lnkup-marketplace' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		}
 		echo LNKup_Shortcodes::organizer_module_card_open( 'invites', '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		?>
 		<p id="lnkup-organizer-invites-summary" class="lnkup-muted" aria-live="polite"></p>
@@ -2221,6 +3269,186 @@ class LNKup_Organizer_Dashboard_Views {
 				<h2 id="lnkup-org-team-activity-title" class="lnkup-panel__title"><?php esc_html_e( 'Team activity', 'lnkup-marketplace' ); ?></h2>
 				<div id="lnkup-org-team-activity" aria-live="polite"><?php echo lnkup_loading_state( 'list' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
 			</section>
+		</div>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Organization settings hub. Read-only summaries; every edit happens on the page that already owns it.
+	 *
+	 * @return string
+	 */
+	private static function render_settings() {
+		$user_id = get_current_user_id();
+		$meta    = static fn( string $k ): string => (string) get_user_meta( $user_id, '_lnkup_organizer_' . $k, true );
+		$name    = '' !== $meta( 'public_name' ) ? $meta( 'public_name' ) : wp_get_current_user()->display_name;
+		$logo_id = (int) $meta( 'logo_id' );
+		$fields  = array(
+			'public_name' => __( 'Public name', 'lnkup-marketplace' ),
+			'tagline'     => __( 'Tagline', 'lnkup-marketplace' ),
+			'bio'         => __( 'About', 'lnkup-marketplace' ),
+			'city'        => __( 'City', 'lnkup-marketplace' ),
+			'logo_id'     => __( 'Logo', 'lnkup-marketplace' ),
+			'website'     => __( 'Website', 'lnkup-marketplace' ),
+		);
+		$missing = array();
+		foreach ( $fields as $key => $label ) {
+			if ( '' === $meta( $key ) || '0' === $meta( $key ) ) {
+				$missing[] = $label;
+			}
+		}
+		$profile_pct = (int) round( ( count( $fields ) - count( $missing ) ) / count( $fields ) * 100 );
+		$profile_url = class_exists( 'LNKup_Organizer_Onboarding' ) ? LNKup_Organizer_Onboarding::organizer_public_url( (int) $user_id ) : '';
+		$place       = function_exists( 'lnkup_display_place' ) ? lnkup_display_place( $meta( 'city' ), $meta( 'state' ) ) : trim( $meta( 'city' ) . ', ' . $meta( 'state' ), ', ' );
+
+		$setup = self::setup_progress( $user_id );
+
+		$connect = array();
+		if ( class_exists( 'LNKup_Stripe_Connect' ) ) {
+			try {
+				$connect = (array) LNKup_Stripe_Connect::onboarding_status( $user_id );
+			} catch ( Throwable $e ) {
+				$connect = array();
+			}
+		}
+		if ( ! empty( $connect['payouts_enabled'] ) ) {
+			$payout_state = array( __( 'Payouts active', 'lnkup-marketplace' ), 'success', __( 'Vendor payments reach your bank on your payout schedule.', 'lnkup-marketplace' ) );
+		} elseif ( ! empty( $connect['code'] ) ) {
+			$payout_state = array( __( 'Not available yet', 'lnkup-marketplace' ), 'neutral', (string) ( $connect['message'] ?? '' ) );
+		} elseif ( 'not_started' === ( $connect['status'] ?? 'not_started' ) ) {
+			$payout_state = array( __( 'Not set up', 'lnkup-marketplace' ), 'warning', __( 'Add your bank details so vendor payments can be paid out to you.', 'lnkup-marketplace' ) );
+		} else {
+			$payout_state = array( __( 'Finish payout setup', 'lnkup-marketplace' ), 'warning', __( 'A few details are still needed before payouts can start.', 'lnkup-marketplace' ) );
+		}
+
+		$roles  = class_exists( 'LNKup_Org_Teams' ) ? LNKup_Org_Teams::roles() : array();
+		$matrix = class_exists( 'LNKup_Org_Teams' ) ? LNKup_Org_Teams::capability_matrix() : array();
+		$areas  = array(
+			__( 'Review applications', 'lnkup-marketplace' ) => array( 'review_applications' ),
+			__( 'Approve & decline', 'lnkup-marketplace' )   => array( 'manage_applications' ),
+			__( 'Operations', 'lnkup-marketplace' )          => array( 'edit_ops', 'check_in' ),
+			__( 'Money', 'lnkup-marketplace' )               => array( 'view_financials' ),
+			__( 'Manage team', 'lnkup-marketplace' )         => array( 'manage_team' ),
+		);
+		$notify_url = class_exists( 'LNKup_Comms_Suppression' ) ? (string) LNKup_Comms_Suppression::preferences_url() : '';
+
+		ob_start();
+		echo LNKup_OS_UI::page_header( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			array(
+				'title'    => __( 'Settings', 'lnkup-marketplace' ),
+				'subtitle' => __( 'Your organization at a glance. Each card opens the page where that setting lives.', 'lnkup-marketplace' ),
+				'testid'   => 'lnkup-org-settings',
+			)
+		);
+		?>
+		<div class="oos-settings">
+			<?php if ( $setup ) : ?>
+				<section class="vos-card oos-settings__setup" aria-labelledby="oos-settings-setup" data-testid="lnkup-org-settings-setup">
+					<div>
+						<h2 id="oos-settings-setup" class="lnkup-panel__title"><?php esc_html_e( 'Getting started', 'lnkup-marketplace' ); ?></h2>
+						<p class="lnkup-muted"><?php echo esc_html( sprintf( /* translators: %d: percent */ __( '%d%% of setup complete.', 'lnkup-marketplace' ), $setup['percent'] ) ); ?></p>
+					</div>
+					<?php echo LNKup_OS_UI::progress( $setup['percent'], __( 'Setup progress', 'lnkup-marketplace' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<a class="lnkup-btn lnkup-btn--outline" href="<?php echo esc_url( $setup['url'] ); ?>"><?php esc_html_e( 'Continue setup', 'lnkup-marketplace' ); ?></a>
+				</section>
+			<?php endif; ?>
+
+			<section class="vos-card" aria-labelledby="oos-settings-profile" data-testid="lnkup-org-settings-profile">
+				<?php echo LNKup_OS_UI::section_head( __( 'Public profile', 'lnkup-marketplace' ), __( 'Edit profile', 'lnkup-marketplace' ), lnkup_organizer_view_url( 'profile' ), 'oos-settings-profile' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+				<div class="oos-settings__profile">
+					<span class="oos-settings__logo" aria-hidden="true">
+						<?php echo $logo_id ? wp_get_attachment_image( $logo_id, 'thumbnail', false, array( 'alt' => '' ) ) : esc_html( LNKup_OS_UI::initials( $name ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					</span>
+					<div>
+						<strong><?php echo esc_html( $name ); ?></strong>
+						<?php if ( '' !== $meta( 'tagline' ) ) : ?>
+							<p class="lnkup-muted"><?php echo esc_html( $meta( 'tagline' ) ); ?></p>
+						<?php endif; ?>
+						<?php if ( '' !== $place ) : ?>
+							<p class="lnkup-muted"><?php echo esc_html( $place ); ?></p>
+						<?php endif; ?>
+					</div>
+				</div>
+				<?php echo LNKup_OS_UI::progress( $profile_pct, __( 'Profile completeness', 'lnkup-marketplace' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+				<p class="lnkup-muted">
+					<?php
+					echo esc_html(
+						$missing
+							/* translators: %s: comma-separated profile fields */
+							? sprintf( __( 'Vendors trust complete profiles. Missing: %s.', 'lnkup-marketplace' ), implode( ', ', $missing ) )
+							: __( 'Your profile is complete.', 'lnkup-marketplace' )
+					);
+					?>
+				</p>
+				<?php if ( $profile_url ) : ?>
+					<a class="vos-link" href="<?php echo esc_url( $profile_url ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Preview as a vendor', 'lnkup-marketplace' ); ?></a>
+				<?php endif; ?>
+			</section>
+
+			<section class="vos-card" aria-labelledby="oos-settings-payments" data-testid="lnkup-org-settings-payments">
+				<?php echo LNKup_OS_UI::section_head( __( 'Payments & payouts', 'lnkup-marketplace' ), __( 'Open Money', 'lnkup-marketplace' ), lnkup_organizer_view_url( 'financial', array( 'fin_tab' => 'settings' ) ), 'oos-settings-payments' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+				<p><?php echo LNKup_OS_UI::status( $payout_state[0], $payout_state[1] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></p>
+				<?php if ( '' !== $payout_state[2] ) : ?>
+					<p class="lnkup-muted"><?php echo esc_html( $payout_state[2] ); ?></p>
+				<?php endif; ?>
+				<p class="lnkup-muted"><?php esc_html_e( 'Booth fees and LNKup fees are set per vendor slot when you create or edit an event.', 'lnkup-marketplace' ); ?></p>
+			</section>
+
+			<section class="vos-card" aria-labelledby="oos-settings-notify" data-testid="lnkup-org-settings-notifications">
+				<?php echo LNKup_OS_UI::section_head( __( 'Notifications', 'lnkup-marketplace' ), $notify_url ? __( 'Manage', 'lnkup-marketplace' ) : '', $notify_url, 'oos-settings-notify' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+				<p class="lnkup-muted"><?php esc_html_e( 'Choose which updates reach you by email, push, or only in your LNKup inbox — new applications, payments, documents, and event reminders.', 'lnkup-marketplace' ); ?></p>
+				<?php if ( ! $notify_url ) : ?>
+					<p class="lnkup-muted"><?php esc_html_e( 'Notification preferences are not available on this site yet.', 'lnkup-marketplace' ); ?></p>
+				<?php endif; ?>
+			</section>
+
+			<section class="vos-card" aria-labelledby="oos-settings-defaults" data-testid="lnkup-org-settings-defaults">
+				<?php
+				$has_tours = class_exists( 'LNKup_Feature_Flags' ) && LNKup_Feature_Flags::portfolio();
+				echo LNKup_OS_UI::section_head( __( 'Defaults & templates', 'lnkup-marketplace' ), $has_tours ? __( 'Open Tours & Series', 'lnkup-marketplace' ) : __( 'Open Events', 'lnkup-marketplace' ), lnkup_organizer_view_url( $has_tours ? 'tours' : 'events' ), 'oos-settings-defaults' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				?>
+				<p class="lnkup-muted"><?php esc_html_e( 'Start new events from an existing one: Duplicate copies booth types, prices and application questions, and asks for the new date and location. Applications, payments and packets are never copied.', 'lnkup-marketplace' ); ?></p>
+				<?php if ( $has_tours ) : ?>
+					<p class="lnkup-muted"><?php esc_html_e( 'Tour templates set the booth types and prices used for every stop in a series.', 'lnkup-marketplace' ); ?></p>
+				<?php endif; ?>
+			</section>
+
+			<section class="vos-card" aria-labelledby="oos-settings-help" data-testid="lnkup-org-settings-help">
+				<?php echo LNKup_OS_UI::section_head( __( 'Help', 'lnkup-marketplace' ), __( 'Open Help', 'lnkup-marketplace' ), lnkup_organizer_view_url( 'help' ), 'oos-settings-help' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+				<p class="lnkup-muted"><?php esc_html_e( 'Guides for reviewing applications, booth maps, check-in and payouts, plus a way to reach the LNKup team.', 'lnkup-marketplace' ); ?></p>
+			</section>
+
+			<?php if ( $roles ) : ?>
+				<section class="vos-card oos-settings__team" aria-labelledby="oos-settings-team" data-testid="lnkup-org-settings-team">
+					<?php echo LNKup_OS_UI::section_head( __( 'Team roles', 'lnkup-marketplace' ), __( 'Manage team', 'lnkup-marketplace' ), lnkup_organizer_view_url( 'team' ), 'oos-settings-team' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<p class="lnkup-muted"><?php esc_html_e( 'What each role can do. Only you, the account owner, can change payout details.', 'lnkup-marketplace' ); ?></p>
+					<div class="vos-table-wrap">
+						<table class="vos-table">
+							<caption class="screen-reader-text"><?php esc_html_e( 'Team role permissions', 'lnkup-marketplace' ); ?></caption>
+							<thead>
+								<tr>
+									<th scope="col"><?php esc_html_e( 'Role', 'lnkup-marketplace' ); ?></th>
+									<?php foreach ( array_keys( $areas ) as $area ) : ?>
+										<th scope="col"><?php echo esc_html( $area ); ?></th>
+									<?php endforeach; ?>
+								</tr>
+							</thead>
+							<tbody>
+								<?php foreach ( $roles as $role_key => $role_label ) : ?>
+									<tr>
+										<th scope="row"><?php echo esc_html( $role_label ); ?></th>
+										<?php foreach ( $areas as $area => $caps ) : ?>
+											<?php $can = (bool) array_intersect( $caps, $matrix[ $role_key ] ?? array() ); ?>
+											<td><?php echo $can ? '<span aria-hidden="true">✓</span><span class="screen-reader-text">' . esc_html__( 'Yes', 'lnkup-marketplace' ) . '</span>' : '<span aria-hidden="true">—</span><span class="screen-reader-text">' . esc_html__( 'No', 'lnkup-marketplace' ) . '</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></td>
+										<?php endforeach; ?>
+									</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+					</div>
+				</section>
+			<?php endif; ?>
 		</div>
 		<?php
 		return (string) ob_get_clean();
@@ -2325,6 +3553,50 @@ class LNKup_Organizer_Dashboard_Views {
 					'cta_href'  => lnkup_organizer_view_url( 'events' ),
 				)
 			); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		} elseif ( class_exists( 'LNKup_OS_UI' ) ) {
+			$dash = lnkup_page_url_helper( 'organizer-dashboard' );
+			$rows = array();
+			foreach ( $query->posts as $event ) {
+				$summary = LNKup_Organizer_Presentation::event_summary( (int) $event->ID, false );
+				$facts   = self::operations_card_facts( (int) $event->ID );
+				$booked  = (int) $facts['booked'];
+				$phase   = 'today' === $summary['chronology'] ? LNKup_OS_UI::status( __( 'Event day', 'lnkup-marketplace' ), 'warning' ) : LNKup_OS_UI::status( __( 'Before the event', 'lnkup-marketplace' ), 'info' );
+				$frac    = static function ( $n ) use ( $booked ) {
+					return $booked ? esc_html( sprintf( /* translators: 1: count, 2: booked */ __( '%1$d of %2$d', 'lnkup-marketplace' ), (int) $n, $booked ) ) : '<span class="lnkup-muted">—</span>';
+				};
+				$rows[] = array(
+					'id'    => (int) $event->ID,
+					'cells' => array(
+						'event'   => LNKup_OS_UI::event_identity( $summary, array( 'href' => add_query_arg( array( 'event' => (int) $event->ID, 'ops' => 1 ), $dash ), 'status' => false ) ),
+						'phase'   => $phase,
+						'booked'  => esc_html( (string) $booked ),
+						'ready'   => $frac( $facts['ready'] ),
+						'booths'  => $frac( $facts['booths_assigned'] ),
+						'risk'    => esc_html( (string) (int) $facts['at_risk'] ),
+						'loadin'  => esc_html( '' !== $facts['loadin'] ? $facts['loadin'] : '—' ),
+						'actions' => '<a class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" href="' . esc_url( add_query_arg( array( 'event' => (int) $event->ID, 'ops' => 1 ), $dash ) ) . '">' . esc_html__( 'Open', 'lnkup-marketplace' ) . '</a> <a class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" href="' . esc_url( add_query_arg( array( 'event' => (int) $event->ID, 'scan' => 1 ), $dash ) ) . '">' . esc_html__( 'Check-in', 'lnkup-marketplace' ) . '</a>',
+					),
+				);
+			}
+			echo LNKup_OS_UI::data_table( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				array(
+					'event'   => array( 'label' => __( 'Event', 'lnkup-marketplace' ), 'lead' => true ),
+					'phase'   => array( 'label' => __( 'Phase', 'lnkup-marketplace' ) ),
+					'booked'  => array( 'label' => __( 'Booked', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+					'ready'   => array( 'label' => __( 'Ready', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+					'booths'  => array( 'label' => __( 'Booths assigned', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+					'risk'    => array( 'label' => __( 'At risk', 'lnkup-marketplace' ), 'class' => 'vos-num' ),
+					'loadin'  => array( 'label' => __( 'Next load-in', 'lnkup-marketplace' ) ),
+					'actions' => array( 'label' => __( 'Actions', 'lnkup-marketplace' ), 'class' => 'vos-actions' ),
+				),
+				$rows,
+				array(
+					'caption' => __( 'Upcoming events', 'lnkup-marketplace' ),
+					'testid'  => 'lnkup-ops-table',
+				)
+			);
+			echo '<p class="vos-footnote">' . esc_html__( 'Booked = approved or paid vendors. Ready and Booths assigned are counted against booked vendors.', 'lnkup-marketplace' ) . '</p>';
+			echo lnkup_organizer_pagination_nav( (int) $query->found_posts, self::PER_PAGE, 'operations' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		} else {
 			echo '<div class="lnkup-workflow-grid">';
 			foreach ( $query->posts as $event ) {
@@ -2336,7 +3608,7 @@ class LNKup_Organizer_Dashboard_Views {
 				?>
 				<article class="lnkup-workflow-card lnkup-ops-list-card" data-testid="lnkup-ops-list-card">
 					<div class="lnkup-ops-list-card__head">
-						<h3><?php echo esc_html( $event->post_title ); ?></h3>
+						<h3><?php echo esc_html( LNKup_Organizer_Presentation::title( (int) $event->ID ) ); ?></h3>
 						<p class="lnkup-muted"><?php echo esc_html( implode( ' · ', array_filter( array( $date ? date_i18n( 'D, M j, Y', strtotime( $date ) ) : '', $facts['where'] ) ) ) ); ?></p>
 					</div>
 					<dl class="lnkup-organizer-event-card__stats">
@@ -2397,7 +3669,7 @@ class LNKup_Organizer_Dashboard_Views {
 				}
 			}
 		}
-		$city     = (string) get_post_meta( $event_id, '_lnkup_city', true );
+		$city     = LNKup_Organizer_Presentation::place( (int) $event_id );
 		$venue    = (string) get_post_meta( $event_id, '_lnkup_venue_name', true );
 		$assigned = 0;
 		if ( class_exists( 'LNKup_Operations_Tables' ) ) {

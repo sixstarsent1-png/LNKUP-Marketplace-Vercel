@@ -17,6 +17,13 @@ import {
   type ApplicationStatus,
 } from "@/lib/status/application-status"
 import type { StatusTone } from "@/lib/theme"
+import {
+  bookingSegment,
+  hasOpenBalance,
+  isEventOver,
+  isPastEventInvoice,
+  isUpcomingPaymentDue,
+} from "@/lib/vendor/booking-lifecycle"
 
 export type VendorRequestStatus = ApplicationStatus
 
@@ -43,6 +50,24 @@ export type VendorRequest = {
   infoRequest?: VendorInfoRequest
   /** Event cover image from WordPress. */
   imageUrl?: string
+  /** Customer-facing status from the WordPress presentation contract (e.g. "Invoice open"). */
+  primaryStatus?: string
+  venue?: string
+  /** Vendor option title (booth / category) the vendor applied to. */
+  opportunityTitle?: string
+  eventEndDateIso?: string
+  /** live | opportunity | snapshot | unrecoverable (how WordPress found the event). */
+  eventResolution?: string
+  /** upcoming | active | completed | cancelled | postponed | unknown (end-date aware). */
+  eventState?: string
+  applicationState?: string
+  bookingState?: string
+  paymentState?: string
+  /** locked | active | ended | revoked */
+  credentialState?: string
+  paymentContext?: { hasBalance: boolean; pastEventInvoice: boolean; collectible: boolean }
+  /** Present on the single-booking endpoint only. */
+  timeline?: Array<{ key: string; label: string; state: "done" | "current" | "pending"; at?: string }>
 }
 
 export type VendorInfoRequest = {
@@ -125,7 +150,7 @@ export function mapWpVendorApplication(item: WpVendorApplicationItem): VendorReq
     eventName: item.event_name ?? "Event",
     eventDate: formatDate(item.event_date) ?? item.event_date,
     eventDateIso: item.event_date ? String(item.event_date).slice(0, 10) : undefined,
-    city: formatLocation(item.city, item.state) || item.city,
+    city: item.place || formatLocation(item.city, item.state) || item.city,
     state: item.state,
     organizerName: item.organizer_name,
     category: item.category,
@@ -137,7 +162,42 @@ export function mapWpVendorApplication(item: WpVendorApplicationItem): VendorReq
     paymentStatus: item.payment_status || undefined,
     infoRequest: mapInfoRequest(item.info_request),
     imageUrl: mapEventMedia(item.media, item.featured_image)?.thumbUrl,
+    primaryStatus: item.primary_status || undefined,
+    venue: item.venue || undefined,
+    opportunityTitle: item.opportunity_title || undefined,
+    eventEndDateIso: item.event_end_date ? String(item.event_end_date).slice(0, 10) : undefined,
+    eventResolution: item.event_resolution,
+    eventState: item.event_state || undefined,
+    applicationState: item.application_state || undefined,
+    bookingState: item.booking_state || undefined,
+    paymentState: item.payment_state || undefined,
+    credentialState: item.credential_state || undefined,
+    paymentContext: item.payment_context
+      ? {
+          hasBalance: Boolean(item.payment_context.has_balance),
+          pastEventInvoice: Boolean(item.payment_context.past_event_invoice),
+          collectible: Boolean(item.payment_context.collectible),
+        }
+      : undefined,
+    timeline: Array.isArray(item.timeline)
+      ? item.timeline.map((step) => ({
+          key: String(step.key ?? ""),
+          label: String(step.label ?? ""),
+          state: step.state === "done" || step.state === "current" ? step.state : "pending",
+          at: step.at || undefined,
+        }))
+      : undefined,
   }
+}
+
+/** One booking with its timeline (`GET /applications/vendor/{id}`). */
+export async function fetchVendorRequest(id: string, auth?: WpAuth): Promise<VendorRequest | null> {
+  if (!auth) {
+    return MOCK_REQUESTS.find((r) => r.id === id) ?? null
+  }
+  const data = await wpFetchJson<WpVendorApplicationItem>(`/applications/vendor/${encodeURIComponent(id)}`, { auth })
+  const mapped = mapWpVendorApplication(data)
+  return mapped.id ? mapped : null
 }
 
 export function mapVendorRequestList(
@@ -203,41 +263,39 @@ export function subscribeVendorRequests(
   return subscribeCache<VendorRequestsResult>(vendorRequestsCacheKey(auth), listener)
 }
 
+/** Open, collectible balance (upcoming or past event). Wallet lists these; Home separates them. */
 export function isPaymentDueRequest(r: VendorRequest): boolean {
-  if (r.status === "payment_required") return true
-  if (r.status === "approved" && Boolean(r.paymentId)) return true
-  return false
+  return hasOpenBalance(r)
 }
 
-const todayIso = () => localIsoDay()
-
-/** Paid booking whose event date is today or later (or not yet scheduled). */
+/** Confirmed booking for an upcoming or in-progress event. Undated bookings are never upcoming. */
 export function isUpcomingBooking(r: VendorRequest): boolean {
-  if (r.status !== "paid") return false
-  return !r.eventDateIso || r.eventDateIso >= todayIso()
+  return bookingSegment(r, localIsoDay()) === "upcoming"
 }
 
-/** Completed, or paid with an event date that has passed. */
+/** Confirmed or completed booking for an event that is over. */
 export function isPastBooking(r: VendorRequest): boolean {
   if (r.status === "completed") return true
-  return r.status === "paid" && Boolean(r.eventDateIso) && (r.eventDateIso as string) < todayIso()
+  return (r.status === "paid" || r.bookingState === "completed") && isEventOver(r)
 }
 
 export function countByStatus(requests: VendorRequest[]) {
   return {
     review: requests.filter((r) => r.status === "submitted" || r.status === "under_review").length,
-    paymentDue: requests.filter(isPaymentDueRequest).length,
+    paymentDue: requests.filter((r) => isUpcomingPaymentDue(r)).length,
+    pastInvoices: requests.filter((r) => isPastEventInvoice(r)).length,
     booked: requests.filter(isUpcomingBooking).length,
     past: requests.filter(isPastBooking).length,
     total: requests.length,
   }
 }
 
+/** Payments that confirm an upcoming spot (past-event invoices are listed separately). */
 export function paymentDueRequests(requests: VendorRequest[], limit = 2): VendorRequest[] {
-  return requests.filter(isPaymentDueRequest).slice(0, limit)
+  return requests.filter((r) => isUpcomingPaymentDue(r)).slice(0, limit)
 }
 
-/** Upcoming booked = paid with a future (or unset) date, soonest first. */
+/** Upcoming confirmed bookings, soonest first. */
 export function upcomingBookedRequests(requests: VendorRequest[], limit = 3): VendorRequest[] {
   return requests
     .filter(isUpcomingBooking)

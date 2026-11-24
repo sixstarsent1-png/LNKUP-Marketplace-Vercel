@@ -19,6 +19,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  LocationField,
+  isLocationSubmittable,
+  type LocationStatus,
+  type LocationSuggestion,
+} from "@/components/forms/location-field"
 
 const STEPS = ["Event", "Opportunity", "Review"] as const
 
@@ -28,6 +34,8 @@ export default function OrganizerLaunchPage() {
     useOrganizerLaunch()
   const [step, setStep] = useState(0)
   const [validationErrors, setValidationErrors] = useState<Array<{ field: string; message: string }>>([])
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>("")
+  const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([])
 
   const feeRows = draft.opportunity.feeRows?.length
     ? draft.opportunity.feeRows
@@ -96,6 +104,11 @@ export default function OrganizerLaunchPage() {
 
   async function handlePublish() {
     trackLnkupEvent({ event: "launch_event_publish_clicked", source: "organizer_launch" })
+    if (!isLocationSubmittable(locationStatus)) {
+      setStep(0)
+      setValidationErrors([{ field: "location", message: "Confirm the event city and state before publishing." }])
+      return
+    }
     const next = {
       ...draft,
       opportunity: {
@@ -109,6 +122,8 @@ export default function OrganizerLaunchPage() {
     const result = await publish(next)
     if (result.status === "validation_error") {
       setValidationErrors(result.validationErrors ?? [])
+      setLocationSuggestions(result.locationSuggestions ?? [])
+      if (result.validationErrors?.some((e) => e.field === "location")) setStep(0)
       return
     }
     if (result.status === "published" && result.eventId) {
@@ -187,14 +202,15 @@ export default function OrganizerLaunchPage() {
               <Label>Event type</Label>
               <Input value={draft.event.eventType ?? ""} onChange={(e) => patchDraft({ event: { eventType: e.target.value } })} />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label>City *</Label>
-              <Input value={draft.event.city ?? ""} onChange={(e) => patchDraft({ event: { city: e.target.value } })} />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label>State *</Label>
-              <Input value={draft.event.state ?? ""} onChange={(e) => patchDraft({ event: { state: e.target.value } })} maxLength={2} />
-            </div>
+            <LocationField
+              required
+              city={draft.event.city ?? ""}
+              state={draft.event.state ?? ""}
+              onChange={({ city, state }) => patchDraft({ event: { city, state } })}
+              onStatusChange={setLocationStatus}
+              externalSuggestions={locationSuggestions}
+              externalMessage={validationErrors.find((e) => e.field === "location")?.message}
+            />
             <div className="flex flex-col gap-2 sm:col-span-2">
               <Label>Venue</Label>
               <Input value={draft.event.venueName ?? ""} onChange={(e) => patchDraft({ event: { venueName: e.target.value } })} />

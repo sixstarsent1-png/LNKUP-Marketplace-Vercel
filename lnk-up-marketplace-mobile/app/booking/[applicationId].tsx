@@ -7,30 +7,38 @@ import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { Screen } from "@/components/screen"
 import { BackLink } from "@/components/ui/back-link"
 import { Button } from "@/components/ui/button"
+import { InlineBanner } from "@/components/ui/banner"
+import { EventImage } from "@/components/ui/event-image"
 import { ListGroup, ListRow } from "@/components/ui/list-row"
-import { StatusPill } from "@/components/ui/status-pill"
+import { StatusBadge } from "@/components/ui/status-badge"
 import { StickyActionBar } from "@/components/ui/sticky-action-bar"
 import { Surface } from "@/components/ui/surface"
 import { DisplayTitle, Meta, SectionTitle } from "@/components/ui/typography"
 import { BookingTimelineView } from "@/components/vendor/booking-timeline-view"
 import { canWithdraw, withdrawApplication } from "@/lib/api/apply"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
-import { fetchVendorRequests, invalidateVendorRequests, type VendorRequest } from "@/lib/api/vendor-requests"
+import {
+  fetchVendorRequest,
+  fetchVendorRequests,
+  invalidateVendorRequests,
+  vendorRequestStatusLabel,
+  vendorRequestStatusTone,
+  type VendorRequest,
+} from "@/lib/api/vendor-requests"
 import { formatMoney } from "@/lib/api/vendor-wallet"
 import { useAuth } from "@/lib/auth/auth-context"
 import { confirmAction, showToast } from "@/lib/feedback/feedback"
+import { canOpenPass, hasOpenBalance, isPastEventInvoice, payCtaLabel } from "@/lib/vendor/booking-lifecycle"
 import { bookingTimeline } from "@/lib/vendor/booking-timeline"
-import { spacing, typeScale } from "@/lib/theme"
+import { radii, spacing, typeScale } from "@/lib/theme"
 
 type PrimaryAction = { label: string; icon: "card-outline" | "ticket-outline" | "search-outline"; href: Href }
 
 function primaryActionFor(request: VendorRequest): PrimaryAction | null {
-  if (request.status === "approved" || request.status === "payment_required") {
-    const amount =
-      request.amountDue != null && request.amountDue > 0 ? formatMoney(request.amountDue, request.currency ?? "USD") : null
-    return { label: amount ? `Pay ${amount}` : "Pay booth fee", icon: "card-outline", href: `/pass/${request.id}` as Href }
+  if (hasOpenBalance(request)) {
+    return { label: isPastEventInvoice(request) ? "Pay invoice" : payCtaLabel(request), icon: "card-outline", href: `/pass/${request.id}` as Href }
   }
-  if (request.status === "paid" || request.status === "completed") {
+  if (canOpenPass(request)) {
     return { label: "Open event pass", icon: "ticket-outline", href: `/pass/${request.id}` as Href }
   }
   if (request.status === "cancelled" && request.opportunityId) {
@@ -58,10 +66,20 @@ export default function BookingDetailScreen() {
       if (force) setRefreshing(true)
       setError(null)
       try {
-        const { items } = await fetchVendorRequests(auth, { force })
-        setRequest(items.find((item) => item.id === id) ?? null)
+        setRequest(await fetchVendorRequest(id, auth))
       } catch (err) {
-        setError(appErrorFromWp(err))
+        const shaped = appErrorFromWp(err)
+        if (shaped.code === "not_found") {
+          // Servers before the single-booking route: find it in the list.
+          try {
+            const { items } = await fetchVendorRequests(auth, { force })
+            setRequest(items.find((item) => item.id === id) ?? null)
+          } catch (listErr) {
+            setError(appErrorFromWp(listErr))
+          }
+        } else {
+          setError(shaped)
+        }
       } finally {
         setLoading(false)
         setRefreshing(false)
@@ -140,13 +158,31 @@ export default function BookingDetailScreen() {
 
       {request ? (
         <>
-          <View style={styles.hero}>
-            <StatusPill status={request.status} audience="vendor" />
-            <DisplayTitle accessibilityRole="header" style={styles.title}>
-              {request.eventName}
-            </DisplayTitle>
-            <Meta>{[request.eventDate, request.city].filter(Boolean).join(" · ")}</Meta>
+          <View style={styles.heroRow}>
+            <EventImage uri={request.imageUrl} height={76} aspectRatio={1} radius={radii.md} style={styles.thumb} icon="calendar-outline" />
+            <View style={styles.hero}>
+              <StatusBadge label={request.primaryStatus ?? vendorRequestStatusLabel(request.status)} tone={isPastEventInvoice(request) ? "neutral" : vendorRequestStatusTone(request.status)} />
+              <DisplayTitle accessibilityRole="header" style={styles.title}>
+                {request.eventName}
+              </DisplayTitle>
+              <Meta>{[request.eventDate, request.city].filter(Boolean).join(" · ")}</Meta>
+            </View>
           </View>
+
+          {request.eventResolution === "unrecoverable" ? (
+            <InlineBanner
+              tone="info"
+              title="Event listing removed"
+              message="We kept your application, payments and receipts. Contact LNKup support from Help if you need details about this event."
+            />
+          ) : null}
+          {isPastEventInvoice(request) ? (
+            <InlineBanner
+              tone="attention"
+              title="Outstanding invoice · past event"
+              message="This event already happened. The organizer's invoice is still open, so it stays payable until it's settled or the organizer closes it."
+            />
+          ) : null}
 
           {request.status === "info_requested" && request.infoRequest ? (
             <InfoRequestReply
@@ -170,7 +206,11 @@ export default function BookingDetailScreen() {
 
           <ListGroup title="Details">
             {request.organizerName ? <ListRow icon="business-outline" title="Organizer" meta={request.organizerName} /> : null}
+            {request.opportunityTitle && request.opportunityTitle !== request.eventName ? (
+              <ListRow icon="storefront-outline" title="Vendor option" meta={request.opportunityTitle} />
+            ) : null}
             {request.category ? <ListRow icon="pricetag-outline" title="Vendor category" meta={request.category} /> : null}
+            {request.venue ? <ListRow icon="location-outline" title="Venue" meta={request.venue} /> : null}
             {request.amountDue != null && request.amountDue > 0 ? (
               <ListRow
                 icon="card-outline"
@@ -179,13 +219,22 @@ export default function BookingDetailScreen() {
               />
             ) : null}
             {request.submittedAt ? <ListRow icon="time-outline" title="Applied" meta={request.submittedAt} /> : null}
-            {request.opportunityId ? (
+            {request.eventId || request.opportunityId ? (
               <ListRow
-                icon="storefront-outline"
+                icon="open-outline"
                 title="Event listing"
-                meta="Venue, booth types and requirements"
-                onPress={() => router.push(`/opportunity/${request.opportunityId}` as Href)}
+                meta="Venue, vendor options and requirements"
+                onPress={() =>
+                  router.push(
+                    (request.eventId
+                      ? `/event/${request.eventId}${request.opportunityId ? `?option=${request.opportunityId}` : ""}`
+                      : `/opportunity/${request.opportunityId}`) as Href,
+                  )
+                }
               />
+            ) : null}
+            {request.status === "paid" || request.status === "completed" ? (
+              <ListRow icon="receipt-outline" title="Receipts and payments" meta="In your Wallet" onPress={() => router.push("/(vendor)/wallet?tab=documents" as Href)} />
             ) : null}
           </ListGroup>
 
@@ -206,8 +255,10 @@ export default function BookingDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  hero: { gap: spacing.sm },
-  title: { fontSize: typeScale.display, lineHeight: 32 },
+  heroRow: { flexDirection: "row", gap: spacing.md, alignItems: "flex-start" },
+  thumb: { width: 76 },
+  hero: { flex: 1, gap: spacing.xs, alignItems: "flex-start" },
+  title: { fontSize: typeScale.title + 2, lineHeight: 28 },
   card: { gap: spacing.md },
   cardTitle: { fontSize: typeScale.bodyLarge },
   flex: { flex: 1 },

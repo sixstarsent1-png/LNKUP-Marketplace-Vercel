@@ -3,6 +3,13 @@ import { cachedRequest, invalidateCache, type CachedRequestOptions } from "@/lib
 import type { WpAuth } from "@/lib/api/wp-client"
 import { wpFetchJson } from "@/lib/api/wp-client"
 import { mapEventMedia, type EventMedia, type WpEventMedia } from "@/lib/api/event-media"
+import {
+  fetchOrganizerEventSummary,
+  fetchOrganizerPortfolio,
+  type EventCapacity,
+  type EventMoneyGross,
+  type OrganizerEventPresentation,
+} from "@/lib/api/organizer-portfolio"
 import { MOCK_ORGANIZER_EVENTS } from "@/lib/data/fixtures"
 import { parseCalendarDate } from "@/lib/format/date"
 
@@ -51,6 +58,25 @@ export type OrganizerEventLite = {
   vendorFee?: number
   spotsTotal?: number
   spotsRemaining?: number
+  /** Canonical "City, ST" from the server; prefer over joining city/state locally. */
+  place?: string
+  capacity?: EventCapacity
+  moneyGross?: EventMoneyGross
+}
+
+/** Overlay server presentation fields (canonical title, place, capacity, gross money). */
+export function withPresentation(
+  event: OrganizerEventLite,
+  presentation: OrganizerEventPresentation | null | undefined,
+): OrganizerEventLite {
+  if (!presentation) return event
+  return {
+    ...event,
+    title: presentation.title || event.title,
+    place: presentation.place || undefined,
+    capacity: presentation.capacity,
+    moneyGross: presentation.money,
+  }
 }
 
 export type OrganizerEventUpdatePayload = {
@@ -333,9 +359,12 @@ export async function fetchOrganizerEvents(
   return cachedRequest(
     `${EVENTS_CACHE_PREFIX}${auth.username}`,
     async () => {
-      const inviteList = await loadInviteList(auth, { includeAll: true })
+      const [inviteList, portfolio] = await Promise.all([
+        loadInviteList(auth, { includeAll: true }),
+        fetchOrganizerPortfolio(auth).catch(() => new Map<string, OrganizerEventPresentation>()),
+      ])
       const baseEvents = inviteList
-        .map((item) => mapInviteOptionToEventLite(item))
+        .map((item) => withPresentation(mapInviteOptionToEventLite(item), portfolio.get(String(item.event_id ?? ""))))
         .filter((event) => event.id)
         .slice(0, 50)
 
@@ -352,6 +381,45 @@ export function invalidateOrganizerEvents(): void {
   invalidateCache(EVENTS_CACHE_PREFIX)
   // Home's launch checklist and counts follow the events (prefix only; importing Home would cycle).
   invalidateCache("organizer.home:")
+  invalidateCache("org-mobile:")
+}
+
+export type DuplicateEventInput = {
+  name: string
+  date: string
+  keepLocation: boolean
+  city?: string
+  state?: string
+  clientToken: string
+}
+
+/**
+ * Copy an event's configuration (booth types, prices, packet, map) to a new date. The server
+ * requires a date and either an explicit "same location" or the new city and state.
+ */
+export async function duplicateOrganizerEvent(
+  eventId: string,
+  input: DuplicateEventInput,
+  auth: WpAuth,
+): Promise<{ eventId: string; message?: string }> {
+  const body: Record<string, unknown> = {
+    event_name: input.name,
+    event_date: input.date,
+    client_token: input.clientToken,
+  }
+  if (input.keepLocation) {
+    body.keep_location = true
+  } else {
+    body.city = input.city ?? ""
+    body.state = input.state ?? ""
+  }
+  const res = await wpFetchJson<{ event_id?: number | string; message?: string }>(`/organizer/events/${eventId}/duplicate`, {
+    method: "POST",
+    auth,
+    body,
+  })
+  invalidateOrganizerEvents()
+  return { eventId: String(res.event_id ?? ""), message: res.message }
 }
 
 export async function fetchOrganizerEvent(
@@ -368,13 +436,16 @@ export async function fetchOrganizerEvent(
 
   if (!auth) return null
 
-  const inviteList = await loadInviteList(auth, { includeAll: true })
+  const [inviteList, summary] = await Promise.all([
+    loadInviteList(auth, { includeAll: true }),
+    fetchOrganizerEventSummary(eventId, auth).catch(() => null),
+  ])
   const match = inviteList
     .map((item) => mapInviteOptionToEventLite(item))
     .find((event) => event.id === eventId)
 
   if (match) {
-    return enrichRoster(match, auth)
+    return enrichRoster(withPresentation(match, summary), auth)
   }
 
   // Fallback: roster ownership proves the event exists even if invite-options lags.
@@ -398,7 +469,7 @@ export async function fetchOrganizerEvent(
       status: deriveEventStatus(date),
       wordpressUrl: base ? `${base}?view=operations&event=${eventId}` : undefined,
     }
-    return enrichEventWithRoster(lite, roster)
+    return enrichEventWithRoster(withPresentation(lite, summary), roster)
   } catch {
     return null
   }

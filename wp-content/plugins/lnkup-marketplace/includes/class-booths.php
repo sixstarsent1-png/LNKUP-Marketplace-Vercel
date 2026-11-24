@@ -169,6 +169,102 @@ class LNKup_Booths {
 	}
 
 	/**
+	 * Free a booth. The vendor keeps their booking; only the booth link is removed.
+	 *
+	 * @param int $booth_id Booth row ID.
+	 * @param int $event_id Event the booth must belong to.
+	 * @return true|WP_Error
+	 */
+	public static function unassign( $booth_id, $event_id ) {
+		global $wpdb;
+		$table = LNKup_Operations_Tables::booths_table();
+		$lock  = 'lnkup_booth_' . absint( $booth_id );
+		if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return new WP_Error( 'busy', __( 'Another change to this booth is in progress. Try again.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
+		}
+		try {
+			$booth = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d AND event_id = %d", absint( $booth_id ), absint( $event_id ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( ! $booth ) {
+				return new WP_Error( 'not_found', __( 'Booth not found for this event.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+			}
+			$app_id = (int) $booth['application_id'];
+			if ( ! $app_id ) {
+				return true;
+			}
+			$wpdb->update( $table, array( 'application_id' => 0, 'updated_at' => current_time( 'mysql' ) ), array( 'id' => absint( $booth_id ) ), array( '%d', '%s' ), array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		} finally {
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		self::sync_packet( $app_id, '' );
+		delete_post_meta( $app_id, '_lnkup_booth_placeholder' );
+		LNKup_Vendor_Readiness::refresh( $app_id );
+		LNKup_Operations_Log::log( (int) $event_id, 'booth_unassigned', array( 'application_id' => $app_id, 'payload' => array( 'booth_number' => $booth['booth_number'] ) ) );
+		delete_transient( 'lnkup_map_live_' . (int) $event_id );
+		return true;
+	}
+
+	/**
+	 * Exchange the vendors on two booths of the same event.
+	 *
+	 * @param int $booth_a  First booth.
+	 * @param int $booth_b  Second booth.
+	 * @param int $event_id Event both booths must belong to.
+	 * @return true|WP_Error
+	 */
+	public static function swap( $booth_a, $booth_b, $event_id ) {
+		global $wpdb;
+		$table = LNKup_Operations_Tables::booths_table();
+		$ids   = array( absint( $booth_a ), absint( $booth_b ) );
+		sort( $ids );
+		if ( $ids[0] === $ids[1] ) {
+			return new WP_Error( 'same_booth', __( 'Choose two different booths.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$locks = array();
+		foreach ( $ids as $id ) {
+			$lock = 'lnkup_booth_' . $id;
+			if ( ! (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock ) ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				foreach ( $locks as $held ) {
+					$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $held ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				}
+				return new WP_Error( 'busy', __( 'Another change to these booths is in progress. Try again.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
+			}
+			$locks[] = $lock;
+		}
+		try {
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE event_id = %d AND id IN (%d, %d)", absint( $event_id ), $ids[0], $ids[1] ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( 2 !== count( (array) $rows ) ) {
+				return new WP_Error( 'not_found', __( 'Both booths must belong to this event.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+			}
+			$by_id = array();
+			foreach ( $rows as $row ) {
+				$by_id[ (int) $row['id'] ] = $row;
+			}
+			$a   = $by_id[ absint( $booth_a ) ];
+			$b   = $by_id[ absint( $booth_b ) ];
+			$now = current_time( 'mysql' );
+			$wpdb->update( $table, array( 'application_id' => (int) $b['application_id'], 'updated_at' => $now ), array( 'id' => (int) $a['id'] ), array( '%d', '%s' ), array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->update( $table, array( 'application_id' => (int) $a['application_id'], 'updated_at' => $now ), array( 'id' => (int) $b['id'] ), array( '%d', '%s' ), array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		} finally {
+			foreach ( $locks as $held ) {
+				$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $held ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			}
+		}
+		foreach ( array( array( (int) $b['application_id'], $a['booth_number'] ), array( (int) $a['application_id'], $b['booth_number'] ) ) as $pair ) {
+			if ( $pair[0] ) {
+				self::sync_packet( $pair[0], $pair[1] );
+				update_post_meta( $pair[0], '_lnkup_booth_placeholder', $pair[1] );
+				LNKup_Vendor_Readiness::refresh( $pair[0] );
+				if ( in_array( (string) get_post_meta( $pair[0], '_lnkup_application_status', true ), array( 'paid', 'completed' ), true ) ) {
+					LNKup_Notifications::send_pass_details_updated( $pair[0] );
+				}
+			}
+		}
+		LNKup_Operations_Log::log( (int) $event_id, 'booths_swapped', array( 'payload' => array( 'booths' => array( $a['booth_number'], $b['booth_number'] ) ) ) );
+		delete_transient( 'lnkup_map_live_' . (int) $event_id );
+		return true;
+	}
+
+	/**
 	 * Sync booth to packet meta.
 	 *
 	 * @param int    $app_id Application ID.

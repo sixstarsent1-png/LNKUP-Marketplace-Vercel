@@ -58,6 +58,8 @@ export type OrganizerLaunchPublishResult = {
   wordpressUrl?: string
   message?: string
   validationErrors?: Array<{ field: string; message: string }>
+  /** WordPress Location Service suggestions when the city/state needs confirmation (422). */
+  locationSuggestions?: Array<{ city: string; state_code: string; display: string; label?: string }>
   raw?: unknown
 }
 

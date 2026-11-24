@@ -100,10 +100,30 @@ class LNKup_Map_Insights {
 		); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$items = array();
 		foreach ( (array) $rows as $row ) {
-			$items[] = array(
-				'city'          => $row['city'],
-				'state'         => $row['state'],
-				'label'         => trim( $row['city'] . ', ' . $row['state'] ),
+			$city  = (string) $row['city'];
+			$state = (string) $row['state'];
+			if ( class_exists( 'LNKup_Location_Service' ) ) {
+				// Merge spelling variants of the same city into one pin.
+				$r = LNKup_Location_Service::resolve( $city, $state );
+				if ( in_array( $r['status'], array( LNKup_Location_Service::VERIFIED, LNKup_Location_Service::NORMALIZED ), true ) && '' !== $r['state_code'] ) {
+					$city  = (string) $r['city'];
+					$state = (string) $r['state_code'];
+				}
+			}
+			$key = strtolower( $city ) . '|' . strtoupper( $state );
+			if ( isset( $items[ $key ] ) ) {
+				$n                               = $items[ $key ]['opportunities'] + (int) $row['opportunities'];
+				$items[ $key ]['lat']            = ( $items[ $key ]['lat'] * $items[ $key ]['opportunities'] + (float) $row['lat'] * (int) $row['opportunities'] ) / max( 1, $n );
+				$items[ $key ]['lng']            = ( $items[ $key ]['lng'] * $items[ $key ]['opportunities'] + (float) $row['lng'] * (int) $row['opportunities'] ) / max( 1, $n );
+				$items[ $key ]['opportunities']  = $n;
+				$items[ $key ]['applications']  += (int) $row['applications'];
+				$items[ $key ]['revenue_proxy'] += (float) $row['revenue_proxy'];
+				continue;
+			}
+			$items[ $key ] = array(
+				'city'          => $city,
+				'state'         => $state,
+				'label'         => trim( $city . ', ' . $state ),
 				'lat'           => (float) $row['lat'],
 				'lng'           => (float) $row['lng'],
 				'opportunities' => (int) $row['opportunities'],
@@ -111,6 +131,6 @@ class LNKup_Map_Insights {
 				'revenue_proxy' => (float) $row['revenue_proxy'],
 			);
 		}
-		return $items;
+		return array_values( $items );
 	}
 }

@@ -1,5 +1,6 @@
 import { router } from "expo-router"
 
+import { clearRequestCache } from "@/lib/api/request-cache"
 import { useAuth } from "@/lib/auth/auth-context"
 import type { AppHomeRole } from "@/lib/auth/roles"
 import { confirmAction, showToast } from "@/lib/feedback/feedback"
@@ -22,6 +23,8 @@ export function useSignOut(): [() => Promise<void>, boolean] {
   return [async () => void (await run()), busy]
 }
 
+const WORKSPACE_LABEL: Record<AppHomeRole, string> = { vendor: "vendor", organizer: "organizer", partner: "partner" }
+
 const SHELL_FOR: Record<AppHomeRole, "/(vendor)" | "/(organizer)" | "/(partner)"> = {
   vendor: "/(vendor)",
   organizer: "/(organizer)",
@@ -34,7 +37,10 @@ export function useSwitchRole(): [(role: AppHomeRole) => Promise<void>, boolean]
   const [run, busy] = useSingleFlight(async (role: AppHomeRole) => {
     try {
       await setHomeRole(role)
+      // Each workspace loads its own records; never show one workspace's cached lists in another.
+      clearRequestCache()
       router.replace(SHELL_FOR[role])
+      showToast(`Switched to your ${WORKSPACE_LABEL[role]} workspace.`, "success")
     } catch {
       showToast("Couldn't switch workspace. Try again.", "error")
     }

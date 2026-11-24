@@ -664,7 +664,14 @@
       }
       var kpis = document.getElementById('lnkup-ops-kpis');
       var feed = document.getElementById('lnkup-ops-feed');
-      if (snap.kpis && kpis) {
+      if (snap.kpis && kpis && snap.kpis.lifecycle && snap.kpis.lifecycle.cards) {
+        var life = snap.kpis.lifecycle;
+        var lifeHtml = '<p class="vos-eyebrow" data-testid="lnkup-ops-phase">' + escapeHtml(life.phase_label || '') + '</p><div class="lnkup-ops-kpis vos-metrics" data-testid="lnkup-ops-lifecycle-kpis">';
+        life.cards.forEach(function (c) {
+          lifeHtml += '<div class="vos-metric"><span class="vos-metric__label">' + escapeHtml(c.label) + '</span><span class="vos-metric__value oos-fraction">' + escapeHtml(String(c.value)) + '</span><span class="vos-metric__hint oos-denominator">' + escapeHtml(c.denominator) + '</span></div>';
+        });
+        kpis.innerHTML = lifeHtml + '</div>';
+      } else if (snap.kpis && kpis) {
         var readinessVal = (snap.kpis.readiness_percent != null ? snap.kpis.readiness_percent : 0) + '%';
         var cards = [
           ['Approved', snap.kpis.approved_vendors, ''],
@@ -733,6 +740,18 @@
       }
       if (!res.alerts.length) {
         compliance.innerHTML = '<p class="lnkup-muted">No compliance alerts.</p>';
+        return;
+      }
+      if (res.groups && res.groups.length) {
+        var groupHtml = '<ul class="lnkup-ops-alerts" data-testid="lnkup-ops-compliance-groups">';
+        res.groups.forEach(function (g) {
+          var names = (g.vendors || []).filter(Boolean).slice(0, 3);
+          var more = Math.max(0, (g.count || 0) - names.length);
+          groupHtml += '<li class="lnkup-ops-alert lnkup-ops-alert--' + escapeHtml(g.severity || 'medium') + '"><strong>' + escapeHtml(g.requirement || '') + '</strong> · ' +
+            escapeHtml(g.owner_label || '') + ' · ' + escapeHtml(g.count + (g.count === 1 ? ' vendor' : ' vendors')) +
+            '<br><span class="lnkup-muted">' + escapeHtml(names.join(', ') + (more ? ' +' + more + ' more' : '')) + '</span></li>';
+        });
+        compliance.innerHTML = groupHtml + '</ul>';
         return;
       }
       var alertHtml = '<ul class="lnkup-ops-alerts">';
@@ -869,6 +888,281 @@
     el.innerHTML = html;
   }
 
+  /* ---------------- Booths (Organizer OS 2.0) ---------------- */
+
+  var boothState = { rows: [], mode: '', boothId: 0, appId: 0 };
+
+  function bookedVendors(root) {
+    try {
+      return JSON.parse(root.getAttribute('data-booked-vendors') || '[]') || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function boothError(scope, message) {
+    var box = scope && scope.querySelector('[data-oos-booth-error]');
+    if (!box) {
+      return;
+    }
+    box.textContent = message || '';
+    box.className = 'vos-notice vos-notice--danger';
+    box.hidden = !message;
+  }
+
+  function osBoothFetch(root, path, body) {
+    return window.LNKupOS.fetchJson('operations/events/' + encodeURIComponent(root.getAttribute('data-event-id')) + path, body ? { method: 'POST', body: body } : {});
+  }
+
+  function renderBoothsOS(root, rows) {
+    var el = root.querySelector('#lnkup-ops-booths-list');
+    var statsEl = root.querySelector('#lnkup-ops-booths-stats');
+    var waitingEl = root.querySelector('#lnkup-ops-booths-unassigned');
+    var vendors = bookedVendors(root);
+    var byApp = {};
+    vendors.forEach(function (v) { byApp[v.application_id] = v; });
+    var assignedApps = {};
+    rows.forEach(function (r) { if (r.application_id) { assignedApps[r.application_id] = r; } });
+    var blocked = rows.filter(function (r) { return !r.application_id && r.booth_type === 'reserved'; }).length;
+    var assigned = rows.filter(function (r) { return r.application_id; }).length;
+    var waiting = vendors.filter(function (v) { return !assignedApps[v.application_id]; });
+    var waitingPaid = waiting.filter(function (v) { return v.paid; }).length;
+    statsEl.innerHTML = '<div class="vos-metrics" data-testid="lnkup-booth-summary">' +
+      [['Total booths', rows.length], ['Available', rows.length - assigned - blocked], ['Assigned', assigned], ['Blocked (reserved)', blocked], ['Paid vendors without a booth', waitingPaid]].map(function (m) {
+        return '<div class="vos-metric"><span class="vos-metric__label">' + escapeHtml(m[0]) + '</span><span class="vos-metric__value">' + escapeHtml(String(m[1])) + '</span></div>';
+      }).join('') + '</div>';
+
+    if (!rows.length) {
+      el.innerHTML = '<div class="vos-empty"><p class="vos-empty__title">No booths yet</p><p class="vos-empty__desc">Create booths in bulk (for example A01–A20) or add them one at a time. You don’t need a map.</p></div>';
+    } else {
+      var html = '<div class="vos-table-wrap vos-table--cards" data-testid="lnkup-booth-table"><table class="vos-table"><caption class="vos-sr">Booths</caption><thead><tr><th scope="col">Booth</th><th scope="col">Type</th><th scope="col">Size</th><th scope="col">Utilities</th><th scope="col">Vendor</th><th scope="col" class="vos-actions">Actions</th></tr></thead><tbody>';
+      rows.forEach(function (r) {
+        var utilities = [r.has_power ? 'Power' : '', r.has_water ? 'Water' : ''].filter(Boolean).join(' · ') || '—';
+        var vendor = r.application_id
+          ? escapeHtml(r.vendor_name || (byApp[r.application_id] && byApp[r.application_id].name) || 'Booked vendor')
+          : (r.booth_type === 'reserved' ? '<span class="lnkup-muted">Blocked</span>' : '<span class="lnkup-muted">Available</span>');
+        var actions = '<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" data-oos-booth-assign="' + r.id + '">' + (r.application_id ? 'Change' : 'Assign') + '</button>';
+        if (r.application_id) {
+          actions += ' <button type="button" class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" data-oos-booth-swap="' + r.id + '">Swap</button>' +
+            ' <button type="button" class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" data-oos-booth-unassign="' + r.id + '">Unassign</button>';
+        }
+        html += '<tr data-booth-id="' + r.id + '"><td class="vos-cell-lead" data-label="Booth"><strong>' + escapeHtml(r.booth_number) + '</strong></td><td data-label="Type">' + escapeHtml(r.booth_type_label || r.booth_type || '') + '</td><td data-label="Size">' + escapeHtml(r.booth_size || '—') + '</td><td data-label="Utilities">' + escapeHtml(utilities) + '</td><td data-label="Vendor">' + vendor + '</td><td class="vos-actions" data-label="Actions">' + actions + '</td></tr>';
+      });
+      el.innerHTML = html + '</tbody></table></div>';
+    }
+
+    if (waitingEl) {
+      if (!waiting.length) {
+        waitingEl.innerHTML = '';
+      } else {
+        waitingEl.innerHTML = '<h3 class="vos-section-head__title" style="font-size:16px;margin:16px 0 8px">Booked vendors without a booth</h3><ul class="vos-timeline">' + waiting.map(function (v) {
+          return '<li><span>' + escapeHtml(v.name) + (v.paid ? '' : ' <span class="lnkup-muted">(approved, not paid yet)</span>') + '</span><button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" data-oos-vendor-assign="' + v.application_id + '">Assign booth</button></li>';
+        }).join('') + '</ul>';
+      }
+    }
+  }
+
+  function openBoothDrawer(root, mode, id, trigger) {
+    var drawer = document.getElementById('oos-booth-assign');
+    if (!drawer || !window.LNKupOS) {
+      return;
+    }
+    boothState.mode = mode;
+    boothState.boothId = mode === 'vendor' ? 0 : id;
+    boothState.appId = mode === 'vendor' ? id : 0;
+    var vendors = bookedVendors(root);
+    var title = drawer.querySelector('h2');
+    var body = drawer.querySelector('[data-oos-booth-assign-body]');
+    boothError(drawer, '');
+    var current = boothState.rows.filter(function (r) { return r.id === boothState.boothId; })[0];
+    var html = '';
+    if (mode === 'booth') {
+      title.textContent = 'Assign booth ' + (current ? current.booth_number : '');
+      html = '<label class="vos-field"><span>Vendor</span><select name="application_id"><option value="">Choose a booked vendor</option>' + vendors.map(function (v) {
+        var has = boothState.rows.filter(function (r) { return r.application_id === v.application_id; })[0];
+        return '<option value="' + v.application_id + '"' + (current && current.application_id === v.application_id ? ' selected' : '') + '>' + escapeHtml(v.name + (has ? ' — now at ' + has.booth_number : '') + (v.paid ? '' : ' (not paid yet)')) + '</option>';
+      }).join('') + '</select><span class="vos-field__hint">A vendor holds one booth per event. Choosing a vendor who already has a booth moves them here.</span></label>';
+    } else if (mode === 'vendor') {
+      var vendor = vendors.filter(function (v) { return v.application_id === boothState.appId; })[0];
+      title.textContent = 'Assign a booth to ' + (vendor ? vendor.name : 'vendor');
+      html = '<label class="vos-field"><span>Booth</span><select name="booth_id"><option value="">Choose an available booth</option>' + boothState.rows.filter(function (r) { return !r.application_id; }).map(function (r) {
+        return '<option value="' + r.id + '">' + escapeHtml(r.booth_number + ' · ' + (r.booth_type_label || '') + (r.booth_size ? ' · ' + r.booth_size : '')) + '</option>';
+      }).join('') + '</select></label>';
+    } else {
+      title.textContent = 'Swap booth ' + (current ? current.booth_number : '');
+      html = '<label class="vos-field"><span>Swap with</span><select name="other_booth"><option value="">Choose another assigned booth</option>' + boothState.rows.filter(function (r) { return r.application_id && r.id !== boothState.boothId; }).map(function (r) {
+        return '<option value="' + r.id + '">' + escapeHtml(r.booth_number + ' · ' + (r.vendor_name || 'Booked vendor')) + '</option>';
+      }).join('') + '</select><span class="vos-field__hint">Both vendors get updated passes.</span></label>';
+    }
+    body.innerHTML = html;
+    window.LNKupOS.open(drawer, trigger);
+  }
+
+  function reloadBooths(root) {
+    var el = root.querySelector('#lnkup-ops-booths-list');
+    if (el) {
+      el.dataset.loaded = '';
+    }
+    loadBooths(root);
+  }
+
+  function bindBoothsOS(root) {
+    if (root.dataset.boothsBound === '1' || !window.LNKupOS) {
+      return;
+    }
+    root.dataset.boothsBound = '1';
+    document.addEventListener('click', function (e) {
+      var t = e.target.closest ? e.target : null;
+      if (!t) {
+        return;
+      }
+      var assign = t.closest('[data-oos-booth-assign]');
+      if (assign) {
+        openBoothDrawer(root, 'booth', parseInt(assign.getAttribute('data-oos-booth-assign'), 10), assign);
+        return;
+      }
+      var vendor = t.closest('[data-oos-vendor-assign]');
+      if (vendor) {
+        openBoothDrawer(root, 'vendor', parseInt(vendor.getAttribute('data-oos-vendor-assign'), 10), vendor);
+        return;
+      }
+      var swap = t.closest('[data-oos-booth-swap]');
+      if (swap) {
+        openBoothDrawer(root, 'swap', parseInt(swap.getAttribute('data-oos-booth-swap'), 10), swap);
+        return;
+      }
+      var unassign = t.closest('[data-oos-booth-unassign]');
+      if (unassign) {
+        if (!window.confirm('Remove the vendor from this booth? Their booking stays in place.')) {
+          return;
+        }
+        unassign.disabled = true;
+        osBoothFetch(root, '/booths/' + unassign.getAttribute('data-oos-booth-unassign') + '/unassign', {}).then(function (res) {
+          if (!res.ok) {
+            unassign.disabled = false;
+            window.LNKupOS.toast((res.data && res.data.message) || 'Could not unassign this booth.', 'danger');
+            return;
+          }
+          window.LNKupOS.toast('Booth unassigned.', 'success');
+          reloadBooths(root);
+        });
+        return;
+      }
+      var save = t.closest('[data-oos-booth-assign-save]');
+      if (save) {
+        var drawer = save.closest('[data-vos-overlay]');
+        var request;
+        if (boothState.mode === 'swap') {
+          var other = parseInt((drawer.querySelector('[name="other_booth"]') || {}).value, 10);
+          if (!other) { boothError(drawer, 'Choose the booth to swap with.'); return; }
+          request = osBoothFetch(root, '/booths/swap', { booth_a: boothState.boothId, booth_b: other });
+        } else {
+          var boothId = boothState.mode === 'vendor' ? parseInt((drawer.querySelector('[name="booth_id"]') || {}).value, 10) : boothState.boothId;
+          var appId = boothState.mode === 'vendor' ? boothState.appId : parseInt((drawer.querySelector('[name="application_id"]') || {}).value, 10);
+          if (!boothId || !appId) { boothError(drawer, boothState.mode === 'vendor' ? 'Choose a booth.' : 'Choose a vendor.'); return; }
+          request = osBoothFetch(root, '/booths/' + boothId + '/assign', { application_id: appId });
+        }
+        save.disabled = true;
+        request.then(function (res) {
+          save.disabled = false;
+          if (!res.ok) {
+            boothError(drawer, (res.data && res.data.message) || 'Could not save. Try again.');
+            return;
+          }
+          window.LNKupOS.close(drawer, true);
+          window.LNKupOS.toast('Booth saved.', 'success');
+          reloadBooths(root);
+        });
+        return;
+      }
+      var bulkSave = t.closest('[data-oos-booth-bulk-save]');
+      if (bulkSave) {
+        runBulkBooths(root, bulkSave);
+      }
+    });
+    document.addEventListener('input', function (e) {
+      if (e.target.closest && e.target.closest('[data-oos-booth-bulk-form]')) {
+        previewBulkBooths(e.target.closest('[data-oos-booth-bulk-form]'));
+      }
+    });
+    document.addEventListener('vos:open', function (e) {
+      if (e.target && e.target.id === 'oos-booth-bulk') {
+        previewBulkBooths(e.target.querySelector('[data-oos-booth-bulk-form]'));
+      }
+    });
+  }
+
+  function bulkNumbers(form) {
+    var prefix = String(form.elements.prefix.value || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+    var from = parseInt(form.elements.from.value, 10);
+    var to = parseInt(form.elements.to.value, 10);
+    if (!(from >= 1) || !(to >= from) || to - from > 199) {
+      return { error: 'Use a range like 1 to 20 (up to 200 booths at once).' };
+    }
+    var width = Math.max(2, String(to).length);
+    var list = [];
+    for (var n = from; n <= to; n++) {
+      list.push(prefix + String(n).padStart(width, '0'));
+    }
+    var existing = {};
+    boothState.rows.forEach(function (r) { existing[String(r.booth_number).toUpperCase()] = true; });
+    var dupes = list.filter(function (num) { return existing[num]; });
+    return { list: list, dupes: dupes };
+  }
+
+  function previewBulkBooths(form) {
+    if (!form) {
+      return;
+    }
+    var preview = form.querySelector('[data-oos-booth-preview]');
+    var res = bulkNumbers(form);
+    if (res.error) {
+      preview.textContent = res.error;
+      return;
+    }
+    preview.textContent = 'Will create ' + res.list.length + ' booths: ' + res.list[0] + (res.list.length > 1 ? '–' + res.list[res.list.length - 1] : '') + '.' +
+      (res.dupes.length ? ' ' + res.dupes.length + ' already exist and will be skipped (' + res.dupes.slice(0, 5).join(', ') + (res.dupes.length > 5 ? '…' : '') + ').' : '');
+  }
+
+  function runBulkBooths(root, btn) {
+    var dialog = btn.closest('[data-vos-overlay]');
+    var form = dialog.querySelector('[data-oos-booth-bulk-form]');
+    var res = bulkNumbers(form);
+    if (res.error) {
+      boothError(dialog, res.error);
+      return;
+    }
+    var todo = res.list.filter(function (num) { return res.dupes.indexOf(num) === -1; });
+    if (!todo.length) {
+      boothError(dialog, 'All of these booth numbers already exist.');
+      return;
+    }
+    boothError(dialog, '');
+    btn.disabled = true;
+    var created = 0;
+    var failed = [];
+    var base = {
+      booth_type: form.elements.booth_type.value,
+      booth_size: form.elements.booth_size.value,
+      has_power: form.elements.has_power.checked,
+      has_water: form.elements.has_water.checked
+    };
+    var chain = Promise.resolve();
+    todo.forEach(function (num) {
+      chain = chain.then(function () {
+        return osBoothFetch(root, '/booths', Object.assign({ booth_number: num }, base)).then(function (r) {
+          if (r.ok) { created++; } else { failed.push(num); }
+        });
+      });
+    });
+    chain.then(function () {
+      btn.disabled = false;
+      window.LNKupOS.close(dialog, true);
+      window.LNKupOS.toast('Created ' + created + ' booths' + (failed.length ? '. Not created: ' + failed.join(', ') : '.'), failed.length ? 'warning' : 'success');
+      reloadBooths(root);
+    });
+  }
+
   function loadBooths(root) {
     var el = root.querySelector('#lnkup-ops-booths-list');
     var statsEl = root.querySelector('#lnkup-ops-booths-stats');
@@ -876,6 +1170,22 @@
       return;
     }
     if (el.dataset.loaded === '1') {
+      return;
+    }
+    if (window.LNKupOS && document.getElementById('oos-booth-assign')) {
+      bindBoothsOS(root);
+      el.innerHTML = '<p class="lnkup-muted">Loading booths…</p>';
+      osBoothFetch(root, '/booths').then(function (res) {
+        if (!res.ok) {
+          el.innerHTML = '<div class="vos-empty"><p class="vos-empty__title">Booths could not load</p><button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" data-oos-booth-retry>Retry</button></div>';
+          var retry = el.querySelector('[data-oos-booth-retry]');
+          if (retry) { retry.addEventListener('click', function () { loadBooths(root); }); }
+          return;
+        }
+        el.dataset.loaded = '1';
+        boothState.rows = (res.data && res.data.items) || [];
+        renderBoothsOS(root, boothState.rows);
+      });
       return;
     }
     if (window.LNKupUI) {
@@ -923,11 +1233,13 @@
         { label: 'parking assignments', value: rows.length },
         { label: 'with gate', value: rows.filter(function (r) { return r.gate; }).length }
       ]);
+      var parkingNames = {};
+      bookedVendors(root).forEach(function (v) { parkingNames[v.application_id] = v.name; });
       renderTable(el, res.items || [], [
         { key: 'lot', label: 'Lot' },
         { key: 'row_label', label: 'Row' },
         { key: 'space_number', label: 'Space' },
-        { key: 'application_id', label: 'App' },
+        { key: 'application_id', label: 'Vendor', render: function (raw) { return raw ? escapeHtml(parkingNames[raw] || 'Booked vendor') : '<span class="lnkup-muted">Open</span>'; } },
         { key: 'gate', label: 'Gate' }
       ], {
         emptyTitle: 'No parking assignments yet'
@@ -961,7 +1273,12 @@
       renderTable(el, res.windows || [], [
         { key: 'label', label: 'Window' },
         { key: 'gate', label: 'Gate' },
-        { key: 'max_slots', label: 'Slots' }
+        { key: 'max_slots', label: 'Capacity' },
+        { key: 'assigned_count', label: 'Assigned' },
+        { key: 'slots_remaining', label: 'Open', render: function (raw, row) {
+          var open = Number(raw || 0);
+          return open > 0 ? escapeHtml(String(open)) : '<span class="lnkup-status lnkup-status--warning">Full</span>';
+        } }
       ], {
         emptyTitle: 'No load-in windows yet'
       });
@@ -1350,12 +1667,33 @@
     resultEl.appendChild(body);
   }
 
+  /** Clear titles for each check-in outcome; the server message stays as the detail line. */
+  var SCAN_OUTCOMES = {
+    already_checked_in: ['warning', 'Already checked in'],
+    wrong_event: ['error', 'Wrong event — this pass is for a different event'],
+    invalid_booking: ['error', 'Booking not eligible for check-in'],
+    not_found: ['error', 'Pass not recognized'],
+    payment_pending: ['warning', 'Payment still pending'],
+    documents: ['warning', 'Documents need attention'],
+    event_completed: ['error', 'Event is closed for check-in'],
+    forbidden: ['error', 'You can’t check in vendors for this event']
+  };
+
   function submitScan(eventId, token, resultEl) {
     return opsFetch('/qr/scan', {
       method: 'POST',
       body: { token: token, event_id: parseInt(eventId, 10) }
     }).then(function (res) {
       if (!resultEl) {
+        return;
+      }
+      var outcome = res && SCAN_OUTCOMES[res.reason || res.code];
+      if (outcome && res.reason !== 'already_checked_in') {
+        renderScanCard(resultEl, outcome[0], outcome[1], (res && res.message) || '');
+        return;
+      }
+      if (res && res.reason === 'already_checked_in') {
+        renderScanCard(resultEl, 'warning', 'Already checked in', [res.business_name || '', res.checked_in_at ? 'at ' + String(res.checked_in_at).slice(11, 16) : ''].filter(Boolean).join(' · '));
         return;
       }
       if (!res || res.code || res.success === false) {
@@ -1370,8 +1708,12 @@
         return;
       }
       var message = (err && err.message && err.message !== 'api_error') ? err.message : 'Scan request failed. Try again.';
-      var state = err && err.code === 'already_checked_in' ? 'warning' : 'error';
-      renderScanCard(resultEl, state, message, '');
+      var known = err && SCAN_OUTCOMES[err.code];
+      if (known) {
+        renderScanCard(resultEl, known[0], known[1], message);
+        return;
+      }
+      renderScanCard(resultEl, 'error', message, '');
     });
   }
 

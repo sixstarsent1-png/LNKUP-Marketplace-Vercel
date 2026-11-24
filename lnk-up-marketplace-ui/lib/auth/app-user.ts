@@ -217,6 +217,13 @@ function canOpenPath(user: AppSessionUser, path: string): boolean {
   if (path === "/admin" || path.startsWith("/admin/") || path.startsWith("/ops") || path.startsWith("/qa")) {
     return false
   }
+  // Public discovery pages a guest started from; any signed-in role may return to them.
+  if (/^\/markets\/[a-z0-9-]+\/?(\?.*)?$/.test(path)) {
+    return true
+  }
+  if (path === "/vendor/find" || path.startsWith("/vendor/find?")) {
+    return Boolean(user.canAccessVendor || user.canAccessOrganizer)
+  }
   if (path.startsWith("/organizer")) {
     return Boolean(user.canAccessOrganizer)
   }

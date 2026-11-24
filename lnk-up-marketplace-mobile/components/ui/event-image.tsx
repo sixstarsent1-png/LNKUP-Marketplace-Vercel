@@ -9,6 +9,11 @@ import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
 type EventImageProps = {
   uri?: string | null
+  /**
+   * Approved fallback art from WordPress (category illustration) used when `uri` is missing or
+   * fails, before the branded placeholder.
+   */
+  fallbackUri?: string | null
   /** Shown on the branded placeholder when there is no image or it fails to load. */
   label?: string
   icon?: AppIconName
@@ -17,18 +22,22 @@ type EventImageProps = {
   radius?: number
   style?: StyleProp<ViewStyle>
   accessibilityLabel?: string
-  /** "contain" shows the whole artwork (flyers, logos) on `background` instead of cropping. */
+  /** "contain" shows the whole artwork (flyers, logos) instead of cropping. */
   fit?: "cover" | "contain"
-  /** Frame color behind contained artwork (from WordPress media.background). */
+  /**
+   * Frame color behind contained artwork (from WordPress media.background). Without one, the
+   * same image is shown blurred behind the flyer so portrait art does not float in empty space.
+   */
   background?: string
 }
 
 /**
- * Event/listing image with disk caching, a short fade-in (none with Reduce Motion), and a branded
- * placeholder instead of a broken image when the URL is missing or fails.
+ * Event/listing image with disk caching, a short fade-in (none with Reduce Motion), WordPress'
+ * resolved media first, its category fallback next, and a branded placeholder last.
  */
 export function EventImage({
   uri,
+  fallbackUri,
   label,
   icon = "storefront-outline",
   height,
@@ -40,28 +49,48 @@ export function EventImage({
   background,
 }: EventImageProps) {
   const reduceMotion = useReducedMotion()
-  const [failedUri, setFailedUri] = useState<string | null>(null)
-  const showImage = Boolean(uri) && failedUri !== uri
+  const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set())
+  const candidates = [uri, fallbackUri].filter((u): u is string => typeof u === "string" && u.length > 0)
+  const source = candidates.find((u) => !failed.has(u))
+  const usingFallback = Boolean(source) && source !== uri
   const sizing = height != null ? { height } : { aspectRatio }
-  const contain = fit === "contain"
+  const contain = fit === "contain" && !usingFallback
+  const markFailed = (failedUri: string) =>
+    setFailed((prev) => {
+      const next = new Set(prev)
+      next.add(failedUri)
+      return next
+    })
 
   return (
     <View
-      style={[styles.frame, sizing, { borderRadius: radius }, showImage && background ? { backgroundColor: background } : null, style]}
+      style={[styles.frame, sizing, { borderRadius: radius }, source && contain && background ? { backgroundColor: background } : null, style]}
       accessible={Boolean(accessibilityLabel)}
       accessibilityRole={accessibilityLabel ? "image" : undefined}
       accessibilityLabel={accessibilityLabel}
     >
-      {showImage ? (
+      {source && contain && !background ? (
         <Image
-          source={{ uri: uri as string }}
+          source={{ uri: source }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          blurRadius={24}
+          cachePolicy="memory-disk"
+          recyclingKey={`${source}:backdrop`}
+          accessibilityIgnoresInvertColors
+        />
+      ) : null}
+      {source && contain && !background ? <View style={styles.scrim} /> : null}
+      {source ? (
+        <Image
+          source={{ uri: source }}
           style={contain ? styles.contained : StyleSheet.absoluteFill}
           contentFit={contain ? "contain" : "cover"}
           contentPosition={contain ? "center" : "top center"}
           cachePolicy="memory-disk"
           transition={reduceMotion ? 0 : 180}
-          recyclingKey={uri ?? undefined}
-          onError={() => setFailedUri(uri ?? null)}
+          recyclingKey={source}
+          onError={() => markFailed(source)}
           accessibilityIgnoresInvertColors
         />
       ) : (
@@ -85,6 +114,14 @@ const styles = StyleSheet.create({
     width: "100%",
     overflow: "hidden",
     backgroundColor: colors.limeMuted,
+  },
+  scrim: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "rgba(10, 10, 10, 0.18)",
   },
   contained: {
     position: "absolute",

@@ -377,10 +377,12 @@ update_option( 'lnkup_settings', $apply_settings );
 list( $event_draft, $draft_opps ) = lnkup_e2e_event( 'apply-os-draft', $org_a, 'E2E Draft Resume Fair', array( 'booth' => array( 'title' => 'Draft Booth', 'spots' => 20, 'fee' => 120 ) ), 50 );
 $tour_id = lnkup_e2e_post( 'tour:apply-os', array( 'post_type' => 'lnkup_tour', 'post_title' => 'E2E Southern Tour' ), array( '_lnkup_organizer_user_id' => $org_a, '_lnkup_tour_type' => 'tour' ) );
 $tour_opps = array();
+$tour_states = array( 'houston' => 'TX', 'atlanta' => 'GA', 'nashville' => 'TN' );
 foreach ( array( 'houston' => 55, 'atlanta' => 62, 'nashville' => 69 ) as $stop_key => $days ) {
 	list( $stop_event, $stop_opps ) = lnkup_e2e_event( "tour-{$stop_key}", $org_a, 'E2E Tour ' . ucfirst( $stop_key ), array( 'booth' => array( 'title' => 'Tour Booth', 'spots' => 20, 'fee' => 200 ) ), $days );
 	update_post_meta( $stop_event, '_lnkup_tour_id', $tour_id );
 	update_post_meta( $stop_event, '_lnkup_city', ucfirst( $stop_key ) );
+	update_post_meta( $stop_event, '_lnkup_state', $tour_states[ $stop_key ] );
 	LNKup_Marketplace_Index::sync_opportunity( $stop_opps['booth'] );
 	$tour_opps[] = (int) $stop_opps['booth'];
 }

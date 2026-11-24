@@ -16,6 +16,32 @@ export type MarketplaceMapPin = {
   vendorFee?: number | null
   category?: string
   spotsRemaining?: number
+  /** Vendor options at this event (pins are one per event). */
+  optionCount?: number
+}
+
+/**
+ * One pin per event: vendor options at the same event share a marker, keeping the lowest fee
+ * and the number of options. Pins without an event stay one per opportunity.
+ */
+export function groupPinsByEvent(pins: MarketplaceMapPin[]): MarketplaceMapPin[] {
+  const byKey = new Map<string, MarketplaceMapPin>()
+  for (const pin of pins) {
+    const key = pin.eventId ? `e${pin.eventId}` : `o${pin.opportunityId}`
+    const existing = byKey.get(key)
+    if (!existing) {
+      byKey.set(key, { ...pin, id: `pin-${key}`, optionCount: 1 })
+      continue
+    }
+    const fees = [existing.vendorFee, pin.vendorFee].filter((f): f is number => typeof f === "number" && f > 0)
+    byKey.set(key, {
+      ...existing,
+      optionCount: (existing.optionCount ?? 1) + 1,
+      vendorFee: fees.length ? Math.min(...fees) : existing.vendorFee,
+      spotsRemaining: (existing.spotsRemaining ?? 0) + (pin.spotsRemaining ?? 0),
+    })
+  }
+  return [...byKey.values()]
 }
 
 export type MapPinsResult = {
@@ -178,10 +204,12 @@ export async function fetchMapPins(
       state: query.state,
     },
   })
-  const pins = filterPins(mapWpPins(data), {
-    lat: query.lat,
-    lng: query.lng,
-    radiusMiles: query.radiusMiles,
-  })
+  const pins = groupPinsByEvent(
+    filterPins(mapWpPins(data), {
+      lat: query.lat,
+      lng: query.lng,
+      radiusMiles: query.radiusMiles,
+    }),
+  )
   return { pins, unavailable: pins.length === 0 }
 }

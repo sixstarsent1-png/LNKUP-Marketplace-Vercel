@@ -335,6 +335,14 @@ class LNKup_Packets {
 			$amount_due     = (float) get_post_meta( $payment->ID, '_lnkup_total_amount', true );
 		}
 
+		$event_state      = 'unknown';
+		$credential_state = $is_unlocked ? 'active' : 'locked';
+		if ( class_exists( 'LNKup_Vendor_Booking_Contract' ) ) {
+			$resolved         = LNKup_Vendor_Booking_Contract::resolve_event( $application_id );
+			$event_state      = LNKup_Vendor_Booking_Contract::event_state( (int) $resolved['event_id'], $resolved['snapshot'] );
+			$credential_state = LNKup_Vendor_Booking_Contract::credential_state( (bool) $is_unlocked, $app_status, $payment_status, $event_state );
+		}
+
 		$base = array(
 			'application_id' => $application_id,
 			'opportunity_id' => $opp_id,
@@ -342,6 +350,8 @@ class LNKup_Packets {
 			'packet_id'      => $packet_id,
 			'is_unlocked'    => $is_unlocked,
 			'status'         => $is_unlocked ? 'unlocked' : 'locked',
+			'event_state'    => $event_state,
+			'credential_state' => $credential_state,
 			'application'    => array(
 				'status' => $app_status,
 				'label'  => LNKup_Vendor_Dashboard_Data::application_status_label( $app_status ),

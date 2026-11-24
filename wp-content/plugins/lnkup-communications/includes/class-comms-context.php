@@ -128,6 +128,13 @@ class LNKup_Comms_Context {
 			return false;
 		}
 		$end_of_day = $start->setTime( 23, 59, 59 );
+		$end_date   = trim( (string) get_post_meta( $event_id, '_lnkup_event_end_date', true ) );
+		if ( '' !== $end_date ) {
+			$end = date_create_immutable( substr( $end_date, 0, 10 ) . ' 23:59:59', $start->getTimezone() );
+			if ( $end instanceof DateTimeImmutable && $end > $end_of_day ) {
+				$end_of_day = $end;
+			}
+		}
 		return new DateTimeImmutable( 'now', $start->getTimezone() ) > $end_of_day;
 	}
 

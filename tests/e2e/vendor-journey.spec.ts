@@ -100,10 +100,10 @@ test.describe('Vendor journey — signed in', () => {
     const tabs = page.getByRole('navigation', { name: /filter requests/i });
     test.skip((await tabs.count()) === 0, 'Request tabs not rendered');
     await expect(tabs.getByRole('button', { name: /needs action/i })).toHaveClass(/is-active/);
-    await tabs.getByRole('button', { name: /past events/i }).click();
+    await tabs.getByRole('button', { name: /^past\b/i }).click();
     await expect(page).toHaveURL(/app_filter=completed/);
     await page.reload();
-    await expect(page.getByRole('navigation', { name: /filter requests/i }).getByRole('button', { name: /past events/i })).toHaveClass(/is-active/);
+    await expect(page.getByRole('navigation', { name: /filter requests/i }).getByRole('button', { name: /^past\b/i })).toHaveClass(/is-active/);
   });
 
   test('request timelines never mark future steps as done', async ({ page }) => {

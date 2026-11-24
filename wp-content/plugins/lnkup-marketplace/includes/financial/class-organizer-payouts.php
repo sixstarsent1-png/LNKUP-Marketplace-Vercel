@@ -14,6 +14,132 @@ class LNKup_Organizer_Payouts {
 	const TYPES = array( 'standard', 'instant' );
 
 	/**
+	 * LNKup's instant cash-out fee rate for payouts LNKup sends (not Stripe Connect payouts, where
+	 * Stripe charges its own fee). Configurable as `organizer_instant_fee_rate`; defaults to the
+	 * long-standing 1.5% so existing policy is unchanged.
+	 */
+	public static function instant_fee_rate() {
+		$settings = function_exists( 'lnkup_get_settings' ) ? lnkup_get_settings() : array();
+		$rate     = isset( $settings['organizer_instant_fee_rate'] ) && is_numeric( $settings['organizer_instant_fee_rate'] )
+			? (float) $settings['organizer_instant_fee_rate']
+			: self::INSTANT_FEE_RATE;
+		return max( 0.0, min( 0.1, $rate ) );
+	}
+
+	/**
+	 * Provider a cash-out would use for this organizer right now.
+	 *
+	 * @param int    $user_id         Organizer.
+	 * @param string $settlement_mode destination|platform_treasury.
+	 */
+	public static function provider_for( $user_id, $settlement_mode ) {
+		if ( ! class_exists( 'LNKup_Stripe_Connect' ) ) {
+			return 'manual';
+		}
+		if ( 'destination' === $settlement_mode ) {
+			return 'stripe_connect_payout';
+		}
+		return LNKup_Stripe_Connect::is_connect_ready( $user_id ) ? 'stripe_connect' : 'manual';
+	}
+
+	/**
+	 * LNKup fee for a cash-out. Connect payouts leave the organizer's own Stripe balance, so LNKup
+	 * keeps nothing there.
+	 *
+	 * @param float  $amount   Amount.
+	 * @param string $type     standard|instant.
+	 * @param string $provider Provider.
+	 */
+	public static function lnkup_fee( $amount, $type, $provider ) {
+		$rate = 'instant' === $type && 'stripe_connect_payout' !== $provider ? self::instant_fee_rate() : 0.0;
+		return round( (float) $amount * $rate, 2 );
+	}
+
+	/**
+	 * Read-only cash-out preview: revalidates payout setup and the available balance and returns
+	 * the fees LNKup would take. Writes nothing and never contacts Stripe for a payout.
+	 *
+	 * @param int    $user_id Organizer.
+	 * @param float  $amount  Requested amount (0 = report limits only).
+	 * @param string $type    standard|instant.
+	 * @return array<string,mixed>
+	 */
+	public static function preview( $user_id, $amount, $type ) {
+		$user_id = absint( $user_id );
+		$amount  = round( max( 0.0, (float) $amount ), 2 );
+		$type    = in_array( $type, self::TYPES, true ) ? $type : 'standard';
+		$mode    = class_exists( 'LNKup_Stripe_Connect' ) ? LNKup_Stripe_Connect::settlement_mode_for_organizer( $user_id ) : 'platform_treasury';
+		$problem = '';
+		if ( 'destination' === $mode ) {
+			if ( ! LNKup_Stripe_Connect::is_connect_ready( $user_id ) ) {
+				$problem = 'connect_not_ready';
+			} elseif ( LNKup_Stripe_Connect::has_past_due_requirements( $user_id ) ) {
+				$problem = 'requirements_past_due';
+			}
+		}
+		$available = null;
+		if ( '' === $problem && class_exists( 'LNKup_Financial_Service' ) ) {
+			$avail = LNKup_Financial_Service::organizer_cashout_available( $user_id, 'destination' === $mode ? $type : 'standard' );
+			if ( is_wp_error( $avail ) ) {
+				$problem = $avail->get_error_code();
+			} else {
+				$available = round( (float) $avail, 2 );
+			}
+		}
+		$provider = self::provider_for( $user_id, $mode );
+		$fee      = self::lnkup_fee( $amount, $type, $provider );
+		$net      = round( $amount - $fee, 2 );
+		if ( '' === $problem && $amount > 0 ) {
+			if ( null !== $available && $amount > $available ) {
+				$problem = 'insufficient_balance';
+			} elseif ( 'instant' === $type && $net <= 0 ) {
+				$problem = 'amount_below_fee';
+			}
+		}
+		$provider_note = '';
+		if ( 'instant' === $type && 'stripe_connect_payout' === $provider ) {
+			$provider_note = __( 'Stripe deducts its instant payout fee from this payout. LNKup does not take a fee on it.', 'lnkup-marketplace' );
+		}
+		$timing = 'instant' === $type
+			? __( 'Instant payouts usually arrive within minutes, but timing depends on your bank.', 'lnkup-marketplace' )
+			: __( 'Standard payouts usually arrive in 1 to 3 business days.', 'lnkup-marketplace' );
+		return array(
+			'type'                => $type,
+			'amount'              => $amount,
+			'available'           => $available,
+			'fee_amount'          => $fee,
+			'fee_rate'            => 'instant' === $type && 'stripe_connect_payout' !== $provider ? self::instant_fee_rate() : 0.0,
+			'provider_fee_note'   => $provider_note,
+			'estimated_net'       => $net,
+			'net_is_estimate'     => '' !== $provider_note,
+			'method'              => 'destination' === $mode ? 'connect' : 'lnkup',
+			'destination_summary' => self::destination_summary( $user_id, $mode ),
+			'timing_note'         => $timing,
+			'can_submit'          => '' === $problem && $amount > 0,
+			'problem'             => $problem,
+		);
+	}
+
+	/**
+	 * Masked payout destination from the connected account, when Stripe has reported one.
+	 *
+	 * @param int    $user_id Organizer.
+	 * @param string $mode    Settlement mode.
+	 */
+	private static function destination_summary( $user_id, $mode ) {
+		if ( 'destination' !== $mode && ! ( class_exists( 'LNKup_Stripe_Connect' ) && LNKup_Stripe_Connect::is_connect_ready( $user_id ) ) ) {
+			return __( 'Paid out by LNKup to the account on file', 'lnkup-marketplace' );
+		}
+		$last4 = (string) get_user_meta( $user_id, '_lnkup_connect_external_last4', true );
+		$bank  = (string) get_user_meta( $user_id, '_lnkup_connect_external_bank', true );
+		if ( '' !== $last4 ) {
+			/* translators: 1: bank name, 2: last four digits */
+			return trim( sprintf( __( '%1$s account ending in %2$s', 'lnkup-marketplace' ), '' !== $bank ? $bank : __( 'Bank', 'lnkup-marketplace' ), $last4 ) );
+		}
+		return __( 'The bank account on your payout profile', 'lnkup-marketplace' );
+	}
+
+	/**
 	 * Request cashout from organizer wallet.
 	 *
 	 * @param int    $user_id Organizer user ID.
@@ -33,7 +159,7 @@ class LNKup_Organizer_Payouts {
 		if ( ! in_array( $type, self::TYPES, true ) ) {
 			return new WP_Error( 'invalid_payout_type', __( 'Choose a standard or instant cashout.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
-		if ( 'instant' === $type && round( $amount - round( $amount * self::INSTANT_FEE_RATE, 2 ), 2 ) <= 0 ) {
+		if ( 'instant' === $type && round( $amount - round( $amount * self::instant_fee_rate(), 2 ), 2 ) <= 0 ) {
 			return new WP_Error( 'amount_below_fee', __( 'This amount is too small for an instant cashout.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 
@@ -119,20 +245,12 @@ class LNKup_Organizer_Payouts {
 		global $wpdb;
 		$table = LNKup_Treasury_Tables::organizer_payouts_table();
 		$now   = current_time( 'mysql' );
-		$provider = 'manual';
-		if ( class_exists( 'LNKup_Stripe_Connect' ) ) {
-			if ( 'destination' === $settlement_mode ) {
-				$provider = 'stripe_connect_payout';
-			} elseif ( LNKup_Stripe_Connect::is_connect_ready( $user_id ) ) {
-				$provider = 'stripe_connect';
-			}
-		}
+		$provider = self::provider_for( $user_id, $settlement_mode );
 
 		// A Connect payout leaves the organizer's own Stripe balance, so LNKup cannot keep a fee out
 		// of it (Stripe charges its instant fee there directly); the full debited amount is paid out.
-		$fee_rate = 'instant' === $type && 'stripe_connect_payout' !== $provider ? self::INSTANT_FEE_RATE : 0;
-		$fee      = round( $amount * $fee_rate, 2 );
-		$net      = round( $amount - $fee, 2 );
+		$fee = self::lnkup_fee( $amount, $type, $provider );
+		$net = round( $amount - $fee, 2 );
 
 		$inserted = $wpdb->insert(
 			$table,
@@ -623,9 +741,12 @@ class LNKup_Organizer_Payouts {
 			'status'         => $row['status'],
 			'provider'       => $row['provider'],
 			'provider_ref'   => $row['provider_ref'] ?? '',
+			'reference'      => 'LNK-PO-' . (int) $row['id'],
+			'source'         => 'lnkup_cashout',
 			'failure_reason' => isset( $row['failure_reason'] ) ? (string) $row['failure_reason'] : '',
 			'paid_at'        => $row['paid_at'] ?? null,
 			'created_at'     => $row['created_at'],
+			'updated_at'     => $row['updated_at'] ?? null,
 		);
 	}
 }

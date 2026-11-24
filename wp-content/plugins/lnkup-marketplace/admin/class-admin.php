@@ -256,6 +256,9 @@ class LNKup_Admin {
 		$output['stripe_connect_enabled']        = ! empty( $input['stripe_connect_enabled'] );
 		$output['connect_express_enabled']       = ! empty( $input['connect_express_enabled'] );
 		$output['connect_instant_payouts_enabled'] = ! empty( $input['connect_instant_payouts_enabled'] );
+		if ( isset( $input['organizer_instant_fee_percent'] ) && is_numeric( $input['organizer_instant_fee_percent'] ) ) {
+			$output['organizer_instant_fee_rate'] = round( max( 0, min( 10, (float) $input['organizer_instant_fee_percent'] ) ) / 100, 4 );
+		}
 		$output['connect_manual_fallback']       = ! empty( $input['connect_manual_fallback'] );
 		$output['ach_enabled']                   = ! empty( $input['ach_enabled'] );
 		$output['stripe_billing_enabled']        = ! empty( $input['stripe_billing_enabled'] );
@@ -777,6 +780,13 @@ class LNKup_Admin {
 					<tr>
 						<th><?php esc_html_e( 'Instant payouts', 'lnkup-marketplace' ); ?></th>
 						<td><label><input type="checkbox" name="lnkup_settings[connect_instant_payouts_enabled]" value="1" <?php checked( ! empty( $settings['connect_instant_payouts_enabled'] ) ); ?> /> <?php esc_html_e( 'Allow instant Connect payouts (Stripe fees apply)', 'lnkup-marketplace' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><label for="organizer_instant_fee_percent"><?php esc_html_e( 'LNKup instant cash-out fee (%)', 'lnkup-marketplace' ); ?></label></th>
+						<td>
+							<input type="number" step="0.01" min="0" max="10" id="organizer_instant_fee_percent" name="lnkup_settings[organizer_instant_fee_percent]" value="<?php echo esc_attr( (string) round( 100 * (float) ( $settings['organizer_instant_fee_rate'] ?? 0.015 ), 2 ) ); ?>" class="small-text" />
+							<p class="description"><?php esc_html_e( 'Applies to instant cash-outs LNKup sends. Stripe Connect payouts carry Stripe\'s own fee instead.', 'lnkup-marketplace' ); ?></p>
+						</td>
 					</tr>
 					<tr>
 						<th><label for="fee_payer_mode"><?php esc_html_e( 'Fee payer', 'lnkup-marketplace' ); ?></label></th>

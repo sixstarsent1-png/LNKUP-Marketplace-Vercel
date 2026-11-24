@@ -28,6 +28,9 @@ export type EventItem = {
   id: string
   /** WordPress opportunity post ID when loaded from live API */
   opportunityId?: number
+  /** Signed-out viewer: pricing and spots were withheld by WordPress; show the sign-in gate. */
+  gated?: boolean
+  statusLabel?: string
   name: string
   image: string
   /** "contain" for flyers/logos (show the whole artwork on imageBackground). */

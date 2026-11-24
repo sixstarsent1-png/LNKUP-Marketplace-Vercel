@@ -2470,6 +2470,21 @@ Native iOS/Android vendor + organizer-lite client. WordPress remains the system 
 | Apply | `/apply/[opportunityId]` | `GET /applications/apply-context/{id}` + `POST /applications/apply-with-profile` |
 | Profile | `/(vendor)/profile` | Readiness KPIs + documents CTA + push prefs; dual-role switch; WP profile handoff |
 
+**Mobile Vendor OS 2.0 contracts** (`docs/mobile-vendor-v2/`; all additive, so older app builds keep the old shapes):
+
+| Route | Purpose |
+|-------|---------|
+| `GET /marketplace/search?group_by=event` | One `GroupedEventSummary` per event (`LNKup_Event_Groups`), paginated by event. Adds `grouped`, `total_events`, `total_options`. Each item keeps `options[]` with its own fee, spaces, deadline and status. Without `group_by` the response is unchanged. |
+| `GET /marketplace/sections/recommended\|trending?group_by=event` | The same grouping for Home rails |
+| `GET /marketplace/events/{event_id}` | One event with every listed option, including full or closed options marked `is_open: false` |
+| `GET /applications/vendor` | Each item adds `event_resolution` (live, opportunity, snapshot, unrecoverable), `event_state` (end-date aware), `application_state`, `booking_state`, `payment_state`, `credential_state` and `payment_context` (`has_balance`, `past_event_invoice`, `collectible`), from `LNKup_Vendor_Booking_Contract` |
+| `GET /applications/vendor/{id}` | One booking (vendor-owned only) with a `timeline` built from stored timestamps |
+| `GET /financial/transactions/{id}` | One vendor ledger row with stored invoice `line_items` and its receipt |
+| `GET /financial/receipts` | Each receipt adds `payment_status` (from the payment post), `document_status`, and snapshot-aware event title, date and place |
+| `GET /packets/pass/{id}` | Adds `event_state` and `credential_state` (locked, active, ended, revoked). Unlock rules are unchanged. |
+
+Repair CLI: `wp lnkup bookings repair-events [--dry-run]`. Tests: `scripts/e2e/php/mobile-vendor-contract-test.php`, `lnk-up-marketplace-mobile/__tests__/vendor-os-v2.test.ts`, `tests/mobile/vendor-os-v2.spec.ts`.
+
 **Native Phase 3 screens (built — organizer lite):**
 
 | Area | Route | Live API |

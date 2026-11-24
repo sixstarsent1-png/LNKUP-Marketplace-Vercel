@@ -49,7 +49,7 @@
 		if (card.title && card.title !== card.event_title) {
 			box.appendChild(text('div', card.title, 'color:#3a3b40;'));
 		}
-		const meta = [card.event_date, [card.city, card.state].filter(Boolean).join(', '), money(card.vendor_fee), card.spots_left > 0 ? card.spots_left + ' spots left' : ''].filter(Boolean).join(' · ');
+		const meta = [card.event_date, [card.city, card.state].filter(Boolean).join(', '), money(card.vendor_fee), card.spots_left > 0 ? card.spots_left + ' spots left' : '', card.status_label || ''].filter(Boolean).join(' · ');
 		if (meta) {
 			box.appendChild(text('div', meta, 'color:#6b6c72;margin-top:4px;'));
 		}

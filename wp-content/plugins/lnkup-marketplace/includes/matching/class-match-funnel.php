@@ -57,6 +57,9 @@ class LNKup_Match_Funnel {
 		'notification_marked_read', 'notification_mark_all_read', 'notification_preferences_viewed', 'notification_preference_changed',
 		'saved_search_alert_frequency_changed', 'saved_search_resumed', 'pwa_install_prompt_shown', 'pwa_install_clicked',
 		'pwa_install_dismissed', 'wordpress_notification_settings_opened',
+		// Guest access gate (LNKup_Access_Policy). Gate impressions are funnel steps, not leads.
+		'guest_opportunity_viewed', 'guest_restricted_section_viewed', 'authentication_gate_displayed',
+		'authentication_gate_clicked', 'guest_registration_started', 'authentication_intent_restored',
 	);
 
 	/** Client events that only make sense for a signed-in user. */

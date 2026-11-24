@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Switch, View } from "react-native"
+import { ActivityIndicator, Linking, Platform, Pressable, StyleSheet, Switch, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 import { router } from "expo-router"
 
@@ -12,7 +12,13 @@ import {
   type PushCategoryKey,
 } from "@/lib/api/push"
 import { useAuth } from "@/lib/auth/auth-context"
-import { clearPushRegistration, syncPushRegistration } from "@/lib/push/notifications"
+import {
+  clearPushRegistration,
+  getPushPermissionState,
+  loadStoredPushToken,
+  syncPushRegistration,
+  type PushPermissionState,
+} from "@/lib/push/notifications"
 import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 const CATEGORY_KEYS = Object.keys(DEFAULT_PUSH_CATEGORIES) as PushCategoryKey[]
@@ -24,14 +30,18 @@ export function PushPreferencesCard({ settingsHref }: { settingsHref?: string } 
   const [enabled, setEnabled] = useState(true)
   const [categories, setCategories] = useState<PushCategories>({ ...DEFAULT_PUSH_CATEGORIES })
   const [error, setError] = useState<string | null>(null)
+  const [permission, setPermission] = useState<PushPermissionState>("undetermined")
+  const [registered, setRegistered] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const prefs = await fetchPushPreferences(auth)
+      const [prefs, state, token] = await Promise.all([fetchPushPreferences(auth), getPushPermissionState(), loadStoredPushToken()])
       setEnabled(prefs.pushEnabled)
       setCategories(prefs.categories)
+      setPermission(state)
+      setRegistered(Boolean(token))
     } catch {
       setError("Could not load notification preferences.")
     } finally {
@@ -83,10 +93,23 @@ export function PushPreferencesCard({ settingsHref }: { settingsHref?: string } 
   return (
     <View style={styles.card}>
       <Text style={styles.title}>Push notifications</Text>
-      <Text style={styles.body}>
-        Choose which alerts to receive on this device. Requires a physical device and an EAS project
-        ID for delivery.
+      <Text style={styles.body}>Choose which alerts you get on this device.</Text>
+      <Text style={styles.status} testID="push-device-status">
+        {permission === "granted"
+          ? registered
+            ? "Notifications are on for this device."
+            : "Allowed — this device will finish connecting the next time you open LNKup."
+          : permission === "denied"
+            ? "Notifications are turned off for LNKup in your phone’s settings."
+            : permission === "unavailable"
+              ? "Push notifications aren’t available on this device."
+              : "You haven’t allowed notifications on this device yet."}
       </Text>
+      {permission === "denied" ? (
+        <Pressable onPress={() => void Linking.openSettings()} accessibilityRole="button" style={styles.link}>
+          <Text style={styles.linkText}>Open phone settings →</Text>
+        </Pressable>
+      ) : null}
 
       {loading ? (
         <ActivityIndicator color={colors.black} style={{ marginTop: spacing.sm }} />
@@ -154,6 +177,12 @@ const styles = StyleSheet.create({
     fontSize: typeScale.footnote,
     lineHeight: 18,
     color: colors.gray500,
+  },
+  status: {
+    fontSize: typeScale.footnote,
+    lineHeight: 18,
+    fontWeight: "600",
+    color: colors.gray700,
   },
   sectionLabel: {
     marginTop: spacing.sm,

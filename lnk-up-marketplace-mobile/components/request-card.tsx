@@ -4,7 +4,7 @@ import { AppText as Text } from "@/components/ui/app-text"
 import { AppIcon } from "@/components/ui/app-icon"
 import { Button } from "@/components/ui/button"
 import { EventImage } from "@/components/ui/event-image"
-import { StatusPill } from "@/components/ui/status-pill"
+import { StatusBadge } from "@/components/ui/status-badge"
 import {
   vendorRequestStatusLabel,
   vendorRequestStatusTone,
@@ -13,6 +13,7 @@ import {
 import { formatMoney } from "@/lib/api/vendor-wallet"
 import { vendorStatusExplainer } from "@/lib/status/application-status"
 import { colors, fonts, radii, spacing, typography, typeScale } from "@/lib/theme"
+import { isPastEventInvoice, isUpcomingPaymentDue } from "@/lib/vendor/booking-lifecycle"
 
 /** Vendor booking card: event image, status, when/where, fee, and the next action. */
 export function RequestCard({
@@ -28,12 +29,20 @@ export function RequestCard({
   primaryLabel?: string
   hint?: string
 }) {
-  const tone = vendorRequestStatusTone(item.status)
-  const statusLabel = vendorRequestStatusLabel(item.status)
-  const isDue = tone === "due"
+  const pastInvoice = isPastEventInvoice(item)
+  const isDue = isUpcomingPaymentDue(item)
+  const tone = pastInvoice ? "neutral" : vendorRequestStatusTone(item.status)
+  const statusLabel = item.primaryStatus ?? vendorRequestStatusLabel(item.status)
   const fee = item.amountDue != null && item.amountDue > 0 ? formatMoney(item.amountDue, item.currency ?? "USD") : undefined
   const whenWhere = [item.eventDate, item.city].filter(Boolean).join(" · ")
-  const explainer = hint ?? vendorStatusExplainer(item.status)
+  const explainer =
+    hint ??
+    (item.eventResolution === "unrecoverable"
+      ? "The event listing was removed. Your application, payments and receipts are kept."
+      : pastInvoice
+        ? "Outstanding invoice · past event. The event already happened; the balance is still open."
+        : vendorStatusExplainer(item.status))
+  const optionLabel = item.opportunityTitle && item.opportunityTitle !== item.eventName ? item.opportunityTitle : item.category
 
   const body = (
     <View style={styles.row}>
@@ -44,7 +53,12 @@ export function RequestCard({
             {item.eventName}
           </Text>
         </View>
-        <StatusPill status={item.status} audience="vendor" />
+        <StatusBadge label={statusLabel} tone={tone} />
+        {item.organizerName ? (
+          <Text style={styles.meta} numberOfLines={1}>
+            {item.organizerName}
+          </Text>
+        ) : null}
         {whenWhere ? (
           <View style={styles.metaRow}>
             <AppIcon name="calendar-outline" size={14} color={colors.gray500} />
@@ -53,11 +67,11 @@ export function RequestCard({
             </Text>
           </View>
         ) : null}
-        {item.category || fee ? (
+        {optionLabel || fee ? (
           <View style={styles.metaRow}>
             <AppIcon name="pricetag-outline" size={14} color={colors.gray500} />
             <Text style={[styles.meta, isDue && styles.metaDue]} numberOfLines={1}>
-              {[item.category, fee ? `${fee}${isDue ? " due" : ""}` : null].filter(Boolean).join(" · ")}
+              {[optionLabel, fee ? `${fee}${isDue || pastInvoice ? " due" : ""}` : null].filter(Boolean).join(" · ")}
             </Text>
           </View>
         ) : null}
@@ -83,13 +97,13 @@ export function RequestCard({
       ) : (
         body
       )}
-      {explainer && !primaryLabel ? <Text style={styles.hint}>{explainer}</Text> : null}
+      {explainer && (!primaryLabel || pastInvoice || item.eventResolution === "unrecoverable") ? <Text style={styles.hint}>{explainer}</Text> : null}
       {onPrimaryAction && primaryLabel ? (
         <Button
           label={primaryLabel}
           onPress={onPrimaryAction}
-          variant={isDue ? "primary" : "secondary"}
-          icon={isDue ? (item.status === "info_requested" ? "chatbubble-ellipses-outline" : "card-outline") : "ticket-outline"}
+          variant={isDue || item.status === "info_requested" ? "primary" : "secondary"}
+          icon={item.status === "info_requested" ? "chatbubble-ellipses-outline" : isDue || pastInvoice ? "card-outline" : "ticket-outline"}
           accessibilityLabel={`${primaryLabel}: ${item.eventName}`}
           style={styles.primaryBtn}
         />
@@ -101,9 +115,9 @@ export function RequestCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.white,
-    borderRadius: radii.lg,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.gray200,
+    borderColor: colors.line,
     padding: spacing.md,
   },
   cardDue: { borderColor: colors.amber200, backgroundColor: colors.amber50 },

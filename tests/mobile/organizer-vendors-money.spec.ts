@@ -39,8 +39,8 @@ test.describe('Organizer vendors, money and more', () => {
       await expect(page.getByText(category.label, { exact: true }).first()).toBeVisible();
       if (category.hint) await expect(page.getByText(category.hint).first()).toBeVisible();
     }
-    await expect(page.getByText('Cash out history')).toBeVisible();
-    await expect(page.getByText(/Stripe Connect|Settlement:|destination/i)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Payouts/ }).first()).toBeVisible();
+    await expect(page.getByText(/Stripe Connect|Settlement:|destination|about 1\.5%/i)).toHaveCount(0);
     await expect(page.getByText(/Send a reminder/i)).toHaveCount(0);
     await expect(page.getByText(/^E2E Draft/)).toHaveCount(0);
     await expectNoHorizontalOverflow(page, 'Money');
@@ -67,10 +67,15 @@ test.describe('Organizer vendors, money and more', () => {
     await appLogout(page);
     await appLogin(page, orgB);
     await page.goto('/(organizer)/money');
-    await page.getByLabel('Cash out amount').fill('10');
-    await page.getByRole('button', { name: 'Cash out', exact: true }).click();
-    await page.getByRole('button', { name: 'Cash out', exact: true }).last().click();
-    await expect(page.getByText(/requested|cash ?out/i).first()).toBeVisible({ timeout: 45_000 });
+    await page.getByTestId('money-cashout').click();
+    await page.getByLabel('Amount').fill('10');
+    await page.getByTestId('cashout-review').click();
+    await expect(page.getByTestId('cashout-preview')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText(/LNKup (instant )?fee/).first()).toBeVisible();
+    await page.getByTestId('cashout-confirm').click();
+    await expect(page.getByText('Cash out requested')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText(/^Paid$/)).toHaveCount(0);
+    await page.getByRole('button', { name: 'View this cash out' }).click();
     const cancel = page.getByRole('button', { name: /^Cancel cash out of \$10/ });
     await expect(cancel).toBeVisible({ timeout: 45_000 });
 
@@ -97,13 +102,17 @@ test.describe('Organizer vendors, money and more', () => {
     for (const name of ['Requests', 'Discover', 'Invites']) {
       await expect(page.getByRole('tab', { name: new RegExp(`^${name}`) })).toBeVisible();
     }
-    for (const name of ['To review', 'Needs info', 'Waitlisted', 'Awaiting payment', 'Confirmed', 'Declined', 'All']) {
+    for (const name of ['To review', 'Needs info', 'Awaiting payment', 'Confirmed']) {
       await expect(page.getByRole('button', { name: new RegExp(`^${name}`) }).first()).toBeVisible();
     }
+    await page.getByTestId('requests-more-filters').click();
+    for (const name of ['To review', 'Needs info', 'Waitlisted', 'Awaiting payment', 'Confirmed', 'Declined', 'All']) {
+      await expect(page.getByRole('radio', { name: new RegExp(`^${name}`) })).toBeVisible();
+    }
+    await page.getByRole('radio', { name: /^Waitlisted/ }).click();
+    await expect(page.getByRole('button', { name: /^Waitlisted/ }).first()).toHaveAttribute('aria-selected', 'true');
     await page.getByRole('tab', { name: /^Invites/ }).click();
-    await expect(
-      page.getByTestId('organizer-invites-list').or(page.getByText('No invites yet')),
-    ).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('invites-panel')).toBeVisible({ timeout: 45_000 });
     await snap(page, 'vendors-invites', testInfo);
   });
 
@@ -131,9 +140,10 @@ test.describe('Organizer vendors, money and more', () => {
 
   test('More is grouped and sign out asks before ending the session', async ({ page }, testInfo) => {
     await page.goto('/(organizer)/more');
-    for (const section of ['Organization', 'Event tools', 'Payments', 'Notifications', 'Help']) {
+    for (const section of ['Organization', 'Business tools', 'Notifications', 'Account', 'Help']) {
       await expect(page.getByText(section, { exact: true }).first()).toBeVisible();
     }
+    await expect(page.getByText(/@e2e_org_a|EAS project/)).toHaveCount(0);
     await snap(page, 'more', testInfo);
     await page.getByTestId('organizer-more-sign-out').click();
     await expect(page.getByRole('heading', { name: 'Sign out?' })).toBeVisible();

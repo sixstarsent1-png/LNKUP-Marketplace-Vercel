@@ -17,20 +17,25 @@ import { Surface } from "@/components/ui/surface"
 import { DisplayTitle, Meta, SectionTitle } from "@/components/ui/typography"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import {
+  fetchApplicationIntel,
   fetchOrganizerRequests,
   normalizeOrganizerRequestStatus,
   organizerRequestStatusLabel,
   organizerRequestStatusTone,
   reviewOrganizerRequest,
+  type ApplicationIntel,
   type OrganizerReviewAction,
   type OrganizerVendorRequest,
 } from "@/lib/api/organizer-requests"
+import { ApproveIntelModal } from "@/components/organizer-vendors/approve-intel-modal"
+import { VendorListsSheet } from "@/components/organizer/vendor-lists-sheet"
+import { fetchApplicationReview, invalidateOrganizerMobile } from "@/lib/api/organizer-mobile"
 import { addVendorNote, fetchVendorNotes, type VendorNote } from "@/lib/api/organizer-crm"
 import { invalidateOrganizerMoney } from "@/lib/api/organizer-financial"
 import { confirmAction, promptText, showToast } from "@/lib/feedback/feedback"
 import { InfoRequestSheet } from "@/components/organizer-vendors/info-request-sheet"
 import { OrganizerPassportPanel } from "@/components/organizer-vendors/passport-panel"
-import { canRequestInfo, canReview } from "@/components/organizer-vendors/vendor-queue"
+import { canRequestInfo, canReview, canWaitlist } from "@/components/organizer-vendors/vendor-queue"
 import { StatusPill } from "@/components/ui/status-pill"
 import {
   fetchOrganizerVendorProfile,
@@ -126,6 +131,11 @@ function OrganizerVendorProfile({ id, appId, from }: { id: string; appId?: strin
   const [addingNote, setAddingNote] = useState(false)
   const [deciding, setDeciding] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
+  const [approveOpen, setApproveOpen] = useState(false)
+  const [listsOpen, setListsOpen] = useState(false)
+  const [approveIntel, setApproveIntel] = useState<ApplicationIntel | null>(null)
+  const [approveNote, setApproveNote] = useState<string | undefined>()
+  const [approveLoading, setApproveLoading] = useState(false)
   const decideRef = useRef(false)
 
   const backHref: Href =
@@ -182,7 +192,23 @@ function OrganizerVendorProfile({ id, appId, from }: { id: string; appId?: strin
     void loadSide()
   }, [loadSide])
 
-  async function decide(action: OrganizerReviewAction) {
+  function openApprove() {
+    if (!request) return
+    setApproveOpen(true)
+    setApproveIntel(null)
+    setApproveLoading(true)
+    void Promise.all([
+      fetchApplicationIntel(request.id, auth).catch(() => null),
+      auth ? fetchApplicationReview(request.id, auth).catch(() => null) : Promise.resolve(null),
+    ])
+      .then(([intel, review]) => {
+        setApproveIntel(intel)
+        setApproveNote(review?.approveNote)
+      })
+      .finally(() => setApproveLoading(false))
+  }
+
+  async function decide(action: OrganizerReviewAction, confirmed = false) {
     if (!request || decideRef.current) return
     let reason: string | undefined
     if (action === "reject") {
@@ -195,11 +221,11 @@ function OrganizerVendorProfile({ id, appId, from }: { id: string; appId?: strin
       })
       if (!typed) return
       reason = typed
-    } else {
+    } else if (action === "waitlist" && !confirmed) {
       const ok = await confirmAction({
-        title: `Approve ${request.vendorBusinessName}?`,
-        message: "Their spot is held and they're asked to pay the booth fee to confirm.",
-        confirmLabel: "Approve",
+        title: `Waitlist ${request.vendorBusinessName}?`,
+        message: "They stay in line for this event and can be approved later if a spot opens.",
+        confirmLabel: "Waitlist",
       })
       if (!ok) return
     }
@@ -208,7 +234,15 @@ function OrganizerVendorProfile({ id, appId, from }: { id: string; appId?: strin
     try {
       await reviewOrganizerRequest(request, action, auth, reason)
       invalidateOrganizerMoney()
-      showToast(action === "approve" ? "Approved. We've asked them to pay to confirm." : "Request declined.", "success")
+      invalidateOrganizerMobile(request.eventId)
+      showToast(
+        action === "approve"
+          ? "Approved. We've asked them to pay to confirm."
+          : action === "waitlist"
+            ? `${request.vendorBusinessName} is on the waitlist.`
+            : "Request declined.",
+        "success",
+      )
       await Promise.all([loadSide(), load("refresh")])
     } catch (err) {
       showToast(`Couldn't update this request. ${appErrorFromWp(err).message}`, "error")
@@ -388,7 +422,10 @@ function OrganizerVendorProfile({ id, appId, from }: { id: string; appId?: strin
                 </View>
                 <StatusPill status={request.status} audience="organizer" />
                 <View style={styles.decisionRow}>
-                  <Button label="Approve" icon="checkmark" style={styles.flex} loading={deciding} onPress={() => void decide("approve")} />
+                  <Button label="Approve" icon="checkmark" style={styles.flex} loading={deciding} onPress={openApprove} />
+                  {canWaitlist(request.status) ? (
+                    <Button label="Waitlist" variant="secondary" disabled={deciding} onPress={() => void decide("waitlist")} />
+                  ) : null}
                   <Button label="Decline" variant="danger" disabled={deciding} onPress={() => void decide("reject")} />
                 </View>
                 {canRequestInfo(request.status) ? (
@@ -526,6 +563,7 @@ function OrganizerVendorProfile({ id, appId, from }: { id: string; appId?: strin
                 </View>
               ))}
               <Button label="Add note" icon="add" variant="secondary" size="sm" loading={addingNote} onPress={() => void handleAddNote()} />
+              <Button label="Save to a list" icon="bookmark-outline" variant="ghost" size="sm" onPress={() => setListsOpen(true)} testID="vendor-save-to-list" />
             </ProfileSection>
 
             {profile.products ? (
@@ -591,6 +629,21 @@ function OrganizerVendorProfile({ id, appId, from }: { id: string; appId?: strin
           </View>
         ) : null}
       </ScrollView>
+      {profile ? (
+        <VendorListsSheet visible={listsOpen} onClose={() => setListsOpen(false)} profileId={String(id)} vendorName={profile.name} auth={auth} />
+      ) : null}
+      <ApproveIntelModal
+        item={approveOpen ? request : null}
+        intel={approveIntel}
+        loading={approveLoading}
+        acting={deciding}
+        note={approveNote}
+        onCancel={() => setApproveOpen(false)}
+        onApprove={() => {
+          setApproveOpen(false)
+          void decide("approve", true)
+        }}
+      />
       <InfoRequestSheet
         item={infoOpen ? request : null}
         auth={auth}

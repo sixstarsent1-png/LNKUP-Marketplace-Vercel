@@ -151,7 +151,7 @@ class LNKup_Budget_Center {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 				$rows = $wpdb->get_results(
 					$wpdb->prepare(
-						"SELECT id, (total_amount - paid_amount) AS amount_due, due_date, status FROM {$inv_table} WHERE organizer_user_id = %d AND status IN ('sent','overdue') AND due_date < %s ORDER BY due_date ASC LIMIT 5",
+						"SELECT id, invoice_number, (total_amount - paid_amount) AS amount_due, due_date, status FROM {$inv_table} WHERE organizer_user_id = %d AND status IN ('sent','overdue') AND due_date < %s ORDER BY due_date ASC LIMIT 5",
 						$user_id,
 						current_time( 'Y-m-d' )
 					),
@@ -160,6 +160,7 @@ class LNKup_Budget_Center {
 				foreach ( (array) $rows as $row ) {
 					$high_risk[] = array(
 						'id'       => (int) $row['id'],
+						'number'   => (string) ( $row['invoice_number'] ?? '' ),
 						'amount'   => round( (float) $row['amount_due'], 2 ),
 						'due_date' => $row['due_date'],
 						'status'   => $row['status'],

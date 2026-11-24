@@ -8,79 +8,56 @@ import { InlineBanner } from "@/components/ui/banner"
 import { FilterChipRow, type ChipOption } from "@/components/ui/chip"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import { fetchVendorRequests, type VendorRequest } from "@/lib/api/vendor-requests"
-import { formatMoney } from "@/lib/api/vendor-wallet"
 import { useAuth } from "@/lib/auth/auth-context"
-import { lifecycleOf, vendorLifecycleCounts } from "@/lib/vendor/vendor-stage"
+import {
+  BOOKING_SEGMENTS,
+  canOpenPass,
+  isPastEventInvoice,
+  isUpcomingPaymentDue,
+  payCtaLabel,
+  segmentBookings,
+  type BookingSegment,
+} from "@/lib/vendor/booking-lifecycle"
 
-type FilterKey = "all" | "action" | "review" | "confirmed" | "past"
-
-const FILTER_KEYS: readonly FilterKey[] = ["all", "action", "review", "confirmed", "past"]
-
-/** Older links (push notifications, Home) used payment/booked; keep them working. */
-const FILTER_ALIASES: Record<string, FilterKey> = { payment: "action", booked: "confirmed" }
-
-function parseFilterParam(value: string | string[] | undefined): FilterKey {
-  const raw = Array.isArray(value) ? value[0] : value
-  if (raw && FILTER_ALIASES[raw]) return FILTER_ALIASES[raw]
-  return FILTER_KEYS.find((key) => key === raw) ?? "all"
+/** Older links (push notifications, Home, web) used other names; keep them working. */
+const FILTER_ALIASES: Record<string, BookingSegment> = {
+  action: "action",
+  payment: "action",
+  review: "applications",
+  applications: "applications",
+  confirmed: "upcoming",
+  booked: "upcoming",
+  upcoming: "upcoming",
+  past: "past",
+  needs_review: "review",
 }
 
-function matchesFilter(item: VendorRequest, filter: FilterKey): boolean {
-  const bucket = lifecycleOf(item)
-  switch (filter) {
-    case "all":
-      return true
-    case "action":
-      return bucket === "action"
-    case "review":
-      return bucket === "review"
-    case "confirmed":
-      return bucket === "confirmed"
-    case "past":
-      return bucket === "past" || bucket === "closed"
-    default: {
-      const unhandled: never = filter
-      return unhandled
-    }
-  }
+function parseFilterParam(value: string | string[] | undefined): BookingSegment | null {
+  const raw = Array.isArray(value) ? value[0] : value
+  return raw ? FILTER_ALIASES[raw] ?? null : null
 }
 
 function primaryAction(item: VendorRequest): { label: string; href: Href } | null {
-  if (item.status === "info_requested") {
-    return { label: "Reply to organizer", href: `/booking/${item.id}` as Href }
-  }
-  if (lifecycleOf(item) === "action" && (item.status === "approved" || item.status === "payment_required")) {
-    const amount =
-      item.amountDue != null && item.amountDue > 0
-        ? formatMoney(item.amountDue, item.currency ?? "USD")
-        : null
-    return { label: amount ? `Pay ${amount}` : "Pay now", href: `/pass/${item.id}` as Href }
-  }
-  if (lifecycleOf(item) === "confirmed") {
-    return { label: "Open pass", href: `/pass/${item.id}` as Href }
-  }
+  if (item.status === "info_requested") return { label: "Reply to organizer", href: `/booking/${item.id}` as Href }
+  if (isUpcomingPaymentDue(item)) return { label: payCtaLabel(item), href: `/pass/${item.id}` as Href }
+  if (isPastEventInvoice(item)) return { label: "Pay invoice", href: `/pass/${item.id}` as Href }
+  if (canOpenPass(item)) return { label: "Open pass", href: `/pass/${item.id}` as Href }
   return null
 }
 
-const EMPTY: Record<FilterKey, { title: string; message: string }> = {
-  all: {
-    title: "No applications yet",
-    message: "Apply to events on Explore — every status and payment tracks here.",
-  },
-  action: {
-    title: "Nothing needs you",
-    message: "Organizer questions and booth fees to confirm a spot show up here.",
-  },
-  review: { title: "Nothing in review", message: "Applications waiting on organizers will show here." },
-  confirmed: { title: "No upcoming bookings", message: "Paid bookings and their event passes show here." },
-  past: { title: "No past bookings", message: "Completed events, declines and cancellations end up here." },
+const EMPTY: Record<BookingSegment, { title: string; message: string }> = {
+  action: { title: "Nothing needs you", message: "Organizer questions and booth fees that confirm a spot show up here." },
+  applications: { title: "No open applications", message: "Applications waiting on organizers show here." },
+  upcoming: { title: "No upcoming bookings", message: "Confirmed bookings and their event passes show here." },
+  past: { title: "No past bookings", message: "Completed events, declines and withdrawals end up here." },
+  review: { title: "Nothing to review", message: "Bookings without a date or event show here." },
 }
 
-/** Bookings: the vendor's applications organized by what happens next. */
+/** Bookings: what needs you, open applications, upcoming events, and history. */
 export default function VendorBookingsScreen() {
   const { auth } = useAuth()
   const params = useLocalSearchParams<{ filter?: string }>()
-  const [filter, setFilter] = useState<FilterKey>(() => parseFilterParam(params.filter))
+  const [segment, setSegment] = useState<BookingSegment | null>(() => parseFilterParam(params.filter))
   const [initialLoad, setInitialLoad] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<AppErrorShape | null>(null)
@@ -89,7 +66,8 @@ export default function VendorBookingsScreen() {
   const didFocusLoad = useRef(false)
 
   useEffect(() => {
-    if (params.filter) setFilter(parseFilterParam(params.filter))
+    const parsed = parseFilterParam(params.filter)
+    if (parsed) setSegment(parsed)
   }, [params.filter])
 
   const load = useCallback(
@@ -119,41 +97,25 @@ export default function VendorBookingsScreen() {
     }, [load]),
   )
 
-  const counts = useMemo(() => vendorLifecycleCounts(items), [items])
+  const segments = useMemo(() => segmentBookings(items), [items])
+  // Default to the first segment with something in it, most urgent first.
+  const active: BookingSegment =
+    segment ?? (["action", "upcoming", "applications", "past"] as const).find((s) => segments[s].length > 0) ?? "action"
 
-  const filters = useMemo<ChipOption<FilterKey>[]>(
-    () => [
-      { value: "all", label: "All", count: items.length },
-      { value: "action", label: "Needs action", count: counts.action },
-      { value: "review", label: "In review", count: counts.review },
-      { value: "confirmed", label: "Confirmed", count: counts.confirmed },
-      { value: "past", label: "Past", count: counts.past + counts.closed },
-    ],
-    [counts, items.length],
-  )
+  const options = useMemo<ChipOption<BookingSegment>[]>(() => {
+    const base: ChipOption<BookingSegment>[] = BOOKING_SEGMENTS.map((s) => ({ value: s.id, label: s.label, count: segments[s.id].length }))
+    if (segments.review.length > 0) base.push({ value: "review", label: "Needs review", count: segments.review.length })
+    return base
+  }, [segments])
 
-  const visible = useMemo(() => {
-    const order: Record<ReturnType<typeof lifecycleOf>, number> = {
-      action: 0,
-      confirmed: 1,
-      review: 2,
-      past: 3,
-      closed: 4,
-    }
-    return items
-      .filter((item) => matchesFilter(item, filter))
-      .sort((a, b) => order[lifecycleOf(a)] - order[lifecycleOf(b)])
-  }, [items, filter])
-
-  const empty = EMPTY[filter]
+  const visible = segments[active]
+  const empty = EMPTY[active]
   const showFullLoader = initialLoad && items.length === 0
-
   const rows = showFullLoader ? EMPTY_ROWS : visible
 
   return (
     <ScreenList
       title="Bookings"
-      subtitle="Applications, payments and confirmed events"
       refreshing={refreshing}
       onRefresh={() => void load("refresh")}
       data={rows}
@@ -171,25 +133,17 @@ export default function VendorBookingsScreen() {
       }}
       listHeader={
         <>
-          <FilterChipRow options={filters} value={filter} onChange={setFilter} />
+          <FilterChipRow options={options} value={active} onChange={setSegment} />
 
-          {filter === "all" && counts.action > 0 ? (
+          {active === "review" ? (
             <InlineBanner
-              tone="attention"
-              title={`${counts.action} booking${counts.action === 1 ? " needs" : "s need"} you`}
-              message="Answer organizer questions or pay to confirm your spot."
-              actionLabel="View"
-              onAction={() => setFilter("action")}
+              tone="info"
+              message="These bookings have no event date, or their event listing was removed. Your payments and receipts are kept. Contact the organizer or LNKup support if something looks wrong."
             />
           ) : null}
 
           {!showFullLoader && error && items.length > 0 ? (
-            <InlineBanner
-              tone="error"
-              message={`Couldn't refresh. ${error.message}`}
-              actionLabel="Retry"
-              onAction={() => void load("refresh")}
-            />
+            <InlineBanner tone="error" message={`Couldn't refresh. ${error.message}`} actionLabel="Retry" onAction={() => void load("refresh")} />
           ) : null}
 
           {showFullLoader ? <LoadingPanel label="Loading bookings…" variant="skeleton" /> : null}
@@ -200,19 +154,11 @@ export default function VendorBookingsScreen() {
 
           {!showFullLoader && !(error && items.length === 0) && visible.length === 0 ? (
             <EmptyPanel
-              icon={
-                filter === "action"
-                  ? "card-outline"
-                  : filter === "confirmed"
-                    ? "ticket-outline"
-                    : "file-tray-outline"
-              }
+              icon={active === "action" ? "card-outline" : active === "upcoming" ? "ticket-outline" : "file-tray-outline"}
               title={empty.title}
               message={empty.message}
               actionLabel="Explore events"
               onAction={() => router.push("/(vendor)/find")}
-              secondaryActionLabel={filter !== "all" ? "Show all bookings" : undefined}
-              onSecondaryAction={filter !== "all" ? () => setFilter("all") : undefined}
             />
           ) : null}
         </>

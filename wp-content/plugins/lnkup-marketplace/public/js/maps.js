@@ -110,16 +110,119 @@
   /**
    * Map builder for organizer ops.
    */
-  function initMapBuilder(shell) {
-    var eventId = shell.getAttribute('data-event-id');
-    if (!eventId || !base) {
+  /** Layout warnings before publishing (not a safety certification). */
+  function layoutWarnings(elements) {
+    var warnings = [];
+    var seen = {};
+    elements.forEach(function (el) {
+      if (el.element_type !== 'booth') {
+        return;
+      }
+      var key = String(el.label || '').trim().toUpperCase();
+      if (key && seen[key]) {
+        warnings.push('Booth ' + el.label + ' appears more than once.');
+      }
+      seen[key] = true;
+    });
+    for (var i = 0; i < elements.length; i++) {
+      for (var j = i + 1; j < elements.length; j++) {
+        var a = elements[i];
+        var b = elements[j];
+        var aw = Number(a.width || 8), ah = Number(a.height || 8), bw = Number(b.width || 8), bh = Number(b.height || 8);
+        var overlap = Number(a.pos_x) < Number(b.pos_x) + bw && Number(b.pos_x) < Number(a.pos_x) + aw &&
+          Number(a.pos_y) < Number(b.pos_y) + bh && Number(b.pos_y) < Number(a.pos_y) + ah;
+        if (overlap && a.element_type === 'booth' && b.element_type === 'booth') {
+          warnings.push(a.label + ' overlaps ' + b.label + '.');
+        }
+      }
+    }
+    return warnings.slice(0, 12);
+  }
+
+  /** Accessible table of every element on the map (same data as the canvas). */
+  function renderElementTable(shell, elements) {
+    var host = shell.querySelector('[data-map-table]');
+    if (!host) {
+      host = document.createElement('details');
+      host.className = 'oos-map-table';
+      host.setAttribute('data-map-table', '');
+      host.innerHTML = '<summary>Map as a table</summary><div></div>';
+      shell.appendChild(host);
+    }
+    var rows = elements.map(function (el) {
+      return '<tr><td>' + escapeHtml(el.label || '') + '</td><td>' + escapeHtml(String(el.element_type || '').replace(/_/g, ' ')) + '</td><td>' + escapeHtml(el.vendor_name || (el.linked_id ? 'Linked booth' : '—')) + '</td><td>' +
+        Math.round(Number(el.pos_x) || 0) + '%, ' + Math.round(Number(el.pos_y) || 0) + '%</td></tr>';
+    }).join('');
+    host.querySelector('div').innerHTML = elements.length
+      ? '<div class="vos-table-wrap"><table class="vos-table"><caption class="vos-sr">Map elements</caption><thead><tr><th scope="col">Label</th><th scope="col">Type</th><th scope="col">Vendor</th><th scope="col">Position (left, top)</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      : '<p class="lnkup-muted">Nothing is on the map yet.</p>';
+  }
+
+  /** Start screen: no map, upload a floor plan, or build an interactive layout. */
+  function showStartScreen(shell, eventId, onLayout) {
+    if (shell.querySelector('[data-map-start]')) {
       return;
     }
+    var start = document.createElement('section');
+    start.className = 'oos-map-start';
+    start.setAttribute('data-map-start', '');
+    start.setAttribute('data-testid', 'lnkup-map-start');
+    start.innerHTML = '<h3>How do you want to lay out booths?</h3>' +
+      '<div class="oos-map-start__grid">' +
+      '<div class="oos-map-start__card"><strong>No map</strong><p class="lnkup-muted">Use the booth list. Vendors see their booth number on their pass.</p><button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" data-map-start-choice="none">Use the booth list</button></div>' +
+      '<div class="oos-map-start__card"><strong>Upload a floor plan</strong><p class="lnkup-muted">A PDF export or image of the venue map. Vendors can open it from their pass.</p><label class="lnkup-btn lnkup-btn--outline lnkup-btn--sm">Choose image<input type="file" accept="image/*" class="lnkup-map-upload-input vos-sr" data-event-id="' + escapeHtml(eventId) + '" /></label></div>' +
+      '<div class="oos-map-start__card"><strong>Interactive layout</strong><p class="lnkup-muted">Place your existing booths on a canvas and publish a live map.</p><button type="button" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" data-map-start-choice="layout">Build a layout</button></div>' +
+      '</div>';
+    shell.insertBefore(start, shell.firstChild);
+    shell.classList.add('is-starting');
+    start.addEventListener('click', function (e) {
+      var choice = e.target.closest('[data-map-start-choice]');
+      if (!choice) {
+        return;
+      }
+      if (choice.getAttribute('data-map-start-choice') === 'none') {
+        var boothsTab = document.querySelector('[data-ops-tab="booths"]');
+        if (boothsTab) {
+          boothsTab.click();
+        }
+        return;
+      }
+      start.remove();
+      shell.classList.remove('is-starting');
+      onLayout();
+    });
+  }
+
+  function initMapBuilder(shell) {
+    var eventId = shell.getAttribute('data-event-id');
+    if (!eventId || !base || shell.dataset.builderInit === '1') {
+      return;
+    }
+    shell.dataset.builderInit = '1';
     var canvasWrap = shell.querySelector('#lnkup-map-canvas-wrap');
     var elContainer = shell.querySelector('#lnkup-map-elements');
     var routeSvg = shell.querySelector('#lnkup-map-routes');
     var drawer = shell.querySelector('#lnkup-map-drawer');
     var state = { elements: [], routes: [], map: null, layers: {} };
+
+    function inspect(el) {
+      if (!drawer) {
+        return;
+      }
+      drawer.hidden = false;
+      shell.querySelector('.lnkup-map-shell__body').classList.add('has-drawer');
+      drawer.innerHTML = '<h3>' + escapeHtml(el.label) + '</h3>' +
+        '<dl class="vos-kv"><dt>Type</dt><dd>' + escapeHtml(String(el.element_type || '').replace(/_/g, ' ')) + '</dd>' +
+        '<dt>Booth row</dt><dd>' + (el.linked_id ? 'Linked' : 'Not linked') + '</dd>' +
+        '<dt>Vendor</dt><dd>' + escapeHtml(el.vendor_name || '—') + '</dd>' +
+        '<dt>Position</dt><dd>' + Math.round(Number(el.pos_x) || 0) + '%, ' + Math.round(Number(el.pos_y) || 0) + '%</dd></dl>' +
+        '<p class="lnkup-muted">Assign vendors from the Booths tab; the map follows the booth list.</p>';
+    }
+
+    function redraw() {
+      renderElements(elContainer, state.elements, { layers: state.layers, onSelect: inspect });
+      renderElementTable(shell, state.elements);
+    }
 
     mapFetch('/events/' + eventId).then(function (data) {
       if (!data || data.code) {
@@ -128,21 +231,52 @@
       state.map = data.map;
       state.elements = data.elements || [];
       state.routes = data.routes || [];
-      renderElements(elContainer, state.elements, {
-        onSelect: function (el) {
-          if (drawer) {
-            drawer.hidden = false;
-            shell.querySelector('.lnkup-map-shell__body').classList.add('has-drawer');
-            drawer.innerHTML = '<h3>' + escapeHtml(el.label) + '</h3><p>' + escapeHtml(el.element_type) + '</p>';
-          }
-        }
-      });
+      redraw();
       renderRoutes(routeSvg, state.routes);
+      if (!state.elements.length && !shell.querySelector('#lnkup-map-canvas-img')) {
+        showStartScreen(shell, eventId, function () {});
+      }
     }).catch(function (err) {
       if (elContainer) {
         elContainer.innerHTML = '<p class="lnkup-alert lnkup-alert--error">' + escapeHtml((err && err.message) || 'Could not load the map.') + '</p>';
       }
     });
+
+    /** Place an existing booth row on the map, so map shapes never duplicate booths. */
+    function placeBooth() {
+      var placed = {};
+      state.elements.forEach(function (el) { if (el.linked_id) { placed[el.linked_id] = true; } });
+      var opsBase = String(ajax.operationsRestUrl || '').replace(/\/$/, '');
+      if (!opsBase) {
+        return;
+      }
+      fetch(opsBase + '/events/' + encodeURIComponent(eventId) + '/booths', { credentials: 'same-origin', headers: { 'X-WP-Nonce': nonce } })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          var free = ((res && res.items) || []).filter(function (b) { return !placed[b.id]; });
+          if (!free.length) {
+            mapToast('Every booth is already on the map. Add booths on the Booths tab first.', 'error');
+            return;
+          }
+          askLabel('Place a booth', 'Booth number (' + free.slice(0, 8).map(function (b) { return b.booth_number; }).join(', ') + (free.length > 8 ? '…' : '') + ')', free[0].booth_number).then(function (num) {
+            var booth = free.filter(function (b) { return String(b.booth_number).toUpperCase() === String(num || '').trim().toUpperCase(); })[0];
+            if (!num) {
+              return;
+            }
+            if (!booth) {
+              mapToast('That booth number is not in your booth list, or it is already on the map.', 'error');
+              return;
+            }
+            var el = { element_type: 'booth', label: booth.booth_number, linked_type: 'booth', linked_id: booth.id, pos_x: 10 + Math.random() * 70, pos_y: 10 + Math.random() * 70, layer: 'booths', visibility: 'public' };
+            mapFetch('/events/' + eventId + '/elements', { method: 'POST', body: { elements: [el] } }).then(function (out) {
+              if (out.items) {
+                state.elements = state.elements.concat(out.items);
+                redraw();
+              }
+            }).catch(mapFailed);
+          });
+        }).catch(mapFailed);
+    }
 
     shell.addEventListener('click', function (e) {
       var action = e.target.closest('[data-map-action]');
@@ -151,28 +285,7 @@
       }
       var key = action.getAttribute('data-map-action');
       if (key === 'add-booth') {
-        askLabel('Add booth', 'Booth number').then(function (num) {
-          if (!num) {
-            return;
-          }
-          var el = {
-            element_type: 'booth',
-            label: num,
-            pos_x: 10 + Math.random() * 70,
-            pos_y: 10 + Math.random() * 70,
-            layer: 'booths',
-            visibility: 'public'
-          };
-          mapFetch('/events/' + eventId + '/elements', { method: 'POST', body: { elements: [el] } }).then(function (res) {
-            if (res.items) {
-              state.elements = state.elements.concat(res.items);
-              renderElements(elContainer, state.elements, {});
-            }
-          }).catch(mapFailed);
-          if (window.lnkupOpsFetch) {
-            Promise.resolve(window.lnkupOpsFetch('/events/' + eventId + '/booths', { method: 'POST', body: { booth_number: num, booth_type: 'standard' } })).catch(mapFailed);
-          }
-        });
+        placeBooth();
       }
       if (key === 'save' && state.map) {
         mapFetch('/events/' + eventId, { method: 'POST', body: { status: 'draft' } })
@@ -180,6 +293,10 @@
           .catch(mapFailed);
       }
       if (key === 'publish') {
+        var warnings = layoutWarnings(state.elements);
+        if (warnings.length && !window.confirm('Layout warnings (not a safety check):\n\n- ' + warnings.join('\n- ') + '\n\nPublish anyway?')) {
+          return;
+        }
         mapFetch('/events/' + eventId + '/publish', { method: 'POST' })
           .then(function () { mapToast('Map published.'); })
           .catch(mapFailed);
@@ -200,7 +317,7 @@
           cb.dataset.layer = layer;
           cb.addEventListener('change', function () {
             state.layers[layer] = cb.checked;
-            renderElements(elContainer, state.elements, { layers: state.layers });
+            renderElements(elContainer, state.elements, { layers: state.layers, onSelect: inspect });
           });
           label.appendChild(cb);
           label.appendChild(document.createTextNode(layer));
@@ -228,7 +345,7 @@
           }).then(function (res) {
             if (res.items) {
               state.elements = state.elements.concat(res.items);
-              renderElements(elContainer, state.elements, {});
+              redraw();
             }
           }).catch(mapFailed);
         });

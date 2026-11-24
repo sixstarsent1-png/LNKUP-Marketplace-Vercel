@@ -277,8 +277,10 @@ class LNKup_Match_REST {
 			}
 		}
 		if ( array_key_exists( 'state', $input ) ) {
-			$state = strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) $input['state'] ) );
-			update_post_meta( $profile_id, '_lnkup_state', substr( $state, 0, 2 ) );
+			$state = function_exists( 'lnkup_canonical_state_code' ) ? lnkup_canonical_state_code( (string) $input['state'] ) : '';
+			if ( '' !== $state ) {
+				update_post_meta( $profile_id, '_lnkup_state', $state );
+			}
 		}
 		if ( array_key_exists( 'cities_served', $input ) ) {
 			$cities = array_slice( array_values( array_unique( array_filter( array_map( 'sanitize_text_field', self::to_list( $input['cities_served'] ) ) ) ) ), 0, 25 );
@@ -287,7 +289,9 @@ class LNKup_Match_REST {
 		if ( array_key_exists( 'states_served', $input ) ) {
 			$states = array();
 			foreach ( self::to_list( $input['states_served'] ) as $state ) {
-				$state = strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) $state ) );
+				$state = class_exists( 'LNKup_Location_Service' )
+					? (string) LNKup_Location_Service::state_code( (string) $state )
+					: strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) $state ) );
 				if ( 2 === strlen( $state ) ) {
 					$states[] = $state;
 				}

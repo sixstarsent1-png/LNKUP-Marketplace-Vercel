@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { clearDemoDataBanner } from "@/components/demo-data-banner"
-import { DisplayTitle, Eyebrow, Meta } from "@/components/ui/typography"
+import { DisplayTitle, Meta } from "@/components/ui/typography"
 import { constrainedColumnStyle, useBreakpoint } from "@/lib/layout/use-breakpoint"
 import { colors, layout, spacing } from "@/lib/theme"
 
@@ -56,7 +56,6 @@ export function Screen({
       {hideTitle ? null : (
         <View style={styles.header}>
           <View style={styles.headerText}>
-            <Eyebrow>LNKup</Eyebrow>
             <DisplayTitle accessibilityRole="header">{title}</DisplayTitle>
             {subtitle ? <Meta style={styles.subtitle}>{subtitle}</Meta> : null}
           </View>
@@ -162,7 +161,6 @@ export function ScreenList<T>({
           {hideTitle ? null : (
             <View style={styles.header}>
               <View style={styles.headerText}>
-                <Eyebrow>LNKup</Eyebrow>
                 <DisplayTitle accessibilityRole="header">{title}</DisplayTitle>
                 {subtitle ? <Meta style={styles.subtitle}>{subtitle}</Meta> : null}
               </View>
@@ -234,7 +232,7 @@ const styles = StyleSheet.create({
   },
   safe: {
     flex: 1,
-    backgroundColor: colors.white,
+    backgroundColor: colors.canvas,
   },
   flex: {
     flex: 1,

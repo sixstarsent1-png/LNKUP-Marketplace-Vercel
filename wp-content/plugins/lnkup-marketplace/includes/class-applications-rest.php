@@ -54,6 +54,17 @@ class LNKup_Applications_REST {
 
 		register_rest_route(
 			self::NS,
+			'/applications/vendor/(?P<id>\d+)',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( __CLASS__, 'vendor_application' ),
+				'permission_callback' => array( __CLASS__, 'vendor_permission' ),
+				'args'                => array( 'id' => array( 'sanitize_callback' => 'absint' ) ),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/applications/organizer',
 			array(
 				'methods'             => 'GET',
@@ -333,8 +344,21 @@ class LNKup_Applications_REST {
 			return new WP_Error( 'lnkup_not_found', __( 'Opportunity not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}
 		$user_id = get_current_user_id();
-		if ( get_post_meta( $opp_id, '_lnkup_invite_only', true ) && ! LNKup_Application_Questions::can_manage( $opp_id, $user_id ) && ! lnkup_vendor_can_discover_opportunity( $user_id, $opp_id ) ) {
+		$manager = LNKup_Application_Questions::can_manage( $opp_id, $user_id );
+		if ( ! $manager && 'publish' !== get_post_status( $opp_id ) ) {
+			return new WP_Error( 'lnkup_not_found', __( 'Opportunity not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		if ( get_post_meta( $opp_id, '_lnkup_invite_only', true ) && ! $manager && ! lnkup_vendor_can_discover_opportunity( $user_id, $opp_id ) ) {
 			return new WP_Error( 'lnkup_invite_only', __( 'This booth is invite-only.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+		}
+		if ( ! $user_id ) {
+			return rest_ensure_response(
+				array(
+					'questions'                   => array(),
+					'documents_required_to_apply' => null,
+					'access'                      => array( 'gated' => true, 'cta' => LNKup_Access_Policy::guest_cta( 'apply' ) ),
+				)
+			);
 		}
 		return rest_ensure_response(
 			array(
@@ -463,56 +487,16 @@ class LNKup_Applications_REST {
 		$user_id = get_current_user_id();
 		$apps    = lnkup_get_applications_for_user( $user_id, 'vendor' );
 		$items   = array();
+		if ( class_exists( 'LNKup_Event_Media' ) ) {
+			$event_ids = array();
+			foreach ( $apps as $app ) {
+				$event_ids[] = (int) get_post_meta( $app->ID, '_lnkup_event_id', true );
+			}
+			LNKup_Event_Media::prime( $event_ids );
+		}
 
 		foreach ( $apps as $app ) {
-			$meta       = LNKup_Vendor_Dashboard_Data::application_event_meta( $app );
-			$status     = (string) get_post_meta( $app->ID, '_lnkup_application_status', true );
-			$opp_id     = (int) get_post_meta( $app->ID, '_lnkup_opportunity_id', true );
-			$card       = $opp_id ? lnkup_get_opportunity_card_data( $opp_id ) : array();
-			$payment    = class_exists( 'LNKup_Payments' ) ? LNKup_Payments::get_for_application( $app->ID ) : null;
-			$pay_status = $payment ? (string) get_post_meta( $payment->ID, '_lnkup_payment_status', true ) : '';
-
-			if ( 'approved' === $status && $payment && 'pending' === $pay_status ) {
-				$status = 'payment_required';
-			}
-
-			$amount_due = $meta['fee'];
-			if ( $payment ) {
-				$amount_due = (float) get_post_meta( $payment->ID, '_lnkup_total_amount', true );
-				if ( $amount_due <= 0 ) {
-					$amount_due = (float) get_post_meta( $payment->ID, '_lnkup_amount', true );
-				}
-				if ( $amount_due <= 0 ) {
-					$amount_due = (float) get_post_meta( $payment->ID, '_lnkup_total', true );
-				}
-			}
-
-			$items[] = array(
-				'application_id'  => (int) $app->ID,
-				'opportunity_id'  => $opp_id,
-				'event_id'        => (int) $meta['event_id'],
-				'event_name'      => (string) $meta['event_title'],
-				'event_date'      => (string) $meta['date'],
-				'city'            => (string) $meta['city'],
-				'state'           => (string) $meta['state'],
-				'organizer_name'  => (string) ( $card['organizer_name'] ?? '' ),
-				'category'        => (string) get_post_meta( $app->ID, '_lnkup_selected_category', true ),
-				'status'          => $status ?: 'submitted',
-				'submitted_at'    => (string) ( get_post_meta( $app->ID, '_lnkup_submitted_at', true ) ?: $app->post_date ),
-				'approved_at'     => (string) ( get_post_meta( $app->ID, '_lnkup_approved_at', true ) ?: get_post_meta( $app->ID, '_lnkup_decided_at', true ) ),
-				'payment_due_at'  => (string) get_post_meta( $app->ID, '_lnkup_payment_due_at', true ),
-				'amount_due'      => $amount_due,
-				'currency'        => 'USD',
-				'vendor_fee'      => (float) $meta['fee'],
-				'featured_image'  => (string) ( $card['featured_image'] ?? '' ),
-				'media'           => $card['media'] ?? null,
-				'payment_id'      => $payment ? (int) $payment->ID : 0,
-				'payment_status'  => $pay_status,
-				'rejection_reason'=> (string) get_post_meta( $app->ID, '_lnkup_rejection_reason', true ),
-				'info_request'    => LNKup_Applications::open_info_request( $app->ID ),
-				'status_history'  => LNKup_Applications::status_history( $app->ID ),
-				'group_id'        => (string) get_post_meta( $app->ID, '_lnkup_submission_group_id', true ),
-			);
+			$items[] = LNKup_Vendor_Booking_Contract::item( $app, (int) $user_id );
 		}
 
 		return rest_ensure_response(
@@ -521,6 +505,20 @@ class LNKup_Applications_REST {
 				'total' => count( $items ),
 			)
 		);
+	}
+
+	/**
+	 * GET one vendor booking with its timeline.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function vendor_application( WP_REST_Request $request ) {
+		$app_id = absint( $request['id'] );
+		$app    = get_post( $app_id );
+		if ( ! $app instanceof WP_Post || 'lnkup_application' !== $app->post_type || ! LNKup_Capabilities::vendor_owns_application( $app_id ) ) {
+			return new WP_Error( 'lnkup_booking_not_found', __( 'Booking not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		return rest_ensure_response( LNKup_Vendor_Booking_Contract::item( $app, get_current_user_id(), true ) );
 	}
 
 	/**
@@ -749,6 +747,8 @@ class LNKup_Applications_REST {
 				'event_date'        => (string) $meta['date'],
 				'city'              => (string) $meta['city'],
 				'state'             => (string) $meta['state'],
+				'place'             => (string) ( $meta['place'] ?? '' ),
+				'primary_status'    => class_exists( 'LNKup_Vendor_Presentation' ) ? (string) ( LNKup_Vendor_Presentation::lifecycle( $app->ID )['primary'] ?? '' ) : '',
 				'vendor_profile_id' => $profile_id,
 				'vendor_user_id'    => $vendor_id,
 				'vendor_business_name' => $business_name,

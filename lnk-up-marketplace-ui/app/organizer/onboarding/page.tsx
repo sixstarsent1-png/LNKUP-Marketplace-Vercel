@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
+import { LocationField, isLocationSubmittable, type LocationStatus } from "@/components/forms/location-field"
 
 const STEP_LABELS: Record<OrganizerOnboardingStep, string> = {
   organizer_basics: "Organizer basics",
@@ -37,6 +38,7 @@ export default function OrganizerOnboardingPage() {
   const [eventType, setEventType] = useState("")
   const [city, setCity] = useState("")
   const [stateCode, setStateCode] = useState("")
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>("")
   const [categories, setCategories] = useState<string[]>([])
   const [vendorFee, setVendorFee] = useState("200")
   const [spots, setSpots] = useState("10")
@@ -53,6 +55,9 @@ export default function OrganizerOnboardingPage() {
   const wpUrl = getOrganizerDashboardUrl()
 
   async function handleNext(skip = false) {
+    if (!skip && state.currentStep === "event_details" && !isLocationSubmittable(locationStatus)) {
+      return
+    }
     const nextState = await advance({
       skip,
       draft: {
@@ -110,14 +115,15 @@ export default function OrganizerOnboardingPage() {
         )}
         {state.currentStep === "event_details" && (
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Label>City</Label>
-              <Input value={city} onChange={(e) => setCity(e.target.value)} />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label>State</Label>
-              <Input value={stateCode} onChange={(e) => setStateCode(e.target.value)} maxLength={2} />
-            </div>
+            <LocationField
+              city={city}
+              state={stateCode}
+              onChange={(next) => {
+                setCity(next.city)
+                setStateCode(next.state)
+              }}
+              onStatusChange={setLocationStatus}
+            />
           </div>
         )}
         {state.currentStep === "vendor_categories" && (

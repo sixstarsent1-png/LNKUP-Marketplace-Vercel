@@ -52,6 +52,8 @@ class LNKup_Growth_Kpis {
 
 		$data = array(
 			'lifetime_revenue'        => $lifetime,
+			'lifetime_spend'          => $lifetime,
+			'spend_definition'        => 'vendor_booth_spend',
 			'revenue_this_year'       => $year_rev,
 			'revenue_this_month'      => $month_rev,
 			'upcoming_revenue'        => $upcoming_rev,

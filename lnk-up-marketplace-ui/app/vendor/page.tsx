@@ -13,6 +13,8 @@ import {
   Bookmark,
 } from "lucide-react"
 import { currentVendor } from "@/lib/data"
+import { isLiveApiEnabled } from "@/lib/api/config"
+import { useVendorProfile } from "@/lib/hooks/use-vendor-profile"
 import { trackLnkupEvent } from "@/lib/analytics/track-event"
 import { useVendorRequests, filterPaymentRequired, filterBooked } from "@/lib/hooks/use-vendor-requests"
 import { useFavorites } from "@/lib/hooks/use-favorites"
@@ -57,6 +59,12 @@ import { useAuth } from "@/lib/hooks/use-auth"
 
 function VendorHomeContent() {
   const { user } = useAuth()
+  const live = isLiveApiEnabled()
+  const { profile } = useVendorProfile()
+  const businessName = live ? profile?.businessName || "your business" : currentVendor.name
+  const marketLine = live
+    ? [profile?.city, profile?.state].filter(Boolean).join(", ")
+    : `${currentVendor.city}, ${currentVendor.state}`
   const { items: requests } = useVendorRequests()
   const { items: favorites } = useFavorites()
   const { readiness } = useVendorReadiness()
@@ -197,8 +205,8 @@ function VendorHomeContent() {
   return (
     <div className="flex flex-col gap-6">
       <ExecutiveHero
-        title={`${greetingLabel()}, ${currentVendor.name}`}
-        subtitle={`${currentVendor.city}, ${currentVendor.state} · One profile. More event opportunities.`}
+        title={`${greetingLabel()}, ${businessName}`}
+        subtitle={marketLine ? `${marketLine} · One profile. More event opportunities.` : "One profile. More event opportunities."}
         metrics={heroMetrics}
         primaryCta={{
           label: nextAction.label,

@@ -17,6 +17,7 @@ export function ApproveIntelModal({
   onCancel,
   onOpenProfile,
   onApprove,
+  note,
 }: {
   item: OrganizerVendorRequest | null
   intel: ApplicationIntel | null
@@ -25,6 +26,8 @@ export function ApproveIntelModal({
   onCancel: () => void
   onOpenProfile?: () => void
   onApprove: () => void
+  /** What approving does (invoice, payment window), from the server. */
+  note?: string
 }) {
   return (
     <Modal visible={Boolean(item)} transparent animationType="fade" onRequestClose={onCancel}>
@@ -71,6 +74,8 @@ export function ApproveIntelModal({
           ) : null}
 
           {!loading && !intel ? <Meta>Intel unavailable — you can still approve.</Meta> : null}
+
+          {note ? <Meta testID="approve-note">{note}</Meta> : null}
 
           <Button
             label="Approve vendor"

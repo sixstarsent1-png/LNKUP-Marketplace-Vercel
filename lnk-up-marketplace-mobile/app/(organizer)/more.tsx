@@ -1,23 +1,22 @@
+import { useCallback, useState } from "react"
 import { StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
-import { router, type Href } from "expo-router"
+import { router, useFocusEffect, type Href } from "expo-router"
 
-import { Screen } from "@/components/screen"
-import { PushPreferencesCard } from "@/components/push-preferences-card"
 import { DeleteAccountCard } from "@/components/delete-account-card"
+import { ProfileMark } from "@/components/profile-mark"
+import { PushPreferencesCard } from "@/components/push-preferences-card"
+import { Screen } from "@/components/screen"
 import { AppIcon, type AppIconName } from "@/components/ui/app-icon"
 import { Button } from "@/components/ui/button"
 import { ListGroup, ListRow } from "@/components/ui/list-row"
 import { PressableScale } from "@/components/ui/pressable-scale"
 import { Eyebrow } from "@/components/ui/typography"
-import {
-  getOrganizerDashboardUrl,
-  getPrivacyPolicyUrl,
-  getTermsOfServiceUrl,
-} from "@/lib/api/config"
+import { WorkspaceSwitchGroup } from "@/components/workspace-switch-group"
+import { getOrganizerDashboardUrl, getPrivacyPolicyUrl, getTermsOfServiceUrl } from "@/lib/api/config"
+import { fetchOrganizerProfileEdit } from "@/lib/api/organizer-profile"
 import { useAuth } from "@/lib/auth/auth-context"
 import { useSignOut } from "@/lib/hooks/use-account-actions"
-import { WorkspaceSwitchGroup } from "@/components/workspace-switch-group"
 import { openExternalUrl } from "@/lib/navigation/open-external-url"
 import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
 
@@ -31,106 +30,41 @@ type MoreLink = {
   external?: string
 }
 
-type MoreSection = {
-  title: string
-  links: MoreLink[]
-}
+type MoreSection = { title: string; links: MoreLink[] }
 
+/** Tabs already cover events, vendors and money; More holds the organization and account. */
 const SECTIONS: MoreSection[] = [
   {
     title: "Organization",
     links: [
-      {
-        title: "Public profile",
-        meta: "Name, logo, and how vendors see you",
-        icon: "business-outline",
-        href: "/(organizer)/profile",
-      },
-      {
-        title: "Referral invites",
-        meta: "Earn LNKup credit by inviting organizers",
-        icon: "gift-outline",
-        href: "/(organizer)/referrals",
-      },
+      { title: "Public profile", meta: "Name, logo, and how vendors see you", icon: "business-outline", href: "/(organizer)/profile" },
+      { title: "Team", meta: "Organization members and event staff", icon: "people-circle-outline", href: "/(organizer)/team" as Href },
     ],
   },
   {
-    title: "Event tools",
+    title: "Business tools",
     links: [
+      { title: "Tours and series", meta: "Events you run in several cities or dates", icon: "git-network-outline", href: "/(organizer)/tours" as Href },
+      { title: "Referral invites", meta: "Earn a share of LNKup’s fee as credit", icon: "gift-outline", href: "/(organizer)/referrals" },
       {
-        title: "Create event",
-        meta: "New event and vendor spots",
-        icon: "add-circle-outline",
-        href: "/(organizer)/launch",
-      },
-      {
-        title: "Your events",
-        meta: "Spots, applications, packets, and event day",
-        icon: "calendar-outline",
-        href: "/(organizer)/events",
-      },
-      {
-        title: "Vendors",
-        meta: "Requests, invites, and discovery",
-        icon: "people-outline",
-        href: "/(organizer)/vendors",
-      },
-    ],
-  },
-  {
-    title: "Payments",
-    links: [
-      {
-        title: "Money",
-        meta: "Balances, cash outs, and payout setup",
-        icon: "wallet-outline",
-        href: "/(organizer)/money",
+        title: "Reports, maps and bulk tools",
+        meta: "Desktop-first tools on LNKup web",
+        icon: "open-outline",
+        url: getOrganizerDashboardUrl,
+        external: "organizer dashboard",
       },
     ],
   },
   {
     title: "Notifications",
-    links: [
-      {
-        title: "Notification inbox",
-        meta: "Applications, payments, and reminders",
-        icon: "notifications-outline",
-        href: "/(organizer)/notifications",
-      },
-    ],
-  },
-  {
-    title: "Help",
-    links: [
-      {
-        title: "Organizer dashboard",
-        meta: "Maps, vendor lists, and bulk tools on the web",
-        icon: "open-outline",
-        url: getOrganizerDashboardUrl,
-        external: "organizer dashboard",
-      },
-      {
-        title: "Terms of service",
-        meta: "LNKup marketplace terms",
-        icon: "document-text-outline",
-        url: getTermsOfServiceUrl,
-        external: "terms of service",
-      },
-      {
-        title: "Privacy policy",
-        meta: "How LNKup handles your data",
-        icon: "lock-closed-outline",
-        url: getPrivacyPolicyUrl,
-        external: "privacy policy",
-      },
-    ],
+    links: [{ title: "Notification inbox", meta: "Applications, payments, and reminders", icon: "notifications-outline", href: "/(organizer)/notifications" }],
   },
 ]
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  return (parts[0]?.[0] ?? "L").concat(parts[1]?.[0] ?? "").toUpperCase()
-}
+const HELP: MoreLink[] = [
+  { title: "Terms of service", meta: "LNKup marketplace terms", icon: "document-text-outline", url: getTermsOfServiceUrl, external: "terms of service" },
+  { title: "Privacy policy", meta: "How LNKup handles your data", icon: "lock-closed-outline", url: getPrivacyPolicyUrl, external: "privacy policy" },
+]
 
 function openLink(link: MoreLink): void {
   if (link.href) {
@@ -141,32 +75,42 @@ function openLink(link: MoreLink): void {
 }
 
 export default function OrganizerMoreScreen() {
-  const { session } = useAuth()
+  const { session, auth } = useAuth()
   const [signOut, signingOut] = useSignOut()
-  const displayName = session?.user.name ?? "Organizer"
+  const [org, setOrg] = useState<{ name: string; logoUrl: string } | null>(null)
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!auth) return
+      void fetchOrganizerProfileEdit(auth)
+        .then((profile) => setOrg({ name: profile.publicName.trim(), logoUrl: profile.logoUrl }))
+        .catch(() => undefined)
+    }, [auth]),
+  )
+
+  const orgName = org?.name || session?.user.name || "Your organization"
 
   return (
     <Screen title="More" subtitle="Your organization, tools, and account">
       <PressableScale
-        style={styles.profileCard}
+        style={styles.hq}
         onPress={() => router.push("/(organizer)/profile" as Href)}
         accessibilityRole="button"
-        accessibilityLabel={`Public profile for ${displayName}. Edit profile`}
+        accessibilityLabel={`${orgName}. Edit public profile`}
+        testID="organizer-hq"
       >
         <View style={styles.identityRow}>
-          <View style={styles.avatar} accessibilityElementsHidden>
-            <Text style={styles.avatarText}>{initials(displayName)}</Text>
-          </View>
+          <ProfileMark name={orgName} logoUrl={org?.logoUrl || undefined} size={52} />
           <View style={styles.identityText}>
-            <Eyebrow style={styles.profileEyebrow}>Public profile</Eyebrow>
-            <Text style={styles.profileName} numberOfLines={2}>
-              {displayName}
+            <Eyebrow style={styles.eyebrow}>Organization</Eyebrow>
+            <Text style={styles.orgName} numberOfLines={2}>
+              {orgName}
             </Text>
-            <Text style={styles.profileHandle}>@{session?.username}</Text>
+            {!org?.name ? <Text style={styles.hint}>Add your public name so vendors recognize you</Text> : null}
           </View>
         </View>
-        <View style={styles.profileCtaRow}>
-          <Text style={styles.profileCta}>Edit profile</Text>
+        <View style={styles.ctaRow}>
+          <Text style={styles.cta}>Edit public profile</Text>
           <AppIcon name="arrow-forward" size={16} color={colors.lime} />
         </View>
       </PressableScale>
@@ -191,15 +135,17 @@ export default function OrganizerMoreScreen() {
 
       <WorkspaceSwitchGroup current="organizer" title="Account" />
 
-      <Button
-        label="Sign out"
-        variant="danger"
-        icon="log-out-outline"
-        loading={signingOut}
-        onPress={() => void signOut()}
-        accessibilityLabel="Sign out"
-        testID="organizer-more-sign-out"
-      />
+      <ListGroup title="Signed in as">
+        <ListRow icon="person-outline" title={session?.user.name ?? "Organizer"} meta={session?.username} showChevron={false} />
+      </ListGroup>
+
+      <ListGroup title="Help">
+        {HELP.map((link) => (
+          <ListRow key={link.title} icon={link.icon} title={link.title} meta={link.meta} onPress={() => openLink(link)} accessibilityHint="Opens in your browser" />
+        ))}
+      </ListGroup>
+
+      <Button label="Sign out" variant="danger" icon="log-out-outline" loading={signingOut} onPress={() => void signOut()} accessibilityLabel="Sign out" testID="organizer-more-sign-out" />
 
       <DeleteAccountCard />
     </Screen>
@@ -207,7 +153,7 @@ export default function OrganizerMoreScreen() {
 }
 
 const styles = StyleSheet.create({
-  profileCard: {
+  hq: {
     backgroundColor: colors.black,
     borderRadius: radii.lg,
     borderTopWidth: 3,
@@ -215,53 +161,12 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
-  identityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: radii.pill,
-    backgroundColor: colors.lime,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    fontFamily: fonts.display,
-    fontSize: typeScale.headline,
-    color: colors.black,
-  },
-  identityText: {
-    flex: 1,
-    gap: 2,
-  },
-  profileEyebrow: {
-    color: colors.lime,
-  },
-  profileName: {
-    fontFamily: fonts.display,
-    fontSize: typeScale.headline,
-    lineHeight: 26,
-    color: colors.white,
-  },
-  profileHandle: {
-    fontFamily: fonts.body,
-    fontSize: typeScale.footnote,
-    color: colors.gray200,
-  },
-  profileCtaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  profileCta: {
-    fontFamily: fonts.bodySemi,
-    fontSize: typeScale.callout,
-    color: colors.lime,
-  },
-  section: {
-    gap: spacing.md,
-  },
+  identityRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  identityText: { flex: 1, gap: 2 },
+  eyebrow: { color: colors.lime },
+  orgName: { fontFamily: fonts.display, fontSize: typeScale.headline, lineHeight: 26, color: colors.white },
+  hint: { fontFamily: fonts.body, fontSize: typeScale.footnote, color: colors.gray200 },
+  ctaRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  cta: { fontFamily: fonts.bodySemi, fontSize: typeScale.callout, color: colors.lime },
+  section: { gap: spacing.md },
 })

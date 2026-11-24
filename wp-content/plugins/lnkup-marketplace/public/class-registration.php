@@ -241,11 +241,11 @@ class LNKup_Registration {
 			<div class="lnkup-signup-form__row">
 				<p class="lnkup-signup-form__field">
 					<label class="lnkup-signup-form__label" for="lnkup_org_city"><?php esc_html_e( 'Primary city', 'lnkup-marketplace' ); ?></label>
-					<input type="text" class="lnkup-signup-form__input" id="lnkup_org_city" name="lnkup_org_city" autocomplete="address-level2" maxlength="120" value="<?php echo esc_attr( $posted( 'lnkup_org_city' ) ); ?>"<?php echo $is_org ? ' required' : ' disabled'; ?> />
+					<input type="text" class="lnkup-signup-form__input" id="lnkup_org_city" name="lnkup_org_city" data-lnkup-location-city autocomplete="address-level2" maxlength="120" value="<?php echo esc_attr( $posted( 'lnkup_org_city' ) ); ?>"<?php echo $is_org ? ' required' : ' disabled'; ?> />
 				</p>
 				<p class="lnkup-signup-form__field">
 					<label class="lnkup-signup-form__label" for="lnkup_org_state"><?php esc_html_e( 'State', 'lnkup-marketplace' ); ?></label>
-					<input type="text" class="lnkup-signup-form__input" id="lnkup_org_state" name="lnkup_org_state" autocomplete="address-level1" maxlength="32" value="<?php echo esc_attr( $posted( 'lnkup_org_state' ) ); ?>"<?php echo $is_org ? ' required' : ' disabled'; ?> />
+					<input type="text" class="lnkup-signup-form__input" id="lnkup_org_state" name="lnkup_org_state" data-lnkup-location-state autocomplete="address-level1" maxlength="32" value="<?php echo esc_attr( $posted( 'lnkup_org_state' ) ); ?>"<?php echo $is_org ? ' required' : ' disabled'; ?> />
 				</p>
 			</div>
 			<?php if ( $categories ) : ?>
@@ -556,6 +556,13 @@ class LNKup_Registration {
 			return $url;
 		}
 
+		if ( class_exists( 'LNKup_Market_Pages' ) && preg_match( '#^/' . preg_quote( LNKup_Market_Pages::REWRITE_BASE, '#' ) . '/([a-z0-9-]+)$#', $path_only, $market_match ) ) {
+			if ( ! LNKup_Market_Pages::get_market_by_slug( $market_match[1] ) ) {
+				return '';
+			}
+			return self::append_intent_query( LNKup_Market_Pages::market_url( $market_match[1] ), $redirect );
+		}
+
 		$slug = trim( $path_only, '/' );
 		$slug = $slug ? strtok( $slug, '/' ) : '';
 		if ( ! $slug || ! in_array( $slug, self::$safe_page_slugs, true ) ) {
@@ -563,7 +570,7 @@ class LNKup_Registration {
 			if ( ! $event_url ) {
 				return '';
 			}
-			$event_url = self::append_follow_query( $event_url, $redirect );
+			$event_url = self::append_intent_query( self::append_follow_query( $event_url, $redirect ), $redirect );
 			if ( $fragment && preg_match( '/^[a-z0-9_-]+$/i', $fragment ) ) {
 				$event_url .= '#' . $fragment;
 			}
@@ -581,6 +588,9 @@ class LNKup_Registration {
 		}
 
 		$url = self::append_public_query( lnkup_page_url_helper( $slug ), $redirect, $slug );
+		if ( ! in_array( $slug, $dashboard_slugs, true ) ) {
+			$url = self::append_intent_query( $url, $redirect );
+		}
 		if ( $fragment && preg_match( '/^[a-z0-9_-]+$/i', $fragment ) ) {
 			$url .= '#' . $fragment;
 		} elseif ( 'organizer-dashboard' === $slug ) {
@@ -605,6 +615,43 @@ class LNKup_Registration {
 		}
 		$url = get_permalink( $post );
 		return $url ? $url : '';
+	}
+
+	/**
+	 * Carry the guest's intent and attribution through sign-in on a validated public URL.
+	 * Adds lnkup_restored=1 so the landing page can resume the action and record the restore.
+	 *
+	 * @param string $url Safe same-site URL.
+	 * @param string $raw Original redirect.
+	 */
+	private static function append_intent_query( string $url, string $raw ): string {
+		$parts = wp_parse_url( $raw );
+		$query = isset( $parts['query'] ) ? (string) $parts['query'] : '';
+		if ( '' === $query ) {
+			return $url;
+		}
+		parse_str( $query, $args );
+		$keep   = array();
+		$intent = isset( $args['lnkup_intent'] ) && is_string( $args['lnkup_intent'] ) ? sanitize_key( $args['lnkup_intent'] ) : '';
+		if ( in_array( $intent, array( 'view_pricing', 'apply', 'save', 'connect' ), true ) ) {
+			$keep['lnkup_intent']   = $intent;
+			$keep['lnkup_restored'] = '1';
+		}
+		foreach ( array( 'ref', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term' ) as $key ) {
+			if ( isset( $args[ $key ] ) && is_string( $args[ $key ] ) ) {
+				$value = substr( sanitize_text_field( $args[ $key ] ), 0, 100 );
+				if ( '' !== $value ) {
+					$keep[ $key ] = rawurlencode( $value );
+				}
+			}
+		}
+		foreach ( array( 'tour_id', 'event', 'opportunity' ) as $key ) {
+			$value = isset( $args[ $key ] ) && is_scalar( $args[ $key ] ) ? absint( $args[ $key ] ) : 0;
+			if ( $value > 0 ) {
+				$keep[ $key ] = (string) $value;
+			}
+		}
+		return $keep ? add_query_arg( $keep, $url ) : $url;
 	}
 
 	/**

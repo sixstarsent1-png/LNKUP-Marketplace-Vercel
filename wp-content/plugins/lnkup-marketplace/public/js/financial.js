@@ -439,7 +439,8 @@
   }
 
   function statusChip(status) {
-    return '<span class="lnkup-fin-status lnkup-fin-status--' + escapeHtml(status) + '">' + escapeHtml(String(status).replace(/_/g, ' ')) + '</span>';
+    var label = status === 'void' ? 'no longer due' : String(status).replace(/_/g, ' ');
+    return '<span class="lnkup-fin-status lnkup-fin-status--' + escapeHtml(status) + '">' + escapeHtml(label) + '</span>';
   }
 
   /**
@@ -501,6 +502,9 @@
       var viewLink = pdf
         ? '<a class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" href="' + escapeHtml(pdf) + '" target="_blank" rel="noopener" data-testid="lnkup-invoice-view">View</a>'
         : '';
+      var detailBtn = r.id
+        ? '<button type="button" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" data-invoice-detail="' + Number(r.id) + '">Details</button>'
+        : '';
       html += '<article class="lnkup-fin-invoice-card">' +
         '<div class="lnkup-fin-invoice-card__main">' +
         '<p class="lnkup-type-label">' + escapeHtml(r.invoice_number || 'Invoice') + '</p>' +
@@ -510,12 +514,85 @@
         '<div class="lnkup-fin-invoice-card__side">' +
         '<p class="lnkup-type-display">$' + Number(r.total_amount || 0).toFixed(2) + '</p>' +
         statusChip(r.status) +
+        detailBtn +
         viewLink +
         '</div></article>';
     });
     html += '</div>';
     return html;
   }
+
+  /**
+   * Invoice drawer with the stored line items. Never recomputes fees.
+   */
+  function openInvoiceDrawer(id, trigger) {
+    var existing = document.getElementById('lnkup-invoice-drawer');
+    if (existing) {
+      existing.remove();
+    }
+    var drawer = document.createElement('div');
+    drawer.id = 'lnkup-invoice-drawer';
+    drawer.className = 'vos-drawer';
+    drawer.innerHTML = '<div class="vos-drawer__backdrop" data-drawer-close></div>' +
+      '<aside class="vos-drawer__panel" role="dialog" aria-modal="true" aria-labelledby="lnkup-invoice-drawer-title">' +
+      '<div class="vos-drawer__head"><h2 id="lnkup-invoice-drawer-title">Invoice</h2><button type="button" class="vos-drawer__close" data-drawer-close aria-label="Close">×</button></div>' +
+      '<div class="vos-drawer__body"><div class="lnkup-fin-skeleton"></div></div></aside>';
+    document.body.appendChild(drawer);
+    var body = drawer.querySelector('.vos-drawer__body');
+    var closeBtn = drawer.querySelector('.vos-drawer__close');
+    function close() {
+      drawer.remove();
+      document.removeEventListener('keydown', onKey);
+      if (trigger) {
+        trigger.focus();
+      }
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') {
+        close();
+      }
+    }
+    drawer.querySelectorAll('[data-drawer-close]').forEach(function (el) {
+      el.addEventListener('click', close);
+    });
+    document.addEventListener('keydown', onKey);
+    closeBtn.focus();
+    finFetch('/invoices/' + id).then(function (inv) {
+      var items = inv.items || [];
+      var total = Number(inv.total_amount || 0);
+      var paid = Number(inv.paid_amount || 0);
+      var html = '<p class="lnkup-type-label">' + escapeHtml(inv.invoice_number || '') + '</p>';
+      html += '<h3 class="vos-drawer__event">' + escapeHtml(inv.event_title || 'Booth fee') + '</h3>';
+      html += '<p class="lnkup-muted">' + (inv.due_date ? 'Due ' + escapeHtml(String(inv.due_date).slice(0, 10)) + ' · ' : '') + statusChip(inv.status) + '</p>';
+      html += '<table class="vos-lines"><tbody>';
+      if (items.length) {
+        items.forEach(function (item) {
+          html += '<tr><th scope="row">' + escapeHtml(item.description || '') + '</th><td>$' + Number(item.amount || 0).toFixed(2) + '</td></tr>';
+        });
+      } else {
+        html += '<tr><th scope="row">Recorded total<span class="vos-lines__hint">Line items were not stored for this invoice.</span></th><td>$' + total.toFixed(2) + '</td></tr>';
+      }
+      html += '</tbody><tfoot>';
+      if (paid > 0) {
+        html += '<tr><th scope="row">Paid</th><td>-$' + paid.toFixed(2) + '</td></tr>';
+      }
+      html += '<tr><th scope="row">' + (paid > 0 ? 'Remaining' : 'Total') + '</th><td>$' + Math.max(0, total - paid).toFixed(2) + '</td></tr></tfoot></table>';
+      html += '<p class="lnkup-muted">Amounts come from the invoice as issued. Fees are not recalculated with current rates.</p>';
+      if (inv.pdf_url) {
+        html += '<p><a class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" href="' + escapeHtml(inv.pdf_url) + '" target="_blank" rel="noopener">Open printable invoice</a></p>';
+      }
+      body.innerHTML = html;
+    }).catch(function () {
+      body.innerHTML = '<p class="lnkup-muted">Could not load this invoice. Try again in a moment.</p>';
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('[data-invoice-detail]') : null;
+    if (btn) {
+      openInvoiceDrawer(btn.getAttribute('data-invoice-detail'), btn);
+    }
+  });
 
   function moneyFlowCell(row) {
     var type = String(row.entry_type || '');
@@ -867,7 +944,7 @@
       finFetch('/reports/vendor')
     ]).then(function (results) {
       var dash = settledValue(results[0], {});
-      var txns = settledValue(results[1], []);
+      var txns = dedupeByPayment((settledValue(results[1], []) || []).map(reconcileTxn));
       var activity = settledValue(results[2], []);
       var report = settledValue(results[3], {});
       if (results[0].status !== 'fulfilled' && results[1].status !== 'fulfilled' && results[3].status !== 'fulfilled') {
@@ -877,19 +954,7 @@
       }
       panel.dataset.loaded = '1';
       loadBalanceHero(dash, report);
-      var openInvoices = Number(report.open_invoices || dash.open_invoices || 0);
-      var dueSoon = Number(report.due_soon || dash.due_soon || 0);
-      var credits = Number(report.credits_available || dash.credits_available || dash.wallet_balance || 0);
-      var refunds = Number(report.refunds || dash.refunds || 0);
-      var paid = Number(report.lifetime_spend || dash.lifetime_spend || dash.revenue_paid || 0);
       var html = '<div class="lnkup-fin-tab-panel">';
-      html += kpiGrid([
-        { label: 'Total spent', value: '$' + paid.toFixed(2) },
-        { label: 'Open Invoices', value: String(openInvoices) },
-        { label: 'Due Soon', value: String(dueSoon) },
-        { label: 'Credits Available', value: '$' + credits.toFixed(2) },
-        { label: 'Refunds', value: '$' + refunds.toFixed(2) }
-      ]);
       html += '<h3>Recent transactions</h3>';
       html += vendorTransactionCards(txns);
       html += '<div class="lnkup-fin-txn-table-desktop">';
@@ -910,7 +975,8 @@
       }));
       html += '</div>';
       html += '<h3>Activity</h3>' + activityList(activity);
-      if (!txns.length && !activity.length && paid <= 0) {
+      var spentForEmpty = vendorSpentDollars(dash, report);
+      if (!txns.length && !activity.length && spentForEmpty <= 0) {
         html += '<p class="lnkup-fin-empty">Payment activity will appear here after you apply and pay for events.</p>';
       }
       panel.innerHTML = html;
@@ -954,6 +1020,69 @@
     return html;
   }
 
+  /**
+   * The payment record is authoritative. A ledger row still marked pending for a payment
+   * that was since cancelled or voided shows the payment's status and no Pay button.
+   */
+  function reconcileTxn(t) {
+    if (!t || t.status !== 'pending' || !t.payment_status) {
+      return t;
+    }
+    if (t.payment_status === 'pending' || t.payment_status === 'failed') {
+      return t;
+    }
+    var copy = {};
+    Object.keys(t).forEach(function (k) { copy[k] = t[k]; });
+    copy.status = t.payment_status === 'removed' ? 'void' : t.payment_status;
+    return copy;
+  }
+
+  /**
+   * One row per payment and status. Retried checkouts can write several ledger rows
+   * for the same pending payment; the payment itself is the single obligation.
+   */
+  function dedupeByPayment(rows) {
+    var seen = {};
+    return (rows || []).filter(function (t) {
+      if (!t) {
+        return false;
+      }
+      var who = t.payment_post_id || ((t.event_title || '') + '|' + Number(t.amount || 0).toFixed(2));
+      if (!who || who === '|0.00') {
+        return true;
+      }
+      var key = who + ':' + (t.type || '') + ':' + (t.status || '');
+      if (seen[key]) {
+        return false;
+      }
+      seen[key] = true;
+      return true;
+    });
+  }
+
+  function vendorSpentDollars(dash, report) {
+    dash = dash || {};
+    report = report || {};
+    if (dash.revenue_paid != null && dash.revenue_paid !== '') {
+      return Number(dash.revenue_paid);
+    }
+    var cents = dash.money && dash.money.metrics && dash.money.metrics.paid && dash.money.metrics.paid.cents;
+    if (cents != null) {
+      return Number(cents) / 100;
+    }
+    return Number(report.lifetime_spend || dash.lifetime_spend || 0);
+  }
+
+  function vendorDueDollars(dash, report) {
+    dash = dash || {};
+    report = report || {};
+    var cents = dash.money && dash.money.metrics && dash.money.metrics.outstanding && dash.money.metrics.outstanding.cents;
+    if (cents != null) {
+      return Number(cents) / 100;
+    }
+    return Number(dash.outstanding || report.pending_payments || 0);
+  }
+
   function loadBalanceHero(dash, report) {
     var hero = document.getElementById('lnkup-fin-balance-hero');
     if (!hero) {
@@ -966,22 +1095,22 @@
     }
     dash = dash || {};
     report = report || {};
-    var outstanding = Number(report.pending_payments || dash.outstanding || dash.pending_payments || 0);
-    var paid = Number(report.lifetime_spend || dash.lifetime_spend || dash.revenue_paid || 0);
+    var outstanding = vendorDueDollars(dash, report);
+    var paid = vendorSpentDollars(dash, report);
     var wallet = Number(report.credits_available || dash.credits_available || dash.wallet_balance || 0);
     hero.dataset.loaded = '1';
     finFetch('/installments').then(function (rows) {
       var nextDue = rows && rows.length ? rows[0].due_date : '—';
       hero.innerHTML = '<div class="lnkup-fin-balance-hero__grid lnkup-fin-balance-hero__grid--vendor">' +
         '<div class="lnkup-fin-balance-hero__primary"><p class="lnkup-fin-balance-hero__label">Amount due</p><p class="lnkup-fin-balance-hero__value">$' + outstanding.toFixed(2) + '</p></div>' +
-        '<div><p class="lnkup-fin-balance-hero__label">Total spent</p><p class="lnkup-fin-balance-hero__value">$' + paid.toFixed(2) + '</p></div>' +
+        '<div><p class="lnkup-fin-balance-hero__label">Total spent</p><p class="lnkup-fin-balance-hero__value">$' + paid.toFixed(2) + '</p><p class="lnkup-muted">Booth fees you paid</p></div>' +
         '<div><p class="lnkup-fin-balance-hero__label">Credits</p><p class="lnkup-fin-balance-hero__value">$' + wallet.toFixed(2) + '</p></div>' +
         '<div><p class="lnkup-fin-balance-hero__label">Next installment</p><p class="lnkup-fin-balance-hero__value">' + escapeHtml(String(nextDue).slice(0, 10)) + '</p></div>' +
         '</div>';
     }).catch(function () {
       hero.innerHTML = '<div class="lnkup-fin-balance-hero__grid lnkup-fin-balance-hero__grid--vendor">' +
         '<div class="lnkup-fin-balance-hero__primary"><p class="lnkup-fin-balance-hero__label">Amount due</p><p class="lnkup-fin-balance-hero__value">$' + outstanding.toFixed(2) + '</p></div>' +
-        '<div><p class="lnkup-fin-balance-hero__label">Total spent</p><p class="lnkup-fin-balance-hero__value">$' + paid.toFixed(2) + '</p></div>' +
+        '<div><p class="lnkup-fin-balance-hero__label">Total spent</p><p class="lnkup-fin-balance-hero__value">$' + paid.toFixed(2) + '</p><p class="lnkup-muted">Booth fees you paid</p></div>' +
         '<div><p class="lnkup-fin-balance-hero__label">Credits</p><p class="lnkup-fin-balance-hero__value">$' + wallet.toFixed(2) + '</p></div>' +
         '<div><p class="lnkup-fin-balance-hero__label">Next installment</p><p class="lnkup-fin-balance-hero__value">—</p></div>' +
         '</div>';
@@ -1016,17 +1145,22 @@
         var brand = r.brand || r.method_type || 'Card';
         html += '<article class="lnkup-pay-method">' +
           '<div><p class="lnkup-pay-method__brand">' + escapeHtml(brand) + ' ···· ' + escapeHtml(r.last4 || '') + '</p>' +
-          '<p class="lnkup-pay-method__meta">Expires ' + escapeHtml((r.exp_month || '') + '/' + (r.exp_year || '')) + '</p></div>' +
+          '<p class="lnkup-pay-method__meta">Expires ' + escapeHtml((r.exp_month || '') + '/' + (r.exp_year || '')) + (r.is_default ? ' · Default' : '') + '</p></div>' +
           '<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm lnkup-remove-card" data-id="' + r.id + '">Remove</button></article>';
       });
       html += '</div>';
       html += '</section><section id="lnkup-fin-settings-installments"><h3>Installments</h3>';
-      html += tableFromRows(['Due', 'Amount', 'Sequence'], installments.map(function (r) {
-        return [escapeHtml(r.due_date), '$' + Number(r.amount).toFixed(2), String(r.sequence)];
-      }));
-      html += '</section><section id="lnkup-fin-settings-tax"><h3>Tax documents</h3>';
-      html += '<p>W-9 on file: ' + (tax && tax.w9_on_file ? 'Yes' : 'No') + '</p>';
-      html += '<p>1099 eligible: ' + (tax && tax.form_1099_eligible ? 'Yes' : 'No') + '</p>';
+      if (!installments.length) {
+        html += '<p class="lnkup-muted">No payment plans yet. Installments appear here when an organizer offers them on a booking.</p>';
+      } else {
+        html += tableFromRows(['Due', 'Amount', 'Sequence'], installments.map(function (r) {
+          return [escapeHtml(r.due_date), '$' + Number(r.amount).toFixed(2), String(r.sequence)];
+        }));
+      }
+      html += '</section><div id="lnkup-card-setup" hidden></div><section id="lnkup-fin-settings-tax"><h3>Tax summaries</h3>';
+      html += '<p class="lnkup-muted">These are LNKup summaries, not official IRS forms.</p>';
+      html += '<p>W-9 summary on file: ' + (tax && tax.w9_on_file ? 'Yes' : 'No') + '</p>';
+      html += '<p>1099 summary available: ' + (tax && tax.form_1099_eligible ? 'Yes' : 'No') + '</p>';
       html += taxPdfLinks(tax) + '</section>';
       panel.innerHTML = html;
       panel.querySelectorAll('.lnkup-remove-card').forEach(function (button) {
@@ -1048,9 +1182,35 @@
       if (addCard) {
         addCard.addEventListener('click', function () {
           finFetch('/payment-methods/setup', { method: 'POST', body: {} }).then(function (setup) {
-            if (setup.client_secret && window.Stripe && ajax.stripePublicKey) {
-              finToast('Finish card setup in checkout. Saved cards appear after setup.');
+            var mount = panel.querySelector('#lnkup-card-setup');
+            if (setup.client_secret && window.Stripe && ajax.stripePublicKey && mount) {
+              mount.hidden = false;
+              mount.innerHTML = '<div id="lnkup-card-element"></div><button type="button" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" id="lnkup-confirm-card">Save card</button>';
+              var stripe = window.Stripe(ajax.stripePublicKey);
+              var elements = stripe.elements({ clientSecret: setup.client_secret });
+              var paymentElement = elements.create('payment');
+              paymentElement.mount('#lnkup-card-element');
+              var confirmBtn = mount.querySelector('#lnkup-confirm-card');
+              confirmBtn.addEventListener('click', function () {
+                confirmBtn.disabled = true;
+                stripe.confirmSetup({ elements: elements, redirect: 'if_required' }).then(function (result) {
+                  if (result.error) {
+                    confirmBtn.disabled = false;
+                    finToast(result.error.message || 'Card setup was not completed.', 'error');
+                    return;
+                  }
+                  finFetch('/payment-methods/sync', { method: 'POST', body: {} }).then(function () {
+                    panel.dataset.loaded = '';
+                    loadVendorSettings(panel);
+                  }).catch(function () {
+                    confirmBtn.disabled = false;
+                    finToast('Card saved at the processor. Refresh to see it here.', 'error');
+                  });
+                });
+              });
+              return;
             }
+            finToast('Card setup is not available in this browser yet. You can still pay from checkout.', 'error');
           }).catch(function () {
             finToast('Could not start card setup.', 'error');
           });
@@ -1172,29 +1332,50 @@
     return tableFromRows(['Field', 'Value'], rows);
   }
 
+  /** Payment record status as organizers read it (from the lnkup_payment post, not the ledger). */
+  var PAYMENT_STATE = {
+    paid: 'Paid', completed: 'Paid', pending: 'Awaiting payment', failed: 'Payment failed',
+    refunded: 'Refunded', partially_refunded: 'Partly refunded', disputed: 'Disputed', removed: 'No longer due'
+  };
+
+  /** Settlement: whether Stripe has released the funds to the balance yet. */
+  function settlementCell(t) {
+    var on = t.funds_available_on && shortDate(t.funds_available_on);
+    var today = new Date().toISOString().slice(0, 10);
+    if (t.funds_available_on && String(t.funds_available_on).slice(0, 10) > today) {
+      return '<span class="lnkup-muted lnkup-fin-funds-on" data-testid="lnkup-fin-funds-available">Pending until ' + escapeHtml(on) + '</span>';
+    }
+    if (t.funds_available_on) {
+      return '<span>Available since ' + escapeHtml(on) + '</span>';
+    }
+    return statusChip(t.status);
+  }
+
   function vendorRevenueTable(rows) {
     var html = '<div class="lnkup-fin-table-wrap"><table class="lnkup-fin-table lnkup-fin-table--revenue"><thead><tr>';
-    html += '<th></th><th>Event</th><th>Amount</th><th>Status</th><th>Date</th><th></th>';
+    html += '<th><span class="screen-reader-text">Details</span></th><th>Reference</th><th>Event</th><th>Amount</th><th>Payment</th><th>Settlement</th><th>Payout</th><th>Date</th><th><span class="screen-reader-text">Actions</span></th>';
     html += '</tr></thead><tbody>';
     if (!rows.length) {
-      html += '<tr><td colspan="6">No records yet.</td></tr>';
+      html += '<tr><td colspan="9">No records yet.</td></tr>';
     }
     rows.forEach(function (t, idx) {
       var audit = t.audit || {};
       var pid = t.payment_post_id || 0;
+      var pay = t.payment_status || audit.payment_status || '';
       html += '<tr class="lnkup-fin-revenue-row" data-revenue-idx="' + idx + '">';
-      html += '<td><button type="button" class="lnkup-fin-expand" data-revenue-idx="' + idx + '" aria-expanded="false">+</button></td>';
-      html += '<td>' + escapeHtml(t.event_title || t.public_id) + '</td>';
+      html += '<td><button type="button" class="lnkup-fin-expand" data-revenue-idx="' + idx + '" aria-expanded="false" aria-label="Show line items">+</button></td>';
+      html += '<td>' + escapeHtml(t.public_id || '') + '</td>';
+      html += '<td>' + escapeHtml(t.event_title || '') + '</td>';
       html += '<td>$' + Number(t.amount || 0).toFixed(2) + '</td>';
-      html += '<td>' + statusChip(t.status) + (t.funds_available_on && shortDate(t.funds_available_on)
-        ? '<br><span class="lnkup-muted lnkup-fin-funds-on" data-testid="lnkup-fin-funds-available">Funds available ' + escapeHtml(shortDate(t.funds_available_on)) + '</span>'
-        : '') + '</td>';
+      html += '<td data-col="payment">' + escapeHtml(PAYMENT_STATE[pay] || (pay ? pay.replace(/_/g, ' ') : '—')) + '</td>';
+      html += '<td data-col="settlement">' + settlementCell(t) + '</td>';
+      html += '<td data-col="payout"><span class="lnkup-muted">' + (pay === 'paid' || pay === 'completed' || pay === 'partially_refunded' ? 'Batched with other payments · see Payouts' : '—') + '</span></td>';
       html += '<td>' + escapeHtml((t.paid_at || t.created_at || '').slice(0, 10)) + '</td>';
       html += '<td>' + (pid && audit.can_reconcile
         ? '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-fin-reconcile" data-payment-id="' + pid + '">' + (audit.payment_status === 'paid' ? 'Reconcile' : 'Sync payment') + '</button>'
         : '') + '</td>';
       html += '</tr>';
-      html += '<tr class="lnkup-fin-revenue-detail" data-revenue-detail="' + idx + '" hidden><td colspan="6">' + paymentAuditBreakdown(audit) + '</td></tr>';
+      html += '<tr class="lnkup-fin-revenue-detail" data-revenue-detail="' + idx + '" hidden><td colspan="9">' + paymentAuditBreakdown(audit) + '</td></tr>';
     });
     html += '</tbody></table></div>';
     return html;
@@ -1471,13 +1652,20 @@
       }
       var data = result.data || {};
       var html = '<div class="lnkup-fin-tab-panel">';
-      html += '<p class="lnkup-muted">Heuristic forecast based on outstanding invoices and recent payment velocity.</p>';
+      html += '<p class="lnkup-muted"><strong>Projection, not a guarantee.</strong> Estimated from what vendors still owe you.</p>';
       html += kpiGrid([
-        { label: 'Next 7 Days', value: '$' + Number(data.next_7_days || 0).toFixed(2) },
-        { label: 'Next 30 Days', value: '$' + Number(data.next_30_days || 0).toFixed(2) },
-        { label: 'Projected Available Cash', value: '$' + Number(data.projected_available_cash || data.projected_payout || 0).toFixed(2) },
-        { label: 'Expected Payouts', value: '$' + Number(data.expected_payouts || 0).toFixed(2) }
+        { label: 'Projected · next 7 days', value: '$' + Number(data.next_7_days || 0).toFixed(2) },
+        { label: 'Projected · next 30 days', value: '$' + Number(data.next_30_days || 0).toFixed(2) },
+        { label: 'Projected available cash', value: '$' + Number(data.projected_available_cash || data.projected_payout || 0).toFixed(2) },
+        { label: 'Payouts already scheduled', value: '$' + Number(data.expected_payouts || 0).toFixed(2) }
       ]);
+      html += '<details class="lnkup-fin-methodology" data-testid="lnkup-forecast-methodology"><summary>How this is calculated</summary><ul>' +
+        '<li>Starts from booth fees approved vendors still owe (outstanding invoices).</li>' +
+        '<li>Next 7 days = amount owed × 7/30 × 35%.</li>' +
+        '<li>Next 30 days = amount owed × 65%.</li>' +
+        '<li>Projected available cash = your available balance + the 30-day projection − payouts already scheduled.</li>' +
+        '<li>Actual collections: see Money → Overview. No other inputs (seasonality, past events) are used.</li>' +
+        '</ul></details>';
       if (data.outstanding_invoices != null) {
         html += '<p class="lnkup-muted">Outstanding invoices counted: <strong>' + Number(data.outstanding_invoices || 0) + '</strong></p>';
       }
@@ -1489,7 +1677,7 @@
       if (data.high_risk_invoices && data.high_risk_invoices.length) {
         html += '<h3>High-risk invoices</h3>';
         html += tableFromRows(['Invoice', 'Amount', 'Due', 'Status'], data.high_risk_invoices.map(function (r) {
-          return ['#' + r.id, '$' + Number(r.amount).toFixed(2), escapeHtml(r.due_date || ''), statusChip(r.status)];
+          return [escapeHtml(r.number || 'Invoice'), '$' + Number(r.amount).toFixed(2), escapeHtml(r.due_date || ''), statusChip(r.status)];
         }));
       }
       html += '</div>';
@@ -1511,7 +1699,9 @@
       var connect = result.data || {};
       var settlement = connect.settlement_mode || 'platform_treasury';
       var html = '<div class="lnkup-fin-tab-panel lnkup-fin-settings">';
-      html += '<p class="lnkup-fin-payout-badge lnkup-fin-payout-badge--pending">Settlement: ' + escapeHtml(settlement.replace(/_/g, ' ')) + '</p>';
+      html += '<p class="lnkup-fin-payout-badge lnkup-fin-payout-badge--pending">' + escapeHtml(settlement === 'destination'
+        ? 'Vendor payments go straight to your payout account.'
+        : 'LNKup holds vendor payments until you cash out.') + '</p>';
       html += payoutStatusCard(connect);
       if (connect.available) {
         html += '<button type="button" class="lnkup-btn lnkup-btn--sm" id="lnkup-connect-reconnect">' +
@@ -2227,20 +2417,49 @@
       }
       if (panel.id === 'lnkup-fin-vendor-tax') {
         loadList(panel, '/tax-center', function (data) {
-          return kpiGrid([
-            { label: 'W-9 on file', value: data.w9_on_file ? 'Yes' : 'No' },
-            { label: '1099 eligible', value: data.form_1099_eligible ? 'Yes' : 'No' },
-            { label: 'Year gross', value: '$' + Number((data.yearly && data.yearly.gross) || (data.yearly && data.yearly.spent) || 0).toFixed(2) }
+          return '<p class="lnkup-muted">These are LNKup summaries of activity on your account. They are not official IRS forms.</p>' + kpiGrid([
+            { label: 'W-9 summary on file', value: data.w9_on_file ? 'Yes' : 'No' },
+            { label: '1099 summary available', value: data.form_1099_eligible ? 'Yes' : 'No' },
+            { label: 'Booth spend this year', value: '$' + Number((data.yearly && data.yearly.spent) || 0).toFixed(2) }
           ]) + taxPdfLinks(data);
         });
         return;
       }
       if (panel.id === 'lnkup-fin-vendor-reports') {
-        loadList(panel, '/reports/vendor', function (data) {
-          return kpiGrid([
-            { label: 'Lifetime spend', value: '$' + Number(data.lifetime_spend || 0).toFixed(2) },
-            { label: 'Refunds', value: '$' + Number(data.refunds || 0).toFixed(2) }
+        if (panel.dataset.loaded) {
+          return;
+        }
+        panel.innerHTML = '<div class="lnkup-fin-skeleton"></div>';
+        Promise.allSettled([finFetch('/dashboard'), finFetch('/reports/vendor')]).then(function (res) {
+          var dash = settledValue(res[0], {}) || {};
+          var data = settledValue(res[1], {}) || {};
+          if (res[1].status !== 'fulfilled') {
+            failPanel(panel, 'Could not load reports.');
+            return;
+          }
+          panel.dataset.loaded = '1';
+          var html = '<div class="lnkup-fin-tab-panel">';
+          html += '<p class="lnkup-muted">Booth fees you pay are business expenses. LNKup does not track your event-day sales.</p>';
+          html += kpiGrid([
+            { label: 'Total booth spend (all time)', value: '$' + vendorSpentDollars(dash, data).toFixed(2) },
+            { label: 'Refunds received', value: '$' + Number(data.refunds || 0).toFixed(2) },
+            { label: 'Credits available', value: '$' + Number(data.credits_available || 0).toFixed(2) },
+            { label: 'Paid bookings', value: String(Number(data.confirmed_bookings || 0)) }
           ]);
+          var months = (data.by_month || []).map(function (m) {
+            return { month: m.month || m.month_key || '', total: Number(m.total || m.amount || 0) };
+          });
+          html += '<h3>Spending by month (last 12 months)</h3>';
+          html += months.length ? chartBars(months, 'total', 'month') : '<p class="lnkup-fin-empty">No paid booth fees in the last 12 months.</p>';
+          if (months.length) {
+            html += tableFromRows(['Month', 'Booth spend'], months.map(function (m) {
+              return [escapeHtml(m.month), '$' + m.total.toFixed(2)];
+            }));
+          }
+          html += '</div>';
+          panel.innerHTML = html;
+        }).catch(function () {
+          failPanel(panel, 'Could not load reports.');
         });
         return;
       }

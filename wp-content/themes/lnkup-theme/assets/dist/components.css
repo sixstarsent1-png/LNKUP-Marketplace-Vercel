@@ -31,6 +31,11 @@
   --lnkup-space-5: 1.25rem;
   --lnkup-space-6: 1.5rem;
   --lnkup-space-8: 2rem;
+  --lnkup-space-12: 3rem;
+  --lnkup-canvas: #f6f5f1;
+  --lnkup-nav: #141414;
+  --lnkup-type-page: 1.75rem;
+  --lnkup-type-section: 1.375rem;
   --lnkup-section-lg: 4rem;
   --lnkup-section-md: 2.75rem;
   --lnkup-card-pad: 1.5rem;
@@ -391,6 +396,7 @@
   flex-direction: column;
   gap: 0.125rem;
 }
+.lnkup-dashboard__nav-group { margin: 1rem 0.875rem 0.25rem; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted-foreground); }
 .lnkup-dashboard__nav-more-summary { display: flex; align-items: center; gap: 0.75rem; min-height: 2.75rem; padding: 0.625rem 0.875rem; border-radius: 0.75rem; font-size: 0.9375rem; font-weight: 500; color: var(--muted-foreground); cursor: pointer; list-style: none; transition: background 0.15s ease, color 0.15s ease; }
 .lnkup-dashboard__nav-more-summary::-webkit-details-marker { display: none; }
 .lnkup-dashboard__nav-more-summary:hover { background: color-mix(in oklch, var(--muted) 65%, transparent); color: var(--foreground); }

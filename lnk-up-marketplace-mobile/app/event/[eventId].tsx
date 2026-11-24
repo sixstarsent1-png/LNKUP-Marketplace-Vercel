@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Share, StyleSheet, View } from "react-native"
 import { router, useLocalSearchParams, type Href } from "expo-router"
 
+import { VendorEventDetail } from "@/components/marketplace/vendor-event-detail"
 import { ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { Screen } from "@/components/screen"
 import { BackLink } from "@/components/ui/back-link"
@@ -24,8 +25,23 @@ const STATE_NOTICE: Record<Exclude<PublicEventState, "scheduled">, string> = {
   past: "This event has already happened.",
 }
 
+/**
+ * Signed-in vendors get the full event with every vendor option; everyone else gets the
+ * guest-safe public event.
+ */
+export default function EventScreen() {
+  const { eventId, option } = useLocalSearchParams<{ eventId: string; option?: string }>()
+  const { session, isAuthenticated } = useAuth()
+  const id = Number(eventId)
+  if (isAuthenticated && isVendorRole(session?.user.roles) && Number.isFinite(id) && id > 0) {
+    const optionId = Number(option)
+    return <VendorEventDetail eventId={id} initialOptionId={Number.isFinite(optionId) && optionId > 0 ? optionId : undefined} />
+  }
+  return <PublicEventScreen />
+}
+
 /** Read-only public event: the same guest-safe details as the event page on the website. */
-export default function PublicEventScreen() {
+function PublicEventScreen() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>()
   const { auth, session, isAuthenticated } = useAuth()
   const [event, setEvent] = useState<PublicEvent | null>(null)

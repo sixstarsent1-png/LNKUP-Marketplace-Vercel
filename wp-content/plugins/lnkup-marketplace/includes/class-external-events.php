@@ -2009,6 +2009,8 @@ class LNKup_External_Events {
 			'state'       => $event['state'] ?? '',
 			'venue_name'  => $event['venue_name'] ?? '',
 			'event_type'  => $event['event_type'] ?? '',
+			// Imported data is flagged for review in Location Health rather than blocking publish.
+			'location_mode' => 'lenient',
 		);
 
 		$result = LNKup_Organizer_Onboarding::create_event_from_request( $input );
@@ -2196,6 +2198,14 @@ class LNKup_External_Events {
 		}
 		if ( $creating || isset( $data['state'] ) ) {
 			$row['state'] = sanitize_text_field( (string) ( $data['state'] ?? '' ) );
+		}
+		if ( isset( $row['city'], $row['state'] ) && class_exists( 'LNKup_Location_Service' ) ) {
+			// Provider regions ("Georgia", "GA ") become canonical; uncertain values stay as sent.
+			$location = LNKup_Location_Service::validate_for_save( (string) $row['city'], (string) $row['state'], (string) ( $data['country'] ?? '' ), array( 'mode' => 'lenient' ) );
+			if ( is_array( $location ) && in_array( $location['status'], array( LNKup_Location_Service::VERIFIED, LNKup_Location_Service::NORMALIZED ), true ) ) {
+				$row['city']  = (string) $location['city'];
+				$row['state'] = (string) $location['state_code'];
+			}
 		}
 		if ( $creating || isset( $data['venue_name'] ) || isset( $data['venue'] ) ) {
 			$row['venue_name'] = sanitize_text_field( (string) ( $data['venue_name'] ?? $data['venue'] ?? '' ) );

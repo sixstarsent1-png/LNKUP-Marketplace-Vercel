@@ -10,8 +10,9 @@ import {
   isPaymentDueRequest,
   type VendorRequest,
 } from "@/lib/api/vendor-requests"
+import { fetchVendorTransactions, type VendorTransaction } from "@/lib/api/vendor-transactions"
+import { isPastEventInvoice } from "@/lib/vendor/booking-lifecycle"
 import {
-  MOCK_ACTIVITY,
   MOCK_INVOICES,
   MOCK_WALLET_SUMMARY,
 } from "@/lib/data/fixtures"
@@ -20,6 +21,8 @@ export { formatMoney, formatMoneyOrZero, pickNumber } from "@/lib/api/format-mon
 
 export type VendorWalletSummary = {
   amountDue?: number
+  /** Part of amountDue on invoices for events that already happened. */
+  pastEventDue?: number
   totalPaid?: number
   availableCredits?: number
   pendingCredits?: number
@@ -67,6 +70,10 @@ export type VendorInvoiceOrReceipt = {
   paidAt?: string
   pdfUrl?: string
   wordpressUrl?: string
+  eventDateIso?: string
+  place?: string
+  organizerName?: string
+  applicationId?: string
 }
 
 export type VendorDispute = {
@@ -84,7 +91,8 @@ export type VendorDispute = {
 export type VendorWalletBundle = {
   summary: VendorWalletSummary
   paymentRequired: VendorRequest[]
-  activity: VendorFinancialActivityItem[]
+  /** Money ledger (`/financial/transactions`), newest first. */
+  transactions: VendorTransaction[]
   /** Invoices and receipts merged for Wallet UI. */
   invoices: VendorInvoiceOrReceipt[]
   disputes: VendorDispute[]
@@ -114,6 +122,7 @@ export function mapVendorWalletSummary(
   const paid = requests.filter((r) => r.status === "paid" || r.status === "completed")
 
   const amountDueFromRequests = paymentRequired.reduce((sum, r) => sum + (r.amountDue ?? 0), 0)
+  const pastEventDue = paymentRequired.filter((r) => isPastEventInvoice(r)).reduce((sum, r) => sum + (r.amountDue ?? 0), 0)
   const totalPaidFromRequests = paid.reduce((sum, r) => sum + (r.amountDue ?? 0), 0)
 
   const amountDue =
@@ -157,12 +166,13 @@ export function mapVendorWalletSummary(
 
   return {
     amountDue,
+    pastEventDue,
     totalPaid,
     availableCredits,
     pendingCredits: pickNumber(s.pending_credits, wallet?.pending_credits),
     pendingRefunds: pickNumber(s.pending_refunds, d.pending_refunds, s.refunds, d.refunds),
     currency: normalizeCurrency(String(s.currency ?? d.currency ?? "USD")),
-    paymentRequiredCount: paymentRequired.length,
+    paymentRequiredCount: paymentRequired.filter((r) => !isPastEventInvoice(r)).length,
     paidBookingsCount: paid.length,
     lastPaymentAt: String(s.last_payment_at ?? d.last_payment_at ?? "") || undefined,
     wordpressFinancialUrl: getVendorPaymentsUrl(),
@@ -253,12 +263,17 @@ export function mapVendorInvoiceOrReceipt(
   type: "invoice" | "receipt",
   index: number,
 ): VendorInvoiceOrReceipt {
-  const statusRaw = String(item.status ?? "").toLowerCase()
+  // Receipts carry the payment's status; their own `status` is a document state ("issued").
+  const statusRaw = String((type === "receipt" ? item.payment_status ?? item.status : item.status) ?? "").toLowerCase()
   let status: VendorInvoiceOrReceipt["status"] = "unknown"
   if (["open", "paid", "void", "refunded"].includes(statusRaw)) {
     status = statusRaw as VendorInvoiceOrReceipt["status"]
-  } else if (["pending", "sent", "overdue", "partially_paid"].includes(statusRaw)) {
+  } else if (["pending", "sent", "overdue", "partially_paid", "failed"].includes(statusRaw)) {
     status = "open"
+  } else if (statusRaw === "partially_refunded") {
+    status = "refunded"
+  } else if (type === "receipt" && (statusRaw === "issued" || statusRaw === "completed")) {
+    status = "paid"
   }
 
   return {
@@ -284,6 +299,10 @@ export function mapVendorInvoiceOrReceipt(
     paidAt: String(item.paid_at ?? "") || undefined,
     pdfUrl: item.pdf_url ? String(item.pdf_url) : undefined,
     wordpressUrl: item.url ? String(item.url) : item.view_url ? String(item.view_url) : undefined,
+    eventDateIso: item.event_date ? String(item.event_date).slice(0, 10) : undefined,
+    place: item.place ? String(item.place) : undefined,
+    organizerName: item.organizer_name ? String(item.organizer_name) : undefined,
+    applicationId: item.application_id ? String(item.application_id) : undefined,
   }
 }
 
@@ -435,26 +454,18 @@ async function loadVendorWallet(auth?: WpAuth, force = false): Promise<VendorWal
             wordpressFinancialUrl: getVendorPaymentsUrl(),
           },
           paymentRequired: [],
-          activity: [],
+          transactions: [],
           invoices: [],
           disputes: [],
         }
       }
 
       const roleQuery = { role: "vendor" as const }
-      const [
-        requestsResult,
-        summaryData,
-        dashboardData,
-        activityData,
-        invoicesData,
-        receiptsData,
-        disputesData,
-      ] = await Promise.all([
+      // `/financial/summary` and `/financial/dashboard` are the same handler; one call is enough.
+      const [requestsResult, summaryData, transactions, invoicesData, receiptsData, disputesData] = await Promise.all([
         fetchVendorRequests(auth, { force }),
         wpFetchJson<unknown>("/financial/summary", { auth, query: roleQuery }).catch(() => null),
-        wpFetchJson<unknown>("/financial/dashboard", { auth, query: roleQuery }).catch(() => null),
-        wpFetchJson<unknown>("/financial/activity", { auth, query: roleQuery }).catch(() => null),
+        fetchVendorTransactions(auth).catch(() => [] as VendorTransaction[]),
         wpFetchJson<unknown>("/financial/invoices", { auth, query: roleQuery }).catch(() => null),
         wpFetchJson<unknown>("/financial/receipts", { auth, query: roleQuery }).catch(() => null),
         wpFetchJson<unknown>("/financial/disputes", { auth, query: roleQuery }).catch(() => null),
@@ -463,9 +474,9 @@ async function loadVendorWallet(auth?: WpAuth, force = false): Promise<VendorWal
       const paymentRequired = requestsResult.items.filter(isPaymentDueRequest)
 
       return {
-        summary: mapVendorWalletSummary(summaryData, dashboardData, requestsResult.items),
+        summary: mapVendorWalletSummary(summaryData, summaryData, requestsResult.items),
         paymentRequired,
-        activity: mapVendorActivityList(activityData).slice(0, 20),
+        transactions,
         invoices: mergeInvoicesAndReceipts(
           mapVendorInvoicesList(invoicesData),
           mapVendorReceiptsList(receiptsData),
@@ -479,7 +490,7 @@ async function loadVendorWallet(auth?: WpAuth, force = false): Promise<VendorWal
       return {
         summary: { ...MOCK_WALLET_SUMMARY, paymentRequiredCount: paymentRequired.length },
         paymentRequired,
-        activity: MOCK_ACTIVITY,
+        transactions: [],
         invoices: mergeInvoicesAndReceipts(MOCK_INVOICES, MOCK_RECEIPTS),
         disputes: MOCK_DISPUTES ?? [],
       }

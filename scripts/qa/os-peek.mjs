@@ -1,0 +1,16 @@
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+await page.goto('http://localhost:8888/wp-login.php');
+await page.fill('#user_login', 'e2e_org_a');
+await page.fill('#user_pass', 'lnkup-e2e-Passw0rd!');
+await page.click('#wp-submit');
+await page.waitForURL((u) => !String(u).includes('wp-login'));
+await page.goto('http://localhost:8888' + process.argv[2], { waitUntil: 'load' });
+console.log('URL', page.url());
+console.log('TITLE', await page.title());
+console.log('BODY', await page.evaluate(() => document.body.className));
+const text = await page.evaluate(() => document.body.innerText.slice(0, 1500));
+console.log(text);
+await page.screenshot({ path: process.env.TEMP + '/home-now.png', fullPage: false });
+await browser.close();

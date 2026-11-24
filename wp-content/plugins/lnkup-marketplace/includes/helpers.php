@@ -251,7 +251,7 @@ function lnkup_organizer_dashboard_view( $view = null ) {
 	if ( isset( $aliases[ $view ] ) ) {
 		$view = $aliases[ $view ];
 	}
-	$allowed = array( 'home', 'start', 'events', 'applications', 'financial', 'vendors', 'lists', 'invites', 'referrals', 'operations', 'intelligence', 'create', 'help', 'profile', 'team', 'tours', 'tasks' );
+	$allowed = array( 'home', 'start', 'events', 'applications', 'financial', 'vendors', 'lists', 'invites', 'referrals', 'operations', 'intelligence', 'create', 'help', 'profile', 'team', 'settings', 'tours', 'tasks' );
 	if ( class_exists( 'LNKup_Organizer_Marketing' ) && LNKup_Organizer_Marketing::enabled() ) {
 		$allowed[] = 'marketing';
 	}
@@ -687,7 +687,7 @@ function lnkup_get_featured_opportunities( $limit = 6, $args = array() ) {
 		if ( $curate && ! lnkup_passes_homepage_curation( $row ) ) {
 			continue;
 		}
-		$result[] = $row;
+		$result[] = class_exists( 'LNKup_Access_Policy' ) ? LNKup_Access_Policy::scrub_opportunity_item( $row ) : $row;
 		if ( count( $result ) >= $limit ) {
 			break;
 		}
@@ -2122,7 +2122,14 @@ function lnkup_render_apply_form_html( $opportunity_id ) {
  */
 function lnkup_get_filtered_opportunities( $args = array() ) {
 	$result = LNKup_Discovery::search( $args );
-	$result = lnkup_merge_marketplace_feed( $result, $args );
+	if ( ! empty( $result['grouped'] ) ) {
+		// Grouped JSON is for app clients; HTML cards and external interleaving stay on the ungrouped feed.
+		$result['html']           = '';
+		$result['external_total'] = 0;
+		$result['has_external']   = false;
+	} else {
+		$result = lnkup_merge_marketplace_feed( $result, $args );
+	}
 	$result['active_filters'] = lnkup_build_active_filters( $args );
 	$result['empty_state']    = 0 === (int) $result['total'] && empty( $result['has_external'] );
 	$result['pagination']     = lnkup_render_marketplace_pagination( $result, $args );
@@ -2449,6 +2456,15 @@ function lnkup_get_opportunity_card_data( $opportunity_id, $row = null ) {
 	}
 	$item['can_apply_again'] = lnkup_application_can_apply_again( (string) $item['application_status'], (int) $opportunity_id );
 
+	if ( ! empty( $item['access']['gated'] ) ) {
+		$guest_status            = (string) ( $item['opportunity_status']['key'] ?? 'open' );
+		$item['fee_label']       = null;
+		$item['document_badges'] = array();
+		$item['spots_unlimited'] = null;
+		$item['is_open']         = in_array( $guest_status, array( 'open', 'closing_soon' ), true );
+		$item['access']['cta']   = LNKup_Access_Policy::guest_cta( 'pricing', (string) $item['details_url'] );
+	}
+
 	return $item;
 }
 
@@ -2470,8 +2486,9 @@ function lnkup_format_index_row( $row, $compare = false ) {
 		'name'              => $row['title'],
 		'excerpt'           => isset( $row['excerpt'] ) ? (string) $row['excerpt'] : '',
 		'description'       => isset( $row['excerpt'] ) ? (string) $row['excerpt'] : '',
-		'city'              => $row['city'],
-		'state'             => $row['state'],
+		'city'              => function_exists( 'lnkup_display_label' ) ? lnkup_display_label( (string) $row['city'] ) : $row['city'],
+		'state'             => function_exists( 'lnkup_display_state' ) ? lnkup_display_state( (string) $row['state'] ) : $row['state'],
+		'place'             => function_exists( 'lnkup_display_place' ) ? lnkup_display_place( (string) $row['city'], (string) $row['state'] ) : '',
 		'venue_name'        => $row['venue_name'],
 		'date'              => $row['event_date'],
 		'attendance'        => (int) $row['attendance'],
@@ -2539,7 +2556,7 @@ function lnkup_format_index_row( $row, $compare = false ) {
 	$item['application_status']     = $statuses[ (int) $row['opportunity_id'] ] ?? '';
 	$item['can_apply_again']        = lnkup_application_can_apply_again( $item['application_status'], (int) $row['opportunity_id'] );
 
-	return $item;
+	return class_exists( 'LNKup_Access_Policy' ) ? LNKup_Access_Policy::scrub_opportunity_item( $item ) : $item;
 }
 
 /**
@@ -2631,6 +2648,21 @@ function lnkup_get_opportunity_badges( $row ) {
 }
 
 /**
+ * Compact lock CTA used on guest cards in place of pricing and inventory.
+ *
+ * @param array<string, string> $cta LNKup_Access_Policy::guest_cta().
+ */
+function lnkup_render_guest_card_gate( array $cta ) {
+	$url = (string) ( $cta['sign_in_url'] ?? '' );
+	if ( '' === $url ) {
+		return '';
+	}
+	return '<a class="lnkup-card-gate" data-testid="lnkup-card-gate" data-lnkup-gate="card" href="' . esc_url( $url ) . '">'
+		. '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>'
+		. '<span>' . esc_html__( 'Sign in to view pricing', 'lnkup-marketplace' ) . '</span></a>';
+}
+
+/**
  * Render v2 opportunity card.
  *
  * @param array $opp Opportunity data.
@@ -2701,7 +2733,10 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 	$deadline_passed = '' !== $deadline_raw && $deadline_raw < current_time( 'Y-m-d' );
 	$deadline_label = (string) ( $opp['deadline_label'] ?? '' );
 	$rolling_deadline = '' === $deadline_label || false !== stripos( $deadline_label, 'rolling' );
-	if ( $deadline_passed || ( $is_closed && $spots_left > 0 ) ) {
+	$gated = ! empty( $opp['access']['gated'] );
+	if ( $gated ) {
+		$availability_line = (string) ( $opp['opportunity_status']['label'] ?? __( 'Vendor applications open', 'lnkup-marketplace' ) );
+	} elseif ( $deadline_passed || ( $is_closed && $spots_left > 0 ) ) {
 		$availability_line = __( 'Closed', 'lnkup-marketplace' );
 	} elseif ( $spots_left < 1 ) {
 		$availability_line = __( 'Full', 'lnkup-marketplace' );
@@ -2723,7 +2758,9 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 			<div class="lnkup-event-card__badges-top">
 				<span class="lnkup-badge lnkup-badge--accent"><?php echo esc_html( $opp['event_type_label'] ?? __( 'Event Opportunity', 'lnkup-marketplace' ) ); ?></span>
 				<span class="lnkup-badge lnkup-badge--managed"><?php echo esc_html( $bookable ? __( 'Book on LNKup', 'lnkup-marketplace' ) : __( 'Not bookable on LNKup', 'lnkup-marketplace' ) ); ?></span>
-				<span class="lnkup-badge"><?php echo esc_html( $opp['fee_label'] ?? __( 'Fee unavailable', 'lnkup-marketplace' ) ); ?></span>
+				<?php if ( ! $gated ) : ?>
+					<span class="lnkup-badge"><?php echo esc_html( $opp['fee_label'] ?? __( 'Fee unavailable', 'lnkup-marketplace' ) ); ?></span>
+				<?php endif; ?>
 			</div>
 			<?php if ( ! empty( $opp['badges'] ) ) : ?>
 				<div class="lnkup-event-card__badges-float">
@@ -2788,6 +2825,12 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 					<span><?php echo esc_html( date_i18n( 'M j, Y', strtotime( $opp['date'] ) ) ); ?></span>
 				</div>
 				<?php endif; ?>
+				<?php if ( $gated ) : ?>
+				<div class="lnkup-event-card__meta-item">
+					<span class="lnkup-event-card__meta-label"><?php esc_html_e( 'Pricing & spaces', 'lnkup-marketplace' ); ?></span>
+					<?php echo lnkup_render_guest_card_gate( (array) $opp['access']['cta'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+				</div>
+				<?php else : ?>
 				<div class="lnkup-event-card__meta-item">
 					<span class="lnkup-event-card__meta-label"><?php esc_html_e( 'Booth fee', 'lnkup-marketplace' ); ?></span>
 					<span><?php echo esc_html( $opp['fee_label'] ?? lnkup_currency( $opp['vendor_fee'] ?? 0 ) ); ?></span>
@@ -2803,6 +2846,7 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 					);
 					?></span>
 				</div>
+				<?php endif; ?>
 				<?php if ( ! empty( $opp['venue_label'] ) ) : ?>
 				<div class="lnkup-event-card__meta-item">
 					<span class="lnkup-event-card__meta-label"><?php esc_html_e( 'Venue', 'lnkup-marketplace' ); ?></span>
@@ -2837,7 +2881,7 @@ function lnkup_render_opportunity_card_v2( $opp ) {
 					<?php if ( lnkup_marketplace_phase_at_least( '1c' ) ) : ?>
 					<button type="button" class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm lnkup-compare-add" data-opportunity-id="<?php echo esc_attr( (string) $opp['opportunity_id'] ); ?>"><?php esc_html_e( 'Compare', 'lnkup-marketplace' ); ?></button>
 					<?php endif; ?>
-					<a href="<?php echo esc_url( $view_url ); ?>" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm"><?php esc_html_e( 'View', 'lnkup-marketplace' ); ?></a>
+					<a href="<?php echo esc_url( $view_url ); ?>" class="lnkup-btn lnkup-btn--outline lnkup-btn--sm"><?php esc_html_e( 'Details', 'lnkup-marketplace' ); ?></a>
 					<?php if ( $status_label ) : ?>
 						<a href="<?php echo esc_url( add_query_arg( 'view', 'applications', lnkup_page_url_helper( 'vendor-dashboard' ) ) ); ?>" class="lnkup-badge lnkup-badge--accent lnkup-event-card__status" data-application-status="<?php echo esc_attr( $status ); ?>"><?php echo esc_html( $status_label ); ?></a>
 					<?php elseif ( $is_closed ) : ?>
@@ -3017,21 +3061,47 @@ function lnkup_canonical_category_options( $terms ) {
  * @param string $state Raw state.
  */
 function lnkup_display_state( $state ) {
+	$code = lnkup_canonical_state_code( $state );
+	if ( '' !== $code ) {
+		return $code;
+	}
 	$state = trim( (string) $state );
 	if ( '' === $state ) {
 		return '';
 	}
-	$aliases = array(
-		'ge' => 'GA',
-	);
-	$key = strtolower( $state );
-	if ( isset( $aliases[ $key ] ) ) {
-		return $aliases[ $key ];
-	}
-	if ( 2 === strlen( $state ) ) {
+	if ( 2 === strlen( $state ) && ctype_alpha( $state ) ) {
 		return strtoupper( $state );
 	}
 	return lnkup_display_label( $state );
+}
+
+/**
+ * Valid two-letter US state code, or empty when the value cannot be mapped.
+ *
+ * @param string $state Raw state.
+ */
+function lnkup_canonical_state_code( $state ) {
+	$raw = trim( (string) $state );
+	if ( '' === $raw ) {
+		return '';
+	}
+	if ( class_exists( 'LNKup_Location_Service' ) ) {
+		// Valid USPS codes and names only. "GE" is never rewritten without city context.
+		return (string) LNKup_Location_Service::state_code( $raw );
+	}
+	if ( ! class_exists( 'LNKup_Meta_User_Data' ) ) {
+		return ( 2 === strlen( $raw ) && ctype_alpha( $raw ) ) ? strtoupper( $raw ) : '';
+	}
+	$code = LNKup_Meta_User_Data::normalize_state( $raw );
+	if ( '' === $code || 'ge' === $code ) {
+		return '';
+	}
+	$known = array(
+		'al', 'ak', 'az', 'ar', 'ca', 'co', 'ct', 'de', 'dc', 'fl', 'ga', 'hi', 'id', 'il', 'in', 'ia', 'ks',
+		'ky', 'la', 'me', 'md', 'ma', 'mi', 'mn', 'ms', 'mo', 'mt', 'ne', 'nv', 'nh', 'nj', 'nm', 'ny', 'nc',
+		'nd', 'oh', 'ok', 'or', 'pa', 'ri', 'sc', 'sd', 'tn', 'tx', 'ut', 'vt', 'va', 'wa', 'wv', 'wi', 'wy',
+	);
+	return in_array( $code, $known, true ) ? strtoupper( $code ) : '';
 }
 
 /**
@@ -3060,7 +3130,10 @@ function lnkup_display_place( $city, $state ) {
  */
 function lnkup_display_event_title( $title, $date, $venue = '', $organizer = '' ) {
 	$title = trim( (string) $title );
-	if ( '' === (string) $date || '' === $title ) {
+	if ( '' === $title ) {
+		return $title;
+	}
+	if ( '' === (string) $date && '' === trim( (string) $venue ) && '' === trim( (string) $organizer ) ) {
 		return $title;
 	}
 	$title = trim( (string) preg_replace( '/\s*@[^|]+/', ' ', $title ) );
@@ -3183,11 +3256,22 @@ function lnkup_render_homepage_event_card( $slots, $context = 'home' ) {
 	$closing     = false;
 	$apply_id    = 0;
 	$app_status  = '';
+	$app_status_key = '';
+	$deadline    = '';
 	$cats        = array();
 	$slot_rows   = array();
+	$gated_card  = false;
 	foreach ( $slots as $slot ) {
 		$open = ! isset( $slot['is_open'] ) || ! empty( $slot['is_open'] );
 		$left = (int) ( $slot['spots_remaining'] ?? 0 );
+		if ( ! empty( $slot['access']['gated'] ) ) {
+			// Guest rows have no counts; availability comes from the guest status only.
+			$gated_card   = true;
+			$guest_status = (string) ( $slot['opportunity_status']['key'] ?? 'open' );
+			$open         = in_array( $guest_status, array( 'open', 'closing_soon' ), true );
+			$left         = $open ? 1 : 0;
+			$closing      = $closing || 'closing_soon' === $guest_status;
+		}
 		$slot_status = (string) ( $slot['application_status'] ?? '' );
 		if ( $left > 0 ) {
 			$spots_left = true;
@@ -3196,7 +3280,12 @@ function lnkup_render_homepage_event_card( $slots, $context = 'home' ) {
 			$closing = true;
 		}
 		if ( '' === $app_status && '' !== $slot_status ) {
-			$app_status = lnkup_application_status_label( $slot_status );
+			$app_status     = lnkup_application_status_label( $slot_status );
+			$app_status_key = $slot_status;
+		}
+		$slot_deadline = (string) ( $slot['deadline'] ?? '' );
+		if ( '' !== $slot_deadline && $slot_deadline >= current_time( 'Y-m-d' ) && ( '' === $deadline || $slot_deadline < $deadline ) ) {
+			$deadline = $slot_deadline;
 		}
 		if ( $bookable && $open && $left > 0 ) {
 			$accepting = true;
@@ -3321,30 +3410,32 @@ function lnkup_render_homepage_event_card( $slots, $context = 'home' ) {
 			<?php if ( $place || $when ) : ?>
 				<p class="lnkup-event-card__meta"><?php echo esc_html( trim( $place . ( $place && $when ? ' · ' : '' ) . $when ) ); ?></p>
 			<?php endif; ?>
-			<p class="lnkup-event-card__fee"><?php echo esc_html( $fee_label ); ?></p>
-			<?php if ( 'storefront' === $context && $open_spot_total > 0 ) : ?>
+			<?php if ( $gated_card && $bookable ) : ?>
+				<p class="lnkup-event-card__fee"><?php echo lnkup_render_guest_card_gate( LNKup_Access_Policy::guest_cta( 'pricing', $view_url ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></p>
+			<?php else : ?>
+				<p class="lnkup-event-card__fee"><?php echo esc_html( $fee_label ); ?></p>
+			<?php endif; ?>
+			<?php if ( 'storefront' === $context && $open_spot_total > 0 && ! $gated_card ) : ?>
 				<p class="lnkup-event-card__slot-count"><?php echo esc_html( sprintf( _n( '%d spot available', '%d spots available', $open_spot_total, 'lnkup-marketplace' ), $open_spot_total ) ); ?></p>
 			<?php endif; ?>
-			<?php if ( 'feed' === $context && $slot_rows ) : ?>
+			<?php if ( 'feed' === $context && ( $visible_cats || $slot_rows ) ) : ?>
 				<?php
-				$slot_labels = array();
-				foreach ( $slot_rows as $slot_row ) {
-					$slot_labels[ strtolower( $slot_row['label'] ) ] = true;
+				$summary_labels = array_values( $cats );
+				if ( ! $summary_labels ) {
+					$summary_labels = array();
+					foreach ( $slot_rows as $slot_row ) {
+						$summary_labels[ strtolower( (string) $slot_row['label'] ) ] = (string) $slot_row['label'];
+					}
+					$summary_labels = array_values( $summary_labels );
 				}
-				$slot_count = count( $slot_labels );
+				$summary_preview = array_slice( $summary_labels, 0, 3 );
+				$summary_more    = count( $summary_labels ) - count( $summary_preview );
+				$summary_text    = implode( ' · ', $summary_preview );
+				if ( $summary_more > 0 ) {
+					$summary_text .= ' +' . $summary_more . ' ' . __( 'more', 'lnkup-marketplace' );
+				}
 				?>
-				<p class="lnkup-event-card__slot-count"><?php echo esc_html( sprintf( _n( '%d vendor category available', '%d vendor categories available', $slot_count, 'lnkup-marketplace' ), $slot_count ) ); ?></p>
-				<p class="lnkup-event-card__slots-title"><?php esc_html_e( 'Available vendor slots', 'lnkup-marketplace' ); ?></p>
-				<ul class="lnkup-event-card__slot-prices">
-					<?php foreach ( array_slice( $slot_rows, 0, 4 ) as $slot_row ) : ?>
-						<li>
-							<span><?php echo esc_html( $slot_row['label'] ); ?></span>
-							<?php if ( null !== $slot_row['fee'] ) : ?>
-								<span><?php echo esc_html( $slot_row['fee'] > 0 ? lnkup_public_money( $slot_row['fee'] ) : __( 'Free', 'lnkup-marketplace' ) ); ?></span>
-							<?php endif; ?>
-						</li>
-					<?php endforeach; ?>
-				</ul>
+				<p class="lnkup-event-card__slot-count"><?php echo esc_html( $summary_text ); ?></p>
 			<?php elseif ( $visible_cats ) : ?>
 				<ul class="lnkup-event-card__chips">
 					<?php foreach ( $visible_cats as $cat_label ) : ?>
@@ -3355,14 +3446,19 @@ function lnkup_render_homepage_event_card( $slots, $context = 'home' ) {
 					<?php endif; ?>
 				</ul>
 			<?php endif; ?>
+			<?php if ( 'feed' === $context && '' !== $deadline && $accepting ) : ?>
+				<p class="lnkup-event-card__deadline"><?php echo esc_html( sprintf( /* translators: %s: date */ __( 'Applications close %s', 'lnkup-marketplace' ), date_i18n( 'M j', strtotime( $deadline ) ) ) ); ?></p>
+			<?php endif; ?>
 			<div class="lnkup-event-card__footer">
-				<?php if ( $action_url ) : ?>
-					<a class="<?php echo esc_attr( $action_class ); ?>" href="<?php echo esc_url( $action_url ); ?>"><?php echo esc_html( $action_label ); ?></a>
-				<?php endif; ?>
 				<?php if ( $apply_url ) : ?>
-					<a class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" href="<?php echo esc_url( $apply_url ); ?>"><?php esc_html_e( 'Apply to vend', 'lnkup-marketplace' ); ?></a>
+					<a class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" href="<?php echo esc_url( $gated_card ? LNKup_Access_Policy::guest_cta( 'apply', $apply_url )['sign_in_url'] : $apply_url ); ?>"<?php echo $gated_card ? ' data-lnkup-gate="card_apply"' : ''; ?>><?php echo esc_html( $gated_card ? __( 'Sign in to apply', 'lnkup-marketplace' ) : __( 'Apply now', 'lnkup-marketplace' ) ); ?></a>
+					<?php if ( $action_url ) : ?>
+						<a class="lnkup-event-card__details" href="<?php echo esc_url( $action_url ); ?>"><?php esc_html_e( 'Details', 'lnkup-marketplace' ); ?></a>
+					<?php endif; ?>
 				<?php elseif ( $status_url ) : ?>
-					<a class="lnkup-btn lnkup-btn--secondary lnkup-btn--sm lnkup-event-card__status" href="<?php echo esc_url( $status_url ); ?>"><?php echo esc_html( sprintf( /* translators: %s: application status */ __( 'Application: %s', 'lnkup-marketplace' ), $app_status ) ); ?></a>
+					<a class="lnkup-btn lnkup-btn--outline lnkup-btn--sm lnkup-event-card__status" href="<?php echo esc_url( $status_url ); ?>"><?php echo esc_html( in_array( $app_status_key, array( 'paid', 'completed' ), true ) ? __( 'View booking', 'lnkup-marketplace' ) : ( in_array( $app_status_key, array( 'approved', 'payment_required' ), true ) ? __( 'Complete payment', 'lnkup-marketplace' ) : __( 'View application', 'lnkup-marketplace' ) ) ); ?></a>
+				<?php elseif ( $action_url ) : ?>
+					<a class="<?php echo esc_attr( $action_class ); ?>" href="<?php echo esc_url( $action_url ); ?>"><?php echo esc_html( 'storefront' === $context ? $action_label : __( 'View details', 'lnkup-marketplace' ) ); ?></a>
 				<?php endif; ?>
 			</div>
 		</div>
@@ -3538,6 +3634,14 @@ function lnkup_get_discoverable_vendors( $args = array() ) {
 			);
 		}
 		$query_args['meta_query'][] = $discoverable;
+	}
+	// An organizer's own vendor account is never a recruitment result for that organizer.
+	if ( $organizer_id ) {
+		$query_args['meta_query'][] = array(
+			'key'     => '_lnkup_owner_user_id',
+			'value'   => (string) $organizer_id,
+			'compare' => '!=',
+		);
 	}
 
 	if ( ! empty( $args['city'] ) ) {

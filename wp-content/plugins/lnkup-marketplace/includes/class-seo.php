@@ -303,10 +303,6 @@ function lnkup_seo_opportunity_copy( $post_id ) {
 		$location = $location ? $location . ', ' . $state : $state;
 	}
 
-	$spots = (int) ( $opp['spots_remaining'] ?? 0 );
-	$fee   = (float) ( $opp['vendor_fee'] ?? 0 );
-	$fee_label = $fee > 0 ? lnkup_currency( $fee ) : __( 'Free', 'lnkup-marketplace' );
-
 	$title = $location
 		? sprintf(
 			/* translators: 1: event name, 2: city/state */
@@ -320,13 +316,13 @@ function lnkup_seo_opportunity_copy( $post_id ) {
 			$name
 		);
 
+	// Same copy for crawlers, guests and social previews: booth pricing and inventory stay
+	// behind sign-in (LNKup_Access_Policy), so they never appear in meta or Open Graph tags.
 	$description = sprintf(
-		/* translators: 1: event name, 2: location, 3: spots remaining, 4: fee */
-		__( 'Apply for a vendor booth at %1$s%2$s. %3$d spots left · %4$s vendor fee. Free to apply on LNKup.', 'lnkup-marketplace' ),
+		/* translators: 1: event name, 2: location */
+		__( 'Vendor applications for %1$s%2$s. See booth options and apply free on LNKup.', 'lnkup-marketplace' ),
 		$name,
-		$location ? ' in ' . $location : '',
-		max( 0, $spots ),
-		$fee_label
+		$location ? ' in ' . $location : ''
 	);
 
 	return array(

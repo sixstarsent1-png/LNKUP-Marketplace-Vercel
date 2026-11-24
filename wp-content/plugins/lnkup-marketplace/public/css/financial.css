@@ -696,3 +696,8 @@
 #lnkup-vendor-financial[data-fin-sections-bound] .lnkup-fin-tab:not(.is-section-visible) {
   display: none;
 }
+#lnkup-vendor-financial .lnkup-fin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  overflow: visible;
+}

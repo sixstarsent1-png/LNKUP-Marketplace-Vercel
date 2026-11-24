@@ -529,10 +529,42 @@ class LNKup_Financial_Reports {
 				$timeline = array();
 			}
 		}
+		// Receivables are invoices a vendor can still pay. Unlike the legacy `pending_revenue`
+		// fallback, refunded, voided, cancelled and disputed payments are never counted.
+		$open_statuses = array( 'pending', 'failed', 'partially_paid', 'overdue' );
+		$open_posts    = get_posts(
+			array(
+				'post_type'      => 'lnkup_payment',
+				'post_status'    => 'any',
+				'posts_per_page' => -1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_event_id', 'value' => $event_id ),
+					array( 'key' => '_lnkup_payment_status', 'value' => $open_statuses, 'compare' => 'IN' ),
+				),
+			)
+		);
+		$receivables       = 0.0;
+		$receivable_apps   = array();
+		foreach ( $open_posts as $pid ) {
+			$app_id = (int) get_post_meta( (int) $pid, '_lnkup_application_id', true );
+			$status = $app_id ? (string) get_post_meta( $app_id, '_lnkup_application_status', true ) : '';
+			if ( in_array( $status, array( 'rejected', 'cancelled' ), true ) ) {
+				continue;
+			}
+			$receivables += LNKup_Financial::payment_booth_amount( (int) $pid );
+			if ( $app_id ) {
+				$receivable_apps[ $app_id ] = true;
+			}
+		}
+
 		return array(
 			'projected_revenue'       => round( $collected + $pending, 2 ),
 			'collected_revenue'       => round( $collected, 2 ),
 			'pending_revenue'         => round( $pending, 2 ),
+			'outstanding_receivables' => round( $receivables, 2 ),
+			'outstanding_invoice_count' => count( $receivable_apps ),
 			'refunds'                 => round( $refunds, 2 ),
 			'payment_completion'      => $completion,
 			'paid_vendor_count'       => $paid_apps,

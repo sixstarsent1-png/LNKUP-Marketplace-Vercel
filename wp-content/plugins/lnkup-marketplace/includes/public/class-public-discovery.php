@@ -499,13 +499,25 @@ class LNKup_Public_Discovery {
 		$closing   = false;
 		$cats      = array();
 		$apply_id  = 0;
+		$gated = false;
 		foreach ( $slots as $slot ) {
-			$left = (int) ( $slot['spots_remaining'] ?? 0 );
-			$open = ! isset( $slot['is_open'] ) || ! empty( $slot['is_open'] );
-			if ( ! $open || $left < 1 ) {
-				continue;
+			if ( ! empty( $slot['access']['gated'] ) ) {
+				// Guest rows carry a status instead of numbers; count open slots, never spaces.
+				$gated  = true;
+				$status = (string) ( $slot['opportunity_status']['key'] ?? 'open' );
+				if ( ! in_array( $status, array( 'open', 'closing_soon' ), true ) ) {
+					continue;
+				}
+				$spots++;
+				$closing = $closing || 'closing_soon' === $status;
+			} else {
+				$left = (int) ( $slot['spots_remaining'] ?? 0 );
+				$open = ! isset( $slot['is_open'] ) || ! empty( $slot['is_open'] );
+				if ( ! $open || $left < 1 ) {
+					continue;
+				}
+				$spots += $left;
 			}
-			$spots += $left;
 			if ( in_array( 'closing_soon', (array) ( $slot['badges'] ?? array() ), true ) ) {
 				$closing = true;
 			}
@@ -528,7 +540,9 @@ class LNKup_Public_Discovery {
 			return null;
 		}
 
-		if ( null === $fee_min ) {
+		if ( $gated ) {
+			$fee_label = null;
+		} elseif ( null === $fee_min ) {
 			$fee_label = __( 'See booth pricing', 'lnkup-marketplace' );
 		} elseif ( $fee_min <= 0 && ( null === $fee_max || $fee_max <= 0 ) ) {
 			$fee_label = __( 'Free booths', 'lnkup-marketplace' );
@@ -559,8 +573,12 @@ class LNKup_Public_Discovery {
 			'date_label'     => $date ? date_i18n( 'D, M j', strtotime( $date ) ) : '',
 			'date_iso'       => $date ? gmdate( 'Y-m-d', (int) strtotime( $date ) ) : '',
 			'fee_label'      => $fee_label,
-			'spots'          => $spots,
+			'spots'          => $gated ? null : $spots,
 			'closing_soon'   => $closing,
+			'status_label'   => $closing ? __( 'Applications closing soon', 'lnkup-marketplace' ) : __( 'Vendor applications open', 'lnkup-marketplace' ),
+			'access'         => $gated
+				? array( 'gated' => true, 'cta' => LNKup_Access_Policy::guest_cta( 'pricing', $url ) )
+				: array( 'gated' => false ),
 			'categories'     => array_slice( array_values( $cats ), 0, 3 ),
 			'more_categories'=> max( 0, count( $cats ) - 3 ),
 			'media'          => $media,

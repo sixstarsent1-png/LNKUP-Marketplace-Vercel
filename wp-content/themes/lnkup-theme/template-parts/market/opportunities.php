@@ -40,8 +40,16 @@ $has_opportunities = ! empty( $opportunities );
 			<div class="lnkup-event-grid<?php echo $marketplace_open ? '' : ' lnkup-event-grid--preview'; ?>">
 				<?php foreach ( $opportunities as $opp ) : ?>
 					<div class="lnkup-featured-card-wrap<?php echo $marketplace_open ? '' : ' is-locked'; ?>" data-testid="lnkup-market-opp-card">
-						<?php echo function_exists( 'lnkup_render_opportunity_card_v2' ) ? lnkup_render_opportunity_card_v2( $opp ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-						<?php if ( ! $marketplace_open ) : ?>
+						<?php if ( $marketplace_open ) : ?>
+							<?php echo function_exists( 'lnkup_render_opportunity_card_v2' ) ? lnkup_render_opportunity_card_v2( $opp ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php else : ?>
+							<?php // Before launch only a title/date/place teaser is rendered; full card data never reaches the page. ?>
+							<article class="lnkup-event-card lnkup-event-card--v2 lnkup-event-card--teaser">
+								<div class="lnkup-event-card__body">
+									<h3><?php echo esc_html( (string) ( $opp['event_name'] ?? $opp['name'] ?? '' ) ); ?></h3>
+									<p class="lnkup-event-card__summary"><?php echo esc_html( trim( ( ! empty( $opp['date'] ) ? date_i18n( 'M j, Y', strtotime( (string) $opp['date'] ) ) : '' ) . ( ! empty( $opp['location_label'] ) ? ' · ' . $opp['location_label'] : '' ), ' ·' ) ); ?></p>
+								</div>
+							</article>
 							<div class="lnkup-featured-card-wrap__lock" aria-hidden="true">
 								<span><?php echo esc_html( $ctx['launch_label'] ? sprintf( __( 'Opens %s', 'lnkup-theme' ), $ctx['launch_label'] ) : __( 'Opens soon', 'lnkup-theme' ) ); ?></span>
 							</div>

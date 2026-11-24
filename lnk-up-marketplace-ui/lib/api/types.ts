@@ -1,6 +1,10 @@
 import type { WpEventMedia } from "./event-media"
 
 export type WpOpportunityItem = {
+  /** Present on every lnkup/v1 card; gated = signed-out viewer, pricing/inventory omitted server-side. */
+  access?: { gated?: boolean; context?: string }
+  /** Guest-safe status (no numbers) sent instead of spots when gated. */
+  opportunity_status?: { key: string; label: string }
   media?: WpEventMedia | null
   opportunity_id?: number
   id?: number
@@ -156,6 +160,8 @@ export type WpVendorApplicationItem = {
   event_date?: string
   city?: string
   state?: string
+  place?: string
+  primary_status?: string
   organizer_name?: string
   category?: string
   status?: string

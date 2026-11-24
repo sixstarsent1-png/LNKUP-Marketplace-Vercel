@@ -32,10 +32,7 @@ class LNKup_Vendor_CRM_Profile {
 		$states = json_decode( get_post_meta( $profile_id, '_lnkup_states_served', true ) ?: '[]', true ) ?: array();
 		$gallery = json_decode( get_post_meta( $profile_id, '_lnkup_gallery_ids', true ) ?: '[]', true ) ?: array();
 		$logo_id = (int) get_post_meta( $profile_id, '_lnkup_logo_attachment_id', true );
-		$categories = wp_get_post_terms( $profile_id, 'lnkup_vendor_category', array( 'fields' => 'names' ) );
-		if ( is_wp_error( $categories ) ) {
-			$categories = array();
-		}
+		$categories = self::category_names( $profile_id );
 
 		$apps = get_posts(
 			array(
@@ -187,10 +184,7 @@ class LNKup_Vendor_CRM_Profile {
 		}
 		$vendor_id  = (int) get_post_meta( $profile_id, '_lnkup_owner_user_id', true );
 		$rel        = LNKup_Organizer_CRM::get_relationship( $organizer_id, $vendor_id );
-		$categories = wp_get_post_terms( $profile_id, 'lnkup_vendor_category', array( 'fields' => 'names' ) );
-		if ( is_wp_error( $categories ) ) {
-			$categories = array();
-		}
+		$categories = self::category_names( $profile_id );
 		$logo_id    = (int) get_post_meta( $profile_id, '_lnkup_logo_attachment_id', true );
 		$cover_id   = (int) get_post_meta( $profile_id, '_lnkup_cover_image_id', true );
 		$reputation = class_exists( 'LNKup_Vendor_Reputation' ) ? LNKup_Vendor_Reputation::get( $profile_id ) : array();
@@ -381,10 +375,34 @@ class LNKup_Vendor_CRM_Profile {
 			$city   = trim( (string) ( $cities[0] ?? '' ) );
 			$state  = trim( (string) ( $states[0] ?? '' ) );
 		}
+		if ( function_exists( 'lnkup_display_place' ) ) {
+			return (string) lnkup_display_place( $city, $state );
+		}
 		if ( '' === $city ) {
 			return $state;
 		}
 		return $state ? $city . ', ' . $state : $city;
+	}
+
+	/**
+	 * Vendor category names, decoded once (term names are stored with HTML entities) and deduplicated.
+	 *
+	 * @param int $profile_id Vendor profile ID.
+	 * @return string[]
+	 */
+	public static function category_names( $profile_id ) {
+		$names = wp_get_post_terms( (int) $profile_id, 'lnkup_vendor_category', array( 'fields' => 'names' ) );
+		if ( is_wp_error( $names ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( (array) $names as $name ) {
+			$name = trim( wp_specialchars_decode( (string) $name, ENT_QUOTES ) );
+			if ( '' !== $name ) {
+				$out[ strtolower( $name ) ] = $name;
+			}
+		}
+		return array_values( $out );
 	}
 
 	/**

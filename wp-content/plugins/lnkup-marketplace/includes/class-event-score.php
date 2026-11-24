@@ -128,6 +128,7 @@ class LNKup_Event_Score {
 			'label'     => self::labels()[ $label_key ],
 			'label_key' => $label_key,
 			'breakdown' => $breakdown,
+			'weights'   => $weights,
 			'is_new'    => $is_new,
 		);
 		set_transient( 'lnkup_event_score_' . $event_id, $result, HOUR_IN_SECONDS );

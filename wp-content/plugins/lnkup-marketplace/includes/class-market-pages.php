@@ -14,6 +14,34 @@ class LNKup_Market_Pages {
 	const OPTION_KEY   = 'lnkup_city_markets';
 	const QUERY_VAR    = 'lnkup_market_slug';
 	const REWRITE_BASE = 'markets';
+	/** Admin-confirmed merges: old slug => canonical slug (Location Health "merge markets"). */
+	const REDIRECT_OPTION = 'lnkup_market_slug_redirects';
+
+	/**
+	 * Merge a duplicate market into its canonical market: the duplicate is disabled and its URL
+	 * 301-redirects. Data is never deleted, and the merge can be undone by removing the redirect.
+	 *
+	 * @param string $from Duplicate slug.
+	 * @param string $to   Canonical slug.
+	 * @return true|WP_Error
+	 */
+	public static function merge_market( $from, $to ) {
+		$from    = sanitize_title( (string) $from );
+		$to      = sanitize_title( (string) $to );
+		$markets = self::get_all_markets();
+		if ( '' === $from || '' === $to || $from === $to || ! isset( $markets[ $from ], $markets[ $to ] ) ) {
+			return new WP_Error( 'lnkup_market_merge_invalid', __( 'Choose two different existing markets.', 'lnkup-marketplace' ) );
+		}
+		$markets[ $from ]['enabled']   = false;
+		$markets[ $from ]['indexable'] = false;
+		$markets[ $from ]['merged_into'] = $to;
+		self::save_markets( $markets );
+		$redirects          = get_option( self::REDIRECT_OPTION, array() );
+		$redirects          = is_array( $redirects ) ? $redirects : array();
+		$redirects[ $from ] = $to;
+		update_option( self::REDIRECT_OPTION, $redirects, false );
+		return true;
+	}
 
 	/**
 	 * Init hooks.
@@ -324,15 +352,9 @@ class LNKup_Market_Pages {
 		}
 
 		global $wpdb;
-		$table = LNKup_Marketplace_Index::table_name();
-		$city_like = '%' . $wpdb->esc_like( $market['city'] ) . '%';
-		$opp_count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$table} WHERE city LIKE %s AND UPPER(state) = %s",
-				$city_like,
-				$market['state']
-			)
-		);
+		// Same canonical market identity as the listings (city + metro), never a substring match.
+		$counted   = class_exists( 'LNKup_Discovery' ) ? LNKup_Discovery::search( array( 'market' => $market['slug'], 'per_page' => 1, 'has_spots' => true ) ) : array();
+		$opp_count = (int) ( $counted['total'] ?? 0 );
 
 		$vendor_signups = (int) $wpdb->get_var(
 			$wpdb->prepare(
@@ -381,8 +403,7 @@ class LNKup_Market_Pages {
 
 		$result = LNKup_Discovery::search(
 			array(
-				'city'     => $market['city'],
-				'state'    => $market['state'],
+				'market'   => $market['slug'],
 				'per_page' => max( 1, min( 12, (int) $limit ) ),
 				'sort'     => 'soonest',
 				'has_spots'=> true,
@@ -548,6 +569,12 @@ class LNKup_Market_Pages {
 			return;
 		}
 		$slug = self::current_slug();
+		// Duplicate market URLs (e.g. /markets/atlanta-ge/) redirect only after an admin merged them.
+		$redirects = get_option( self::REDIRECT_OPTION, array() );
+		if ( is_array( $redirects ) && ! empty( $redirects[ $slug ] ) && self::get_market_by_slug( (string) $redirects[ $slug ] ) ) {
+			wp_safe_redirect( self::market_url( (string) $redirects[ $slug ] ), 301 );
+			exit;
+		}
 		$data = self::get_market_page_data( $slug );
 		if ( ! $data ) {
 			return;

@@ -1,0 +1,226 @@
+{
+  "loginMs": 14360,
+  "metrics": [
+    {
+      "route": "/(vendor)",
+      "ms": 14581,
+      "settled": true,
+      "apiCalls": 15,
+      "calls": [
+        "GET /lnkup/v1/applications/vendor",
+        "POST /lnkup/v1/marketplace/track/event",
+        "GET /lnkup/v1/marketplace/sections/recommended?limit=3",
+        "GET /lnkup/v1/marketplace/sections/trending?section=closing_soon&limit=3",
+        "GET /lnkup/v1/verification/vendor",
+        "GET /lnkup/v1/reputation/vendor-dashboard",
+        "GET /lnkup/v1/operations/vendor-home",
+        "GET /lnkup/v1/marketplace/favorites",
+        "GET /lnkup/v1/comms/inbox/count?role=vendor",
+        "POST /lnkup/v1/marketplace/track/event",
+        "POST /lnkup/v1/marketplace/track/event",
+        "POST /lnkup/v1/marketplace/track/event",
+        "GET /lnkup/v1/comms/next-steps?role=vendor",
+        "GET /lnkup/v1/growth/profile-strength",
+        "GET /lnkup/v1/notifications/inbox"
+      ],
+      "pending": [],
+      "errors": [
+        "console: Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. payment_due",
+        "console: Encountered two children with the same key, `%s`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version. payment_due"
+      ]
+    },
+    {
+      "route": "/(vendor)/find",
+      "ms": 6313,
+      "settled": true,
+      "apiCalls": 9,
+      "calls": [
+        "GET /lnkup/v1/match/vendor/recommendations?section=recommended&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=preferred_markets&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=deadlines&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=previous_organizers&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=tours&per_page=6",
+        "GET /lnkup/v1/match/vendor/recommendations?section=series&per_page=6",
+        "GET /lnkup/v1/marketplace/favorites",
+        "GET /lnkup/v1/marketplace/search?per_page=20&page=1&include_external=false&sort=recommended",
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/requests",
+      "ms": 1389,
+      "settled": true,
+      "apiCalls": 1,
+      "calls": [
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "pending": [
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/wallet",
+      "ms": 1412,
+      "settled": true,
+      "apiCalls": 7,
+      "calls": [
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/financial/summary?role=vendor",
+        "GET /lnkup/v1/financial/dashboard?role=vendor",
+        "GET /lnkup/v1/financial/activity?role=vendor",
+        "GET /lnkup/v1/financial/invoices?role=vendor",
+        "GET /lnkup/v1/financial/receipts?role=vendor",
+        "GET /lnkup/v1/financial/disputes?role=vendor"
+      ],
+      "pending": [
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/financial/summary?role=vendor",
+        "GET /lnkup/v1/financial/dashboard?role=vendor",
+        "GET /lnkup/v1/financial/activity?role=vendor",
+        "GET /lnkup/v1/financial/invoices?role=vendor",
+        "GET /lnkup/v1/financial/receipts?role=vendor",
+        "GET /lnkup/v1/financial/disputes?role=vendor"
+      ],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/more",
+      "ms": 1394,
+      "settled": true,
+      "apiCalls": 3,
+      "calls": [
+        "GET /lnkup/v1/push/preferences",
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/vendor/profile"
+      ],
+      "pending": [
+        "GET /lnkup/v1/push/preferences",
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/vendor/profile"
+      ],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/profile",
+      "ms": 16775,
+      "settled": true,
+      "apiCalls": 6,
+      "calls": [
+        "GET /lnkup/v1/vendor/profile",
+        "GET /lnkup/v1/verification/vendor",
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/growth/profile-strength",
+        "GET /lnkup/v1/match/vendor/preferences",
+        "GET /lnkup/v1/locations/resolve?city=Charlotte&state=NC"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/documents",
+      "ms": 5019,
+      "settled": true,
+      "apiCalls": 3,
+      "calls": [
+        "GET /lnkup/v1/documents/shares",
+        "GET /lnkup/v1/documents/vendor",
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/favorites",
+      "ms": 4398,
+      "settled": true,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/marketplace/favorites"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/growth",
+      "ms": 13649,
+      "settled": true,
+      "apiCalls": 3,
+      "calls": [
+        "GET /lnkup/v1/growth/dashboard",
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/reputation/vendor-dashboard"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/reviews",
+      "ms": 8199,
+      "settled": true,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/reputation/vendor-dashboard",
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/operations",
+      "ms": 1349,
+      "settled": true,
+      "apiCalls": 1,
+      "calls": [
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "pending": [
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/notifications",
+      "ms": 9469,
+      "settled": true,
+      "apiCalls": 3,
+      "calls": [
+        "GET /lnkup/v1/comms/inbox?role=vendor&tab=all&page=1&per_page=20&filter=all",
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/comms/inbox/count?role=vendor"
+      ],
+      "pending": [],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/saved-searches",
+      "ms": 1417,
+      "settled": true,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/marketplace/saved-searches",
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "pending": [
+        "GET /lnkup/v1/marketplace/saved-searches",
+        "GET /lnkup/v1/applications/vendor"
+      ],
+      "errors": []
+    },
+    {
+      "route": "/(vendor)/referrals",
+      "ms": 4791,
+      "settled": true,
+      "apiCalls": 2,
+      "calls": [
+        "GET /lnkup/v1/applications/vendor",
+        "GET /lnkup/v1/referrals/organizer-recruit"
+      ],
+      "pending": [],
+      "errors": []
+    }
+  ]
+}

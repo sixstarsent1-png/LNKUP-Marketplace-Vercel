@@ -201,10 +201,15 @@ class LNKup_Growth_REST {
 	public static function revenue( WP_REST_Request $request ) {
 		return self::respond( function () use ( $request ) {
 			$user_id = get_current_user_id();
+			$days = (int) $request->get_param( 'days' ) ?: 90;
+			$series = LNKup_Growth_Analytics::revenue_over_time( $user_id, $days );
 			return array(
-				'over_time' => LNKup_Growth_Analytics::revenue_over_time( $user_id, (int) $request->get_param( 'days' ) ?: 90 ),
-				'by_month'  => LNKup_Growth_Analytics::revenue_by_month( $user_id ),
-				'summary'   => LNKup_Growth_Analytics::revenue_summary( $user_id ),
+				'over_time'  => $series,
+				'by_month'   => LNKup_Growth_Analytics::revenue_by_month( $user_id ),
+				'summary'    => LNKup_Growth_Analytics::revenue_summary( $user_id ),
+				'window_days'=> $days,
+				'metric'     => 'vendor_spend',
+				'empty_hint' => __( 'No payments in this period. Lifetime event investment is on the overview.', 'lnkup-marketplace' ),
 			);
 		} );
 	}

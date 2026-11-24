@@ -102,6 +102,7 @@ class LNKup_Portfolio_REST {
 			array( $id . '/archive', 'POST', 'archive_tour', $owner ),
 			array( $id . '/cancel', 'POST', 'cancel_stops', $owner ),
 			array( $id . '/stops', 'POST', 'add_stops', $owner ),
+			array( $id . '/attach', 'POST', 'attach_events', $owner ),
 			array( $id . '/stops/reorder', 'POST', 'reorder_stops', $owner ),
 			array( $stop, 'PATCH', 'update_stop', $stop_ok ),
 			array( $stop, 'DELETE', 'delete_stop', $stop_ok ),
@@ -323,6 +324,11 @@ class LNKup_Portfolio_REST {
 
 	public static function delete_stop( WP_REST_Request $request ) {
 		return self::respond( LNKup_Portfolio_Tours::delete_stop( self::tour_id( $request ), absint( $request['event_id'] ), self::uid() ) );
+	}
+
+	public static function attach_events( WP_REST_Request $request ) {
+		$body = self::body( $request );
+		return self::respond( LNKup_Portfolio_Tours::attach_events( self::tour_id( $request ), (array) ( $body['event_ids'] ?? array() ), self::uid() ) );
 	}
 
 	public static function detach_stop( WP_REST_Request $request ) {

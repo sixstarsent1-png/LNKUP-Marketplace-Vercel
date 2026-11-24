@@ -450,6 +450,20 @@ class LNKup_Market_Pages_Admin {
 	public static function create_market( string $city, string $state ) {
 		$city  = sanitize_text_field( $city );
 		$state = strtoupper( sanitize_text_field( $state ) );
+		if ( class_exists( 'LNKup_Location_Service' ) ) {
+			// Markets are keyed by canonical city + USPS state so "Atlanta, Georgia" never forks Atlanta.
+			$location = LNKup_Location_Service::canonical_profile_location( $city, $state );
+			if ( is_wp_error( $location ) ) {
+				return new WP_Error( 'lnkup_market_invalid', $location->get_error_message() );
+			}
+			$city  = $location['city'];
+			$state = $location['state'];
+			$owner = LNKup_Location_Service::market_for( $city, $state );
+			if ( '' !== $owner ) {
+				/* translators: %s: existing market slug */
+				return new WP_Error( 'lnkup_market_exists', sprintf( __( 'That city already belongs to the "%s" market.', 'lnkup-marketplace' ), $owner ) );
+			}
+		}
 		if ( '' === $city || ! preg_match( '/^[A-Z]{2}$/', $state ) ) {
 			return new WP_Error( 'lnkup_market_invalid', __( 'Enter a city and a two-letter state.', 'lnkup-marketplace' ) );
 		}

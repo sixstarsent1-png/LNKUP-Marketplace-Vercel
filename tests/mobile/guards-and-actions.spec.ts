@@ -70,19 +70,22 @@ test.describe('Vendor guards', () => {
 test.describe('Organizer guards', () => {
   test('declining asks for a reason and cancel changes nothing', async ({ page }) => {
     await appLogin(page, organizerUser);
-    await page.goto('/(organizer)/vendors');
-    const decline = page.getByRole('button', { name: /^Decline / }).first();
-    const hasOpenRequest = await decline
+    await page.goto('/(organizer)/vendors?tab=requests&filter=review');
+    const row = page.locator('[data-testid^="organizer-request-"]').first();
+    const hasOpenRequest = await row
       .waitFor({ state: 'visible', timeout: 30_000 })
       .then(() => true)
       .catch(() => false);
     test.skip(!hasOpenRequest, 'No open request to decline in the seed');
+    await row.click();
+    const decline = page.getByTestId('review-decline');
+    await expect(decline).toBeVisible({ timeout: 45_000 });
     await decline.click();
     await expect(page.getByRole('heading', { name: /^Decline / })).toBeVisible();
-    await page.getByRole('button', { name: 'Decline request' }).click();
+    await page.getByRole('button', { name: 'Decline', exact: true }).last().click();
     await expect(page.getByText('Enter at least 3 characters.')).toBeVisible();
     await page.getByRole('button', { name: 'Cancel' }).click();
-    await expect(page.getByRole('button', { name: /^Decline / }).first()).toBeVisible();
+    await expect(page.getByTestId('review-decline')).toBeVisible();
   });
 
   test('invites go to a chosen event and a repeat is reported, not duplicated', async ({ page }) => {

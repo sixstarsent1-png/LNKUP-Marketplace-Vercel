@@ -136,10 +136,10 @@ class LNKup_Stripe_Connect {
 		$status['payout_schedule']            = sanitize_key( $settings['connect_payout_schedule'] ?? 'manual' );
 		if ( ! self::is_enabled() ) {
 			$status['code']    = 'connect_not_configured';
-			$status['message'] = __( 'Stripe Connect is not enabled on this marketplace.', 'lnkup-marketplace' );
+			$status['message'] = __( 'Online payouts aren’t turned on yet. LNKup keeps a record of every vendor payment until they are.', 'lnkup-marketplace' );
 		} elseif ( ! ( new LNKup_Stripe_Client() )->is_available() ) {
 			$status['code']    = 'stripe_not_configured';
-			$status['message'] = __( 'Stripe API keys are not configured.', 'lnkup-marketplace' );
+			$status['message'] = __( 'Payouts are temporarily unavailable. Our team has been notified.', 'lnkup-marketplace' );
 		}
 		return $status;
 	}
@@ -708,7 +708,7 @@ class LNKup_Stripe_Connect {
 		if ( ! self::is_enabled() ) {
 			return new WP_Error(
 				'connect_not_configured',
-				__( 'Stripe Connect is not enabled.', 'lnkup-marketplace' ),
+				__( 'Online payouts aren’t turned on yet.', 'lnkup-marketplace' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -763,7 +763,7 @@ class LNKup_Stripe_Connect {
 			return array(
 				'success' => false,
 				'code'    => 'connect_not_configured',
-				'message' => __( 'Stripe Connect is not enabled.', 'lnkup-marketplace' ),
+				'message' => __( 'Online payouts aren’t turned on yet.', 'lnkup-marketplace' ),
 				'status'  => 'not_started',
 			);
 		}
@@ -1120,7 +1120,7 @@ class LNKup_Stripe_Connect {
 			return new WP_Error( 'invalid_amount', __( 'Invalid transfer amount.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 		if ( ! self::is_enabled() ) {
-			return new WP_Error( 'connect_disabled', __( 'Stripe Connect is not enabled.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+			return new WP_Error( 'connect_disabled', __( 'Online payouts aren’t turned on yet.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 		$account = self::get_account( $organizer_id, 'organizer' );
 		if ( ! $account || empty( $account['stripe_account_id'] ) ) {
@@ -1289,7 +1289,7 @@ class LNKup_Stripe_Connect {
 		);
 
 		if ( ! self::is_enabled() ) {
-			$empty['error'] = __( 'Stripe Connect is not enabled.', 'lnkup-marketplace' );
+			$empty['error'] = __( 'Online payouts aren’t turned on yet.', 'lnkup-marketplace' );
 			return $empty;
 		}
 
@@ -1398,7 +1398,7 @@ class LNKup_Stripe_Connect {
 			return new WP_Error( 'invalid_amount', __( 'Invalid payout amount.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 		if ( ! self::is_enabled() ) {
-			return new WP_Error( 'connect_disabled', __( 'Stripe Connect is not enabled.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+			return new WP_Error( 'connect_disabled', __( 'Online payouts aren’t turned on yet.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 
 		$split = self::platform_balance_split();

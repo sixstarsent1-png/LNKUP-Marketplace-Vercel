@@ -106,6 +106,10 @@ export type LnkupAnalyticsEventName =
   | "tutorial_viewed"
   | "tutorial_step_clicked"
   | "tutorial_step_completed"
+  | "authentication_gate_displayed"
+  | "authentication_gate_clicked"
+  | "guest_registration_started"
+  | "authentication_intent_restored"
 
 export type LnkupAnalyticsEvent = {
   event: LnkupAnalyticsEventName
@@ -224,6 +228,10 @@ const ALLOWED_EVENTS = new Set<LnkupAnalyticsEventName>([
   "tutorial_viewed",
   "tutorial_step_clicked",
   "tutorial_step_completed",
+  "authentication_gate_displayed",
+  "authentication_gate_clicked",
+  "guest_registration_started",
+  "authentication_intent_restored",
 ])
 
 export function isAllowedAnalyticsEvent(event: string): event is LnkupAnalyticsEventName {
@@ -341,6 +349,10 @@ export function toWpEventType(event: LnkupAnalyticsEventName): string {
     tutorial_viewed: "tutorial_viewed",
     tutorial_step_clicked: "tutorial_step_clicked",
     tutorial_step_completed: "tutorial_step_completed",
+    authentication_gate_displayed: "authentication_gate_displayed",
+    authentication_gate_clicked: "authentication_gate_clicked",
+    guest_registration_started: "guest_registration_started",
+    authentication_intent_restored: "authentication_intent_restored",
   }
   return map[event] ?? event
 }

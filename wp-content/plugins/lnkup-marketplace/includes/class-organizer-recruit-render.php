@@ -18,7 +18,36 @@ class LNKup_Organizer_Recruit_Render {
 	 * Headline used as the referral page subtitle.
 	 */
 	public static function headline(): string {
-		return __( 'Invite organizers or vendors — earn on LNKup fees for a year', 'lnkup-marketplace' );
+		return sprintf(
+			/* translators: 1: commission percent, 2: attribution months */
+			__( 'Invite organizers or vendors — earn %1$s%% of LNKup fees for %2$d months', 'lnkup-marketplace' ),
+			self::percent_label(),
+			self::window_months()
+		);
+	}
+
+	/**
+	 * Compact offer sentence from the live credit rule.
+	 */
+	public static function offer_copy(): string {
+		return sprintf(
+			/* translators: 1: commission percent, 2: attribution months */
+			__( 'Earn %1$s%% of LNKup fees for %2$d months when they book or collect booth payments.', 'lnkup-marketplace' ),
+			self::percent_label(),
+			self::window_months()
+		);
+	}
+
+	/**
+	 * @return string Percent without trailing zeros.
+	 */
+	private static function percent_label(): string {
+		$percent = class_exists( 'LNKup_Organizer_Recruit_Referrals' ) ? LNKup_Organizer_Recruit_Referrals::commission_percent() : 0.0;
+		return rtrim( rtrim( number_format( $percent, 2 ), '0' ), '.' );
+	}
+
+	private static function window_months(): int {
+		return class_exists( 'LNKup_Organizer_Recruit_Referrals' ) ? LNKup_Organizer_Recruit_Referrals::window_months() : 12;
 	}
 
 	/**
@@ -44,7 +73,7 @@ class LNKup_Organizer_Recruit_Render {
 					<h2 class="lnkup-org-recruit__title"><?php echo esc_html( self::headline() ); ?></h2>
 				<?php endif; ?>
 				<p class="lnkup-org-recruit__body lnkup-muted">
-					<?php esc_html_e( 'Share a role-specific link. When they pay booth fees (vendors) or collect booth fees on their events (organizers), you earn a cut of LNKup’s vendor fee and organizer fee for up to 12 months.', 'lnkup-marketplace' ); ?>
+					<?php echo esc_html( self::offer_copy() ); ?>
 				</p>
 			</div>
 			<div class="lnkup-org-recruit__mount" data-org-recruit-mount>
@@ -65,7 +94,7 @@ class LNKup_Organizer_Recruit_Render {
 		?>
 		<a class="lnkup-org-recruit-cta" href="<?php echo esc_url( $href ); ?>" data-testid="lnkup-org-recruit-home-cta">
 			<span class="lnkup-org-recruit-cta__title"><?php esc_html_e( 'Invite organizers or vendors', 'lnkup-marketplace' ); ?></span>
-			<span class="lnkup-org-recruit-cta__body"><?php esc_html_e( 'Earn 20% of LNKup fees for 12 months when they book or collect booth payments.', 'lnkup-marketplace' ); ?></span>
+			<span class="lnkup-org-recruit-cta__body"><?php echo esc_html( self::offer_copy() ); ?></span>
 			<span class="lnkup-org-recruit-cta__action"><?php esc_html_e( 'Get invite link', 'lnkup-marketplace' ); ?> →</span>
 		</a>
 		<?php

@@ -68,6 +68,8 @@ export type WpVendorApplicationItem = {
   event_date?: string
   city?: string
   state?: string
+  place?: string
+  primary_status?: string
   organizer_name?: string
   category?: string
   status?: string
@@ -83,6 +85,17 @@ export type WpVendorApplicationItem = {
   payment_status?: string
   rejection_reason?: string
   info_request?: WpInfoRequestEntry | null
+  event_end_date?: string
+  venue?: string
+  opportunity_title?: string
+  event_resolution?: "live" | "opportunity" | "snapshot" | "unrecoverable"
+  event_state?: string
+  application_state?: string
+  booking_state?: string
+  payment_state?: string
+  credential_state?: string
+  payment_context?: { has_balance?: boolean; past_event_invoice?: boolean; collectible?: boolean }
+  timeline?: Array<{ key?: string; label?: string; state?: string; at?: string }>
 }
 
 export type WpInfoRequestEntry = {

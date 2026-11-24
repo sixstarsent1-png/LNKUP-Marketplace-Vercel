@@ -34,7 +34,32 @@ async function rosterRow(page: Page, eventId: string, appId: string): Promise<Ro
 async function openCheckIn(page: Page, eventId: string) {
   await page.goto(`/(organizer)/events/checkin?eventId=${eventId}`);
   await expect(page.getByRole('heading', { name: 'Check-in' })).toBeVisible();
-  await expect(page.getByTestId('checkin-code-card')).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId('checkin-search')).toBeVisible({ timeout: 45_000 });
+}
+
+/**
+ * Enter a pass code through the code sheet.
+ */
+async function enterPassCode(page: Page, code: string) {
+  await page.getByTestId('checkin-code-open').click();
+  await page.getByLabel('Pass code').fill(code);
+  await page.getByRole('button', { name: 'Check in with code' }).click();
+}
+
+/**
+ * Open one vendor's action sheet from the roster.
+ */
+async function openVendor(page: Page, appId: string) {
+  await page.getByRole('button', { name: /^All/ }).click();
+  await page.getByTestId(`checkin-row-${appId}`).getByRole('button').first().click();
+  await expect(page.getByTestId('checkin-vendor-sheet')).toBeVisible();
+}
+
+/**
+ * Close whichever sheet is open.
+ */
+async function closeSheet(page: Page) {
+  await page.getByRole('button', { name: /^Close / }).last().click();
 }
 
 /**
@@ -48,15 +73,16 @@ async function giveOverrideReason(page: Page, reason: string) {
 }
 
 test.describe('Organizer event-day check-in', () => {
-  test('the check-in screen opens from the event Day-of tab and fits the screen', async ({ page }, testInfo) => {
+  test('the check-in screen opens from the event Operations tab and fits the screen', async ({ page }, testInfo) => {
     await appLogin(page, organizerUser);
     await page.goto(`/(organizer)/events/${freeEventId}?tab=dayof`);
-    await page.getByRole('button', { name: 'Open check-in' }).click();
+    await page.getByRole('button', { name: /^Check-in\./ }).click();
     await expect(page).toHaveURL(new RegExp(`checkin\\?eventId=${freeEventId}`));
-    await expect(page.getByTestId('checkin-code-card')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('checkin-search')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId('checkin-populations')).toContainText('eligible checked in');
     await page.getByRole('button', { name: /^All/ }).click();
     await expect(page.getByTestId(`checkin-row-${freeAppId}`)).toBeVisible();
-    await expect(page.getByText(/Checked in/).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /scan/i })).toHaveCount(0);
     await expectNoHorizontalOverflow(page, 'Check-in');
     await snap(page, 'checkin', testInfo);
   });
@@ -76,10 +102,11 @@ test.describe('Organizer event-day check-in', () => {
 
       await appLogin(page, securityUser);
       await openCheckIn(page, freeEventId);
-      await page.getByLabel('Pass code').fill(passCode);
-      await page.getByRole('button', { name: 'Check in with code' }).click();
-      await expect(page.getByText(/Documents need attention\. Find the vendor below/)).toBeVisible({ timeout: 45_000 });
+      await enterPassCode(page, passCode);
+      await expect(page.getByText(/Documents need attention/).first()).toBeVisible({ timeout: 45_000 });
+      await closeSheet(page);
 
+      await openVendor(page, freeAppId);
       await page.getByRole('button', { name: /with an override$/ }).click();
       await giveOverrideReason(page, 'Paper permit shown at the gate');
       await expect(page.getByText(/Only the event owner or operations staff can override/)).toBeVisible({ timeout: 45_000 });
@@ -90,6 +117,7 @@ test.describe('Organizer event-day check-in', () => {
     test('an offline override is reported as not recorded', async ({ page, context }) => {
       await appLogin(page, organizerUser);
       await openCheckIn(page, freeEventId);
+      await openVendor(page, freeAppId);
       await page.getByRole('button', { name: /with an override$/ }).click();
       const field = page.getByRole('textbox', { name: /^Check in .* anyway\?$/ });
       await field.fill('Paid cash at the gate');
@@ -103,6 +131,7 @@ test.describe('Organizer event-day check-in', () => {
     test('the owner overrides with a reason, and a repeat code entry says already checked in', async ({ page }, testInfo) => {
       await appLogin(page, organizerUser);
       await openCheckIn(page, freeEventId);
+      await openVendor(page, freeAppId);
       await page.getByRole('button', { name: /with an override$/ }).click();
       const field = page.getByRole('textbox', { name: /^Check in .* anyway\?$/ });
       await field.fill('ok');
@@ -111,10 +140,11 @@ test.describe('Organizer event-day check-in', () => {
       await giveOverrideReason(page, 'Paid cash at the gate');
       await expect(page.getByText(/Checked in with override/)).toBeVisible({ timeout: 45_000 });
       await expect.poll(async () => (await rosterRow(page, freeEventId, freeAppId))?.checked_in).toBe(true);
+      await closeSheet(page);
 
-      await page.getByLabel('Pass code').fill(passCode);
-      await page.getByRole('button', { name: 'Check in with code' }).click();
+      await enterPassCode(page, passCode);
       await expect(page.getByText('Already checked in.')).toBeVisible({ timeout: 45_000 });
+      await closeSheet(page);
       await page.getByRole('button', { name: /^Checked in/ }).first().click();
       await expect(page.getByTestId(`checkin-row-${freeAppId}`)).toBeVisible();
       await snap(page, 'checkin-done', testInfo);
@@ -124,6 +154,7 @@ test.describe('Organizer event-day check-in', () => {
       await appLogin(page, organizerUser);
       await openCheckIn(page, mainEventId);
       await page.getByRole('button', { name: /^All/ }).click();
+      await page.locator('[data-testid^="checkin-row-"]').first().getByRole('button').first().click();
       const boothButton = page.getByRole('button', { name: /^(Assign|Move) booth for / }).first();
       await expect(boothButton).toBeVisible({ timeout: 45_000 });
       await boothButton.click();

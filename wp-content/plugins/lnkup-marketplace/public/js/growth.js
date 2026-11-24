@@ -95,24 +95,50 @@
       '<p class="lnkup-stat-card__value"' + anim + '>' + escapeHtml(value) + '</p>' + trendHtml + '</div></div>';
   }
 
-  function renderFunnel(f) {
-    if (!f) return '';
+  /**
+   * Application funnel from real lifetime counts. Every stage is the same population
+   * (all applications ever submitted); percentages are of submitted.
+   */
+  function renderFunnel(f, k) {
+    k = k || {};
+    var submitted = Number(k.applications_submitted || 0);
+    if (!submitted) {
+      return '<p class="lnkup-muted">Your funnel appears after your first application.</p>';
+    }
     var steps = [
-      { label: 'Submitted', pct: 100 },
-      { label: 'Approved', pct: Math.min(100, parseFloat(f.approval_rate) || 0) },
-      { label: 'Booked', pct: Math.min(100, (parseFloat(f.approval_rate) || 0) * 0.85) }
+      { label: 'Applications submitted', count: submitted },
+      { label: 'Approved by organizers', count: Number(k.applications_approved || 0) },
+      { label: 'Paid or completed bookings', count: Number(k.completed_bookings || 0) }
     ];
-    var html = '<div class="lnkup-growth-funnel" role="img" aria-label="Application funnel">';
+    var html = '<ol class="vos-funnel" aria-label="Application funnel, all time">';
     steps.forEach(function (step) {
-      html += '<div class="lnkup-growth-funnel__step"><span class="lnkup-growth-funnel__bar" style="width:' + step.pct + '%"></span><span class="lnkup-growth-funnel__label">' + escapeHtml(step.label) + '</span></div>';
+      var pct = Math.round((step.count / submitted) * 100);
+      html += '<li class="vos-funnel__step"><div class="vos-funnel__row"><span>' + escapeHtml(step.label) + '</span><strong>' + step.count +
+        ' <span class="vos-muted">(' + pct + '%)</span></strong></div><span class="vos-funnel__bar"><span style="width:' + Math.max(2, pct) + '%"></span></span></li>';
     });
-    html += '</div><p class="lnkup-type-meta">Approval: ' + (f.approval_rate || 0) + '% · Rejection: ' + (f.rejection_rate || 0) + '%</p>';
+    html += '</ol>';
+    var rejected = Number(k.applications_rejected || 0);
+    html += '<p class="lnkup-type-meta">All time. ' + rejected + ' not selected. Applications still in review are counted as submitted only.</p>';
+    if (f && f.approval_rate != null) {
+      html += '<p class="lnkup-type-meta">Approval rate ' + escapeHtml(String(f.approval_rate)) + '% of decided applications.</p>';
+    }
     return html;
+  }
+
+  /**
+   * Accessible table fallback for a monthly chart.
+   */
+  function tableFromMonths(rows) {
+    var html = '<table class="lnkup-growth-table vos-chart-table"><caption class="screen-reader-text">Monthly booth spending</caption><thead><tr><th scope="col">Month</th><th scope="col">Booth spending</th></tr></thead><tbody>';
+    (rows || []).forEach(function (r) {
+      html += '<tr><td>' + escapeHtml(r.month || r.date || r.label || '') + '</td><td>' + currency(r.amount) + '</td></tr>';
+    });
+    return html + '</tbody></table>';
   }
 
   function barChart(items, valueKey) {
     if (window.LNKupUI && window.LNKupUI.renderBarChart) {
-      return window.LNKupUI.renderBarChart(items, { valueKey: valueKey || 'amount', labelKey: 'date', ariaLabel: 'Revenue chart' });
+      return window.LNKupUI.renderBarChart(items, { valueKey: valueKey || 'amount', labelKey: 'date', ariaLabel: 'Spending chart' });
     }
     if (!items || !items.length) {
       return '<p class="lnkup-muted">No data yet.</p>';
@@ -159,18 +185,17 @@
     }
     strip.hidden = false;
     var k = data.kpis;
+    var spend = k.lifetime_spend != null ? k.lifetime_spend : k.lifetime_revenue;
+    var growth = Number(k.growth_rate || 0);
     strip.innerHTML =
-      kpiCard('Lifetime Revenue', currency(k.lifetime_revenue), '', k.lifetime_revenue) +
-      kpiCard('This Month', currency(k.revenue_this_month), '', k.revenue_this_month) +
-      kpiCard('Vendor Score', String(k.vendor_score || 0), '', k.vendor_score) +
-      kpiCard('Growth Rate', (k.growth_rate || 0) + '%', '', k.growth_rate) +
-      kpiCard('Profile', (k.profile_strength || 0) + '%', '', k.profile_strength) +
-      kpiCard('Events', String(k.completed_events || 0), '', k.completed_events) +
-      kpiCard('Success Rate', (k.application_success_rate || 0) + '%', '', k.application_success_rate) +
-      kpiCard('Cities', String(k.cities_served || 0), '', k.cities_served);
-    if (window.LNKupUI && LNKupUI.animateKpiCards) {
-      LNKupUI.animateKpiCards(strip);
-    }
+      kpiCard('Event investment', currency(spend), 'All time · booth fees paid') +
+      kpiCard('Spent this month', currency(k.revenue_this_month), 'Booth fees, this month') +
+      kpiCard('Completed events', String(k.completed_events || 0), 'All time') +
+      kpiCard('Approval rate', (k.application_success_rate || 0) + '%', 'Of decided applications') +
+      kpiCard('Markets', String(k.cities_served || 0), 'Cities you booked in') +
+      kpiCard('Profile', (k.profile_strength || 0) + '%', 'Profile complete') +
+      kpiCard('Vendor score', String(k.vendor_score || 0), 'Points out of 100') +
+      kpiCard('Spending change', growth ? (growth > 0 ? '+' : '') + growth + '%' : '—', growth ? 'vs. last month' : 'Not enough history yet');
   }
 
   function loadOverview(panel) {
@@ -216,8 +241,9 @@
         Object.keys(data.benchmarks).forEach(function (key) {
           var b = data.benchmarks[key];
           var cls = b.percentile >= 75 ? ' lnkup-growth-benchmark--top' : '';
+          var benchmarkLabels = { revenue: 'Event investment', approval_rate: 'Approval rate', vendor_score: 'Vendor score', completed_events: 'Completed events', profile_strength: 'Profile strength' };
           html += '<div class="lnkup-growth-benchmark' + cls + '"><span class="lnkup-growth-benchmark__label">' +
-            escapeHtml(key.replace(/_/g, ' ')) + '</span><span>' + escapeHtml(b.label) + '</span></div>';
+            escapeHtml(benchmarkLabels[key] || key.replace(/_/g, ' ')) + '</span><span>' + escapeHtml(b.label) + '</span></div>';
         });
         html += '</div>';
       }
@@ -278,33 +304,23 @@
       var data = res[0] || {};
       var k = res[1] || {};
       var f = res[2] || {};
-      var html = '<div class="lnkup-growth-card"><h3 class="lnkup-growth-card__title">Revenue Over Time</h3>';
-      html += barChart(data.over_time, 'amount') + '</div>';
-      html += '<div class="lnkup-growth-card"><h3 class="lnkup-growth-card__title">By Month</h3>';
-      html += barChart(data.by_month, 'amount') + '</div>';
-      html += '<div class="lnkup-growth-grid">';
-      ['applications_submitted', 'applications_approved', 'applications_rejected', 'completed_bookings'].forEach(function (key) {
-        html += '<div class="lnkup-growth-card"><span class="lnkup-muted">' + escapeHtml(key.replace(/_/g, ' ')) +
-          '</span><br><strong>' + escapeHtml(String(k[key] || 0)) + '</strong></div>';
-      });
-      html += '</div>';
-      if (f) {
-        html += '<div class="lnkup-growth-card"><h3 class="lnkup-growth-card__title">Application Funnel</h3>';
-        html += renderFunnel(f) + '</div>';
-      }
+      var days = Number(data.window_days || 90);
+      var html = '<div class="lnkup-growth-card"><h3 class="lnkup-growth-card__title">Booth spending, last ' + days + ' days</h3>';
+      html += '<p class="lnkup-type-meta">Booth fees you paid, by payment date. These are expenses, not sales.</p>';
       if (!data.over_time || !data.over_time.length) {
-        html = '<div data-growth-revenue-empty></div>' + html;
+        html += '<p class="lnkup-muted">' + escapeHtml(data.empty_hint || 'No payments in this period. Lifetime event investment can still be greater than zero.') + '</p>';
+      } else {
+        html += barChart(data.over_time, 'amount');
       }
+      html += '</div>';
+      if (data.by_month && data.by_month.length) {
+        html += '<div class="lnkup-growth-card"><h3 class="lnkup-growth-card__title">Booth spending by month</h3>';
+        html += barChart(data.by_month, 'amount');
+        html += tableFromMonths(data.by_month) + '</div>';
+      }
+      html += '<div class="lnkup-growth-card"><h3 class="lnkup-growth-card__title">Application funnel</h3>';
+      html += renderFunnel(f, k) + '</div>';
       panel.innerHTML = html;
-      var revEmpty = panel.querySelector('[data-growth-revenue-empty]');
-      if (revEmpty && window.LNKupUI) {
-        LNKupUI.panelEmpty(revEmpty, {
-          title: 'No revenue data yet',
-          desc: 'Revenue charts appear after you complete paid bookings.',
-          ctaLabel: 'Find events',
-          ctaHref: (ajax.opportunitiesUrl || '/opportunities/')
-        });
-      }
     }).catch(function () {
       failPanel(panel);
     });
@@ -334,21 +350,35 @@
       var roiItems = Array.isArray(res[3]) ? res[3] : [];
       var cal = Array.isArray(res[4]) ? res[4] : [];
       var feedBase = ajax.opportunitiesUrl || '/';
-      var citiesExplored = (exp.suggested_cities || []).length;
-      var bestSeason = (ins.best_seasons && ins.best_seasons[0]) ? ins.best_seasons[0] : '—';
+      var seenCities = {};
+      exp.suggested_cities = (exp.suggested_cities || []).filter(function (c) {
+        var key = String(c.city || c.label || '').toLowerCase().trim();
+        if (!key || seenCities[key]) {
+          return false;
+        }
+        seenCities[key] = true;
+        return true;
+      });
+      var citiesExplored = exp.suggested_cities.length;
+      var bestSeason = (ins.best_seasons && ins.best_seasons[0]) ? ins.best_seasons[0] : '';
       var html = '<div class="lnkup-growth-kpi-strip">';
       html += '<div class="lnkup-growth-kpi"><p class="lnkup-growth-kpi__label">Cities to explore</p><p class="lnkup-growth-kpi__value">' + citiesExplored + '</p></div>';
-      html += '<div class="lnkup-growth-kpi"><p class="lnkup-growth-kpi__label">Avg fee (markets)</p><p class="lnkup-growth-kpi__value">' + currency(ins.avg_vendor_fee) + '</p></div>';
-      html += '<div class="lnkup-growth-kpi"><p class="lnkup-growth-kpi__label">Best season</p><p class="lnkup-growth-kpi__value">' + escapeHtml(bestSeason) + '</p></div>';
+      html += '<div class="lnkup-growth-kpi"><p class="lnkup-growth-kpi__label">Average paid booth fee, all markets</p><p class="lnkup-growth-kpi__value">' + currency(ins.avg_vendor_fee) + '</p></div>';
+      if (bestSeason) {
+        html += '<div class="lnkup-growth-kpi"><p class="lnkup-growth-kpi__label">Best season</p><p class="lnkup-growth-kpi__value">' + escapeHtml(bestSeason) + '</p></div>';
+      }
       html += '</div><div class="lnkup-growth-grid lnkup-growth-markets-grid">';
 
       if (exp.suggested_cities && exp.suggested_cities.length) {
-        html += '<div class="lnkup-growth-card"><h3 class="lnkup-growth-card__title">Suggested Cities</h3><ul class="lnkup-growth-markets-list">';
+        html += '<div class="lnkup-growth-card"><h3 class="lnkup-growth-card__title">Markets to consider</h3><ul class="vos-market-list">';
         exp.suggested_cities.forEach(function (c) {
           var cityLabel = c.city || c.label || '';
           var link = feedBase + (feedBase.indexOf('?') >= 0 ? '&' : '?') + 'market=' + encodeURIComponent(cityLabel);
-          html += '<li><strong>' + escapeHtml(cityLabel) + '</strong> — ' + escapeHtml(c.reason || '') +
-            ' <a class="lnkup-growth-markets-link" href="' + escapeHtml(link) + '">Find events</a></li>';
+          var count = Number(c.count || c.opportunities || 0);
+          html += '<li class="vos-market"><div><p class="vos-market__city">' + escapeHtml(c.place || cityLabel) + '</p>' +
+            (count ? '<p class="vos-market__count">' + count + ' open opportunities</p>' : '') +
+            '<p class="vos-market__reason">' + escapeHtml(c.reason || '') + '</p></div>' +
+            '<a class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" href="' + escapeHtml(link) + '">Find events</a></li>';
         });
         html += '</ul></div>';
       }
@@ -357,9 +387,9 @@
         (ins.trending_categories && ins.trending_categories.length) ||
         (ins.fastest_growing && ins.fastest_growing.length);
       if (hasTrends) {
-        html += '<div class="lnkup-growth-card"><h3 class="lnkup-growth-card__title">Market Trends</h3>';
+        html += '<div class="lnkup-growth-card"><h3 class="lnkup-growth-card__title">Marketplace activity</h3>';
         if (ins.trending_cities && ins.trending_cities.length) {
-          html += '<p class="lnkup-muted">Trending cities</p><div class="lnkup-growth-chip-scroll">';
+          html += '<p class="lnkup-muted">Markets with recent listings</p><div class="lnkup-growth-chip-scroll">';
           ins.trending_cities.forEach(function (c) {
             var label = c.label || c.city || '';
             var href = feedBase + (feedBase.indexOf('?') >= 0 ? '&' : '?') + 'market=' + encodeURIComponent(label);
@@ -368,7 +398,7 @@
           html += '</div>';
         }
         if (ins.trending_categories && ins.trending_categories.length) {
-          html += '<p class="lnkup-muted" style="margin-top:0.75rem">Trending categories</p><div class="lnkup-growth-chip-scroll">';
+          html += '<p class="lnkup-muted" style="margin-top:0.75rem">Categories with recent listings</p><div class="lnkup-growth-chip-scroll">';
           ins.trending_categories.forEach(function (cat) {
             var name = cat.category || cat.name || cat.label || '';
             var href = feedBase + (feedBase.indexOf('?') >= 0 ? '&' : '?') + 'event_type=' + encodeURIComponent(name);
@@ -377,7 +407,11 @@
           html += '</div>';
         }
         if (ins.fastest_growing && ins.fastest_growing.length) {
-          html += '<p class="lnkup-muted" style="margin-top:0.75rem">Fastest growing</p><ul class="lnkup-growth-markets-list">';
+          html += '<p class="lnkup-muted" style="margin-top:0.75rem">Active opportunities</p>';
+          if (ins.fastest_growing_note) {
+            html += '<p class="lnkup-muted">' + escapeHtml(ins.fastest_growing_note) + '</p>';
+          }
+          html += '<ul class="lnkup-growth-markets-list">';
           ins.fastest_growing.forEach(function (item) {
             html += '<li>' + escapeHtml(item.title || item.name || item.label || '') + '</li>';
           });
@@ -392,7 +426,7 @@
         organizers.slice(0, 6).forEach(function (o) {
           html += '<div class="lnkup-growth-rel-card"><strong>' + escapeHtml(o.name || o.organizer_name || '') + '</strong>';
           if (o.is_favorite) html += ' <span aria-label="Favorite">★</span>';
-          html += '<p class="lnkup-muted">' + (o.bookings || 0) + ' events · ' + currency(o.revenue) + '</p>';
+          html += '<p class="lnkup-muted">' + (o.bookings || 0) + ' bookings · ' + currency(o.revenue) + ' booth fees paid</p>';
           if (o.last_booking) {
             html += '<p class="lnkup-muted">Last applied ' + escapeHtml(String(o.last_booking).slice(0, 10)) + '</p>';
           }
@@ -489,7 +523,10 @@
     panel.innerHTML = '<div class="lnkup-growth-skeleton"></div>';
     growthFetch('/revenue').then(function (data) {
       panel.dataset.loaded = '1';
-      var html = '<div class="lnkup-growth-card"><h3 class="lnkup-growth-card__title">Revenue Over Time</h3>';
+      var html = '<div class="lnkup-growth-card"><h3 class="lnkup-growth-card__title">Spending over time</h3>';
+      if (!data.over_time || !data.over_time.length) {
+        html += '<p class="lnkup-muted">' + escapeHtml(data.empty_hint || 'This period has no payments. Lifetime event investment can still be greater than zero.') + '</p>';
+      }
       html += barChart(data.over_time, 'amount') + '</div>';
       html += '<div class="lnkup-growth-card"><h3 class="lnkup-growth-card__title">By Month</h3>';
       html += barChart(data.by_month, 'amount') + '</div>';
@@ -569,7 +606,7 @@
     panel.innerHTML = '<div class="lnkup-growth-skeleton"></div>';
     growthFetch('/relationships').then(function (data) {
       panel.dataset.loaded = '1';
-      var html = '<table class="lnkup-growth-table"><thead><tr><th>Organizer</th><th>Bookings</th><th>Revenue</th></tr></thead><tbody>';
+      var html = '<table class="lnkup-growth-table"><thead><tr><th>Organizer</th><th>Bookings</th><th>Your spending</th></tr></thead><tbody>';
       (data.top_organizers || []).forEach(function (o) {
         html += '<tr><td>' + escapeHtml(o.name) + (o.is_favorite ? ' ★' : '') + '</td><td>' + o.bookings +
           '</td><td>' + currency(o.revenue) + '</td></tr>';
@@ -590,7 +627,7 @@
         panel.innerHTML = '<p class="lnkup-muted">Complete events to track ROI and profit estimates.</p>';
         return;
       }
-      var html = '<table class="lnkup-growth-table"><thead><tr><th>Event</th><th>Revenue</th><th>Profit</th><th>Rating</th></tr></thead><tbody>';
+      var html = '<table class="lnkup-growth-table"><thead><tr><th>Event</th><th>Reported sales</th><th>Estimated profit</th><th>Rating</th></tr></thead><tbody>';
       items.forEach(function (item) {
         var roi = item.roi || {};
         html += '<tr><td>' + escapeHtml(item.event_title) + '</td><td>' + currency(roi.gross_revenue) +

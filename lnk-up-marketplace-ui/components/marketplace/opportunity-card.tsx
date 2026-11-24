@@ -13,6 +13,7 @@ import {
   Clock,
   Store,
   Loader2,
+  Lock,
 } from "lucide-react"
 import type { EventItem } from "@/lib/data"
 import { isLiveApiEnabled } from "@/lib/api/config"
@@ -53,8 +54,13 @@ export function OpportunityCard({
   const cardRef = useRef<HTMLDivElement>(null)
   const [infoOpen, setInfoOpen] = useState(false)
   const [saveOpen, setSaveOpen] = useState(false)
-  const almostFull = event.spotsRemaining > 0 && event.spotsRemaining <= 5
+  const gated = Boolean(event.gated)
+  const almostFull = !gated && event.spotsRemaining > 0 && event.spotsRemaining <= 5
   const full = event.spotsRemaining === 0
+  const returnPath = event.opportunityId
+    ? `/vendor/find?opportunityId=${event.opportunityId}&apply=1`
+    : "/vendor/find"
+  const loginHref = `/login?redirect=${encodeURIComponent(returnPath)}`
   const live = isLiveApiEnabled()
   const { isAuthenticated } = useAuth()
   const { isFavorited, toggleFavorite, isLive: favoritesLive } = useFavorites()
@@ -270,9 +276,28 @@ export function OpportunityCard({
               <Users className="size-4" />
               {event.expectedAttendance.toLocaleString()} expected
             </span>
-            <span className="font-heading font-bold">
-              {event.vendorFee == null ? "Fee unavailable" : event.vendorFee > 0 ? `From $${event.vendorFee}` : "Free"}
-            </span>
+            {gated ? (
+              <Link
+                href={loginHref}
+                className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1 text-xs font-semibold text-background"
+                data-testid="opportunity-guest-gate"
+                onClick={() => {
+                  trackLnkupEvent({
+                    event: "authentication_gate_clicked",
+                    source: "opportunity_card",
+                    opportunityId: event.opportunityId != null ? String(event.opportunityId) : undefined,
+                    eventId: event.id,
+                  })
+                }}
+              >
+                <Lock className="size-3.5" aria-hidden />
+                Sign in to view pricing
+              </Link>
+            ) : (
+              <span className="font-heading font-bold">
+                {event.vendorFee == null ? "Fee unavailable" : event.vendorFee > 0 ? `From $${event.vendorFee}` : "Free"}
+              </span>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-1.5">
@@ -294,7 +319,11 @@ export function OpportunityCard({
               )}
             >
               <Ticket className="size-3.5" />
-              {full ? "Fully booked" : `${event.spotsRemaining} of ${event.totalSpots} spots left`}
+              {gated
+                ? (event.statusLabel ?? "Vendor applications open")
+                : full
+                  ? "Fully booked"
+                  : `${event.spotsRemaining} of ${event.totalSpots} spots left`}
             </span>
             <span className="inline-flex items-center gap-1 text-muted-foreground">
               <Clock className="size-3.5" />
@@ -349,8 +378,8 @@ export function OpportunityCard({
                     </DialogDescription>
                   </DialogHeader>
                   <div className="flex flex-col gap-2">
-                    <Button nativeButton={false} render={<Link href="/login" />}>
-                      Log in to apply
+                    <Button nativeButton={false} render={<Link href={loginHref} />}>
+                      Sign in to apply
                     </Button>
                     <Button variant="outline" nativeButton={false} render={<Link href="/vendor/find" />}>
                       Find more events
@@ -432,8 +461,8 @@ export function OpportunityCard({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
-            <Button nativeButton={false} render={<Link href={`/login?redirect=/vendor/find`} />}>
-              Log in
+            <Button nativeButton={false} render={<Link href={loginHref} />}>
+              Sign in
             </Button>
             <Button variant="outline" onClick={() => setSaveOpen(false)}>
               Cancel

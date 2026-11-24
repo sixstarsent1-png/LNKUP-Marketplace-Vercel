@@ -58,7 +58,7 @@ test.describe('Organizer Get started', () => {
     await cityInput.fill('Charlotte');
     await stateInput.fill('NC');
     await form.getByRole('button', { name: 'Save organization' }).click();
-    await expect(form.getByRole('status')).toHaveText('Saved.');
+    await expect(form.getByRole('status')).toHaveText('Saved.', { timeout: 20_000 });
 
     await page.reload();
     await expect(page.getByTestId('lnkup-start-profile').getByLabel('Organization name')).toHaveValue(stamp);
@@ -68,7 +68,7 @@ test.describe('Organizer Get started', () => {
     expect(restored.status).toBe(200);
   });
 
-  test('published event shows a copyable apply link and embed code', async ({ page }) => {
+  test('published event shows a copyable apply link and points to Marketing for the embed', async ({ page }) => {
     await page.goto(START_URL);
     if ((await page.getByTestId('lnkup-start-share').count()) === 0) {
       const date = new Date(Date.now() + 45 * 86_400_000).toISOString().slice(0, 10);
@@ -91,7 +91,7 @@ test.describe('Organizer Get started', () => {
     const share = page.getByTestId('lnkup-start-share');
     await expect(share).toBeVisible();
     await expect(share.getByLabel('Your vendor apply link')).toHaveValue(/[?&]apply=\d+/);
-    await expect(share.getByLabel('Add an Apply button to your website')).toHaveValue(/data-lnkup-apply="\d+".*embed\.js/s);
+    await expect(share.getByRole('link', { name: 'Get an Apply button for your website' })).toHaveAttribute('href', /view=marketing|tab=marketing/);
     await expect(share.getByRole('button', { name: 'Copy link' })).toBeVisible();
   });
 

@@ -57,12 +57,18 @@ export type VendorEventPass = {
   emptyMessage?: string
   wordpressUrl?: string
   paymentId?: string
+  /** upcoming | active | completed | cancelled | postponed | unknown */
+  eventState?: string
+  /** locked | active | ended | revoked. Only "active" shows a scannable code. */
+  credentialState: "locked" | "active" | "ended" | "revoked"
 }
 
 /** Real WP DTO + legacy flat/mock shape. */
 type WpPacketPassResponse = {
   application_id?: number
   status?: string
+  event_state?: string
+  credential_state?: string
   locked?: boolean
   is_unlocked?: boolean
   headline?: string
@@ -284,6 +290,14 @@ export function mapVendorPass(requestId: string, data: WpPacketPassResponse): Ve
     data.status === "locked" ||
     data.is_unlocked === false
 
+  const credentialState: VendorEventPass["credentialState"] =
+    data.credential_state === "active" || data.credential_state === "ended" || data.credential_state === "revoked" || data.credential_state === "locked"
+      ? data.credential_state
+      : locked
+        ? "locked"
+        : "active"
+  const scannable = credentialState === "active"
+
   const vendorRules = asLines(data.rules?.vendor_rules)
   const setupRestrictions = asLines(data.rules?.setup_restrictions)
   const prohibitedItems = asLines(data.rules?.prohibited_items)
@@ -397,8 +411,10 @@ export function mapVendorPass(requestId: string, data: WpPacketPassResponse): Ve
       ? undefined
       : (data.policies?.refund ?? data.refund_policy ?? undefined),
     weatherPolicy: locked ? undefined : weatherPolicy,
-    checkInCode: locked ? undefined : (data.qr_pass?.code ?? data.check_in_code),
-    qrCodeUrl: locked ? undefined : (data.qr_pass?.image_url ?? data.qr_pass?.url),
+    checkInCode: !scannable ? undefined : (data.qr_pass?.code ?? data.check_in_code),
+    qrCodeUrl: !scannable ? undefined : (data.qr_pass?.image_url ?? data.qr_pass?.url),
+    eventState: data.event_state || undefined,
+    credentialState,
     unlocks,
     amountDue:
       typeof data.payment?.amount_due === "number" && data.payment.amount_due > 0

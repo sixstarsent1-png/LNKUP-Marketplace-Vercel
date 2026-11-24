@@ -48,6 +48,11 @@ class LNKup_Marketplace_REST {
 			'callback' => array( __CLASS__, 'collection' ),
 		) ) );
 
+		register_rest_route( self::NS, '/marketplace/events/(?P<event_id>\d+)', array_merge( $read, array(
+			'callback' => array( __CLASS__, 'event_detail' ),
+			'args'     => array( 'event_id' => array( 'sanitize_callback' => 'absint' ) ),
+		) ) );
+
 		register_rest_route( self::NS, '/marketplace/compare', array_merge( $read, array(
 			'callback' => array( __CLASS__, 'compare' ),
 		) ) );
@@ -124,7 +129,7 @@ class LNKup_Marketplace_REST {
 			'food_truck_allowed', 'verified_organizer', 'featured_organizer',
 			'instant_approval', 'has_spots', 'show_closed', 'newly_added',
 			'closing_soon', 'almost_full', 'applications_open', 'doc_none',
-			'include_external', 'high_demand', 'preferred_markets', 'previous_organizers',
+			'include_external', 'high_demand', 'preferred_markets', 'previous_organizers', 'metro',
 		);
 		foreach ( $bool_keys as $key ) {
 			if ( isset( $params[ $key ] ) ) {
@@ -232,7 +237,15 @@ class LNKup_Marketplace_REST {
 	public static function trending( WP_REST_Request $request ) {
 		$section = sanitize_key( $request->get_param( 'section' ) ?: 'trending' );
 		$limit   = absint( $request->get_param( 'limit' ) ?: 8 );
-		$items   = LNKup_Trending::get_section( $section, $limit );
+		if ( self::wants_groups( $request ) ) {
+			$items = LNKup_Trending::get_section( $section, min( 48, $limit * 3 ) );
+			return rest_ensure_response( array(
+				'section' => $section,
+				'grouped' => true,
+				'items'   => array_slice( LNKup_Event_Groups::group( (array) $items ), 0, $limit ),
+			) );
+		}
+		$items = LNKup_Trending::get_section( $section, $limit );
 		return rest_ensure_response( array(
 			'section' => $section,
 			'items'   => $items,
@@ -242,11 +255,40 @@ class LNKup_Marketplace_REST {
 
 	public static function recommended( WP_REST_Request $request ) {
 		$limit = absint( $request->get_param( 'limit' ) ?: 8 );
+		if ( self::wants_groups( $request ) ) {
+			$items = LNKup_Recommendations::get_for_user( get_current_user_id(), min( 48, $limit * 3 ) );
+			return rest_ensure_response( array(
+				'grouped' => true,
+				'items'   => array_slice( LNKup_Event_Groups::group( (array) $items ), 0, $limit ),
+			) );
+		}
 		$items = LNKup_Recommendations::get_for_user( get_current_user_id(), $limit );
 		return rest_ensure_response( array(
 			'items' => $items,
 			'html'  => lnkup_render_opportunity_cards_batch( $items ),
 		) );
+	}
+
+	/**
+	 * Whether the client asked for event-grouped results (`group_by=event`).
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	private static function wants_groups( WP_REST_Request $request ): bool {
+		return 'event' === sanitize_key( (string) $request->get_param( 'group_by' ) ) && class_exists( 'LNKup_Event_Groups' );
+	}
+
+	/**
+	 * GET one event with every listed vendor option.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function event_detail( WP_REST_Request $request ) {
+		$result = LNKup_Event_Groups::event_detail( absint( $request['event_id'] ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return rest_ensure_response( $result );
 	}
 
 	public static function collections_list() {

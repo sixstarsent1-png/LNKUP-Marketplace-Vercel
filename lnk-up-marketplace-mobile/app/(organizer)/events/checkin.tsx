@@ -1,9 +1,12 @@
-import { useCallback, useMemo, useRef, useState } from "react"
-import { StyleSheet, View } from "react-native"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Pressable, StyleSheet, View } from "react-native"
 import { useFocusEffect, useLocalSearchParams, type Href } from "expo-router"
 
+import { NetworkBanner } from "@/components/organizer/network-banner"
+import { SearchField } from "@/components/organizer/search-field"
 import { EmptyPanel, ErrorPanel } from "@/components/panel-states"
-import { Screen } from "@/components/screen"
+import { ScreenList } from "@/components/screen"
+import { AppText as Text } from "@/components/ui/app-text"
 import { BackLink } from "@/components/ui/back-link"
 import { InlineBanner } from "@/components/ui/banner"
 import { BottomSheet } from "@/components/ui/bottom-sheet"
@@ -14,67 +17,99 @@ import { ListGroup, ListRow } from "@/components/ui/list-row"
 import { SkeletonList, SkeletonStats } from "@/components/ui/skeleton"
 import { StatGrid, StatTile } from "@/components/ui/stat-tile"
 import { StatusBadge } from "@/components/ui/status-badge"
-import { Surface } from "@/components/ui/surface"
-import { Meta, SectionTitle } from "@/components/ui/typography"
+import { Meta } from "@/components/ui/typography"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import {
-  CHECK_IN_FILTERS,
   assignBooth,
-  canCheckIn,
-  canOverride,
   checkInApplication,
   checkInByCode,
-  checkInCounts,
   eventDayEntries,
   fetchEventBooths,
-  matchesCheckInFilter,
-  matchesCheckInSearch,
-  needsAttention,
   overrideCheckIn,
-  type CheckInFilter,
   type CheckInOutcome,
   type EventBooth,
 } from "@/lib/api/organizer-checkin"
-import { fetchEventRoster, type RosterEntry } from "@/lib/api/organizer-roster"
+import {
+  fetchCheckinSummary,
+  invalidateOrganizerMobile,
+  type CheckinPopulations,
+  type CheckinRosterRow,
+} from "@/lib/api/organizer-mobile"
+import { fetchEventRoster } from "@/lib/api/organizer-roster"
 import { useAuth } from "@/lib/auth/auth-context"
-import { promptText, showToast } from "@/lib/feedback/feedback"
+import { promptText } from "@/lib/feedback/feedback"
+import { formatShortDate, formatTime } from "@/lib/format/date"
 import { useKeyedSingleFlight, useSingleFlight } from "@/lib/hooks/use-single-flight"
-import { spacing } from "@/lib/theme"
+import { useNetworkStatus } from "@/lib/network/use-network-status"
+import {
+  CHECKIN_FILTERS,
+  canCheckInRow,
+  canOverrideRow,
+  isBlocked,
+  matchesCheckinFilter,
+  matchesCheckinSearch,
+  populationLine,
+  populationsFromRows,
+  reasonCopy,
+  rowFromRoster,
+  type CheckinFilter,
+} from "@/lib/organizer/checkin-model"
+import { colors, fonts, layout, radii, spacing, typeScale, typography } from "@/lib/theme"
 
 const OVERRIDE_MIN_REASON = 5
 
+type Result = { outcome: CheckInOutcome; name: string; row?: CheckinRosterRow }
+
+/** Event-day check-in: find a vendor first, pass code second. Online only — nothing is queued. */
 export default function OrganizerCheckInScreen() {
   const { auth } = useAuth()
   const { eventId: eventParam } = useLocalSearchParams<{ eventId?: string }>()
   const eventId = String(eventParam ?? "")
-  const [entries, setEntries] = useState<RosterEntry[] | null>(null)
+  const network = useNetworkStatus()
+  const online = network === "online"
+  const [rows, setRows] = useState<CheckinRosterRow[] | null>(null)
+  const [populations, setPopulations] = useState<CheckinPopulations | null>(null)
+  const [meta, setMeta] = useState<{ title: string; date: string } | null>(null)
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<AppErrorShape | null>(null)
   const [refreshError, setRefreshError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<CheckInFilter>("waiting")
+  const [filter, setFilter] = useState<CheckinFilter>("expected")
   const [query, setQuery] = useState("")
+  const [codeOpen, setCodeOpen] = useState(false)
   const [code, setCode] = useState("")
-  const [codeResult, setCodeResult] = useState<CheckInOutcome | null>(null)
-  const [boothFor, setBoothFor] = useState<RosterEntry | null>(null)
+  const [selected, setSelected] = useState<CheckinRosterRow | null>(null)
+  const [result, setResult] = useState<Result | null>(null)
+  const [boothFor, setBoothFor] = useState<CheckinRosterRow | null>(null)
   const [booths, setBooths] = useState<EventBooth[] | null>(null)
   const [boothsError, setBoothsError] = useState<string | null>(null)
-  const entriesRef = useRef<RosterEntry[] | null>(null)
-  entriesRef.current = entries
+  const rowsRef = useRef<CheckinRosterRow[] | null>(null)
+  rowsRef.current = rows
 
   const load = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
-      if (!eventId) return
+      if (!eventId || !auth) return
       if (mode === "refresh") setRefreshing(true)
       else setLoading(true)
       setError(null)
       setRefreshError(null)
       try {
-        const roster = await fetchEventRoster(eventId, auth, { force: mode === "refresh" })
-        setEntries(eventDayEntries(roster))
+        const summary = await fetchCheckinSummary(eventId, auth, mode === "refresh")
+        if (summary) {
+          setRows(summary.rows)
+          setPopulations(summary)
+          setMeta({ title: summary.title, date: summary.date })
+        } else {
+          const roster = await fetchEventRoster(eventId, auth, { force: mode === "refresh" })
+          const next = eventDayEntries(roster).map(rowFromRoster)
+          setRows(next)
+          setPopulations(populationsFromRows(next))
+        }
+        setUpdatedAt(new Date())
       } catch (err) {
         const shaped = appErrorFromWp(err)
-        if (entriesRef.current) setRefreshError(shaped.message)
+        if (rowsRef.current) setRefreshError(shaped.message)
         else setError(shaped)
       } finally {
         setLoading(false)
@@ -86,73 +121,58 @@ export default function OrganizerCheckInScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void load(entriesRef.current ? "refresh" : "initial")
+      void load(rowsRef.current ? "refresh" : "initial")
     }, [load]),
   )
 
-  const reportOutcome = useCallback(
-    (outcome: CheckInOutcome, name: string) => {
-      switch (outcome.kind) {
-        case "checked_in":
-          showToast(`${name}: ${outcome.message}`, "success")
-          break
-        case "already":
-          showToast(`${name} is already checked in.`, "info")
-          break
-        case "blocked":
-        case "denied":
-        case "offline":
-        case "error":
-          showToast(`${name}: ${outcome.message}`, "error")
-          break
-        case "unconfirmed":
-          showToast(outcome.message, "info")
-          break
-        default: {
-          const exhaustive: never = outcome
-          return exhaustive
-        }
-      }
+  // Coming back online: refresh before anyone acts on a stale roster.
+  useEffect(() => {
+    if (network === "reconnecting") void load("refresh")
+  }, [network, load])
+
+  const finish = useCallback(
+    (outcome: CheckInOutcome, name: string, row?: CheckinRosterRow) => {
+      setSelected(null)
+      setResult({ outcome, name, row })
+      invalidateOrganizerMobile(eventId)
       if (outcome.kind !== "offline") void load("refresh")
     },
-    [load],
+    [eventId, load],
   )
 
   const [checkIn, isCheckingIn] = useKeyedSingleFlight(async (applicationId: string) => {
-    const entry = entries?.find((item) => item.applicationId === applicationId)
-    if (!entry) return
-    reportOutcome(await checkInApplication(auth, eventId, applicationId), entry.businessName)
+    const row = rows?.find((item) => item.applicationId === applicationId)
+    if (!row || !online) return
+    finish(await checkInApplication(auth, eventId, applicationId), row.vendorName, row)
   })
 
   const [override, isOverriding] = useKeyedSingleFlight(async (applicationId: string) => {
-    const entry = entries?.find((item) => item.applicationId === applicationId)
-    if (!entry) return
+    const row = rows?.find((item) => item.applicationId === applicationId)
+    if (!row || !online) return
     const reason = await promptText({
-      title: `Check in ${entry.businessName} anyway?`,
-      message: `${entry.blockMessage ?? "This vendor isn't cleared yet."} Your reason is saved to the event log.`,
+      title: `Check in ${row.vendorName} anyway?`,
+      message: `${reasonCopy(row.reason)} Your reason is saved to the event log.`,
       placeholder: "Reason (for example: paid cash at the gate)",
       confirmLabel: "Check in",
       minLength: OVERRIDE_MIN_REASON,
       multiline: true,
     })
     if (!reason) return
-    reportOutcome(await overrideCheckIn(auth, eventId, applicationId, reason.trim()), entry.businessName)
+    finish(await overrideCheckIn(auth, eventId, applicationId, reason.trim()), row.vendorName, row)
   })
 
   const [submitCode, codeBusy] = useSingleFlight(async () => {
     const trimmed = code.trim()
-    if (!trimmed) {
-      setCodeResult({ kind: "error", message: "Enter the code from the vendor's pass." })
-      return
-    }
+    if (!trimmed || !online) return
     const outcome = await checkInByCode(auth, eventId, trimmed)
-    setCodeResult(outcome)
     if (outcome.kind === "checked_in" || outcome.kind === "already") setCode("")
-    if (outcome.kind !== "offline") void load("refresh")
+    setCodeOpen(false)
+    finish(outcome, outcome.businessName ?? "Vendor")
   })
 
-  const [openBooths, boothsLoading] = useSingleFlight(async (entry: RosterEntry) => {
-    setBoothFor(entry)
+  const [openBooths, boothsLoading] = useSingleFlight(async (row: CheckinRosterRow) => {
+    setSelected(null)
+    setBoothFor(row)
     setBoothsError(null)
     try {
       setBooths(await fetchEventBooths(auth, eventId))
@@ -162,190 +182,244 @@ export default function OrganizerCheckInScreen() {
   })
 
   const [chooseBooth, isAssigning] = useKeyedSingleFlight(async (boothId: string) => {
-    const entry = boothFor
+    const row = boothFor
     const booth = booths?.find((item) => item.id === boothId)
-    if (!entry || !booth) return
+    if (!row || !booth || !online) return
     try {
-      await assignBooth(auth, eventId, boothId, entry.applicationId)
-      showToast(`${entry.businessName} is now at booth ${booth.number}.`, "success")
+      await assignBooth(auth, eventId, boothId, row.applicationId)
       setBoothFor(null)
+      setResult({ outcome: { kind: "checked_in", message: `${row.vendorName} is now at booth ${booth.number}.`, override: false }, name: row.vendorName })
       void load("refresh")
     } catch (err) {
       setBoothsError(appErrorFromWp(err).message)
     }
   })
 
-  const counts = useMemo(() => checkInCounts(entries ?? []), [entries])
   const visible = useMemo(
-    () => (entries ?? []).filter((entry) => matchesCheckInFilter(entry, filter) && matchesCheckInSearch(entry, query)),
-    [entries, filter, query],
+    () => (rows ?? []).filter((row) => matchesCheckinFilter(row, query ? "all" : filter) && matchesCheckinSearch(row, query)),
+    [rows, filter, query],
   )
   const filterOptions = useMemo(
-    () =>
-      CHECK_IN_FILTERS.map((item) => ({
-        value: item.key,
-        label: item.label,
-        count: (entries ?? []).filter((entry) => matchesCheckInFilter(entry, item.key)).length,
-      })),
-    [entries],
+    () => CHECKIN_FILTERS.map((item) => ({ value: item.key, label: item.label, count: (rows ?? []).filter((row) => matchesCheckinFilter(row, item.key)).length })),
+    [rows],
   )
 
-  const back = <BackLink label="Event" fallbackHref={(eventId ? `/(organizer)/events/${eventId}?tab=dayof` : "/(organizer)/events") as Href} />
+  const back = <BackLink label="Event" fallbackHref={(eventId ? `/(organizer)/events/${eventId}?tab=operations` : "/(organizer)/events") as Href} />
 
   if (!eventId) {
     return (
-      <Screen title="Check-in" header={back}>
-        <EmptyPanel icon="calendar-outline" title="Pick an event" message="Open check-in from an event's Day-of tab." />
-      </Screen>
+      <ScreenList title="Check-in" header={back} data={[]} keyExtractor={() => ""} renderItem={() => null} listHeader={<EmptyPanel icon="calendar-outline" title="Pick an event" message="Open check-in from an event's Operations tab." />} />
     )
   }
 
   return (
-    <Screen
+    <ScreenList
       title="Check-in"
-      subtitle="Check vendors in as they arrive"
+      subtitle={meta ? [meta.title, formatShortDate(meta.date)].filter(Boolean).join(" · ") : undefined}
       header={back}
       refreshing={refreshing}
       onRefresh={() => void load("refresh")}
-    >
-      {loading && !entries ? (
-        <View style={styles.stack} accessibilityLabel="Loading check-in">
-          <SkeletonStats count={3} />
-          <SkeletonList count={4} />
-        </View>
-      ) : null}
-
-      {!loading && error && !entries ? (
-        <ErrorPanel title={error.title} message={error.message} onAction={() => void load("refresh")} />
-      ) : null}
-
-      {entries ? (
+      data={rows ? visible : []}
+      keyExtractor={(row) => row.applicationId}
+      renderItem={(row) => (
+        <CheckinRow
+          row={row}
+          disabled={!online}
+          busy={isCheckingIn(row.applicationId) || isOverriding(row.applicationId)}
+          onCheckIn={() => void checkIn(row.applicationId)}
+          onOpen={() => setSelected(row)}
+        />
+      )}
+      listHeader={
         <View style={styles.stack}>
-          {refreshError ? (
-            <InlineBanner
-              tone="error"
-              message={`Couldn’t refresh the list: ${refreshError}`}
-              actionLabel="Retry"
-              onAction={() => void load("refresh")}
-            />
+          <NetworkBanner status={network} lastUpdated={updatedAt ? updatedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : undefined} />
+
+          {loading && !rows ? (
+            <View style={styles.stack} accessibilityLabel="Loading check-in">
+              <SkeletonStats count={2} />
+              <SkeletonList count={4} />
+            </View>
           ) : null}
 
-          <StatGrid>
-            <StatTile icon="checkmark-circle-outline" label="Checked in" value={`${counts.checkedIn} of ${counts.expected}`} tone={counts.checkedIn > 0 ? "accent" : "default"} />
-            <StatTile icon="alert-circle-outline" label="Needs attention" value={String(counts.attention)} />
-          </StatGrid>
+          {!loading && error && !rows ? <ErrorPanel title={error.title} message={error.message} onAction={() => void load("refresh")} /> : null}
 
-          <Surface style={styles.card} testID="checkin-code-card">
-            <SectionTitle>Pass code</SectionTitle>
-            <Meta>Type the code printed under the vendor’s QR pass.</Meta>
+          {rows && populations ? (
+            <>
+              {refreshError ? <InlineBanner tone="error" message={`Couldn’t refresh the list: ${refreshError}`} actionLabel="Retry" onAction={() => void load("refresh")} /> : null}
+
+              <StatGrid>
+                <StatTile icon="checkmark-circle-outline" label="Checked in" hint="of eligible vendors" value={`${populations.checkedIn} of ${populations.expected}`} tone={populations.checkedIn > 0 ? "accent" : "default"} />
+                <StatTile
+                  icon="alert-circle-outline"
+                  label="Blocked"
+                  hint="unpaid or documents"
+                  value={String(populations.blocked.paymentPending + populations.blocked.documents)}
+                  tone={populations.blocked.paymentPending + populations.blocked.documents > 0 ? "urgent" : "default"}
+                  onPress={() => setFilter("attention")}
+                />
+              </StatGrid>
+              <Meta accessibilityLiveRegion="polite" testID="checkin-populations">
+                {populationLine(populations)}
+              </Meta>
+
+              <SearchField value={query} onChangeText={setQuery} placeholder="Find a vendor by name, category or booth" testID="checkin-search" />
+              <Button
+                label="Enter a pass code"
+                icon="keypad-outline"
+                variant="secondary"
+                disabled={!online}
+                onPress={() => setCodeOpen(true)}
+                testID="checkin-code-open"
+              />
+              {!query ? <FilterChipRow options={filterOptions} value={filter} onChange={setFilter} /> : null}
+
+              {rows.length === 0 ? (
+                <EmptyPanel icon="people-outline" title="No booked vendors yet" message="Approved and paid vendors appear here on event day." />
+              ) : visible.length === 0 ? (
+                <EmptyPanel icon="search-outline" title="No vendors match" message={query ? "Check the spelling or try a booth number." : "Nobody in this view right now."} />
+              ) : null}
+            </>
+          ) : null}
+
+          <BottomSheet
+            visible={codeOpen}
+            onClose={() => setCodeOpen(false)}
+            title="Pass code"
+            footer={<Button label="Check in with code" loadingLabel="Checking…" fullWidth loading={codeBusy} disabled={!code.trim() || !online} onPress={() => void submitCode()} />}
+          >
+            <Meta>Type the code printed under the vendor’s pass.</Meta>
             <FormField
               label="Pass code"
               value={code}
-              onChangeText={(value) => {
-                setCode(value)
-                setCodeResult(null)
-              }}
+              onChangeText={setCode}
               autoCapitalize="none"
               autoCorrect={false}
+              autoFocus
               returnKeyType="go"
               onSubmitEditing={() => void submitCode()}
-              tone="muted"
+              testID="checkin-code-input"
             />
-            <Button label="Check in with code" loadingLabel="Checking…" icon="qr-code-outline" loading={codeBusy} onPress={() => void submitCode()} />
-            {codeResult ? <CodeResultBanner outcome={codeResult} /> : null}
-          </Surface>
+          </BottomSheet>
 
-          <FormField
-            label="Find a vendor"
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Business name or booth number"
-            autoCorrect={false}
-          />
-          <FilterChipRow options={filterOptions} value={filter} onChange={setFilter} />
-
-          {entries.length === 0 ? (
-            <EmptyPanel
-              icon="people-outline"
-              title="No booked vendors yet"
-              message="Approved and paid vendors appear here on event day."
-            />
-          ) : visible.length === 0 ? (
-            <EmptyPanel icon="search-outline" title="No vendors match" message="Try another name or filter." />
-          ) : (
-            <ListGroup>
-              {visible.map((entry) => (
-                <CheckInRow
-                  key={entry.applicationId}
-                  entry={entry}
-                  checkingIn={isCheckingIn(entry.applicationId) || isOverriding(entry.applicationId)}
-                  onCheckIn={() => void checkIn(entry.applicationId)}
-                  onOverride={() => void override(entry.applicationId)}
-                  onBooth={() => void openBooths(entry)}
+          <BottomSheet visible={selected != null} onClose={() => setSelected(null)} title={selected?.vendorName ?? "Vendor"}>
+            {selected ? (
+              <View style={styles.sheet} testID="checkin-vendor-sheet">
+                <ListGroup>
+                  <ListRow icon="grid-outline" title={selected.booth ? `Booth ${selected.booth}` : "No booth yet"} meta={selected.category || undefined} />
+                  <ListRow
+                    icon={selected.checkedIn ? "checkmark-circle" : isBlocked(selected) ? "alert-circle-outline" : "time-outline"}
+                    iconTone={selected.checkedIn ? "accent" : isBlocked(selected) ? "danger" : "default"}
+                    title={selected.checkedIn ? `Checked in${selected.checkedInAt ? ` at ${formatTime(selected.checkedInAt)}` : ""}` : reasonCopy(selected.reason)}
+                  />
+                </ListGroup>
+                {canCheckInRow(selected) ? (
+                  <Button
+                    label="Check in"
+                    loadingLabel="Saving…"
+                    disabled={!online}
+                    loading={isCheckingIn(selected.applicationId)}
+                    onPress={() => void checkIn(selected.applicationId)}
+                    accessibilityLabel={`Check in ${selected.vendorName}`}
+                  />
+                ) : null}
+                {canOverrideRow(selected) ? (
+                  <Button
+                    label="Check in with a reason"
+                    loadingLabel="Saving…"
+                    variant="secondary"
+                    disabled={!online}
+                    loading={isOverriding(selected.applicationId)}
+                    onPress={() => void override(selected.applicationId)}
+                    accessibilityLabel={`Check in ${selected.vendorName} with an override`}
+                  />
+                ) : null}
+                <Button
+                  label={selected.booth ? "Move booth" : "Assign booth"}
+                  variant="ghost"
+                  disabled={!online}
+                  onPress={() => void openBooths(selected)}
+                  accessibilityLabel={`${selected.booth ? "Move" : "Assign"} booth for ${selected.vendorName}`}
                 />
-              ))}
-            </ListGroup>
-          )}
-        </View>
-      ) : null}
+              </View>
+            ) : null}
+          </BottomSheet>
 
-      <BottomSheet
-        visible={boothFor != null}
-        title={boothFor ? `Booth for ${boothFor.businessName}` : "Booth"}
-        onClose={() => setBoothFor(null)}
-      >
-        {boothsError ? <InlineBanner tone="error" message={boothsError} /> : null}
-        {boothsLoading && !booths ? <SkeletonList count={3} /> : null}
-        {booths && booths.length === 0 ? (
-          <EmptyPanel icon="grid-outline" title="No booths set up" message="Add booths for this event on the web dashboard." />
-        ) : null}
-        {booths && booths.length > 0 && boothFor ? (
-          <ListGroup>
-            {booths.map((booth) => {
-              const mine = booth.applicationId === boothFor.applicationId
-              const taken = Boolean(booth.applicationId) && !mine
-              return (
-                <ListRow
-                  key={booth.id}
-                  icon="grid-outline"
-                  title={`Booth ${booth.number}`}
-                  meta={taken ? `Taken by ${booth.vendorName || "another vendor"}` : booth.typeLabel || undefined}
-                  rightSlot={
-                    <StatusBadge
-                      label={mine ? "Current" : taken ? "Taken" : isAssigning(booth.id) ? "Assigning…" : "Open"}
-                      tone={mine ? "approved" : taken ? "neutral" : "paid"}
+          <BottomSheet visible={result != null} onClose={() => setResult(null)} title={result ? resultTitle(result) : ""}>
+            {result ? <ResultBody result={result} onOverride={result.row && canOverrideRow(result.row) ? () => { const id = result.row!.applicationId; setResult(null); void override(id) } : undefined} /> : null}
+          </BottomSheet>
+
+          <BottomSheet visible={boothFor != null} title={boothFor ? `Booth for ${boothFor.vendorName}` : "Booth"} onClose={() => setBoothFor(null)}>
+            {boothsError ? <InlineBanner tone="error" message={boothsError} /> : null}
+            {boothsLoading && !booths ? <SkeletonList count={3} /> : null}
+            {booths && booths.length === 0 ? <EmptyPanel icon="grid-outline" title="No booths set up" message="Add booths from the event's Booths screen." /> : null}
+            {booths && booths.length > 0 && boothFor ? (
+              <ListGroup>
+                {booths.map((booth) => {
+                  const mine = booth.applicationId === boothFor.applicationId
+                  const taken = Boolean(booth.applicationId) && !mine
+                  return (
+                    <ListRow
+                      key={booth.id}
+                      icon="grid-outline"
+                      title={`Booth ${booth.number}`}
+                      meta={taken ? `Taken by ${booth.vendorName || "another vendor"}` : booth.typeLabel || undefined}
+                      rightSlot={<StatusBadge label={mine ? "Current" : taken ? "Taken" : isAssigning(booth.id) ? "Assigning…" : "Open"} tone={mine ? "approved" : taken ? "neutral" : "paid"} />}
+                      onPress={taken || mine || isAssigning(booth.id) || !online ? undefined : () => void chooseBooth(booth.id)}
                     />
-                  }
-                  onPress={taken || mine || isAssigning(booth.id) ? undefined : () => void chooseBooth(booth.id)}
-                />
-              )
-            })}
-          </ListGroup>
-        ) : null}
-      </BottomSheet>
-    </Screen>
+                  )
+                })}
+              </ListGroup>
+            ) : null}
+          </BottomSheet>
+        </View>
+      }
+    />
   )
 }
 
-function CodeResultBanner({ outcome }: { outcome: CheckInOutcome }) {
+function resultTitle(result: Result): string {
+  switch (result.outcome.kind) {
+    case "checked_in":
+      return "Done"
+    case "already":
+      return "Already checked in"
+    case "blocked":
+      return "Can't check in yet"
+    case "offline":
+      return "Not saved"
+    case "unconfirmed":
+      return "Checking…"
+    case "denied":
+      return "Not allowed"
+    case "error":
+      return "Not saved"
+    default: {
+      const exhaustive: never = result.outcome
+      return exhaustive
+    }
+  }
+}
+
+function ResultBody({ result, onOverride }: { result: Result; onOverride?: () => void }) {
+  const { outcome, name } = result
   switch (outcome.kind) {
     case "checked_in":
-      return <InlineBanner tone="success" message={outcome.message} />
+      return <InlineBanner tone="success" title={name} message={outcome.override ? `${outcome.message} The reason was saved to the event log.` : outcome.message} />
     case "already":
-      return <InlineBanner tone="info" message={outcome.message} />
-    case "unconfirmed":
-      return <InlineBanner tone="info" message={outcome.message} />
+      return <InlineBanner tone="info" title={name} message={result.row?.checkedInAt ? `Checked in at ${formatTime(result.row.checkedInAt)}.` : outcome.message} />
     case "blocked":
       return (
-        <InlineBanner
-          tone="attention"
-          message={outcome.canOverride ? `${outcome.message} Find the vendor below to check them in with a reason.` : outcome.message}
-        />
+        <View style={styles.sheet}>
+          <InlineBanner tone="attention" title={name} message={outcome.message} />
+          {onOverride && outcome.canOverride ? <Button label="Check in with a reason" variant="secondary" onPress={onOverride} accessibilityLabel={`Check in ${name} with an override`} /> : null}
+        </View>
       )
+    case "unconfirmed":
+      return <InlineBanner tone="info" message={outcome.message} />
     case "offline":
     case "denied":
     case "error":
-      return <InlineBanner tone="error" message={outcome.message} />
+      return <InlineBanner tone="error" title={name} message={outcome.message} />
     default: {
       const exhaustive: never = outcome
       return exhaustive
@@ -353,81 +427,70 @@ function CodeResultBanner({ outcome }: { outcome: CheckInOutcome }) {
   }
 }
 
-function CheckInRow({
-  entry,
-  checkingIn,
+function CheckinRow({
+  row,
+  disabled,
+  busy,
   onCheckIn,
-  onOverride,
-  onBooth,
+  onOpen,
 }: {
-  entry: RosterEntry
-  checkingIn: boolean
+  row: CheckinRosterRow
+  disabled: boolean
+  busy: boolean
   onCheckIn: () => void
-  onOverride: () => void
-  onBooth: () => void
+  onOpen: () => void
 }) {
-  const label = entry.opsLabel ?? (entry.checkedIn ? "Checked in" : "Ready to check in")
-  const tone = entry.checkedIn ? "paid" : needsAttention(entry) ? "due" : "neutral"
-  const meta = [entry.booth ? `Booth ${entry.booth}` : "No booth yet", needsAttention(entry) ? entry.blockMessage : null]
-    .filter(Boolean)
-    .join(" · ")
+  const blocked = isBlocked(row)
+  const status = row.checkedIn ? "Checked in" : blocked ? (row.reason === "payment_pending" ? "Payment pending" : row.reason === "documents" ? "Documents" : "Not eligible") : "Expected"
   return (
-    <View style={styles.row} testID={`checkin-row-${entry.applicationId}`}>
-      <ListRow title={entry.businessName} meta={meta} rightSlot={<StatusBadge label={label} tone={tone} />} />
-      <View style={styles.rowActions}>
-        {canCheckIn(entry) ? (
-          <Button
-            label="Check in"
-            loadingLabel="Saving…"
-            size="md"
-            style={styles.flex}
-            loading={checkingIn}
-            onPress={onCheckIn}
-            accessibilityLabel={`Check in ${entry.businessName}`}
-          />
-        ) : null}
-        {canOverride(entry) ? (
-          <Button
-            label="Check in anyway"
-            loadingLabel="Saving…"
-            size="md"
-            variant="secondary"
-            style={styles.flex}
-            loading={checkingIn}
-            onPress={onOverride}
-            accessibilityLabel={`Check in ${entry.businessName} with an override`}
-          />
-        ) : null}
-        <Button
-          label={entry.booth ? "Move booth" : "Assign booth"}
-          size="md"
-          variant="secondary"
-          style={styles.flex}
-          onPress={onBooth}
-          accessibilityLabel={`${entry.booth ? "Move" : "Assign"} booth for ${entry.businessName}`}
-        />
-      </View>
+    <View style={styles.row} testID={`checkin-row-${row.applicationId}`}>
+      <Pressable
+        onPress={onOpen}
+        style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel={`${row.vendorName}. ${row.booth ? `Booth ${row.booth}` : "No booth yet"}. ${status}`}
+      >
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle} numberOfLines={1}>
+            {row.vendorName}
+          </Text>
+          <Text style={styles.rowMeta} numberOfLines={1}>
+            {[row.booth ? `Booth ${row.booth}` : "No booth yet", row.category].filter(Boolean).join(" · ")}
+          </Text>
+        </View>
+        <StatusBadge label={status} tone={row.checkedIn ? "paid" : blocked ? "due" : "neutral"} />
+      </Pressable>
+      {canCheckInRow(row) ? (
+        <Button label="Check in" size="sm" loadingLabel="Saving…" loading={busy} disabled={disabled} onPress={onCheckIn} accessibilityLabel={`Check in ${row.vendorName}`} />
+      ) : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  stack: {
-    gap: spacing.lg,
-  },
-  card: {
-    gap: spacing.sm,
-  },
+  stack: { gap: spacing.md },
+  sheet: { gap: spacing.md },
   row: {
-    paddingBottom: spacing.sm,
-  },
-  rowActions: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
     gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    paddingRight: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
   },
-  flex: {
-    flexGrow: 1,
+  rowMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    minHeight: layout.hitTargetMin + 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
+  pressed: { backgroundColor: colors.gray50 },
+  rowText: { flex: 1, gap: 2 },
+  rowTitle: { fontFamily: fonts.bodySemi, fontSize: typeScale.callout, color: colors.black },
+  rowMeta: { ...typography.meta },
 })

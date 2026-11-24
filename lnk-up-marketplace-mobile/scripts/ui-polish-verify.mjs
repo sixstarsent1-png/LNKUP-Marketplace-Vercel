@@ -31,8 +31,8 @@ const requiredChecks = [
     snippets: ["Surface", "DisplayTitle", "HomeHeroCard", "components/ui/typography"],
   },
   {
-    file: "components/opportunity-card.tsx",
-    snippets: ["Surface", "expo-image", "OpportunityThumbnail", "gallery"],
+    file: "components/marketplace/event-card.tsx",
+    snippets: ["EventImage", "groupPriceLabel", "accessibilityLabel"],
   },
   {
     file: "components/organizer-home-hero.tsx",
@@ -44,7 +44,7 @@ const requiredChecks = [
   },
   {
     file: "app/(vendor)/find.tsx",
-    snippets: ["viewToggleBtnActive", "colors.lime", "searchSurface", "components/ui/typography"],
+      snippets: ["iconBtnActive", "colors.lime", "searchSurface", "components/ui/typography"],
   },
 ]
 

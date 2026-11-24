@@ -7,6 +7,7 @@ import {
   type VendorRequestStatus,
 } from "@/lib/api/vendor-requests"
 import { MOCK_VENDOR_OPERATIONS } from "@/lib/data/fixtures"
+import { countdownLabel, isEventOver } from "@/lib/vendor/booking-lifecycle"
 
 export type VendorOperationsStatus =
   | "payment_required"
@@ -26,6 +27,15 @@ export type VendorOperationsEvent = {
   readinessPercent?: number
   boothAssignment?: string
   loadInTime?: string
+  imageUrl?: string
+  /** End-date aware; past events move out of preparation. */
+  isPast?: boolean
+  /** "In 12 days", "Tomorrow", "Happening now". */
+  countdown?: string
+  /** Packet state text from WordPress ("Not opened", "Rules pending", "Complete"). */
+  packetStatus?: string
+  /** Server credential state; only "active" offers the pass. */
+  credentialState?: string
 }
 
 type WpBooth = {
@@ -93,7 +103,7 @@ const OPS_STATUSES = new Set<VendorRequestStatus>([
 
 function deriveStatus(request: VendorRequest): VendorOperationsStatus {
   if (request.status === "cancelled" || request.status === "rejected") return "cancelled"
-  if (request.status === "completed") return "completed"
+  if (request.status === "completed" || (request.status === "paid" && isEventOver(request))) return "completed"
   if (request.status === "payment_required" || request.status === "approved") {
     return "payment_required"
   }
@@ -111,6 +121,10 @@ function mapRequest(request: VendorRequest): VendorOperationsEvent {
     state: request.state,
     status,
     passStatus: status === "pass_ready" || status === "completed" ? "unlocked" : "locked",
+    imageUrl: request.imageUrl,
+    isPast: isEventOver(request),
+    countdown: countdownLabel(request) ?? undefined,
+    credentialState: request.credentialState,
   }
 }
 
@@ -124,6 +138,7 @@ export function enrichWithVendorHome(event: VendorOperationsEvent, home: WpVendo
     loadInTime: formatLoadIn(home.loadin, home.load_in) ?? event.loadInTime,
     passStatus: packetUnlocked ? "unlocked" : event.passStatus,
     status: packetUnlocked && event.status === "upcoming" ? "pass_ready" : event.status,
+    packetStatus: home.packet_status?.trim() || event.packetStatus,
   }
 }
 

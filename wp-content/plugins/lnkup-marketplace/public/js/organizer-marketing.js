@@ -12,7 +12,8 @@
   var root = document.querySelector('[data-testid="lnkup-org-marketing"]');
   if (!root || !cfg.rest) return;
 
-  var state = { ctx: null, eventId: 0, tab: 'share', links: [], perf: null, graphic: { template: 'applications_open', format: 'portrait', cobrand: true, link: '' } };
+  var initialTab = new URLSearchParams(window.location.search).get('om_tab');
+  var state = { ctx: null, eventId: 0, tab: ['share', 'graphics', 'copy', 'embed', 'performance'].indexOf(initialTab) !== -1 ? initialTab : 'share', links: [], perf: null, graphic: { template: 'applications_open', format: 'portrait', cobrand: true, link: '' } };
   var select = root.querySelector('[data-om-event]');
   var statusEl = root.querySelector('[data-om-status]');
 

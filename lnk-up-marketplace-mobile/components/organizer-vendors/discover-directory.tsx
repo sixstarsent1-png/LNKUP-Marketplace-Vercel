@@ -279,6 +279,19 @@ export function DiscoverFooter({
   )
 }
 
+/** "3 completed events" or "No completed events on LNKup yet" — never a bare 0. */
+export function completedEventsLabel(count?: number | null): string | null {
+  if (count == null) return null
+  if (count <= 0) return "No completed events on LNKup yet"
+  return `${count} completed event${count === 1 ? "" : "s"}`
+}
+
+/** The canonical category head: "Food — Tacos and more" → "Food". */
+export function shortCategory(category?: string | null): string {
+  const raw = (category ?? "").trim()
+  return raw.split(/\s+[—–-]\s+/)[0] ?? raw
+}
+
 export const DirectoryCard = memo(function DirectoryCard({
   vendor,
   onInvite,
@@ -288,8 +301,8 @@ export const DirectoryCard = memo(function DirectoryCard({
 }) {
   const location = [vendor.city, vendor.state].filter(Boolean).join(", ")
   const stats = [
-    vendor.rating != null ? `${vendor.rating.toFixed(1)}★` : null,
-    vendor.eventsCompleted != null ? `${vendor.eventsCompleted} events` : null,
+    vendor.rating != null && vendor.rating > 0 ? `${vendor.rating.toFixed(1)}★` : null,
+    completedEventsLabel(vendor.eventsCompleted),
   ]
     .filter(Boolean)
     .join(" · ")
@@ -312,7 +325,9 @@ export const DirectoryCard = memo(function DirectoryCard({
           </View>
           <View style={styles.metaRow}>
             <AppIcon name="pricetag-outline" size={13} color={colors.gray500} />
-            <Text style={styles.meta}>{vendor.category || "Category not set"}</Text>
+            <Text style={styles.meta} numberOfLines={1}>
+              {shortCategory(vendor.category) || "Category not set"}
+            </Text>
           </View>
           <View style={styles.metaRow}>
             <AppIcon name="location-outline" size={13} color={colors.gray500} />

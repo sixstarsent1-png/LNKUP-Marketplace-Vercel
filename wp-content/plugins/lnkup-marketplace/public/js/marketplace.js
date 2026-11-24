@@ -1787,6 +1787,18 @@
       }
     }
     if (duplicateForm) {
+      duplicateForm.addEventListener('change', function (e) {
+        if (!e.target || e.target.id !== 'lnkup-duplicate-keep-location' || !duplicateDialog) {
+          return;
+        }
+        var keep = e.target.checked;
+        var city = document.getElementById('lnkup-duplicate-event-city');
+        var state = document.getElementById('lnkup-duplicate-event-state');
+        var venue = document.getElementById('lnkup-duplicate-event-venue');
+        if (city) { city.value = keep ? (duplicateDialog.getAttribute('data-source-city') || '') : ''; city.disabled = keep; }
+        if (state) { state.value = keep ? (duplicateDialog.getAttribute('data-source-state') || '') : ''; state.disabled = keep; }
+        if (venue && keep && !venue.value) { venue.value = duplicateDialog.getAttribute('data-source-venue') || ''; }
+      });
       duplicateForm.addEventListener('submit', function (e) {
         e.preventDefault();
         var errEl = document.getElementById('lnkup-duplicate-event-error');
@@ -1923,18 +1935,27 @@
         var stateField = document.getElementById('lnkup-duplicate-event-state');
         var venueField = document.getElementById('lnkup-duplicate-event-venue');
         var addressField = document.getElementById('lnkup-duplicate-event-address');
-        if (cityField) {
-          cityField.value = duplicateBtn.getAttribute('data-city') || '';
-        }
-        if (stateField) {
-          stateField.value = duplicateBtn.getAttribute('data-state') || '';
+        var keepField = document.getElementById('lnkup-duplicate-keep-location');
+        var sourcePlace = document.getElementById('lnkup-duplicate-event-source-place');
+        var srcCity = duplicateBtn.getAttribute('data-city') || '';
+        var srcState = duplicateBtn.getAttribute('data-state') || '';
+        // Location starts empty on purpose: a copy must say where it happens.
+        if (cityField) { cityField.value = ''; cityField.disabled = false; }
+        if (stateField) { stateField.value = ''; stateField.disabled = false; }
+        if (keepField) { keepField.checked = false; }
+        if (sourcePlace) {
+          sourcePlace.textContent = (srcCity || srcState) ? 'Original: ' + [srcCity, srcState].filter(Boolean).join(', ') : '';
         }
         if (venueField) {
-          venueField.value = duplicateBtn.getAttribute('data-venue') || '';
+          venueField.value = '';
+          venueField.setAttribute('placeholder', duplicateBtn.getAttribute('data-venue') || '');
         }
         if (addressField) {
-          addressField.value = duplicateBtn.getAttribute('data-address') || '';
+          addressField.value = '';
         }
+        duplicateDialog.setAttribute('data-source-city', srcCity);
+        duplicateDialog.setAttribute('data-source-state', srcState);
+        duplicateDialog.setAttribute('data-source-venue', duplicateBtn.getAttribute('data-venue') || '');
         if (typeof duplicateDialog.showModal === 'function') {
           if (!duplicateDialog.open) {
             duplicateDialog.showModal();

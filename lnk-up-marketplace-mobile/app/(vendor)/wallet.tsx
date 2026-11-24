@@ -1,47 +1,38 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import {
-  AppState,
-  StyleSheet,
-  View,
-  type AppStateStatus,
-} from "react-native"
-import { router, useFocusEffect, type Href } from "expo-router"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { AppState, StyleSheet, View, type AppStateStatus } from "react-native"
+import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-router"
 import * as WebBrowser from "expo-web-browser"
 
-import { ActivityRow } from "@/components/activity-row"
-import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
+import { EmptyPanel, ErrorPanel } from "@/components/panel-states"
 import { RequestCard } from "@/components/request-card"
 import { Screen } from "@/components/screen"
 import { WalletSummary } from "@/components/wallet-summary"
+import { TransactionRow } from "@/components/wallet/transaction-row"
 import { InlineBanner, type BannerTone } from "@/components/ui/banner"
 import { Button } from "@/components/ui/button"
 import { SegmentedControl } from "@/components/ui/chip"
 import { ListGroup, ListRow } from "@/components/ui/list-row"
 import { SectionHeader } from "@/components/ui/section-header"
 import { SkeletonList, SkeletonStats } from "@/components/ui/skeleton"
+import { Eyebrow } from "@/components/ui/typography"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import type { VendorRequest } from "@/lib/api/vendor-requests"
+import { groupTransactionsByDate, isMoneyMovement, formatLedgerDate, type VendorTransaction } from "@/lib/api/vendor-transactions"
 import {
   fetchDocumentUrl,
   fetchVendorWallet,
   formatMoney,
-  openVendorDispute,
   type VendorDispute,
-  type VendorFinancialActivityItem,
   type VendorInvoiceOrReceipt,
   type VendorWalletSummary,
 } from "@/lib/api/vendor-wallet"
 import { useAuth } from "@/lib/auth/auth-context"
-import { promptText, showToast } from "@/lib/feedback/feedback"
+import { showToast } from "@/lib/feedback/feedback"
 import { payBoothFee } from "@/lib/payments/stripe-checkout"
-import { spacing } from "@/lib/theme"
+import { isPastEventInvoice, payCtaLabel } from "@/lib/vendor/booking-lifecycle"
+import { colors, radii, spacing } from "@/lib/theme"
 
-function payLabel(item: VendorRequest): string {
-  if (item.amountDue != null && item.amountDue > 0) {
-    return `Pay ${formatMoney(item.amountDue, item.currency ?? "USD")}`
-  }
-  return "Pay now"
-}
+type Section = "due" | "history" | "documents"
 
 const SUCCESS_PREFIXES = ["Payment received", "Dispute opened"]
 
@@ -49,24 +40,47 @@ function bannerTone(message: string): BannerTone {
   return SUCCESS_PREFIXES.some((prefix) => message.startsWith(prefix)) ? "success" : "attention"
 }
 
+const DOC_STATUS: Record<NonNullable<VendorInvoiceOrReceipt["status"]>, string> = {
+  open: "Open",
+  paid: "Paid",
+  void: "Void",
+  refunded: "Refunded",
+  unknown: "Recorded",
+}
+
+function parseSection(value: string | string[] | undefined): Section {
+  const raw = Array.isArray(value) ? value[0] : value
+  if (raw === "history" || raw === "documents") return raw
+  if (raw === "receipts") return "documents"
+  return "due"
+}
+
+/**
+ * Wallet: what's due (upcoming booth fees first, past-event invoices labelled as such), the money
+ * ledger, and invoices and receipts. Amounts come from WordPress; nothing is recalculated here.
+ */
 export default function VendorWalletScreen() {
   const { auth } = useAuth()
+  const params = useLocalSearchParams<{ tab?: string }>()
   const [initialLoad, setInitialLoad] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [payingId, setPayingId] = useState<string | null>(null)
   const [error, setError] = useState<AppErrorShape | null>(null)
   const [summary, setSummary] = useState<VendorWalletSummary | null>(null)
   const [dues, setDues] = useState<VendorRequest[]>([])
-  const [activity, setActivity] = useState<VendorFinancialActivityItem[]>([])
+  const [transactions, setTransactions] = useState<VendorTransaction[]>([])
   const [documents, setDocuments] = useState<VendorInvoiceOrReceipt[]>([])
   const [disputes, setDisputes] = useState<VendorDispute[]>([])
   const [paymentBanner, setPaymentBanner] = useState<string | null>(null)
-  const [section, setSection] = useState<"due" | "history" | "receipts">("due")
+  const [section, setSection] = useState<Section>(() => parseSection(params.tab))
   const hasLoadedOnce = useRef(false)
   const awaitingPaymentReturn = useRef(false)
   const didFocusLoad = useRef(false)
   const payingRef = useRef(false)
-  const disputingRef = useRef(false)
+
+  useEffect(() => {
+    if (params.tab) setSection(parseSection(params.tab))
+  }, [params.tab])
 
   const load = useCallback(
     async (mode: "initial" | "focus" | "refresh" = "initial") => {
@@ -77,12 +91,12 @@ export default function VendorWalletScreen() {
         const bundle = await fetchVendorWallet(auth, { force: mode === "refresh" })
         setSummary(bundle.summary)
         setDues(bundle.paymentRequired)
-        setActivity(bundle.activity)
+        setTransactions(bundle.transactions)
         setDocuments(bundle.invoices)
         setDisputes(bundle.disputes ?? [])
         hasLoadedOnce.current = true
         if (awaitingPaymentReturn.current && bundle.paymentRequired.length === 0) {
-          setPaymentBanner("Payment received — your wallet is up to date")
+          setPaymentBanner("Payment received. Your wallet is up to date.")
           awaitingPaymentReturn.current = false
         }
       } catch (err) {
@@ -105,9 +119,7 @@ export default function VendorWalletScreen() {
 
   useEffect(() => {
     function onAppStateChange(next: AppStateStatus) {
-      if (next === "active" && awaitingPaymentReturn.current) {
-        void load("refresh")
-      }
+      if (next === "active" && awaitingPaymentReturn.current) void load("refresh")
     }
     const sub = AppState.addEventListener("change", onAppStateChange)
     return () => sub.remove()
@@ -116,258 +128,180 @@ export default function VendorWalletScreen() {
   async function handlePay(request: VendorRequest) {
     if (payingRef.current) return
     if (!request.paymentId) {
-      setPaymentBanner("Payment isn’t ready yet. Open the event pass and try again.")
+      setPaymentBanner("This invoice isn't ready for payment yet. Open the booking and try again.")
       return
     }
     payingRef.current = true
     setPayingId(request.id)
     try {
       const result = await payBoothFee(request, auth)
-      if (result.status === "cancelled") {
-        return
-      }
+      if (result.status === "cancelled") return
       if (result.status === "paid" || result.status === "browser") {
+        // The booking only changes after WordPress confirms the payment.
         awaitingPaymentReturn.current = true
         setPaymentBanner(result.message || "Confirming your payment…")
         await load("refresh")
         return
       }
-      setPaymentBanner(result.message || "Payment failed. Try again.")
+      setPaymentBanner(result.message || "Payment failed. Nothing was charged. Try again.")
     } catch (err) {
-      const shaped = appErrorFromWp(err)
-      setPaymentBanner(shaped.message)
+      setPaymentBanner(appErrorFromWp(err).message)
     } finally {
       payingRef.current = false
       setPayingId(null)
     }
   }
 
-  async function openDocument(doc: VendorInvoiceOrReceipt) {
+  async function openInvoice(doc: VendorInvoiceOrReceipt) {
     try {
       const url = await fetchDocumentUrl(doc, auth)
       if (!url) return
       await WebBrowser.openBrowserAsync(url)
     } catch (err) {
-      showToast(`Couldn't open this ${doc.type}. ${appErrorFromWp(err).message}`, "error")
+      showToast(`Couldn't open this invoice. ${appErrorFromWp(err).message}`, "error")
     }
   }
 
-  async function promptDispute(paymentId: string, eventName?: string) {
-    if (disputingRef.current) return
-    disputingRef.current = true
-    try {
-      const reason = await promptText({
-        title: "Dispute this charge",
-        message: `Tell us what's wrong${eventName ? ` with the ${eventName} charge` : ""}. The organizer and LNKup will review it — you can add evidence later on the web.`,
-        placeholder: "e.g. I was charged twice for the same booth",
-        confirmLabel: "Open dispute",
-        minLength: 10,
-      })
-      if (!reason) return
-      await openVendorDispute(paymentId, reason, auth ?? undefined)
-      setPaymentBanner("Dispute opened. Manage evidence in LNKup Payments.")
-      await load("refresh")
-    } catch (err) {
-      showToast(`Couldn't open the dispute. ${appErrorFromWp(err).message}`, "error")
-    } finally {
-      disputingRef.current = false
-    }
-  }
-
+  const upcomingDues = useMemo(() => dues.filter((r) => !isPastEventInvoice(r)), [dues])
+  const pastDues = useMemo(() => dues.filter((r) => isPastEventInvoice(r)), [dues])
+  const history = useMemo(() => transactions.filter(isMoneyMovement), [transactions])
+  const historyGroups = useMemo(() => groupTransactionsByDate(history), [history])
   const showFullLoader = initialLoad && !summary
 
+  function renderDue(item: VendorRequest) {
+    const isPaying = payingId === item.id
+    const label = isPastEventInvoice(item) ? `Pay invoice${item.amountDue ? ` · ${formatMoney(item.amountDue, item.currency)}` : ""}` : payCtaLabel(item)
+    return (
+      <View key={item.id} style={styles.dueBlock}>
+        <RequestCard item={item} onPress={() => router.push(`/booking/${item.id}` as Href)} />
+        <Button
+          label={label}
+          loadingLabel="Opening checkout…"
+          icon="card-outline"
+          loading={isPaying}
+          disabled={!item.paymentId || payingId != null}
+          onPress={() => void handlePay(item)}
+          accessibilityLabel={`${label} for ${item.eventName}`}
+        />
+      </View>
+    )
+  }
+
   return (
-    <Screen
-      title="Wallet"
-      subtitle="Booth fees & receipts"
-      refreshing={refreshing}
-      onRefresh={() => void load("refresh")}
-    >
+    <Screen title="Wallet" refreshing={refreshing} onRefresh={() => void load("refresh")}>
       {showFullLoader ? (
         <View style={styles.section} accessibilityLabel="Loading wallet">
-          <SkeletonStats count={3} />
+          <SkeletonStats count={1} />
           <SkeletonList count={2} />
         </View>
       ) : null}
 
-      {!showFullLoader && error && !summary ? (
-        <ErrorPanel title={error.title} message={error.message} onAction={() => void load("refresh")} />
-      ) : null}
+      {!showFullLoader && error && !summary ? <ErrorPanel title={error.title} message={error.message} onAction={() => void load("refresh")} /> : null}
 
       {!showFullLoader && summary ? (
         <>
-          {paymentBanner ? (
-            <InlineBanner
-              tone={bannerTone(paymentBanner)}
-              message={paymentBanner}
-              onDismiss={() => setPaymentBanner(null)}
-            />
-          ) : null}
-
-          {error ? (
-            <InlineBanner
-              tone="error"
-              message={`Couldn't refresh. ${error.message}`}
-              actionLabel="Retry"
-              onAction={() => void load("refresh")}
-            />
-          ) : null}
+          {paymentBanner ? <InlineBanner tone={bannerTone(paymentBanner)} message={paymentBanner} onDismiss={() => setPaymentBanner(null)} /> : null}
+          {error ? <InlineBanner tone="error" message={`Couldn't refresh. ${error.message}`} actionLabel="Retry" onAction={() => void load("refresh")} /> : null}
 
           <WalletSummary summary={summary} />
 
           <SegmentedControl
             options={[
               { value: "due", label: "Due", count: dues.length },
-              { value: "history", label: "History", count: activity.length + disputes.length },
-              { value: "receipts", label: "Receipts", count: documents.length },
+              { value: "history", label: "History", count: history.length },
+              { value: "documents", label: "Documents", count: documents.length },
             ]}
             value={section}
             onChange={setSection}
           />
 
           {section === "due" ? (
-          <View style={styles.section}>
-            <SectionHeader
-              title="Amount due"
-              icon="card-outline"
-              subtitle={dues.length > 0 ? "Pay to unlock your event pass" : undefined}
-            />
-            {dues.length === 0 ? (
-              <EmptyPanel
-                icon="checkmark-done-outline"
-                title="Nothing due"
-                message="When you’re accepted, booth fees to unlock your pass appear here."
-              />
-            ) : (
-              <View style={styles.list}>
-                {dues.map((item) => {
-                  const canPay = Boolean(item.paymentId)
-                  const isPaying = payingId === item.id
-                  return (
-                    <View key={item.id} style={styles.dueBlock}>
-                      <RequestCard
-                        item={item}
-                        onPress={() => router.push(`/pass/${item.id}` as Href)}
-                      />
-                      <View style={styles.dueActions}>
-                        <Button
-                          label={payLabel(item)}
-                          loadingLabel="Paying…"
-                          icon="card-outline"
-                          loading={isPaying}
-                          disabled={!canPay || payingId != null}
-                          onPress={() => void handlePay(item)}
-                          accessibilityLabel={`${payLabel(item)} for ${item.eventName}`}
-                          style={styles.payButton}
-                        />
-                        <Button
-                          label="View pass"
-                          variant="secondary"
-                          onPress={() => router.push(`/pass/${item.id}` as Href)}
-                          accessibilityLabel={`View pass for ${item.eventName}`}
-                        />
-                      </View>
-                    </View>
-                  )
-                })}
-              </View>
-            )}
-          </View>
-          ) : null}
-
-          {section === "history" ? (
-          <View style={styles.section}>
-            <SectionHeader title="Payments" icon="receipt-outline" />
-            {activity.length === 0 ? (
-              <EmptyPanel
-                icon="receipt-outline"
-                title="No payments yet"
-                message="Booth fees you pay through LNKup will be listed here."
-              />
-            ) : (
-              <View style={styles.list}>
-                {activity.map((item) => (
-                  <View key={item.id} style={styles.activityBlock}>
-                    <ActivityRow
-                      item={item}
-                      onPress={
-                        item.requestId
-                          ? () => router.push(`/pass/${item.requestId}` as Href)
-                          : undefined
-                      }
-                    />
-                    {item.status === "paid" && item.paymentId ? (
-                      <Button
-                        label="Dispute charge"
-                        icon="flag-outline"
-                        variant="ghost"
-                        size="sm"
-                        style={styles.disputeLink}
-                        onPress={() => void promptDispute(item.paymentId!, item.eventName)}
-                        accessibilityLabel={`Dispute charge${item.eventName ? ` for ${item.eventName}` : ""}`}
-                      />
-                    ) : null}
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-
-          ) : null}
-
-          {section === "history" && disputes.length > 0 ? (
             <View style={styles.section}>
-              <SectionHeader title="Your disputes" icon="flag-outline" />
-              <ListGroup>
-                {disputes.map((d) => (
-                  <ListRow
-                    key={d.id}
-                    icon="flag-outline"
-                    title={d.eventName ?? `Payment #${d.paymentId ?? d.id}`}
-                    meta={[d.status.replace(/_/g, " "), formatMoney(d.amount, d.currency), "Manage on LNKup"]
-                      .filter(Boolean)
-                      .join(" · ")}
-                    onPress={
-                      d.wordpressUrl
-                        ? () => void WebBrowser.openBrowserAsync(d.wordpressUrl!)
-                        : undefined
-                    }
+              {dues.length === 0 ? (
+                <EmptyPanel icon="checkmark-done-outline" title="Nothing due" message="When an organizer approves you, the booth fee to confirm your spot appears here." />
+              ) : null}
+              {upcomingDues.length > 0 ? (
+                <View style={styles.list}>
+                  <SectionHeader title="Confirm your booths" icon="card-outline" subtitle="Your spot is confirmed after the payment clears." />
+                  {upcomingDues.map(renderDue)}
+                </View>
+              ) : null}
+              {pastDues.length > 0 ? (
+                <View style={styles.list}>
+                  <SectionHeader
+                    title="Outstanding invoices · past events"
+                    icon="receipt-outline"
+                    subtitle="These events already happened. The organizer's invoices are still open."
                   />
-                ))}
-              </ListGroup>
+                  {pastDues.map(renderDue)}
+                </View>
+              ) : null}
             </View>
           ) : null}
 
-          {section === "receipts" ? (
-          <View style={styles.section}>
-            <SectionHeader title="Invoices & receipts" icon="document-text-outline" />
-            {documents.length === 0 ? (
-              <EmptyPanel
-                icon="document-text-outline"
-                title="No invoices or receipts yet"
-                message="Receipts appear here after each booth fee payment."
-              />
-            ) : (
-              <ListGroup>
-                {documents.map((doc) => {
-                  const canOpen = Boolean(doc.pdfUrl || doc.wordpressUrl)
-                  const typeLabel = doc.type === "receipt" ? "Receipt" : "Invoice"
-                  return (
+          {section === "history" ? (
+            <View style={styles.section}>
+              {history.length === 0 ? (
+                <EmptyPanel icon="receipt-outline" title="No payments yet" message="Booth fees you pay through LNKup, and any refunds, are listed here." />
+              ) : (
+                historyGroups.map((group) => (
+                  <View key={group.title} style={styles.list}>
+                    <Eyebrow>{group.title}</Eyebrow>
+                    <View style={styles.ledger}>
+                      {group.items.map((t, index) => (
+                        <View key={t.id} style={index > 0 ? styles.divider : undefined}>
+                          <TransactionRow item={t} onPress={() => router.push(`/wallet/transaction/${t.id}` as Href)} />
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ))
+              )}
+              {disputes.length > 0 ? (
+                <ListGroup title="Your disputes">
+                  {disputes.map((d) => (
                     <ListRow
-                      key={`${doc.type}-${doc.id}`}
-                      icon={doc.type === "receipt" ? "receipt-outline" : "document-text-outline"}
-                      title={`${doc.number ?? doc.id} · ${doc.eventName ?? typeLabel}`}
-                      meta={[typeLabel, doc.status, formatMoney(doc.amount, doc.currency)]
-                        .filter(Boolean)
-                        .join(" · ")}
-                      onPress={canOpen ? () => void openDocument(doc) : undefined}
-                      accessibilityHint={canOpen ? "Opens the document" : undefined}
+                      key={d.id}
+                      icon="flag-outline"
+                      title={d.eventName ?? `Payment #${d.paymentId ?? d.id}`}
+                      meta={[d.status.replace(/_/g, " "), formatMoney(d.amount, d.currency), "Manage on LNKup"].filter(Boolean).join(" · ")}
+                      onPress={d.wordpressUrl ? () => void WebBrowser.openBrowserAsync(d.wordpressUrl!) : undefined}
                     />
-                  )
-                })}
-              </ListGroup>
-            )}
-          </View>
+                  ))}
+                </ListGroup>
+              ) : null}
+            </View>
+          ) : null}
+
+          {section === "documents" ? (
+            <View style={styles.section}>
+              {documents.length === 0 ? (
+                <EmptyPanel icon="document-text-outline" title="No invoices or receipts yet" message="Receipts appear here after each booth fee payment." />
+              ) : (
+                <ListGroup>
+                  {documents.map((doc) => {
+                    const typeLabel = doc.type === "receipt" ? "Receipt" : "Invoice"
+                    const date = formatLedgerDate(doc.type === "receipt" ? doc.issuedAt : doc.dueAt ?? doc.issuedAt)
+                    return (
+                      <ListRow
+                        key={`${doc.type}-${doc.id}`}
+                        icon={doc.type === "receipt" ? "receipt-outline" : "document-text-outline"}
+                        title={doc.eventName || `${typeLabel} ${doc.number ?? ""}`.trim()}
+                        meta={[typeLabel, date, formatMoney(doc.amount, doc.currency), DOC_STATUS[doc.status ?? "unknown"]].filter(Boolean).join(" · ")}
+                        onPress={
+                          doc.type === "receipt" && /^\d+$/.test(doc.id)
+                            ? () => router.push(`/wallet/receipt/${doc.id}` as Href)
+                            : doc.pdfUrl || doc.wordpressUrl
+                              ? () => void openInvoice(doc)
+                              : undefined
+                        }
+                        accessibilityHint={doc.type === "receipt" ? "Opens the receipt" : "Opens the invoice"}
+                      />
+                    )
+                  })}
+                </ListGroup>
+              )}
+            </View>
           ) : null}
         </>
       ) : null}
@@ -376,26 +310,15 @@ export default function VendorWalletScreen() {
 }
 
 const styles = StyleSheet.create({
-  section: {
-    gap: spacing.md,
+  section: { gap: spacing.lg },
+  list: { gap: spacing.md },
+  dueBlock: { gap: spacing.sm },
+  ledger: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    overflow: "hidden",
   },
-  list: {
-    gap: spacing.md,
-  },
-  dueBlock: {
-    gap: spacing.sm,
-  },
-  dueActions: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  payButton: {
-    flex: 1,
-  },
-  activityBlock: {
-    gap: spacing.xs,
-  },
-  disputeLink: {
-    alignSelf: "flex-start",
-  },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.gray200 },
 })

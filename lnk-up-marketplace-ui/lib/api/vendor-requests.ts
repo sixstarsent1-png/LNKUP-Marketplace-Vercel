@@ -132,7 +132,7 @@ export function mapWpVendorApplication(item: WpVendorApplicationItem): VendorReq
     eventName: item.event_name ?? "Event",
     eventImage: mapEventMedia(item.media, item.featured_image)?.thumbUrl ?? "",
     eventDate: formatDate(item.event_date) ?? item.event_date,
-    city: formatLocation(item.city, item.state) || item.city,
+    city: item.place || formatLocation(item.city, item.state) || item.city,
     state: item.state,
     organizerName: item.organizer_name,
     category: item.category,

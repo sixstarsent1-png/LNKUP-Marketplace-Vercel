@@ -1,23 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-router"
 
-import { ApproveIntelModal } from "@/components/organizer-vendors/approve-intel-modal"
-import { InvitesList } from "@/components/organizer-vendors/invites-list"
-import { fetchOrganizerInvites, type OrganizerInvite } from "@/lib/api/organizer-crm"
+import { ApplicationRow } from "@/components/organizer/application-row"
+import { InvitesPanel } from "@/components/organizer/invites-panel"
 import {
   DirectoryCard,
   DiscoverFooter,
   DiscoverHeader,
 } from "@/components/organizer-vendors/discover-directory"
-import { InfoRequestSheet } from "@/components/organizer-vendors/info-request-sheet"
 import { InviteSheet } from "@/components/organizer-vendors/invite-sheet"
-import { OrganizerRequestCard } from "@/components/organizer-vendors/organizer-request-card"
 import { RequestsQueueHeader } from "@/components/organizer-vendors/requests-queue"
 import {
   EMPTY_DISCOVER_FILTERS,
   matchesFilter,
   parseFilterKey,
-  vendorProfileHref,
   type FilterKey,
   type SegmentKey,
 } from "@/components/organizer-vendors/vendor-queue"
@@ -26,38 +22,35 @@ import { InlineBanner } from "@/components/ui/banner"
 import { SegmentedControl, type ChipOption } from "@/components/ui/chip"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import { isAbortError } from "@/lib/api/wp-client"
-import {
-  fetchApplicationIntel,
-  fetchOrganizerRequests,
-  reviewOrganizerRequest,
-  type ApplicationIntel,
-  type OrganizerReviewAction,
-  type OrganizerVendorRequest,
-} from "@/lib/api/organizer-requests"
+import { fetchOrganizerRequests, type OrganizerVendorRequest } from "@/lib/api/organizer-requests"
 import {
   fetchOrganizerVendorDirectory,
   type OrganizerDirectoryVendor,
   type OrganizerDiscoverFilters,
 } from "@/lib/api/organizer-vendor-directory"
 import { fetchFindVendorsEnabled } from "@/lib/api/match"
-import { invalidateOrganizerMoney } from "@/lib/api/organizer-financial"
 import { useAuth } from "@/lib/auth/auth-context"
-import { promptText, showToast } from "@/lib/feedback/feedback"
+import { showToast } from "@/lib/feedback/feedback"
 
 export default function OrganizerVendorsScreen() {
   const { auth } = useAuth()
   const {
     event: eventParam,
     tab: tabParam,
+    segment: segmentParam,
     filter: filterParam,
+    invite: inviteParam,
   } = useLocalSearchParams<{
     event?: string
     tab?: string
+    segment?: string
     filter?: string
+    invite?: string
   }>()
   const eventFilter = typeof eventParam === "string" && eventParam ? eventParam : null
+  const segmentHint = segmentParam ?? tabParam
 
-  const initialSegment: SegmentKey = tabParam === "discover" || tabParam === "invites" ? tabParam : "requests"
+  const initialSegment: SegmentKey = segmentHint === "discover" || segmentHint === "invites" ? segmentHint : "requests"
 
   const [segment, setSegment] = useState<SegmentKey>(initialSegment)
   const [filter, setFilter] = useState<FilterKey>(() => parseFilterKey(filterParam) ?? "review")
@@ -68,7 +61,6 @@ export default function OrganizerVendorsScreen() {
   }, [filterParam])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [actingId, setActingId] = useState<string | null>(null)
   const [error, setError] = useState<AppErrorShape | null>(null)
   const [items, setItems] = useState<OrganizerVendorRequest[]>([])
 
@@ -82,19 +74,10 @@ export default function OrganizerVendorsScreen() {
   const [discoverPages, setDiscoverPages] = useState(1)
   const [discoverTotal, setDiscoverTotal] = useState(0)
   const [inviteVendor, setInviteVendor] = useState<OrganizerDirectoryVendor | null>(null)
-  const [invites, setInvites] = useState<OrganizerInvite[] | null>(null)
-  const [invitesLoading, setInvitesLoading] = useState(false)
-  const [invitesError, setInvitesError] = useState<AppErrorShape | null>(null)
-  const intelRequestRef = useRef<string | null>(null)
+  const [invitesVersion, setInvitesVersion] = useState(0)
   const discoverRef = useRef<AbortController | null>(null)
 
-  const [intelItem, setIntelItem] = useState<OrganizerVendorRequest | null>(null)
-  const [intel, setIntel] = useState<ApplicationIntel | null>(null)
-  const [intelLoading, setIntelLoading] = useState(false)
-
   const didFocusLoad = useRef(false)
-  const reviewInFlight = useRef(false)
-  const [infoItem, setInfoItem] = useState<OrganizerVendorRequest | null>(null)
   const [findVendorsEnabled, setFindVendorsEnabled] = useState(false)
 
   useEffect(() => {
@@ -241,95 +224,9 @@ export default function OrganizerVendorsScreen() {
     [filterCounts.review],
   )
 
-  const loadInvites = useCallback(
-    async (force = false) => {
-      setInvitesLoading(true)
-      setInvitesError(null)
-      try {
-        setInvites(await fetchOrganizerInvites(auth, { force }))
-      } catch (err) {
-        setInvitesError(appErrorFromWp(err))
-      } finally {
-        setInvitesLoading(false)
-      }
-    },
-    [auth],
-  )
-
-  useEffect(() => {
-    if (segment === "invites") void loadInvites()
-  }, [segment, loadInvites])
-
-  async function runReview(item: OrganizerVendorRequest, action: OrganizerReviewAction, reason?: string) {
-    if (reviewInFlight.current) return
-    reviewInFlight.current = true
-    setActingId(item.id)
-    try {
-      await reviewOrganizerRequest(item, action, auth, reason)
-      invalidateOrganizerMoney()
-      // Re-read canonical status: approve can land on payment_required or paid (free booth).
-      const fresh = await fetchOrganizerRequests(auth, { force: true })
-      setItems(fresh.items)
-      const updated = fresh.items.find((row) => row.id === item.id)
-      if (updated) {
-        const next = (["waitlisted", "awaiting_payment", "confirmed", "declined"] as const).find((key) =>
-          matchesFilter(updated.status, key),
-        )
-        if (next) {
-          setFilter(next)
-          showToast(
-            next === "awaiting_payment"
-              ? `${item.vendorBusinessName} approved — we've asked them to pay to confirm.`
-              : next === "confirmed"
-                ? `${item.vendorBusinessName} is confirmed.`
-                : next === "waitlisted"
-                  ? `${item.vendorBusinessName} is on the waitlist.`
-                  : `${item.vendorBusinessName} was declined.`,
-            "success",
-          )
-        }
-      }
-    } catch (err) {
-      showToast(`Couldn't update this request. ${appErrorFromWp(err).message}`, "error")
-      void loadRequests("refresh")
-    } finally {
-      reviewInFlight.current = false
-      setActingId(null)
-    }
-  }
-
-  async function handleReview(item: OrganizerVendorRequest, action: OrganizerReviewAction) {
-    if (reviewInFlight.current) return
-    if (action === "reject") {
-      const reason = await promptText({
-        title: `Decline ${item.vendorBusinessName}?`,
-        message: "The vendor sees this reason with the decision. Keep it short and kind.",
-        placeholder: "e.g. We already have enough food vendors for this date",
-        confirmLabel: "Decline request",
-        minLength: 3,
-      })
-      if (reason) void runReview(item, action, reason)
-      return
-    }
-    if (action === "approve") {
-      const requestId = item.id
-      intelRequestRef.current = requestId
-      setIntelItem(item)
-      setIntel(null)
-      setIntelLoading(true)
-      void fetchApplicationIntel(requestId, auth)
-        .then((data) => {
-          if (intelRequestRef.current === requestId) setIntel(data)
-        })
-        .catch(() => {
-          if (intelRequestRef.current === requestId) setIntel(null)
-        })
-        .finally(() => {
-          if (intelRequestRef.current === requestId) setIntelLoading(false)
-        })
-      return
-    }
-    void runReview(item, action)
+  function openReview(item: OrganizerVendorRequest) {
+    const query = [`filter=${filter}`, eventFilter ? `eventId=${eventFilter}` : ""].filter(Boolean).join("&")
+    router.push(`/(organizer)/vendors/review/${item.id}?${query}` as Href)
   }
 
   function handleInvite(vendor: OrganizerDirectoryVendor) {
@@ -340,22 +237,15 @@ export default function OrganizerVendorsScreen() {
     setInviteVendor(vendor)
   }
 
-  function closeIntel() {
-    intelRequestRef.current = null
-    setIntelItem(null)
-    setIntel(null)
-    setIntelLoading(false)
-  }
-
   function clearEventFilter() {
     router.replace("/(organizer)/vendors")
   }
 
   useEffect(() => {
-    if (tabParam === "discover" || tabParam === "invites" || tabParam === "requests") {
-      setSegment(tabParam)
+    if (segmentHint === "discover" || segmentHint === "invites" || segmentHint === "requests") {
+      setSegment(segmentHint)
     }
-  }, [tabParam])
+  }, [segmentHint])
 
   function onRefresh() {
     if (segment === "discover") {
@@ -366,7 +256,6 @@ export default function OrganizerVendorsScreen() {
     void loadRequests("refresh")
   }
 
-  const intelProfileId = intelItem?.vendorProfileId
   const discoverHasMore = discoverPage < discoverPages
 
   const rows = useMemo<VendorRow[]>(() => {
@@ -383,20 +272,7 @@ export default function OrganizerVendorsScreen() {
 
   function renderRow(row: VendorRow) {
     if (row.kind === "request") {
-      const item = row.item
-      return (
-        <OrganizerRequestCard
-          item={item}
-          acting={actingId === item.id}
-          onReview={handleReview}
-          onRequestInfo={setInfoItem}
-          onOpenProfile={
-            item.vendorProfileId
-              ? () => router.push(vendorProfileHref(item.vendorProfileId!, item.id) as Href)
-              : undefined
-          }
-        />
-      )
+      return <ApplicationRow request={row.item} onPress={() => openReview(row.item)} />
     }
     return <DirectoryCard vendor={row.vendor} onInvite={handleInvite} />
   }
@@ -483,12 +359,11 @@ export default function OrganizerVendorsScreen() {
             ) : null}
 
             {segment === "invites" ? (
-              <InvitesList
-                invites={invites}
-                loading={invitesLoading}
-                error={invitesError}
+              <InvitesPanel
+                key={invitesVersion}
+                auth={auth}
                 eventFilter={eventFilter}
-                onRetry={() => void loadInvites(true)}
+                openInviteId={typeof inviteParam === "string" ? inviteParam : null}
                 onDiscover={() => setSegment("discover")}
               />
             ) : null}
@@ -496,45 +371,12 @@ export default function OrganizerVendorsScreen() {
         }
       />
 
-      <ApproveIntelModal
-        item={intelItem}
-        intel={intel}
-        loading={intelLoading}
-        acting={Boolean(intelItem) && actingId === intelItem?.id}
-        onCancel={closeIntel}
-        onOpenProfile={
-          intelItem && intelProfileId
-            ? () => {
-                const applicationId = intelItem.id
-                closeIntel()
-                router.push(vendorProfileHref(intelProfileId, applicationId) as Href)
-              }
-            : undefined
-        }
-        onApprove={() => {
-          const target = intelItem
-          closeIntel()
-          if (target) void runReview(target, "approve")
-        }}
-      />
-
       <InviteSheet
         vendor={inviteVendor}
         auth={auth}
         defaultEventId={eventFilter}
         onClose={() => setInviteVendor(null)}
-        onSent={() => setInvites(null)}
-      />
-
-      <InfoRequestSheet
-        item={infoItem}
-        auth={auth}
-        onClose={() => setInfoItem(null)}
-        onSent={() => {
-          setInfoItem(null)
-          setFilter("needs_info")
-          void loadRequests("refresh")
-        }}
+        onSent={() => setInvitesVersion((v) => v + 1)}
       />
     </>
   )

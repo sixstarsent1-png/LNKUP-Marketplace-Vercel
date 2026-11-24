@@ -198,6 +198,12 @@ class LNKup_Meta {
 				),
 				'_lnkup_emergency_contacts'  => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
 				'_lnkup_weather_placeholder' => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field' ),
+				// LNKup_Location_Service: confidence and provenance of the canonical city/state.
+				'_lnkup_location_status'      => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ),
+				'_lnkup_location_source'      => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ),
+				'_lnkup_location_precision'   => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ),
+				'_lnkup_location_verified_at' => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
+				'_lnkup_market_slug'          => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_title' ),
 				'_lnkup_start_time'          => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
 			),
 			'lnkup_opportunity' => array(

@@ -84,10 +84,13 @@
         const barWrap = card.querySelector('.lnkup-trust-card__bar');
         if (barWrap) barWrap.setAttribute('aria-valuenow', String(percent));
       }
-      if (badgesEl && Array.isArray(data.badges)) {
-        badgesEl.innerHTML = '<p class="lnkup-type-label">Unlocked</p>' + data.badges.slice(0, 6).map(function (b) {
-          return badgeHtml(b, /verified|top rated|documents ready/i.test(b));
-        }).join('');
+      if (badgesEl) {
+        var earned = Array.isArray(data.badges) ? data.badges.filter(Boolean) : [];
+        badgesEl.innerHTML = earned.length
+          ? '<p class="lnkup-type-label">Unlocked</p>' + earned.slice(0, 6).map(function (b) {
+            return badgeHtml(b, /verified|top rated|documents ready/i.test(b));
+          }).join('')
+          : '';
       }
       if (missingEl) {
         const items = (data.missing_items || []).slice(0, 4);

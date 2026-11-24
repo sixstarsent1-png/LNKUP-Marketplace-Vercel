@@ -35,6 +35,12 @@ class LNKup_Financial_REST {
 			'callback' => array( __CLASS__, 'transactions' ),
 		) ) );
 
+		register_rest_route( self::NS, '/financial/transactions/(?P<id>\d+)', array_merge( $vendor, array(
+			'methods'  => 'GET',
+			'callback' => array( __CLASS__, 'transaction_detail' ),
+			'args'     => array( 'id' => array( 'sanitize_callback' => 'absint' ) ),
+		) ) );
+
 		register_rest_route( self::NS, '/financial/sync', array_merge( $fin, array(
 			'methods'  => WP_REST_Server::CREATABLE,
 			'callback' => array( __CLASS__, 'sync' ),
@@ -182,6 +188,10 @@ class LNKup_Financial_REST {
 			'methods'  => 'POST',
 			'callback' => array( __CLASS__, 'payment_methods_setup' ),
 		) ) );
+		register_rest_route( self::NS, '/financial/payment-methods/sync', array_merge( $vendor, array(
+			'methods'  => 'POST',
+			'callback' => array( __CLASS__, 'payment_methods_sync' ),
+		) ) );
 		register_rest_route( self::NS, '/financial/payment-methods/(?P<id>\d+)', array(
 			array(
 				'methods'             => 'DELETE',
@@ -216,6 +226,11 @@ class LNKup_Financial_REST {
 		register_rest_route( self::NS, '/financial/receipts/(?P<id>\d+)/view', array(
 			'methods'             => 'GET',
 			'callback'            => array( __CLASS__, 'receipt_view' ),
+			'permission_callback' => array( __CLASS__, 'receipt_document_permission' ),
+		) );
+		register_rest_route( self::NS, '/financial/receipts/(?P<id>\d+)/pdf', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'receipt_pdf' ),
 			'permission_callback' => array( __CLASS__, 'receipt_document_permission' ),
 		) );
 
@@ -1065,6 +1080,14 @@ class LNKup_Financial_REST {
 		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
 	}
 
+	public static function payment_methods_sync() {
+		$provider = LNKup_Payment_Provider::get_instance();
+		if ( method_exists( $provider, 'sync_payment_methods' ) ) {
+			$provider->sync_payment_methods( get_current_user_id() );
+		}
+		return rest_ensure_response( LNKup_Payment_Methods::list_for_user( get_current_user_id() ) );
+	}
+
 	public static function payment_methods_delete( $request ) {
 		$id = absint( $request['id'] );
 		LNKup_Payment_Provider::get_instance()->detach_payment_method( $id, get_current_user_id() );
@@ -1136,6 +1159,56 @@ class LNKup_Financial_REST {
 			return new WP_Error( 'not_found', __( 'Receipt not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}
 		return self::serve_html( LNKup_Receipts::render_html( $row ) );
+	}
+
+	public static function receipt_pdf( $request ) {
+		global $wpdb;
+		$row = $wpdb->get_row(
+			$wpdb->prepare( 'SELECT * FROM ' . LNKup_Financial_Tables::receipts_table() . ' WHERE id = %d', absint( $request['id'] ) ),
+			ARRAY_A
+		);
+		if ( ! $row || ( (int) $row['vendor_user_id'] !== get_current_user_id() && ! LNKup_Capabilities::user_has_manage_all() ) ) {
+			return new WP_Error( 'not_found', __( 'Receipt not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		$result = LNKup_Receipts::render_pdf( $row );
+		return is_wp_error( $result ) ? $result : self::serve_pdf( $result );
+	}
+
+	/**
+	 * GET one vendor ledger row with the stored invoice lines and its receipt.
+	 * Amounts come from what was recorded; nothing is recalculated with current fees.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function transaction_detail( $request ) {
+		return self::respond( function () use ( $request ) {
+			global $wpdb;
+			$table = LNKup_Financial_Tables::transactions_table();
+			$row   = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", absint( $request['id'] ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			if ( ! $row || ( (int) $row['vendor_user_id'] !== get_current_user_id() && ! LNKup_Capabilities::user_has_manage_all() ) ) {
+				return new WP_Error( 'not_found', __( 'Transaction not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+			}
+			$out        = LNKup_Transactions::format( $row );
+			$payment_id = (int) $row['payment_post_id'];
+			$items      = array();
+			$invoice    = $payment_id && class_exists( 'LNKup_Invoices' ) ? LNKup_Invoices::get_by_payment( $payment_id ) : null;
+			if ( is_array( $invoice ) && ! empty( $invoice['id'] ) ) {
+				foreach ( (array) LNKup_Invoices::get_items( (int) $invoice['id'] ) as $item ) {
+					$items[] = array(
+						'description' => (string) ( $item['description'] ?? '' ),
+						'amount'      => (float) ( $item['line_total'] ?? 0 ),
+					);
+				}
+			}
+			$receipt = $payment_id ? LNKup_Receipts::get_by_payment( $payment_id ) : null;
+			unset( $out['audit'] );
+			$out['line_items'] = $items;
+			$out['invoice']    = is_array( $invoice ) && ! empty( $invoice['id'] )
+				? array( 'id' => (int) $invoice['id'], 'number' => (string) ( $invoice['invoice_number'] ?? '' ) )
+				: null;
+			$out['receipt']    = is_array( $receipt ) ? LNKup_Receipts::format( $receipt ) : null;
+			return $out;
+		} );
 	}
 
 	public static function receipt_detail( $request ) {

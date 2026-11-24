@@ -128,7 +128,15 @@
     composer.querySelector('[data-fv-preview]').hidden = false;
   }
 
+  /** Term names arrive HTML-encoded ("Food &amp; Beverage"); decode once before escaping. */
+  function decodeEntities(str) {
+    var box = document.createElement('textarea');
+    box.innerHTML = String(str == null ? '' : str);
+    return box.value;
+  }
+
   function renderCard(v) {
+    v.primary_category = decodeEntities(v.primary_category);
     var location = [v.city, v.state].filter(Boolean).join(', ');
     var reasons = (v.match && v.match.reasons ? v.match.reasons : []).slice(0, 3).map(function (r) {
       return '<li>' + escapeHtml(r) + '</li>';

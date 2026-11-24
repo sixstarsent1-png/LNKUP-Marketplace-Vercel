@@ -925,6 +925,14 @@ class LNKup_Vendor_Import {
 			}
 		}
 
+		if ( class_exists( 'LNKup_Location_Service' ) && ( ! empty( $row['city'] ) || ! empty( $row['state'] ) ) ) {
+			// Imports never block: certain values become canonical, uncertain ones stay as sent.
+			$location = LNKup_Location_Service::canonical_profile_location( (string) ( $row['city'] ?? '' ), (string) ( $row['state'] ?? '' ), '', 'lenient' );
+			if ( is_array( $location ) ) {
+				$row['city']  = $location['city'];
+				$row['state'] = $location['state'];
+			}
+		}
 		$data = array(
 			'organizer_user_id' => absint( $organizer_id ),
 			'normalized_email'  => self::normalize_email( $row['email'] ?? '' ),

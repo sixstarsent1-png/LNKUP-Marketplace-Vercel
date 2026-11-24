@@ -3,7 +3,7 @@ import type { OrganizerVendorRequest } from "@/lib/api/organizer-requests"
 import type { RoleTutorial } from "@/lib/tutorials/tutorial-contract"
 
 export function buildOrganizerTutorial(input: {
-  summary?: OrganizerHomeSummary | null
+  summary?: Pick<OrganizerHomeSummary, "stats"> | null
   requests: OrganizerVendorRequest[]
 }): RoleTutorial {
   const stats = input.summary?.stats

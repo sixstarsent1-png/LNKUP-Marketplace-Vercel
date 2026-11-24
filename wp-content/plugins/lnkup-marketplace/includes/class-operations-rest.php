@@ -74,6 +74,18 @@ class LNKup_Operations_REST {
 			'permission_callback' => $ops,
 		) );
 
+		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/booths/(?P<booth_id>\d+)/unassign', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'unassign_booth' ),
+			'permission_callback' => $ops,
+		) );
+
+		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/booths/swap', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'swap_booths' ),
+			'permission_callback' => $ops,
+		) );
+
 		register_rest_route( self::NS, '/operations/events/(?P<id>\d+)/parking', array(
 			array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_parking' ), 'permission_callback' => $view ),
 			array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'save_parking' ), 'permission_callback' => $ops ),
@@ -414,7 +426,13 @@ class LNKup_Operations_REST {
 	}
 
 	public static function event_compliance( WP_REST_Request $request ) {
-		return rest_ensure_response( array( 'alerts' => LNKup_Event_Operations::compliance_alerts( absint( $request['id'] ) ) ) );
+		$alerts = LNKup_Event_Operations::compliance_alerts( absint( $request['id'] ) );
+		return rest_ensure_response(
+			array(
+				'alerts' => $alerts,
+				'groups' => LNKup_Event_Operations::group_compliance_alerts( $alerts ),
+			)
+		);
 	}
 
 	public static function get_booths( WP_REST_Request $request ) {
@@ -433,6 +451,23 @@ class LNKup_Operations_REST {
 	public static function assign_booth( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
 		$result = LNKup_Booths::assign( absint( $request['booth_id'] ), absint( $body['application_id'] ?? 0 ), absint( $request['id'] ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return rest_ensure_response( array( 'success' => true ) );
+	}
+
+	public static function unassign_booth( WP_REST_Request $request ) {
+		$result = LNKup_Booths::unassign( absint( $request['booth_id'] ), absint( $request['id'] ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return rest_ensure_response( array( 'success' => true ) );
+	}
+
+	public static function swap_booths( WP_REST_Request $request ) {
+		$body   = $request->get_json_params() ?: $request->get_params();
+		$result = LNKup_Booths::swap( absint( $body['booth_a'] ?? 0 ), absint( $body['booth_b'] ?? 0 ), absint( $request['id'] ) );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}

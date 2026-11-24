@@ -211,7 +211,7 @@ lnkup_t_same( array( $cat ), wp_get_object_terms( $opp2, 'lnkup_vendor_category'
 lnkup_t_same( 'Do you bring a "10x10" tent?', LNKup_Application_Questions::get_for_opportunity( $opp2 )[0]['label'] ?? '', 'application questions copied (quotes intact)' );
 lnkup_t_assert( (bool) get_post_meta( $opp2, '_lnkup_documents_required_to_apply', true ), 'documents-required gate copied' );
 
-$dup = LNKup_Organizer_Onboarding::duplicate_event( $event_id, array( 'event_date' => $future, 'event_name' => 'Activation Test Duplicate' ), $org );
+$dup = LNKup_Organizer_Onboarding::duplicate_event( $event_id, array( 'event_date' => $future, 'event_name' => 'Activation Test Duplicate', 'keep_location' => 1 ), $org );
 lnkup_t_assert( ! is_wp_error( $dup ), 'event duplicated' );
 $dup_opps = is_wp_error( $dup ) ? array() : array_map( 'intval', (array) ( $dup['opportunity_ids'] ?? array() ) );
 $posts    = array_merge( $posts, array( is_wp_error( $dup ) ? 0 : (int) $dup['event_id'] ), $dup_opps );

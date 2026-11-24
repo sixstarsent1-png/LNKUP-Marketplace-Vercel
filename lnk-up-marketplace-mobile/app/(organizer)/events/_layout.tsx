@@ -12,6 +12,8 @@ export default function OrganizerEventsLayout() {
     >
       <Stack.Screen name="index" />
       <Stack.Screen name="checkin" />
+      <Stack.Screen name="operations" />
+      <Stack.Screen name="booths" />
       <Stack.Screen name="[eventId]" />
     </Stack>
   )

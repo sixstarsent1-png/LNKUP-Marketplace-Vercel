@@ -29,6 +29,29 @@ class LNKup_Organizer_CRM_REST {
 	}
 
 	/**
+	 * Organizers, or event staff assigned to the event in the route (roster view).
+	 * The callbacks still check per-event access.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function event_roster_permission( WP_REST_Request $request ) {
+		return self::organizer_permission() || LNKup_Capabilities::staff_can( absint( $request['id'] ), 'view_roster' );
+	}
+
+	/**
+	 * Organizers, or staff allowed to check vendors in at the application's event.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function application_checkin_permission( WP_REST_Request $request ) {
+		if ( self::organizer_permission() ) {
+			return true;
+		}
+		$event_id = (int) get_post_meta( absint( $request['id'] ), '_lnkup_event_id', true );
+		return $event_id > 0 && LNKup_Capabilities::staff_can( $event_id, 'check_in' );
+	}
+
+	/**
 	 * Register routes.
 	 */
 	public static function register_routes() {
@@ -172,7 +195,7 @@ class LNKup_Organizer_CRM_REST {
 		register_rest_route( self::NS, '/crm/events/(?P<id>\d+)/roster', array(
 			'methods'  => 'GET',
 			'callback' => array( __CLASS__, 'event_roster' ),
-			'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+			'permission_callback' => array( __CLASS__, 'event_roster_permission' ),
 		) );
 
 		register_rest_route( self::NS, '/crm/events/(?P<id>\d+)/roster/bulk', array(
@@ -184,13 +207,13 @@ class LNKup_Organizer_CRM_REST {
 		register_rest_route( self::NS, '/crm/applications/(?P<id>\d+)/check-in', array(
 			'methods'  => 'POST',
 			'callback' => array( __CLASS__, 'check_in' ),
-			'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+			'permission_callback' => array( __CLASS__, 'application_checkin_permission' ),
 		) );
 
 		register_rest_route( self::NS, '/crm/applications/(?P<id>\d+)/no-show', array(
 			'methods'  => 'POST',
 			'callback' => array( __CLASS__, 'no_show' ),
-			'permission_callback' => array( __CLASS__, 'organizer_permission' ),
+			'permission_callback' => array( __CLASS__, 'application_checkin_permission' ),
 		) );
 
 		register_rest_route( self::NS, '/crm/dashboard/widgets', array(

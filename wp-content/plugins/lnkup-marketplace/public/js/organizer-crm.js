@@ -156,7 +156,8 @@
     });
   }
 
-  var crmState = { scope: 'discover', view: 'card', q: '', sort: 'score', city: '', category: '', verified: '' };
+  var initialScope = new URLSearchParams(window.location.search).get('scope');
+  var crmState = { scope: ['discover', 'my', 'imported'].indexOf(initialScope) !== -1 ? initialScope : 'discover', view: 'card', q: '', sort: 'score', city: '', category: '', verified: '' };
   var inviteOptionsCache = null;
   var listsCache = [];
 

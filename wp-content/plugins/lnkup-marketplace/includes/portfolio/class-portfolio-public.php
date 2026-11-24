@@ -347,7 +347,11 @@ class LNKup_Portfolio_Public {
 												<?php foreach ( $stop['opportunities'] as $opp ) : ?>
 													<li>
 														<span><?php echo esc_html( $opp['title'] ); ?></span>
-														<span><?php echo esc_html( $opp['vendor_fee'] > 0 ? '$' . number_format_i18n( $opp['vendor_fee'], 2 ) : __( 'Free', 'lnkup-marketplace' ) ); ?></span>
+														<?php if ( null === $opp['vendor_fee'] ) : ?>
+															<a class="lnkup-link" data-lnkup-gate="tour" href="<?php echo esc_url( LNKup_Access_Policy::guest_cta( 'pricing', (string) $tour['url'] )['sign_in_url'] ); ?>"><?php esc_html_e( 'Sign in to view pricing', 'lnkup-marketplace' ); ?></a>
+														<?php else : ?>
+															<span><?php echo esc_html( $opp['vendor_fee'] > 0 ? '$' . number_format_i18n( $opp['vendor_fee'], 2 ) : __( 'Free', 'lnkup-marketplace' ) ); ?></span>
+														<?php endif; ?>
 														<?php if ( $opp['application_status'] ) : ?>
 															<span class="lnkup-badge"><?php echo esc_html( ucwords( str_replace( '_', ' ', $opp['application_status'] ) ) ); ?></span>
 														<?php elseif ( $opp['is_open'] ) : ?>

@@ -18,7 +18,7 @@ class LNKup_Geocoder {
 	 *
 	 * @param string $address Full address.
 	 */
-	public static function geocode( $address ) {
+	public static function geocode( $address, $country_code = '' ) {
 		$address = trim( (string) $address );
 		if ( '' === $address ) {
 			return null;
@@ -32,6 +32,10 @@ class LNKup_Geocoder {
 				'lng' => (float) $cached['lng'],
 			);
 		}
+		// Failed lookups are not retried for a day, so a bad address never hammers the provider.
+		if ( $cached && self::STATUS_FAILED === $cached['status'] && ! empty( $cached['updated_at'] ) && strtotime( (string) $cached['updated_at'] ) > strtotime( current_time( 'mysql' ) ) - DAY_IN_SECONDS ) {
+			return null;
+		}
 
 		$transient_key = 'lnkup_geo_' . $hash;
 		$transient     = get_transient( $transient_key );
@@ -39,15 +43,20 @@ class LNKup_Geocoder {
 			return $transient;
 		}
 
-		$url = add_query_arg(
-			array(
-				'q'              => $address,
-				'format'         => 'json',
-				'limit'          => 1,
-				'addressdetails' => 0,
-			),
-			'https://nominatim.openstreetmap.org/search'
+		$query = array(
+			'q'              => $address,
+			'format'         => 'json',
+			'limit'          => 1,
+			'addressdetails' => 0,
 		);
+		$country_code = strtolower( (string) $country_code );
+		if ( '' === $country_code && preg_match( '/,\s*(usa|us|united states)$/i', $address ) ) {
+			$country_code = 'us';
+		}
+		if ( preg_match( '/^[a-z]{2}$/', $country_code ) ) {
+			$query['countrycodes'] = $country_code;
+		}
+		$url = add_query_arg( $query, 'https://nominatim.openstreetmap.org/search' );
 
 		$response = wp_remote_get(
 			$url,
@@ -159,6 +168,7 @@ class LNKup_Geocoder {
 			);
 		}
 
+		$street  = trim( (string) ( get_post_meta( $event_id, '_lnkup_address_line1', true ) ?: get_post_meta( $event_id, '_lnkup_venue_address', true ) ) );
 		$address = self::event_address_string( $event_id );
 		if ( '' === $address ) {
 			$city  = get_post_meta( $event_id, '_lnkup_city', true );
@@ -166,12 +176,17 @@ class LNKup_Geocoder {
 			$venue = get_post_meta( $event_id, '_lnkup_venue_name', true );
 			$address = trim( implode( ', ', array_filter( array( $venue, $city, $state, 'USA' ) ) ) );
 		}
+		$country = class_exists( 'LNKup_Location_Service' )
+			? LNKup_Location_Service::country_code( (string) get_post_meta( $event_id, '_lnkup_country', true ) )
+			: 'US';
 
-		$coords = self::geocode( $address );
+		$coords = self::geocode( $address, $country );
 		if ( $coords ) {
 			update_post_meta( $event_id, '_lnkup_lat', $coords['lat'] );
 			update_post_meta( $event_id, '_lnkup_lng', $coords['lng'] );
 			update_post_meta( $event_id, '_lnkup_geocode_status', self::STATUS_OK );
+			// Without a street address the point is the city, never an exact venue.
+			update_post_meta( $event_id, '_lnkup_location_precision', '' === $street ? 'city' : 'venue' );
 		} else {
 			update_post_meta( $event_id, '_lnkup_geocode_status', self::STATUS_FAILED );
 		}

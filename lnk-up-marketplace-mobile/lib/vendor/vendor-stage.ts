@@ -1,5 +1,6 @@
 import type { VendorRequest } from "@/lib/api/vendor-requests"
 import { vendorLifecycleBucket } from "@/lib/status/application-status"
+import { eventStateOf, isConfirmed, isEventOver, isUpcomingPaymentDue } from "@/lib/vendor/booking-lifecycle"
 
 /** Where the vendor is in the marketplace journey; drives what Home leads with. */
 export type VendorStage = "new" | "awaiting" | "action" | "confirmed" | "exploring"
@@ -23,8 +24,9 @@ function isoPlusDays(now: Date, days: number): string {
   return isoToday(next)
 }
 
+/** End-date aware (server `event_state` when present). */
 export function isEventPast(request: VendorRequest, now: Date = new Date()): boolean {
-  return Boolean(request.eventDateIso) && (request.eventDateIso as string) < isoToday(now)
+  return isEventOver(request, isoToday(now))
 }
 
 export function lifecycleOf(request: VendorRequest, now: Date = new Date()) {
@@ -36,7 +38,7 @@ export function eventDayBookings(requests: VendorRequest[], now: Date = new Date
   const today = isoToday(now)
   const tomorrow = isoPlusDays(now, 1)
   return requests
-    .filter((r) => r.status === "paid" && (r.eventDateIso === today || r.eventDateIso === tomorrow))
+    .filter((r) => isConfirmed(r) && (r.eventDateIso === today || r.eventDateIso === tomorrow || eventStateOf(r, today) === "active"))
     .sort((a, b) => (a.eventDateIso ?? "").localeCompare(b.eventDateIso ?? ""))
 }
 
@@ -58,11 +60,11 @@ export function vendorNextStep(
   const reply = live.find((r) => r.status === "info_requested")
   if (reply) return { stage: "action", step: { kind: "reply", request: reply } }
 
-  const pay = live.find((r) => r.status === "payment_required" || (r.status === "approved" && Boolean(r.paymentId)))
+  const pay = live.find((r) => isUpcomingPaymentDue(r, isoToday(now)))
   if (pay) return { stage: "action", step: { kind: "pay", request: pay } }
 
   const confirmed = live
-    .filter((r) => r.status === "paid")
+    .filter((r) => isConfirmed(r) && Boolean(r.eventDateIso))
     .sort((a, b) => (a.eventDateIso ?? "9999").localeCompare(b.eventDateIso ?? "9999"))[0]
   if (confirmed) return { stage: "confirmed", step: { kind: "prepare", request: confirmed } }
 

@@ -880,6 +880,7 @@ class LNKup_Match_Service {
 		$where         = array( 'r.opportunity_id IN (' . implode( ',', $opp_ids ) . ')', 'r.eligible = 1', "v.status = 'active'" );
 		$params        = array();
 		$where[]       = $related_users ? '(v.discoverable = 1 OR v.user_id IN (' . implode( ',', $related_users ) . '))' : 'v.discoverable = 1';
+		$where[]       = 'v.user_id <> ' . (int) $organizer_id;
 
 		if ( ! empty( $args['category'] ) ) {
 			$where[]  = 'v.profile_id IN (SELECT profile_id FROM ' . LNKup_Match_Tables::vendor_categories_table() . ' WHERE term_id = %d)';
@@ -1070,7 +1071,7 @@ class LNKup_Match_Service {
 	public static function organizer_reasons( array $reasons ) {
 		$out = array();
 		foreach ( $reasons as $reason ) {
-			$value = (string) ( $reason['value'] ?? '' );
+			$value = wp_specialchars_decode( (string) ( $reason['value'] ?? '' ), ENT_QUOTES );
 			switch ( $reason['code'] ?? '' ) {
 				case 'category':
 					$out[] = sprintf( __( 'Sells in your %s category', 'lnkup-marketplace' ), $value );

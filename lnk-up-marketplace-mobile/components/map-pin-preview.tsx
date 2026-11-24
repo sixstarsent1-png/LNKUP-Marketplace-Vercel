@@ -2,7 +2,9 @@ import { Platform, Pressable, StyleSheet, View } from "react-native"
 import { AppText as Text } from "@/components/ui/app-text"
 import { router, type Href } from "expo-router"
 
+import { formatMoney } from "@/lib/api/format-money"
 import type { MarketplaceMapPin } from "@/lib/api/map-pins"
+import { deadlineLabel } from "@/lib/vendor/event-group-presentation"
 import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 export function MapPinPreview({
@@ -15,6 +17,9 @@ export function MapPinPreview({
   testID?: string
 }) {
   const location = [pin.city, pin.state].filter(Boolean).join(", ")
+  const options = pin.optionCount ?? 1
+  const deadline = deadlineLabel(pin.eventDate?.slice(0, 10))
+  const href = (pin.eventId ? `/event/${pin.eventId}?option=${pin.opportunityId}` : `/opportunity/${pin.opportunityId}`) as Href
 
   return (
     <View style={styles.card} testID={testID}>
@@ -22,32 +27,28 @@ export function MapPinPreview({
         {pin.title}
       </Text>
       {location ? <Text style={styles.meta}>{location}</Text> : null}
-      {pin.eventDate ? <Text style={styles.meta}>{pin.eventDate}</Text> : null}
+      {deadline ? <Text style={styles.meta}>{deadline.label}</Text> : null}
       <View style={styles.row}>
-        {pin.vendorFee != null ? (
-          <Text style={styles.badge}>${pin.vendorFee} fee</Text>
+        {pin.vendorFee != null && pin.vendorFee > 0 ? (
+          <Text style={styles.badge}>
+            {options > 1 ? "From " : ""}
+            {formatMoney(pin.vendorFee)}
+          </Text>
         ) : null}
-        {pin.category ? <Text style={styles.badgeMuted}>{pin.category}</Text> : null}
-        {pin.spotsRemaining != null ? (
-          <Text style={styles.badgeMuted}>{pin.spotsRemaining} spots</Text>
+        {options > 1 ? (
+          <Text style={styles.badgeMuted}>{options} vendor options</Text>
+        ) : pin.category ? (
+          <Text style={styles.badgeMuted}>{pin.category}</Text>
         ) : null}
       </View>
       <View style={styles.actions}>
         <Pressable
           style={styles.primary}
-          onPress={() => router.push(`/opportunity/${pin.opportunityId}` as Href)}
+          onPress={() => router.push(href)}
           accessibilityRole="button"
           testID={`${testID}-view`}
         >
-          <Text style={styles.primaryText}>View</Text>
-        </Pressable>
-        <Pressable
-          style={styles.secondary}
-          onPress={() => router.push(`/apply/${pin.opportunityId}` as Href)}
-          accessibilityRole="button"
-          testID={`${testID}-apply`}
-        >
-          <Text style={styles.secondaryText}>Apply</Text>
+          <Text style={styles.primaryText}>{options > 1 ? "View vendor options" : "View event"}</Text>
         </Pressable>
         {onClose ? (
           <Pressable
@@ -133,18 +134,6 @@ const styles = StyleSheet.create({
   },
   primaryText: {
     color: colors.white,
-    fontWeight: "700",
-    fontSize: typeScale.footnote,
-  },
-  secondary: {
-    flex: 1,
-    backgroundColor: colors.lime,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.sm,
-    alignItems: "center",
-  },
-  secondaryText: {
-    color: colors.black,
     fontWeight: "700",
     fontSize: typeScale.footnote,
   },

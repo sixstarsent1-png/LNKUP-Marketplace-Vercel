@@ -440,8 +440,10 @@ function UnlockedPassBody({
   return (
     <>
       <View style={styles.unlockedHero} onLayout={(event) => onHeroLayout?.(event.nativeEvent.layout.height)}>
-        <View style={styles.readyBadge}>
-          <Text style={styles.readyBadgeText}>Ready</Text>
+        <View style={[styles.readyBadge, pass.credentialState !== "active" && styles.inactiveBadge]}>
+          <Text style={styles.readyBadgeText}>
+            {pass.credentialState === "ended" ? "Event ended" : pass.credentialState === "revoked" ? "Not valid" : "Ready"}
+          </Text>
         </View>
         <Text style={styles.unlockedTitle} numberOfLines={3}>
           {pass.eventName}
@@ -465,6 +467,12 @@ function UnlockedPassBody({
             {pass.checkInCode ? <Text style={styles.checkInCode}>{pass.checkInCode}</Text> : null}
             <Text style={styles.checkInHint}>Show this at check-in</Text>
           </View>
+        ) : pass.credentialState === "ended" || pass.credentialState === "revoked" ? (
+          <Text style={styles.unlockedMeta} testID="pass-inactive-note">
+            {pass.credentialState === "ended"
+              ? "This event has ended. The pass is kept as a record and can't be used to check in."
+              : "This pass is no longer valid. Contact the organizer if you think this is a mistake."}
+          </Text>
         ) : null}
       </View>
 
@@ -762,6 +770,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
+  },
+  inactiveBadge: {
+    backgroundColor: colors.gray200,
   },
   readyBadgeText: {
     fontSize: typeScale.micro,

@@ -55,6 +55,14 @@ function referralEarningsLabel(r: {
   return `Earns until ${formatDate(r.expires_at)} · ${money(r.earned_total)}`
 }
 
+/** Organizers earn a share of LNKup's fee as account credit; it is never paid out as cash. */
+export function organizerRewardCopy(data: Pick<OrganizerRecruitDashboard, "percent" | "months">): string {
+  const percent = Number(data.percent)
+  const months = Number(data.months)
+  const share = percent > 0 ? `${percent}% of LNKup’s fee${months > 0 ? ` for ${months} months` : ""}` : "a share of LNKup’s fee"
+  return `Earn ${share} on bookings from people you invite, paid as LNKup credit. Credit can’t be withdrawn to your bank.`
+}
+
 function rewardCopy(data: OrganizerRecruitDashboard): string {
   const percent = Number(data.percent)
   const months = Number(data.months)
@@ -70,7 +78,7 @@ function rewardCopy(data: OrganizerRecruitDashboard): string {
 /**
  * Shared Referral Invites screen (vendor + organizer).
  */
-export function ReferralInvitesScreen() {
+export function ReferralInvitesScreen({ audience = "vendor" }: { audience?: "vendor" | "organizer" } = {}) {
   const { auth } = useAuth()
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -153,7 +161,11 @@ export function ReferralInvitesScreen() {
   return (
     <Screen
       title="Referral Invites"
-      subtitle="Invite organizers or vendors · earn LNKup credit toward booth fees"
+      subtitle={
+        audience === "organizer"
+          ? "Invite organizers or vendors · earn a share of LNKup’s fee as credit"
+          : "Invite organizers or vendors · earn LNKup credit toward booth fees"
+      }
       refreshing={refreshing}
       onRefresh={() => void load("refresh")}
     >
@@ -180,7 +192,7 @@ export function ReferralInvitesScreen() {
             <Text style={styles.heroTitle}>
               {data.headline || "Invite organizers or vendors"}
             </Text>
-            <Text style={styles.heroBody}>{rewardCopy(data)}</Text>
+            <Text style={styles.heroBody}>{audience === "organizer" ? organizerRewardCopy(data) : rewardCopy(data)}</Text>
             {data.message ? <Text style={styles.heroNote}>{data.message}</Text> : null}
           </View>
 

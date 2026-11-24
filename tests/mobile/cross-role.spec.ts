@@ -129,12 +129,16 @@ test.describe('Cross-role failure and session handling', () => {
       route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ code: 'server_error', message: 'boom' }) }),
     );
     await page.goto(`/(organizer)/vendors?event=${eventId}&tab=requests&filter=review`);
-    const approve = page.getByRole('button', { name: /^Approve / }).first();
+    const row = page.locator('[data-testid^="organizer-request-"]').first();
+    await expect(row).toBeVisible({ timeout: 45_000 });
+    await row.click();
+    const approve = page.getByTestId('review-approve');
     await expect(approve).toBeVisible({ timeout: 45_000 });
     await approve.click();
+    await expect(page.getByTestId('approve-note')).toBeVisible({ timeout: 45_000 });
     await page.getByRole('button', { name: 'Approve vendor' }).click();
     await expect(page.getByText(/Couldn't update this request/)).toBeVisible({ timeout: 45_000 });
-    await expect(page.getByText(/approved — we've asked them to pay/)).toHaveCount(0);
+    await expect(page.getByText(/is approved\. We've sent the invoice/)).toHaveCount(0);
     await expect(page.getByText('boom')).toHaveCount(0);
   });
 

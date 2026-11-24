@@ -28,7 +28,7 @@ test.describe('Vendor dashboard UI', () => {
       await page.goto('/vendor-dashboard/');
       const sidebar = page.locator('#lnkup-sidebar');
       await expect(sidebar).toBeVisible();
-      for (const name of [/^home$/i, /find events/i, /^requests/i, /^wallet$/i]) {
+      for (const name of [/^home$/i, /^explore$/i, /bookings/i, /^wallet$/i]) {
         await expect(sidebar.getByRole('link', { name })).toBeVisible();
       }
       await expect(page.locator('.lnkup-dashboard__nav-more').first()).toBeVisible();
@@ -43,7 +43,7 @@ test.describe('Vendor dashboard UI', () => {
     test('home leads with welcome, next step, and linked metrics', async ({ page }) => {
       await page.goto('/vendor-dashboard/');
       await expect(page.getByTestId('lnkup-vendor-home-welcome')).toBeVisible();
-      await expect(page.getByRole('heading', { level: 1, name: /welcome back/i })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: /get ready for your next event|your vendor business, all in one place|find your next opportunity/i })).toBeVisible();
       await expect(page.getByTestId('lnkup-action-center')).toBeVisible();
       const stats = page.getByTestId('lnkup-vendor-home-stats');
       await expect(stats.getByRole('link', { name: /payments due/i })).toHaveAttribute('href', /app_filter=pay-now/);
@@ -51,7 +51,7 @@ test.describe('Vendor dashboard UI', () => {
 
     test('each view has its heading and highlights its nav link', async ({ page }) => {
       const views = [
-        { query: 'applications', heading: /^requests$/i, link: 'Requests' },
+        { query: 'applications', heading: /bookings/i, link: 'Bookings' },
         { query: 'documents', heading: /^documents$/i, link: 'Documents' },
         { query: 'payments', heading: /^wallet$/i, link: 'Wallet' },
         { query: 'operations', heading: /event operations/i, link: 'Event Operations' },
@@ -85,7 +85,7 @@ test.describe('Vendor dashboard UI', () => {
       await page.goto('/opportunities/');
       await expect(page.locator('#lnkup-sidebar')).toBeVisible();
       await expect(page.locator('#lnkup-marketplace')).toBeVisible();
-      await expect(page.locator('#lnkup-sidebar').getByRole('link', { name: /find events/i })).toHaveClass(/is-active/);
+      await expect(page.locator('#lnkup-sidebar').getByRole('link', { name: /^explore$/i })).toHaveClass(/is-active/);
     });
 
     test('mobile bottom navigation and sidebar toggle work', async ({ page }) => {

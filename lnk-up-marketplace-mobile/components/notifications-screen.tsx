@@ -26,6 +26,7 @@ import { BackLink } from "@/components/ui/back-link"
 import { showToast } from "@/lib/feedback/feedback"
 import { inAppHrefForNotification } from "@/lib/push/notification-routing"
 import { getUnreadCount, markAllRead, markRead } from "@/lib/notifications/read-state"
+import { groupRepeatedNotifications, type NotificationRow } from "@/lib/notifications/group-notifications"
 import { clearAppBadge, syncAppBadge } from "@/lib/push/notifications"
 import {
   inboxTabsFor,
@@ -181,13 +182,22 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
     return getUnreadCount(items)
   }, [items, source, tab, tabCounts])
 
-  async function handleOpen(item: LnkupNotification) {
-    if (!item.readAt) {
-      setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, readAt: new Date().toISOString() } : n)))
-      if (userId != null) void markRead(userId, item.id).catch(() => undefined)
-      void markInboxRead(item.id, auth)
-        .then(() => refreshCounts())
-        .catch(() => undefined)
+  async function handleOpen(item: NotificationRow) {
+    if (item.unreadCount > 0) {
+      const ids = new Set(item.memberIds)
+      const now = new Date().toISOString()
+      setItems((prev) => prev.map((n) => (ids.has(n.id) && !n.readAt ? { ...n, readAt: now } : n)))
+      if (item.memberIds.length === 1) {
+        if (userId != null) void markRead(userId, item.id).catch(() => undefined)
+        void markInboxRead(item.id, auth)
+          .then(() => refreshCounts())
+          .catch(() => undefined)
+      } else {
+        if (userId != null) void markAllRead(userId, item.memberIds).catch(() => undefined)
+        void markInboxReadAll(item.memberIds, auth)
+          .then(() => refreshCounts())
+          .catch(() => undefined)
+      }
     }
     if (item.notificationId) void trackNotificationOpened(item.notificationId, auth)
     const href = inAppHrefForNotification(item, session?.user.roles)
@@ -223,7 +233,8 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
     }
   }
 
-  const rows = !loading && !error ? items : EMPTY_NOTIFICATIONS
+  const grouped = useMemo(() => groupRepeatedNotifications(items), [items])
+  const rows = !loading && !error ? grouped : EMPTY_NOTIFICATIONS
   const emptyCopy = EMPTY_COPY[tab]
 
   return (
@@ -249,8 +260,9 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
       keyExtractor={(item) => item.id}
       onEndReached={() => void handleLoadMore()}
       renderItem={(item) => {
-        const unread = !item.readAt
+        const unread = item.unreadCount > 0
         const when = relativeTime(item.createdAt)
+        const repeats = item.memberIds.length - 1
         return (
           <Pressable
             style={[styles.card, unread && styles.cardUnread]}
@@ -269,6 +281,11 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
             </View>
             <Text style={styles.cardTitle}>{item.title}</Text>
             {item.message ? <Text style={styles.cardBody}>{item.message}</Text> : null}
+            {repeats > 0 ? (
+              <Text style={styles.time}>
+                Repeated {repeats} more time{repeats === 1 ? "" : "s"} · showing the latest
+              </Text>
+            ) : null}
             {item.actionLabel ? <Text style={styles.action}>{item.actionLabel} →</Text> : null}
           </Pressable>
         )
@@ -323,7 +340,7 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
   )
 }
 
-const EMPTY_NOTIFICATIONS: LnkupNotification[] = []
+const EMPTY_NOTIFICATIONS: NotificationRow[] = []
 
 const EMPTY_COPY: Record<InboxTab, string> = {
   all: "Updates from applications, payments, and events will show here.",

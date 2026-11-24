@@ -35,11 +35,11 @@ export function NextStepsCard({ role }: { role: "vendor" | "organizer" }) {
       <Text style={styles.heading} accessibilityRole="header">
         {role === "organizer" ? "Requires attention" : "Your next steps"}
       </Text>
-      {steps.slice(0, 5).map((step) => {
+      {steps.slice(0, 5).map((step, index) => {
         const href = safeDestination(step.deepLink, session?.user.roles)
         return (
           <Pressable
-            key={step.key}
+            key={`${step.key}:${step.context ?? ""}:${index}`}
             style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             onPress={() => {
               if (href) router.push(href as never)

@@ -159,7 +159,14 @@ export type OrganizerPayout = {
   failureReason?: string
   createdAt?: string
   paidAt?: string
+  updatedAt?: string
   canCancel: boolean
+  /** LNKup payout reference ("LNK-PO-12"). */
+  reference: string
+  /** stripe_connect_payout | stripe_connect | manual */
+  provider?: string
+  /** Stripe payout or transfer id, when one exists. */
+  providerRef?: string
 }
 
 export type OrganizerFinancialActivityItem = {
@@ -182,6 +189,9 @@ export type OrganizerEventMoneySummary = {
   paymentRequiredCount?: number
   paidVendorCount?: number
   unpaidVendorCount?: number
+  /** Open invoices (pending, failed, partially paid, overdue); absent on older servers. */
+  openInvoiceCount?: number
+  refunds?: number
   currency?: string
 }
 
@@ -391,7 +401,11 @@ export function mapOrganizerPayouts(raw: unknown): OrganizerPayout[] {
         failureReason: row.failure_reason ? String(row.failure_reason) : undefined,
         createdAt: row.created_at ? String(row.created_at) : undefined,
         paidAt: row.paid_at ? String(row.paid_at) : undefined,
+        updatedAt: row.updated_at ? String(row.updated_at) : undefined,
         canCancel: status === "requested" || status === "approved",
+        reference: row.reference ? String(row.reference) : `LNK-PO-${String(row.id)}`,
+        provider: row.provider ? String(row.provider) : undefined,
+        providerRef: row.provider_ref ? String(row.provider_ref) : undefined,
       },
     ]
   })
@@ -699,8 +713,10 @@ export function mapOrganizerEventMoney(
         stats.collected,
         stats.gross_revenue,
       ) ?? 0,
+    // Open invoices only when the server reports them; older servers fall back to pending_revenue.
     pending:
       pickNumber(
+        d.outstanding_receivables,
         d.pending_revenue,
         d.pending,
         stats.pending_revenue,
@@ -708,6 +724,8 @@ export function mapOrganizerEventMoney(
         stats.outstanding,
         d.outstanding,
       ) ?? 0,
+    openInvoiceCount: pickNumber(d.outstanding_invoice_count),
+    refunds: pickNumber(d.refunds),
     paymentRequiredCount: pickNumber(
       stats.payment_required,
       stats.payment_required_count,

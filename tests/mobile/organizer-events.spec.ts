@@ -18,15 +18,12 @@ test.describe('Organizer events', () => {
     await appLogin(page, organizerUser);
   });
 
-  test('Home counts match live application statuses', async ({ page }, testInfo) => {
-    const { body } = await restAs(page, organizerUser, 'GET', '/applications/organizer');
-    const items = ((body as { items?: Array<{ status?: string }> })?.items ?? []) as Array<{ status?: string }>;
-    const due = items.filter((i) => i.status === 'payment_required' || i.status === 'approved').length;
-    await expect(page.getByText('Payment due').first()).toBeVisible();
-    const tile = page.getByRole('button', { name: new RegExp(`Payment due`) }).first();
-    if (await tile.isVisible().catch(() => false)) {
-      await expect(tile).toContainText(String(due));
-    }
+  test('Home KPIs match the server home summary', async ({ page }, testInfo) => {
+    const { body } = await restAs(page, organizerUser, 'GET', '/organizer/home-summary');
+    const kpis = (body as { kpis?: Record<string, { value: number }> })?.kpis ?? {};
+    await expect(page.getByTestId('organizer-home')).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByRole('button', { name: new RegExp(`^Approved, unpaid: ${kpis.approved_unpaid?.value ?? 0},`) })).toBeVisible();
+    await expect(page.getByRole('button', { name: new RegExp(`^To review: ${kpis.awaiting_review?.value ?? 0},`) })).toBeVisible();
     await snap(page, 'home', testInfo);
   });
 
@@ -37,8 +34,8 @@ test.describe('Organizer events', () => {
     });
     await page.goto('/(organizer)/events');
     await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Manage E2E Summer Market/ })).toBeVisible();
-    for (const chip of ['All', 'Live', 'Drafts', 'Past']) {
+    await expect(page.getByRole('button', { name: /^E2E Summer Market\./ })).toBeVisible({ timeout: 45_000 });
+    for (const chip of ['All', 'Upcoming', 'Applications open', 'Drafts', 'Past']) {
       await expect(page.getByRole('button', { name: new RegExp(`^${chip}`) }).first()).toBeVisible();
     }
     expect(rosterCalls, 'no per-event roster requests on the list').toHaveLength(0);
@@ -48,20 +45,22 @@ test.describe('Organizer events', () => {
   test('the event workspace splits into sections and keeps real event details', async ({ page }, testInfo) => {
     await page.goto(`/(organizer)/events/${eventId}`);
     const tabs = page.getByTestId('event-workspace-tabs');
-    await expect(tabs).toBeVisible();
-    for (const name of ['Overview', 'Slots', 'Applications', 'Vendors', 'Payments', 'Day-of', 'Packet']) {
+    await expect(tabs).toBeVisible({ timeout: 45_000 });
+    for (const name of ['Overview', 'Vendors', 'Inventory', 'Money', 'Operations']) {
       await expect(tabs.getByRole('tab', { name: new RegExp(`^${name}`) })).toBeVisible();
     }
+    await expect(page.getByText(/\d{4}-\d{2}-\d{2}/)).toHaveCount(0);
     await page.getByRole('button', { name: 'Edit event details' }).click();
     await expect(page.getByLabel('Venue')).toHaveValue('E2E Park');
     await expect(page.getByLabel('Description')).not.toHaveValue('');
     await snap(page, 'workspace', testInfo);
 
-    await tabs.getByRole('tab', { name: /^Slots/ }).click();
+    await tabs.getByRole('tab', { name: /^Inventory/ }).click();
     await expect(page.getByText(/held · .* available of/).first()).toBeVisible();
-    await tabs.getByRole('tab', { name: /^Payments/ }).click();
+    await tabs.getByRole('tab', { name: /^Money/ }).click();
     await expect(page.getByText('Outstanding')).toBeVisible();
-    await tabs.getByRole('tab', { name: /^Packet/ }).click();
+    await tabs.getByRole('tab', { name: /^Operations/ }).click();
+    await page.getByRole('button', { name: /^Vendor packet/ }).click();
     await expect(page.getByTestId('packet-form')).toBeVisible();
   });
 

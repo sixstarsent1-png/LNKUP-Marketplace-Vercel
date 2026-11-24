@@ -26,7 +26,7 @@ import { showToast } from "@/lib/feedback/feedback"
 import { colors, radii, spacing, typeScale } from "@/lib/theme"
 
 export default function OrganizerEventCommsScreen() {
-  const { eventId } = useLocalSearchParams<{ eventId: string }>()
+  const { eventId, group: groupParam } = useLocalSearchParams<{ eventId: string; group?: string }>()
   const id = String(eventId ?? "")
   const { auth } = useAuth()
   const [loading, setLoading] = useState(true)
@@ -53,13 +53,14 @@ export default function OrganizerEventCommsScreen() {
       setGroups(aud.groups)
       setTemplates(tpl)
       setHistory(hist)
-      setGroup((current) => current || aud.groups.find((g) => g.count > 0)?.key || "")
+      const requested = typeof groupParam === "string" ? aud.groups.find((g) => g.key === groupParam && g.count > 0)?.key : undefined
+      setGroup((current) => current || requested || aud.groups.find((g) => g.count > 0)?.key || "")
     } catch (err) {
       setError(appErrorFromWp(err))
     } finally {
       setLoading(false)
     }
-  }, [auth, id])
+  }, [auth, id, groupParam])
 
   useEffect(() => {
     void load()

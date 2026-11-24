@@ -66,6 +66,43 @@ export async function addVendorNote(
   })
 }
 
+export type VendorList = { id: string; name: string; count: number }
+
+const LISTS_KEY = "organizer.lists:"
+
+/** The organizer's private vendor lists (CRM). */
+export async function fetchVendorLists(auth: WpAuth, options: CachedRequestOptions = {}): Promise<VendorList[]> {
+  if (!isLiveApiEnabled()) return []
+  return cachedRequest(
+    `${LISTS_KEY}${auth.username}`,
+    async () => {
+      const data = await wpFetchJson<{ items?: Array<{ id?: number; name?: string; count?: number }> }>("/crm/lists", { auth })
+      return (data.items ?? []).map((row) => ({ id: String(row.id ?? ""), name: String(row.name ?? "List"), count: Number(row.count ?? 0) }))
+    },
+    options,
+  )
+}
+
+/** Profile IDs on one list. */
+export async function fetchVendorListMembers(listId: string, auth: WpAuth): Promise<string[]> {
+  if (!isLiveApiEnabled()) return []
+  const data = await wpFetchJson<{ items?: Array<number | { id?: number; profile_id?: number }> }>(`/crm/lists/${listId}/vendors`, { auth })
+  return (data.items ?? []).map((row) => String(typeof row === "number" ? row : (row.profile_id ?? row.id ?? ""))).filter(Boolean)
+}
+
+export async function createVendorList(name: string, auth: WpAuth): Promise<string> {
+  const data = await wpFetchJson<{ id?: number }>("/crm/lists", { method: "POST", auth, body: { name } })
+  invalidateCache(LISTS_KEY)
+  return String(data.id ?? "")
+}
+
+export async function setVendorOnList(listId: string, profileId: string, onList: boolean, auth: WpAuth): Promise<void> {
+  await wpFetchJson(`/crm/lists/${listId}/vendors`, onList
+    ? { method: "POST", auth, body: { profile_id: Number(profileId) } }
+    : { method: "DELETE", auth, query: { profile_id: profileId } })
+  invalidateCache(LISTS_KEY)
+}
+
 const INVITES_KEY = "organizer.invites:"
 
 /** Invites this organizer has sent, newest first, with their response status. */

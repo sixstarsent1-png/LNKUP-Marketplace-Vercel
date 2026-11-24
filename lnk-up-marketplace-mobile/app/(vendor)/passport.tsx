@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams, type Href } from "expo-router"
 import * as DocumentPicker from "expo-document-picker"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Image, Share, StyleSheet, Switch, TextInput, View } from "react-native"
+import { Share, StyleSheet, Switch, TextInput, View } from "react-native"
+import { Image } from "expo-image"
 
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { Screen } from "@/components/screen"

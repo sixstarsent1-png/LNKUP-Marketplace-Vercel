@@ -6,8 +6,33 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
-**Plugin version:** 12.37.0 (lnkup-communications 1.4.0)  
+**Plugin version:** 12.38.0 (lnkup-communications 1.4.0)  
 **Theme version:** 1.7.0
+
+### Organizer Experience OS 2.0 (marketplace 12.38.0)
+
+Reference: [organizer-experience-v2/RESULTS.md](organizer-experience-v2/RESULTS.md) (audit, route map, design system, data integrity, results).
+
+- **Design layer:** shared `lnkup-os.css` / `lnkup-os.js` (`LNKup_OS_UI`) used by vendor and organizer; `organizer-os.css` / `organizer-os.js`; grouped organizer navigation (Workspace, Vendor Management, Business, Organization).
+- **Contracts:** `LNKup_Organizer_Presentation` (canonical title and place, capacity = confirmed / held / open, event money, portfolio rows, action queue); `GET /organizer/portfolio`, `GET /organizer/events/{id}/summary`.
+- **Screens:** Home command center; Events table/grid with filters and a location-required Duplicate; event workspace (Overview, Inventory drawer with capacity guard, Applications drawer with prev/next, Marketing); Money tabs with a reconciliation flow strip; lifecycle Operations with grouped compliance; booth table with assign / unassign / swap and bulk create; map start screen and publish warnings; tour attach; Settings hub.
+- **New routes:** `POST /portfolio/tours/{id}/attach`, `POST /operations/events/{id}/booths/{booth_id}/unassign`, `POST /operations/events/{id}/booths/swap`.
+- **Fixes:** duplicate events no longer inherit the source city; organizer-safe weather copy; CSV formula injection; location field no longer swallows a submit made before its lookup finishes.
+- **Mobile:** organizer events and event detail consume the portfolio / summary contracts (capacity bar, canonical place, gross labels).
+- **Tests:** Playwright `organizer-os.spec.ts` 18/18; organizer and vendor regression with only the pre-existing, environment-caused failures; Expo Jest 245/245.
+
+### Mobile Vendor OS 2.0 (marketplace changes ship with the next marketplace version; mobile is OTA-only)
+
+Reference: [mobile-vendor-v2/RESULTS.md](mobile-vendor-v2/RESULTS.md) (audit, data integrity, design system, release and rollback).
+
+- **Backend (additive):**
+  - `LNKup_Vendor_Booking_Contract`: event resolution (live, then the opportunity's event, then a snapshot), end-date-aware `event_state`, separated application, booking, payment and credential states, `payment_context`, and timeline.
+  - `LNKup_Event_Groups`: `group_by=event` search and sections, and `GET /marketplace/events/{id}`.
+  - New routes `GET /applications/vendor/{id}` and `GET /financial/transactions/{id}`.
+  - Receipts now include `payment_status`.
+  - Repair CLI: `wp lnkup bookings repair-events`.
+- **Mobile:** one card per event (Explore, Home, Saved), vendor event detail with an option selector, lifecycle Home (Action Center and next-event spotlight), Bookings segments by event state, a ledger-based Wallet with transaction and receipt screens, pass credential states, a Profile hub (tab renamed from "Passport"), and grouped notification repeats.
+- **Tests:** PHP `mobile-vendor-contract-test` 44 assertions; Expo Jest 242/242; Playwright `tests/mobile/vendor-os-v2.spec.ts` 7/7 and `vendor.spec.ts` 8/8; 68 screenshots at four viewports with no overflow.
 
 ### Marketing, SEO & Distribution OS (marketplace 12.37.0, lnkup-communications 1.4.0)
 

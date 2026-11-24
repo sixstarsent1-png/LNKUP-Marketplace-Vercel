@@ -1,0 +1,274 @@
+{
+  "eventId": "968",
+  "screens": {
+    "home": {
+      "url": "/organizer-dashboard/?view=home",
+      "settledMs": 5169,
+      "requests": 1,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/crm/dashboard/widgets",
+          "ms": 2462
+        }
+      ]
+    },
+    "events": {
+      "url": "/organizer-dashboard/?view=events",
+      "settledMs": 2531,
+      "requests": 0,
+      "calls": []
+    },
+    "applications": {
+      "url": "/organizer-dashboard/?view=applications",
+      "settledMs": 6093,
+      "requests": 0,
+      "calls": []
+    },
+    "vendors": {
+      "url": "/organizer-dashboard/?view=vendors",
+      "settledMs": 8263,
+      "requests": 3,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/match/organizer/events/1762/recruitment",
+          "ms": 1731
+        },
+        {
+          "url": "/wp-json/lnkup/v1/match/organizer/events/1762/vendors?exclude_applied=1",
+          "ms": 1731
+        },
+        {
+          "url": "/wp-json/lnkup/v1/crm/vendors?scope=discover&view=card&q=&sort=score&city=&category=",
+          "ms": 2202
+        }
+      ]
+    },
+    "lists": {
+      "url": "/organizer-dashboard/?view=lists",
+      "settledMs": 9408,
+      "requests": 1,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/crm/lists",
+          "ms": 3662
+        }
+      ]
+    },
+    "invites": {
+      "url": "/organizer-dashboard/?view=invites",
+      "settledMs": 4117,
+      "requests": 1,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/crm/invites/list",
+          "ms": 1739
+        }
+      ]
+    },
+    "money": {
+      "url": "/organizer-dashboard/?view=financial",
+      "settledMs": 5304,
+      "requests": 7,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/financial/connect/status?role=organizer",
+          "ms": 829
+        },
+        {
+          "url": "/wp-json/lnkup/v1/financial/organizer-balances?role=organizer",
+          "ms": 836
+        },
+        {
+          "url": "/wp-json/lnkup/v1/financial/activity?limit=8&role=organizer",
+          "ms": 835
+        },
+        {
+          "url": "/wp-json/lnkup/v1/financial/dashboard?role=organizer",
+          "ms": 861
+        },
+        {
+          "url": "/wp-json/lnkup/v1/financial/organizer-balances?role=organizer",
+          "ms": 1625
+        },
+        {
+          "url": "/wp-json/lnkup/v1/financial/connect/status?role=organizer",
+          "ms": 1628
+        },
+        {
+          "url": "/wp-json/lnkup/v1/financial/dashboard?role=organizer",
+          "ms": 1664
+        }
+      ]
+    },
+    "operations": {
+      "url": "/organizer-dashboard/?view=operations",
+      "settledMs": 6340,
+      "requests": 0,
+      "calls": []
+    },
+    "marketing": {
+      "url": "/organizer-dashboard/?view=marketing",
+      "settledMs": 14915,
+      "requests": 2,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/organizer/marketing/context",
+          "ms": 5516
+        },
+        {
+          "url": "/wp-json/lnkup/v1/organizer/marketing/links?event_id=968",
+          "ms": 3827
+        }
+      ]
+    },
+    "intelligence": {
+      "url": "/organizer-dashboard/?view=intelligence",
+      "settledMs": 10703,
+      "requests": 1,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/intelligence/dashboard",
+          "ms": 4409
+        }
+      ]
+    },
+    "tours": {
+      "url": "/organizer-dashboard/?view=tours",
+      "settledMs": 12311,
+      "requests": 1,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/portfolio/overview",
+          "ms": 6771
+        }
+      ]
+    },
+    "team": {
+      "url": "/organizer-dashboard/?view=team",
+      "settledMs": 9080,
+      "requests": 3,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/org/team",
+          "ms": 1765
+        },
+        {
+          "url": "/wp-json/lnkup/v1/organizer/verification",
+          "ms": 2858
+        },
+        {
+          "url": "/wp-json/lnkup/v1/org/team/audit?per_page=25&owner_id=292",
+          "ms": 1989
+        }
+      ]
+    },
+    "profile": {
+      "url": "/organizer-dashboard/?view=profile",
+      "settledMs": 5688,
+      "requests": 0,
+      "calls": []
+    },
+    "settings": {
+      "url": "/organizer-dashboard/?view=settings",
+      "settledMs": 10055,
+      "requests": 1,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/crm/dashboard/widgets",
+          "ms": 4442
+        }
+      ]
+    },
+    "start": {
+      "url": "/organizer-dashboard/?view=start",
+      "settledMs": 10016,
+      "requests": 1,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/organizer/setups",
+          "ms": 4166
+        }
+      ]
+    },
+    "create": {
+      "url": "/organizer-dashboard/?view=create",
+      "settledMs": 5195,
+      "requests": 0,
+      "calls": []
+    },
+    "help": {
+      "url": "/organizer-dashboard/?view=help",
+      "settledMs": 5126,
+      "requests": 0,
+      "calls": []
+    },
+    "event-overview": {
+      "url": "/organizer-dashboard/?event=968",
+      "settledMs": 5096,
+      "requests": 0,
+      "calls": []
+    },
+    "event-inventory": {
+      "url": "/organizer-dashboard/?event=968&tab=inventory",
+      "settledMs": 5090,
+      "requests": 0,
+      "calls": []
+    },
+    "event-applications": {
+      "url": "/organizer-dashboard/?event=968&tab=applications",
+      "settledMs": 5225,
+      "requests": 0,
+      "calls": []
+    },
+    "event-money": {
+      "url": "/organizer-dashboard/?event=968&tab=money",
+      "settledMs": 5094,
+      "requests": 0,
+      "calls": []
+    },
+    "event-ops": {
+      "url": "/organizer-dashboard/?event=968&ops=1",
+      "settledMs": 9175,
+      "requests": 5,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/operations/events/968/defaults",
+          "ms": 1903
+        },
+        {
+          "url": "/wp-json/lnkup/v1/maps/events/968/live",
+          "ms": 1978
+        },
+        {
+          "url": "/wp-json/lnkup/v1/operations/events/968",
+          "ms": 2015
+        },
+        {
+          "url": "/wp-json/lnkup/v1/operations/events/968/compliance",
+          "ms": 2425
+        },
+        {
+          "url": "/wp-json/lnkup/v1/maps/events/968",
+          "ms": 2500
+        }
+      ]
+    },
+    "event-roster": {
+      "url": "/organizer-dashboard/?event=968&roster=1",
+      "settledMs": 5311,
+      "requests": 0,
+      "calls": []
+    },
+    "event-checkin": {
+      "url": "/organizer-dashboard/?event=968&scan=1",
+      "settledMs": 9204,
+      "requests": 1,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/operations/events/968/feed",
+          "ms": 4189
+        }
+      ]
+    }
+  }
+}

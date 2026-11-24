@@ -40,7 +40,9 @@ class LNKup_Event_Operations {
 		}
 		LNKup_Vendor_Readiness::begin_batch();
 		try {
-			$kpis = self::compute_kpis( $apps );
+			$kpis              = self::compute_kpis( $apps );
+			$kpis['lifecycle'] = self::lifecycle_cards( $kpis, (int) $event_id );
+			$compliance        = self::compliance_alerts( $event_id, $apps );
 			return array(
 				'event_id'          => $event_id,
 				'title'             => $event->post_title,
@@ -49,7 +51,8 @@ class LNKup_Event_Operations {
 				'lifecycle'         => LNKup_Event_Lifecycle::get( $event_id ),
 				'kpis'              => $kpis,
 				'readiness_summary' => LNKup_Vendor_Readiness::event_readiness_summary( $event_id ),
-				'compliance'        => self::compliance_alerts( $event_id, $apps ),
+				'compliance'        => $compliance,
+				'compliance_groups' => self::group_compliance_alerts( $compliance ),
 				'feed'              => array_slice( LNKup_Operations_Log::get_for_event( $event_id, 15 ), 0, 15 ),
 				'emergency'         => self::emergency_contacts( $event_id ),
 				'weather'           => class_exists( 'LNKup_Weather_Service' ) ? LNKup_Weather_Service::for_event( $event_id ) : array(),
@@ -154,15 +157,37 @@ class LNKup_Event_Operations {
 				update_meta_cache( 'post', $app_ids );
 			}
 		}
-		$alerts = array();
+		$alerts   = array();
+		$days     = null;
+		$date     = (string) get_post_meta( absint( $event_id ), '_lnkup_event_date', true );
+		if ( '' !== $date && strtotime( $date ) ) {
+			$days = (int) floor( ( strtotime( $date ) - strtotime( current_time( 'Y-m-d' ) ) ) / DAY_IN_SECONDS );
+		}
+		// Severity follows the event date: what is missing a week out matters more than a month out.
+		$relative = static function ( $base ) use ( $days ) {
+			if ( null === $days || $days < 0 ) {
+				return $base;
+			}
+			if ( $days <= 3 ) {
+				return 'high';
+			}
+			return $days <= 14 ? $base : 'low';
+		};
 		foreach ( $app_ids as $app_id ) {
+			$status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+			// Only booked vendors have requirements to meet; applicants and declined vendors don't.
+			if ( ! in_array( $status, array( 'approved', 'payment_required', 'paid', 'completed' ), true ) ) {
+				continue;
+			}
+			$is_paid   = in_array( $status, array( 'paid', 'completed' ), true );
 			$checklist = LNKup_Vendor_Readiness::checklist( $app_id );
 			$name      = self::vendor_name_for_app( $app_id );
 			if ( $checklist['percent'] < 65 ) {
 				$hint = ! empty( $checklist['next_action']['label'] ) ? $checklist['next_action']['label'] : '';
 				$alerts[] = array(
 					'type'           => 'readiness_low',
-					'severity'       => $checklist['percent'] < 50 ? 'high' : 'medium',
+					'owner'          => (string) ( $checklist['next_action']['owner'] ?? 'vendor' ),
+					'severity'       => $relative( $checklist['percent'] < 50 ? 'high' : 'medium' ),
 					'message'        => sprintf(
 						/* translators: 1: vendor name, 2: percent */
 						__( '%1$s readiness at %2$d%% — needs review', 'lnkup-marketplace' ),
@@ -181,10 +206,16 @@ class LNKup_Event_Operations {
 				}
 			}
 			foreach ( $checklist['items'] as $item ) {
+				// Unpaid vendors can't open the packet yet, so "not viewed" isn't actionable.
+				if ( 'packet_viewed' === $item['key'] && ! $is_paid ) {
+					continue;
+				}
 				if ( ! $item['done'] && in_array( $item['key'], $critical_keys, true ) ) {
 					$alerts[] = array(
 						'type'           => $item['key'],
-						'severity'       => 'medium',
+						'requirement'    => (string) ( $item['done_label'] ?? $item['label'] ),
+						'owner'          => (string) ( $item['owner'] ?? 'vendor' ),
+						'severity'       => $relative( 'medium' ),
 						'message'        => sprintf(
 							/* translators: 1: vendor name, 2: item label */
 							__( '%1$s: %2$s incomplete', 'lnkup-marketplace' ),
@@ -199,6 +230,108 @@ class LNKup_Event_Operations {
 			}
 		}
 		return $alerts;
+	}
+
+	/**
+	 * Compliance alerts grouped by requirement and responsible party (worst severity first).
+	 *
+	 * @param array $alerts Output of compliance_alerts().
+	 * @return array<int,array{requirement:string,owner:string,owner_label:string,severity:string,count:int,vendors:string[]}>
+	 */
+	public static function group_compliance_alerts( array $alerts ) {
+		$owners = array(
+			'vendor'    => __( 'Vendor to act', 'lnkup-marketplace' ),
+			'organizer' => __( 'You to act', 'lnkup-marketplace' ),
+			'system'    => __( 'LNKup', 'lnkup-marketplace' ),
+		);
+		$rank   = array( 'high' => 3, 'medium' => 2, 'low' => 1 );
+		$groups = array();
+		foreach ( $alerts as $alert ) {
+			$requirement = 'readiness_low' === ( $alert['type'] ?? '' ) ? __( 'Overall readiness below 65%', 'lnkup-marketplace' ) : (string) ( $alert['requirement'] ?? $alert['next_action'] ?? '' );
+			$owner       = (string) ( $alert['owner'] ?? 'vendor' );
+			$key         = $requirement . '|' . $owner;
+			if ( ! isset( $groups[ $key ] ) ) {
+				$groups[ $key ] = array(
+					'requirement' => $requirement,
+					'owner'       => $owner,
+					'owner_label' => $owners[ $owner ] ?? $owners['vendor'],
+					'severity'    => 'low',
+					'count'       => 0,
+					'vendors'     => array(),
+				);
+			}
+			$groups[ $key ]['count']++;
+			$groups[ $key ]['vendors'][] = (string) ( $alert['vendor_name'] ?? '' );
+			$sev = (string) ( $alert['severity'] ?? 'medium' );
+			if ( ( $rank[ $sev ] ?? 0 ) > ( $rank[ $groups[ $key ]['severity'] ] ?? 0 ) ) {
+				$groups[ $key ]['severity'] = $sev;
+			}
+		}
+		$groups = array_values( $groups );
+		usort(
+			$groups,
+			static function ( $a, $b ) use ( $rank ) {
+				return ( $rank[ $b['severity'] ] ?? 0 ) <=> ( $rank[ $a['severity'] ] ?? 0 ) ?: $b['count'] <=> $a['count'];
+			}
+		);
+		return $groups;
+	}
+
+	/**
+	 * Four or five lifecycle metrics shown as fractions, chosen from the event date.
+	 * Each card names its denominator (see DATA_INTEGRITY.md).
+	 *
+	 * @param array $kpis     compute_kpis() output.
+	 * @param int   $event_id Event ID.
+	 * @return array{phase:string,phase_label:string,cards:array<int,array{label:string,value:string,denominator:string}>}
+	 */
+	public static function lifecycle_cards( array $kpis, $event_id ) {
+		$date  = (string) get_post_meta( absint( $event_id ), '_lnkup_event_date', true );
+		$today = current_time( 'Y-m-d' );
+		$day   = substr( $date, 0, 10 );
+		$phase = '' === $day || $day > $today ? 'pre' : ( $day === $today ? 'day' : 'post' );
+		$booked = (int) ( $kpis['approved_vendors'] ?? 0 );
+		$paid   = (int) ( $kpis['paid_vendors'] ?? 0 );
+		$booths = 0;
+		if ( class_exists( 'LNKup_Booths' ) ) {
+			foreach ( (array) LNKup_Booths::get_for_event( absint( $event_id ) ) as $booth ) {
+				if ( ! empty( $booth['application_id'] ) ) {
+					$booths++;
+				}
+			}
+		}
+		$frac = static function ( $n, $d ) {
+			/* translators: 1: count, 2: total */
+			return sprintf( __( '%1$d of %2$d', 'lnkup-marketplace' ), (int) $n, (int) $d );
+		};
+		if ( 'pre' === $phase ) {
+			$cards = array(
+				array( 'label' => __( 'Paid', 'lnkup-marketplace' ), 'value' => $frac( $paid, $booked ), 'denominator' => __( 'of booked vendors (approved or paid)', 'lnkup-marketplace' ) ),
+				array( 'label' => __( 'Ready', 'lnkup-marketplace' ), 'value' => $frac( (int) ( $kpis['ready_vendors'] ?? 0 ), $booked ), 'denominator' => __( 'of booked vendors', 'lnkup-marketplace' ) ),
+				array( 'label' => __( 'Booths assigned', 'lnkup-marketplace' ), 'value' => $frac( $booths, $booked ), 'denominator' => __( 'of booked vendors', 'lnkup-marketplace' ) ),
+				array( 'label' => __( 'Open support requests', 'lnkup-marketplace' ), 'value' => (string) (int) ( $kpis['support_requests'] ?? 0 ), 'denominator' => __( 'from vendors', 'lnkup-marketplace' ) ),
+			);
+		} elseif ( 'day' === $phase ) {
+			$cards = array(
+				array( 'label' => __( 'Checked in', 'lnkup-marketplace' ), 'value' => $frac( (int) ( $kpis['checked_in'] ?? 0 ), $paid ), 'denominator' => __( 'of paid vendors', 'lnkup-marketplace' ) ),
+				array( 'label' => __( 'Late', 'lnkup-marketplace' ), 'value' => (string) (int) ( $kpis['late_vendors'] ?? 0 ), 'denominator' => __( 'after their arrival window', 'lnkup-marketplace' ) ),
+				array( 'label' => __( 'Marked missing', 'lnkup-marketplace' ), 'value' => (string) (int) ( $kpis['missing_vendors'] ?? 0 ), 'denominator' => __( 'by your team', 'lnkup-marketplace' ) ),
+				array( 'label' => __( 'Open support requests', 'lnkup-marketplace' ), 'value' => (string) (int) ( $kpis['support_requests'] ?? 0 ), 'denominator' => __( 'from vendors', 'lnkup-marketplace' ) ),
+			);
+		} else {
+			$cards = array(
+				array( 'label' => __( 'Checked in', 'lnkup-marketplace' ), 'value' => $frac( (int) ( $kpis['checked_in'] ?? 0 ), $paid ), 'denominator' => __( 'of paid vendors', 'lnkup-marketplace' ) ),
+				array( 'label' => __( 'Closed out', 'lnkup-marketplace' ), 'value' => (int) ( $kpis['setup_completion_pct'] ?? 0 ) . '%', 'denominator' => __( 'of paid vendors checked out or completed', 'lnkup-marketplace' ) ),
+				array( 'label' => __( 'Marked missing', 'lnkup-marketplace' ), 'value' => (string) (int) ( $kpis['missing_vendors'] ?? 0 ), 'denominator' => __( 'no-shows recorded by your team', 'lnkup-marketplace' ) ),
+				array( 'label' => __( 'Open support requests', 'lnkup-marketplace' ), 'value' => (string) (int) ( $kpis['support_requests'] ?? 0 ), 'denominator' => __( 'still unresolved', 'lnkup-marketplace' ) ),
+			);
+		}
+		$labels = array(
+			'pre'  => __( 'Before the event', 'lnkup-marketplace' ),
+			'day'  => __( 'Event day', 'lnkup-marketplace' ),
+			'post' => __( 'After the event', 'lnkup-marketplace' ),
+		);
+		return array( 'phase' => $phase, 'phase_label' => $labels[ $phase ], 'cards' => $cards );
 	}
 
 	/**
@@ -445,7 +578,7 @@ class LNKup_Event_Operations {
 			'has_event'          => true,
 			'application_id'     => $app_id,
 			'event_id'           => $event_id,
-			'event_title'        => lnkup_plain_title( $event_id ),
+			'event_title'        => class_exists( 'LNKup_Vendor_Presentation' ) ? LNKup_Vendor_Presentation::customer_event_title( $event_id ) : lnkup_plain_title( $event_id ),
 			'event_date'         => get_post_meta( $event_id, '_lnkup_event_date', true ),
 			'readiness'          => $checklist,
 			'readiness_percent'  => $checklist['percent'] ?? 0,

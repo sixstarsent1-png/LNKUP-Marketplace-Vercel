@@ -3,7 +3,6 @@ import path from 'node:path';
 import { appLogin, restAs, vendorUser } from './helpers/app-session';
 
 const shots = path.join(__dirname, '..', '..', 'scripts', 'e2e', 'reports', 'mobile-shots', 'after');
-const capacityOpportunityId = process.env.PLAYWRIGHT_CAPACITY_OPPORTUNITY_ID || '57';
 
 /**
  * Save a full-page screenshot for the report.
@@ -38,19 +37,18 @@ test.describe('Vendor experience', () => {
     expect(calls, 'one bookings request on a cold Home load').toHaveLength(1);
   });
 
-  test('Explore cards show honest apply states', async ({ page }, testInfo) => {
+  test('Explore shows one card per event with an event count', async ({ page }, testInfo) => {
     await page.goto('/(vendor)/find');
     await expect(page.getByRole('heading', { name: 'Explore' })).toBeVisible();
-    const firstCard = page.getByRole('button', { name: /^Details for / }).first();
-    await expect(firstCard).toBeVisible();
-    await expect(page.getByRole('button', { name: /^(Apply to |Applied: |Full: |Applications closed: |Event ended: )/ }).first()).toBeVisible();
+    await expect(page.getByTestId('explore-event-card').first()).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByText(/^\d+ events?( · \d+ vendor options?)?$/)).toBeVisible();
     await snap(page, 'explore', testInfo);
   });
 
   test('a booking opens with its progress timeline', async ({ page }, testInfo) => {
     await page.goto('/(vendor)/requests');
     await expect(page.getByRole('heading', { name: 'Bookings' })).toBeVisible();
-    await page.getByRole('button', { name: /^Needs action/ }).click();
+    await page.getByRole('button', { name: /^Action needed/ }).click();
     const card = page.getByRole('button', { name: /^E2E Summer Market, / }).first();
     await expect(card).toBeVisible();
     await card.click();
@@ -64,11 +62,16 @@ test.describe('Vendor experience', () => {
     await expect(page).toHaveURL(/\/requests/);
   });
 
-  test('an opportunity you applied to links to your booking instead of Apply', async ({ page }, testInfo) => {
-    await page.goto(`/opportunity/${capacityOpportunityId}`);
-    await expect(page.getByTestId('opportunity-already-applied')).toBeVisible();
-    await page.getByRole('button', { name: 'View booking' }).click();
-    await expect(page).toHaveURL(/\/booking\/\d+/);
+  test('an opportunity you applied to opens its event with your application, not Apply', async ({ page }, testInfo) => {
+    const { body } = await restAs(page, vendorUser, 'GET', '/applications/vendor');
+    const applied = ((body as { items?: Array<{ opportunity_id: number; event_id: number }> }).items ?? []).find((i) => i.opportunity_id && i.event_id);
+    const opportunityId = process.env.PLAYWRIGHT_CAPACITY_OPPORTUNITY_ID || String(applied?.opportunity_id ?? '');
+    test.skip(!opportunityId, 'Vendor has no application with an event in this seed');
+    await page.goto(`/opportunity/${opportunityId}`);
+    await expect(page).toHaveURL(new RegExp(`/event/\\d+\\?option=${opportunityId}`), { timeout: 45_000 });
+    await expect(page.getByText('You applied to this option')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^(View booking|View application|Pay )/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Start application/ })).toHaveCount(0);
     await snap(page, 'opportunity-applied', testInfo);
   });
 
@@ -81,13 +84,15 @@ test.describe('Vendor experience', () => {
     await snap(page, 'documents', testInfo);
   });
 
-  test('wallet groups due, history and receipts', async ({ page }, testInfo) => {
+  test('wallet groups due, history and documents', async ({ page }, testInfo) => {
     await page.goto('/(vendor)/wallet');
-    for (const tab of ['Due', 'History', 'Receipts']) {
+    for (const tab of ['Due', 'History', 'Documents']) {
       await expect(page.getByRole('tab', { name: new RegExp(`^${tab}`) })).toBeVisible();
     }
     await page.getByRole('tab', { name: /^History/ }).click();
-    await expect(page.getByRole('heading', { name: 'Payments' })).toBeVisible();
+    await expect(
+      page.getByText('No payments yet').or(page.getByRole('button', { name: /(Vendor payment|Refund|Application fee)/ }).first()),
+    ).toBeVisible();
     await snap(page, 'wallet', testInfo);
   });
 

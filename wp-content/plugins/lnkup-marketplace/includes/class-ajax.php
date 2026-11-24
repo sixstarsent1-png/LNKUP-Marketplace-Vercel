@@ -161,6 +161,19 @@ class LNKup_Ajax {
 				update_post_meta( $profile_id, '_lnkup_' . $field, $val );
 			}
 		}
+		if ( class_exists( 'LNKup_Location_Service' ) && ( isset( $_POST['city'] ) || isset( $_POST['state'] ) ) ) {
+			$location = LNKup_Location_Service::canonical_profile_location(
+				(string) get_post_meta( $profile_id, '_lnkup_city', true ),
+				(string) get_post_meta( $profile_id, '_lnkup_state', true ),
+				'',
+				'lenient'
+			);
+			if ( is_array( $location ) ) {
+				update_post_meta( $profile_id, '_lnkup_city', $location['city'] );
+				update_post_meta( $profile_id, '_lnkup_state', $location['state'] );
+				update_post_meta( $profile_id, '_lnkup_location_status', $location['status'] );
+			}
+		}
 		if ( isset( $_POST['willing_to_travel'] ) ) {
 			update_post_meta( $profile_id, '_lnkup_willing_to_travel', ! empty( $_POST['willing_to_travel'] ) );
 		}
@@ -221,6 +234,10 @@ class LNKup_Ajax {
 		}
 		if ( isset( $_POST['states_served'] ) ) {
 			$states = array_filter( array_map( 'trim', explode( ',', sanitize_text_field( wp_unslash( $_POST['states_served'] ) ) ) ) );
+			if ( class_exists( 'LNKup_Location_Service' ) ) {
+				// Only real US states ("Georgia" and "GA" both become GA; "GE" is dropped).
+				$states = array_values( array_unique( array_filter( array_map( array( 'LNKup_Location_Service', 'state_code' ), $states ) ) ) );
+			}
 			update_post_meta( $profile_id, '_lnkup_states_served', wp_json_encode( $states ) );
 		}
 		if ( isset( $_POST['years_in_business'] ) ) {

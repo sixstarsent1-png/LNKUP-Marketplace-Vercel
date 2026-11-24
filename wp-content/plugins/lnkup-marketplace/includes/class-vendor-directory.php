@@ -572,6 +572,17 @@ class LNKup_Vendor_Directory {
 	}
 
 	/**
+	 * Neutralize spreadsheet formula injection: a cell that starts with = + - @ tab or CR
+	 * is prefixed with an apostrophe so spreadsheet apps show it as text.
+	 *
+	 * @param mixed $value Cell value.
+	 */
+	public static function csv_safe_cell( $value ): string {
+		$value = (string) $value;
+		return preg_match( '/^[=+\-@\t\r]/', $value ) ? "'" . $value : $value;
+	}
+
+	/**
 	 * Stream a contact CSV and stop the request.
 	 *
 	 * @param string[][] $rows          Data rows.
@@ -595,7 +606,7 @@ class LNKup_Vendor_Directory {
 		}
 		fputcsv( $out, self::contact_csv_headers( $include_event ) );
 		foreach ( $rows as $row ) {
-			fputcsv( $out, $row );
+			fputcsv( $out, array_map( array( __CLASS__, 'csv_safe_cell' ), (array) $row ) );
 		}
 		fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 		exit;

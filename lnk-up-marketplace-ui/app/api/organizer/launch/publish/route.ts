@@ -97,6 +97,17 @@ export async function POST(request: Request) {
       }
     } catch (error) {
       if (error instanceof WpFetchError && error.status !== 404) {
+        if (error.status === 422 && error.code === "lnkup_location_needs_confirmation") {
+          const location = (error.data?.location ?? {}) as {
+            suggestions?: OrganizerLaunchPublishResult["locationSuggestions"]
+          }
+          return NextResponse.json({
+            status: "validation_error",
+            message: error.message,
+            validationErrors: [{ field: "location", message: error.message }],
+            locationSuggestions: location.suggestions ?? [],
+          } satisfies OrganizerLaunchPublishResult)
+        }
         if (error.status === 401) {
           return NextResponse.json(
             { status: "auth_required", message: "Sign in as an organizer to continue." },

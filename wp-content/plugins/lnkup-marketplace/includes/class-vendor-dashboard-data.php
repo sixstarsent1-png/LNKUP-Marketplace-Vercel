@@ -156,6 +156,12 @@ class LNKup_Vendor_Dashboard_Data {
 	public static function application_request_bucket( $app, $user_id = 0 ) {
 		$app_id = $app instanceof WP_Post ? (int) $app->ID : (int) $app;
 		$status = (string) get_post_meta( $app_id, '_lnkup_application_status', true );
+		if ( in_array( $status, array( 'rejected', 'cancelled' ), true ) ) {
+			return 'applied';
+		}
+		if ( self::application_event_has_passed( $app_id ) ) {
+			return 'completed';
+		}
 		if ( in_array( $status, array( 'submitted', 'under_review', 'info_requested' ), true ) ) {
 			return 'in-review';
 		}
@@ -166,7 +172,7 @@ class LNKup_Vendor_Dashboard_Data {
 			return 'completed';
 		}
 		if ( 'paid' === $status ) {
-			return self::application_event_has_passed( $app_id ) ? 'completed' : 'booked';
+			return 'booked';
 		}
 		return 'applied';
 	}
@@ -177,6 +183,10 @@ class LNKup_Vendor_Dashboard_Data {
 	 * @param int $app_id Application ID.
 	 */
 	public static function application_event_has_passed( $app_id ) {
+		if ( class_exists( 'LNKup_Vendor_Booking_Contract' ) ) {
+			$resolved = LNKup_Vendor_Booking_Contract::resolve_event( (int) $app_id );
+			return 'completed' === LNKup_Vendor_Booking_Contract::event_state( (int) $resolved['event_id'], $resolved['snapshot'] );
+		}
 		$event_id = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
 		$date     = $event_id ? (string) get_post_meta( $event_id, '_lnkup_event_date', true ) : '';
 		return '' !== $date && $date < current_time( 'Y-m-d' );
@@ -461,6 +471,38 @@ class LNKup_Vendor_Dashboard_Data {
 			);
 		}
 
+		$past_due_total = 0.0;
+		$past_due_count = 0;
+		foreach ( $ctx['applications'] as $app ) {
+			if ( ! self::application_event_has_passed( (int) $app->ID ) || ! self::application_is_payable( $app, $ctx['user_id'] ) ) {
+				continue;
+			}
+			$payment = self::application_payment_for_vendor( $app, $ctx['user_id'] );
+			if ( $payment ) {
+				++$past_due_count;
+				$past_due_total += (float) get_post_meta( $payment->ID, '_lnkup_total_amount', true );
+			}
+		}
+		if ( $past_due_count ) {
+			$items[] = array(
+				'level'        => 'warn',
+				'group'        => 'history',
+				'title'        => sprintf(
+					/* translators: %d: invoice count */
+					_n( '%d past event balance', '%d past event balances', $past_due_count, 'lnkup-marketplace' ),
+					$past_due_count
+				),
+				'meta'         => sprintf(
+					/* translators: %s: amount */
+					__( '%s still open on events that already happened. These do not affect upcoming bookings.', 'lnkup-marketplace' ),
+					lnkup_currency( $past_due_total )
+				),
+				'action_label' => __( 'Review invoices', 'lnkup-marketplace' ),
+				'action_href'  => add_query_arg( 'fin_tab', 'invoices', $pay_url ),
+				'primary'      => false,
+			);
+		}
+
 		if ( ! empty( $ctx['compliance']['attention_count'] ) ) {
 			$items[] = array(
 				'level'        => 'warn',
@@ -478,7 +520,7 @@ class LNKup_Vendor_Dashboard_Data {
 				return ! empty( $item['payment_id'] );
 			}
 		);
-		if ( $week['outstanding_count'] > 0 && ! $has_pay_items ) {
+		if ( $week['outstanding_count'] > $past_due_count && ! $has_pay_items ) {
 			$items[] = array(
 				'level'        => 'urgent',
 				'title'        => __( 'Outstanding payments', 'lnkup-marketplace' ),
@@ -593,18 +635,26 @@ class LNKup_Vendor_Dashboard_Data {
 				'start_time'     => '',
 			);
 		}
-		$event_id = (int) get_post_meta( $app->ID, '_lnkup_event_id', true );
+		$event_id = class_exists( 'LNKup_Vendor_Booking_Contract' )
+			? (int) LNKup_Vendor_Booking_Contract::resolve_event( (int) $app->ID )['event_id']
+			: (int) get_post_meta( $app->ID, '_lnkup_event_id', true );
 		$opp_id   = (int) get_post_meta( $app->ID, '_lnkup_opportunity_id', true );
 		$event    = $event_id ? get_post( $event_id ) : null;
 		$city     = $event_id ? (string) get_post_meta( $event_id, '_lnkup_city', true ) : '';
 		$state    = $event_id ? (string) get_post_meta( $event_id, '_lnkup_state', true ) : '';
 		$date     = $event_id ? (string) get_post_meta( $event_id, '_lnkup_event_date', true ) : '';
 		$fee      = $opp_id ? (float) get_post_meta( $opp_id, '_lnkup_vendor_fee', true ) : 0;
+		$display_city  = function_exists( 'lnkup_display_label' ) ? lnkup_display_label( $city ) : $city;
+		$display_state = function_exists( 'lnkup_display_state' ) ? lnkup_display_state( $state ) : $state;
+		$title         = class_exists( 'LNKup_Vendor_Presentation' )
+			? LNKup_Vendor_Presentation::customer_event_title( $event_id, $app )
+			: lnkup_plain_title( $event ? $event : $app );
 		return array(
 			'event_id'       => $event_id,
-			'event_title'    => lnkup_plain_title( $event ? $event : $app ),
-			'city'           => $city,
-			'state'          => $state,
+			'event_title'    => $title,
+			'city'           => $display_city,
+			'state'          => $display_state,
+			'place'          => function_exists( 'lnkup_display_place' ) ? lnkup_display_place( $city, $state ) : trim( $display_city . ( $display_state ? ', ' . $display_state : '' ) ),
 			'date'           => $date,
 			'fee'            => $fee,
 			'venue'          => $event_id ? (string) get_post_meta( $event_id, '_lnkup_venue_name', true ) : '',

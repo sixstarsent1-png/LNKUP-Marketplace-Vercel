@@ -184,7 +184,7 @@ class LNKup_Checkins {
 			return self::result( $base, 'documents', __( 'Documents need attention.', 'lnkup-marketplace' ) );
 		}
 
-		$allowed = self::allowed_actions( $ops, '' !== $checked_in_at );
+		$allowed = self::allowed_actions( $ops, '' !== $checked_in_at, $app_id );
 		$base['actions'] = $allowed;
 		if ( '' === $action ) {
 			$view = self::result( $base, 'ready', '' );
@@ -357,7 +357,7 @@ class LNKup_Checkins {
 			return self::record( $app_id, $action, 'manual', $expected_event_id );
 		}
 		$ops     = (string) $state['ops_status'];
-		$allowed = self::allowed_actions( $ops, ! empty( $state['checked_in'] ) );
+		$allowed = self::allowed_actions( $ops, ! empty( $state['checked_in'] ), $app_id );
 		if ( ! in_array( $action, $allowed, true ) ) {
 			$conflict            = self::result( $state, 'conflict', __( 'That action is not available from the current status.', 'lnkup-marketplace' ) );
 			$conflict['actions'] = $allowed;
@@ -490,7 +490,29 @@ class LNKup_Checkins {
 	 * @param bool   $checked_in  Whether a check-in timestamp exists.
 	 * @return string[]
 	 */
-	private static function allowed_actions( $ops, $checked_in ) {
+	/**
+	 * Whether the vendor's arrival window is over: their load-in window end, else the event
+	 * start time. Unknown windows count as over so the action is never blocked by missing data.
+	 *
+	 * @param int $app_id Application ID.
+	 */
+	private static function arrival_window_passed( $app_id ) {
+		$end = '';
+		if ( class_exists( 'LNKup_Loadin_Schedule' ) ) {
+			$window = LNKup_Loadin_Schedule::get_for_application( $app_id );
+			$end    = is_array( $window ) ? (string) ( $window['end_at'] ?? '' ) : '';
+		}
+		if ( '' === $end ) {
+			$event_id = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
+			$date     = (string) get_post_meta( $event_id, '_lnkup_event_date', true );
+			$start    = (string) get_post_meta( $event_id, '_lnkup_start_time', true );
+			$end      = '' !== $date ? trim( $date . ' ' . ( '' !== $start ? $start : '00:00' ) ) : '';
+		}
+		$ts = '' !== $end ? strtotime( $end ) : false;
+		return false === $ts || (int) current_time( 'timestamp' ) >= $ts;
+	}
+
+	private static function allowed_actions( $ops, $checked_in, $app_id = 0 ) {
 		if ( 'checked_out' === $ops ) {
 			return array();
 		}
@@ -505,6 +527,9 @@ class LNKup_Checkins {
 		}
 		if ( $checked_in || in_array( $ops, array( 'checked_in', 'late' ), true ) ) {
 			return array( 'setup_started', 'setup_complete', 'checked_out' );
+		}
+		if ( $app_id && ! self::arrival_window_passed( $app_id ) ) {
+			return array( 'checked_in', 'no_show' );
 		}
 		return array( 'checked_in', 'late_arrival', 'no_show' );
 	}

@@ -59,6 +59,13 @@ class LNKup_Operations_Render {
 		if ( ! $kpis ) {
 			return '';
 		}
+		if ( ! empty( $kpis['lifecycle']['cards'] ) ) {
+			$html = '<p class="vos-eyebrow" data-testid="lnkup-ops-phase">' . esc_html( (string) $kpis['lifecycle']['phase_label'] ) . '</p><div class="lnkup-ops-kpis vos-metrics" data-testid="lnkup-ops-lifecycle-kpis">';
+			foreach ( $kpis['lifecycle']['cards'] as $card ) {
+				$html .= '<div class="vos-metric"><span class="vos-metric__label">' . esc_html( $card['label'] ) . '</span><span class="vos-metric__value oos-fraction">' . esc_html( $card['value'] ) . '</span><span class="vos-metric__hint oos-denominator">' . esc_html( $card['denominator'] ) . '</span></div>';
+			}
+			return $html . '</div>';
+		}
 		$readiness_value = ( $kpis['readiness_percent'] ?? 0 ) . '%';
 		$readiness_sub   = $kpis['readiness_ready_label'] ?? '';
 		$cards = array(
@@ -124,9 +131,19 @@ class LNKup_Operations_Render {
 	 *
 	 * @param array $alerts Alert rows.
 	 */
-	public static function compliance_alerts( $alerts ) {
+	public static function compliance_alerts( $alerts, $groups = null ) {
 		if ( ! $alerts ) {
 			return '<p class="lnkup-muted">' . esc_html__( 'No compliance alerts.', 'lnkup-marketplace' ) . '</p>';
+		}
+		if ( is_array( $groups ) && $groups ) {
+			$html = '<ul class="lnkup-ops-alerts" data-testid="lnkup-ops-compliance-groups">';
+			foreach ( $groups as $group ) {
+				$names = array_slice( array_filter( $group['vendors'] ), 0, 3 );
+				$more  = max( 0, (int) $group['count'] - count( $names ) );
+				$html .= '<li class="lnkup-ops-alert lnkup-ops-alert--' . esc_attr( $group['severity'] ) . '"><strong>' . esc_html( $group['requirement'] ) . '</strong> · ' . esc_html( $group['owner_label'] ) . ' · ' . esc_html( sprintf( /* translators: %d: vendors */ _n( '%d vendor', '%d vendors', (int) $group['count'], 'lnkup-marketplace' ), (int) $group['count'] ) );
+				$html .= '<br><span class="lnkup-muted">' . esc_html( implode( ', ', $names ) . ( $more ? ' ' . sprintf( /* translators: %d: more */ __( '+%d more', 'lnkup-marketplace' ), $more ) : '' ) ) . '</span></li>';
+			}
+			return $html . '</ul>';
 		}
 		$html = '<ul class="lnkup-ops-alerts">';
 		foreach ( $alerts as $alert ) {
@@ -203,6 +220,91 @@ class LNKup_Operations_Render {
 				$html .= '<a href="' . esc_url( $url ) . '" class="lnkup-btn lnkup-btn--primary lnkup-btn--sm">' . esc_html__( 'Go', 'lnkup-marketplace' ) . '</a>';
 			}
 			$html .= '</div>';
+		}
+
+		$flat = array();
+		foreach ( (array) ( $checklist['groups'] ?? array() ) as $group ) {
+			foreach ( (array) ( $group['items'] ?? array() ) as $item ) {
+				$flat[] = $item;
+			}
+		}
+		if ( ! $flat ) {
+			$flat = (array) ( $checklist['items'] ?? array() );
+		}
+		$has_owner = (bool) array_filter(
+			$flat,
+			static function ( $item ) {
+				return isset( $item['owner'] );
+			}
+		);
+		if ( $has_owner ) {
+			$buckets = array(
+				'vendor'    => array(),
+				'organizer' => array(),
+				'done'      => array(),
+			);
+			foreach ( $flat as $item ) {
+				if ( ! empty( $item['done'] ) ) {
+					$buckets['done'][] = $item;
+				} elseif ( 'organizer' === $item['owner'] || 'system' === $item['owner'] ) {
+					$buckets['organizer'][] = $item;
+				} else {
+					$buckets['vendor'][] = $item;
+				}
+			}
+			$vendor_total = count(
+				array_filter(
+					$flat,
+					static function ( $item ) {
+						return 'vendor' === ( $item['owner'] ?? 'vendor' );
+					}
+				)
+			);
+			$vendor_done  = $vendor_total - count( $buckets['vendor'] );
+			$html .= '<p class="vos-readiness__split">' . esc_html(
+				sprintf(
+					/* translators: 1: done count, 2: total, 3: organizer pending count */
+					__( 'You have finished %1$d of %2$d of your steps. %3$d items are waiting on the organizer.', 'lnkup-marketplace' ),
+					$vendor_done,
+					$vendor_total,
+					count( $buckets['organizer'] )
+				)
+			) . '</p>';
+			$titles = array(
+				'vendor'    => __( 'Your next steps', 'lnkup-marketplace' ),
+				'organizer' => __( 'Waiting on organizer', 'lnkup-marketplace' ),
+			);
+			foreach ( $titles as $bucket => $title ) {
+				if ( ! $buckets[ $bucket ] ) {
+					continue;
+				}
+				$html .= '<section class="lnkup-ops-readiness__group vos-readiness__group vos-readiness__group--' . esc_attr( $bucket ) . '">';
+				$html .= '<h4 class="lnkup-ops-readiness__group-title">' . esc_html( $title ) . ' <span class="vos-muted">(' . count( $buckets[ $bucket ] ) . ')</span></h4>';
+				$html .= '<ul class="lnkup-ops-readiness__list">';
+				foreach ( $buckets[ $bucket ] as $item ) {
+					$is_blocked = 'blocked' === ( $item['status'] ?? '' );
+					$html      .= '<li class="is-' . ( 'organizer' === $bucket ? 'waiting' : ( $is_blocked ? 'blocked' : 'pending' ) ) . '">';
+					$html      .= '<span class="lnkup-ops-readiness__icon" aria-hidden="true">' . ( 'organizer' === $bucket ? '…' : ( $is_blocked ? '!' : '○' ) ) . '</span>';
+					$html      .= '<span class="lnkup-ops-readiness__item-label">' . esc_html( (string) $item['label'] ) . '</span>';
+					if ( 'vendor' === $bucket && ! empty( $item['cta_tab'] ) && $app_id ) {
+						$cta_args = array( 'view' => 'operations', 'app' => $app_id, 'tab' => $item['cta_tab'] );
+						if ( ! empty( $item['cta_section'] ) ) {
+							$cta_args['section'] = $item['cta_section'];
+						}
+						$html .= '<a href="' . esc_url( add_query_arg( $cta_args, $dashboard ) ) . '" class="lnkup-ops-readiness__cta">' . esc_html( ! empty( $item['action_label'] ) ? (string) $item['action_label'] : __( 'Open', 'lnkup-marketplace' ) ) . '</a>';
+					}
+					$html .= '</li>';
+				}
+				$html .= '</ul></section>';
+			}
+			if ( $buckets['done'] ) {
+				$html .= '<details class="vos-readiness__done"><summary>' . esc_html( sprintf( /* translators: %d: count */ _n( '%d item complete', '%d items complete', count( $buckets['done'] ), 'lnkup-marketplace' ), count( $buckets['done'] ) ) ) . '</summary><ul class="lnkup-ops-readiness__list">';
+				foreach ( $buckets['done'] as $item ) {
+					$html .= '<li class="is-done"><span class="lnkup-ops-readiness__icon" aria-hidden="true">✓</span><span class="lnkup-ops-readiness__item-label">' . esc_html( (string) ( $item['done_label'] ?? $item['label'] ) ) . '</span></li>';
+				}
+				$html .= '</ul></details>';
+			}
+			return $html . '</div>';
 		}
 
 		$groups = ! empty( $checklist['groups'] ) ? $checklist['groups'] : array();

@@ -22,18 +22,46 @@ class LNKup_Weather_Service {
 
 		$settings = lnkup_get_settings();
 		if ( empty( $settings['weather_intelligence_enabled'] ) ) {
-			return self::empty_dto( $event_id, 'unconfigured', __( 'Weather intelligence is disabled.', 'lnkup-marketplace' ) );
+			return self::for_viewer( self::empty_dto( $event_id, 'unconfigured', __( 'Weather intelligence is disabled.', 'lnkup-marketplace' ) ) );
 		}
 
 		$cache_key = 'lnkup_weather_intel_' . $event_id;
 		$cached    = get_transient( $cache_key );
 		if ( is_array( $cached ) && ! empty( $cached['event_id'] ) ) {
-			return $cached;
+			return self::for_viewer( $cached );
 		}
 
 		$dto = self::build_dto( $event_id, false );
 		$ttl = max( 5, (int) ( $settings['weather_refresh_minutes'] ?? 30 ) ) * MINUTE_IN_SECONDS;
 		set_transient( $cache_key, $dto, $ttl );
+		return self::for_viewer( $dto );
+	}
+
+	/**
+	 * Replace provider/setup messages with copy that is safe for organizers and vendors.
+	 * Users with lnkup_manage_all keep the original message (e.g. API key setup).
+	 *
+	 * @param array $dto Weather DTO.
+	 * @return array
+	 */
+	public static function for_viewer( array $dto ): array {
+		$status = (string) ( $dto['status'] ?? '' );
+		if ( ! in_array( $status, array( 'unconfigured', 'no_date', 'no_location', 'error', 'unavailable' ), true ) ) {
+			return $dto;
+		}
+		$dto['viewer_state'] = $status;
+		if ( class_exists( 'LNKup_Capabilities' ) && LNKup_Capabilities::user_has_manage_all() ) {
+			$dto['admin_message'] = (string) ( $dto['message'] ?? '' );
+			return $dto;
+		}
+		$copy = array(
+			'unconfigured' => __( "Weather isn't available for this event.", 'lnkup-marketplace' ),
+			'no_date'      => __( 'Add a date and location to see the forecast.', 'lnkup-marketplace' ),
+			'no_location'  => __( 'Add a date and location to see the forecast.', 'lnkup-marketplace' ),
+			'error'        => __( 'Weather is temporarily unavailable.', 'lnkup-marketplace' ),
+			'unavailable'  => __( "Weather isn't available for this event.", 'lnkup-marketplace' ),
+		);
+		$dto['message'] = $copy[ $status ];
 		return $dto;
 	}
 
@@ -49,7 +77,7 @@ class LNKup_Weather_Service {
 		$dto = self::build_dto( $event_id, true );
 		$ttl = max( 5, (int) ( lnkup_get_settings()['weather_refresh_minutes'] ?? 30 ) ) * MINUTE_IN_SECONDS;
 		set_transient( 'lnkup_weather_intel_' . $event_id, $dto, $ttl );
-		return $dto;
+		return self::for_viewer( $dto );
 	}
 
 	/**
@@ -162,7 +190,7 @@ class LNKup_Weather_Service {
 
 		$context = self::event_context( $event_id );
 		if ( empty( $context['event_date'] ) ) {
-			return self::empty_dto( $event_id, 'no_date', __( 'Add an event date to unlock weather intelligence.', 'lnkup-marketplace' ) );
+			return self::empty_dto( $event_id, 'no_date', __( 'A forecast appears here closer to the event, once a date and location are published.', 'lnkup-marketplace' ) );
 		}
 
 		$location = self::resolve_location( $event_id, $force );

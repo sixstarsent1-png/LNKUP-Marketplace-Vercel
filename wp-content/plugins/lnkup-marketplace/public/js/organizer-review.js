@@ -21,12 +21,16 @@
 	var BOARD_GROUPS = ['pending', 'info', 'waitlisted', 'booking', 'confirmed', 'declined'];
 
 	var params = new URLSearchParams(window.location.search);
+	// Links from Home, Events and the classic list use ?filter=; map them to review groups.
+	var FILTER_GROUPS = { pending: 'pending', needs_info: 'info', approved: 'booking', unpaid: 'booking', paid: 'confirmed', waitlisted: 'waitlisted', rejected: 'declined' };
+	// Inside an event workspace the table is scoped to that event and the Event column is hidden.
+	var scopedEvent = root.getAttribute('data-scope') === 'event' ? (root.getAttribute('data-event-id') || '') : '';
 	var state = {
-		group: params.get('group') || 'pending',
-		event_id: params.get('event_id') || params.get('event_filter') || '',
+		group: params.get('group') || FILTER_GROUPS[params.get('filter') || ''] || 'pending',
+		event_id: scopedEvent || params.get('event_id') || params.get('event_filter') || '',
 		assigned: params.get('assigned') || '',
 		search: params.get('q') || '',
-		missing_docs: params.get('missing_docs') === '1',
+		missing_docs: params.get('missing_docs') === '1' || params.get('filter') === 'missing_docs',
 		layout: params.get('layout') === 'board' ? 'board' : 'table',
 		page: Math.max(1, parseInt(params.get('page') || '1', 10) || 1),
 		selected: {},
@@ -239,7 +243,7 @@
 			loadQueue();
 		});
 		toolbar.appendChild(el('div', { class: 'lnkup-review__filters' }, [
-			events.length ? eventSelect : null,
+			events.length && !scopedEvent ? eventSelect : null,
 			assigned,
 			search,
 			el('label', { class: 'lnkup-review__check' }, [docs, el('span', { text: 'Missing documents' })]),
@@ -343,7 +347,7 @@
 		table.appendChild(el('thead', {}, [el('tr', {}, [
 			bulk ? el('th', { scope: 'col' }, [el('span', { class: 'screen-reader-text', text: 'Select' })]) : null,
 			el('th', { scope: 'col', text: 'Vendor' }),
-			el('th', { scope: 'col', text: 'Event' }),
+			scopedEvent ? null : el('th', { scope: 'col', text: 'Event' }),
 			el('th', { scope: 'col', text: 'Status' }),
 			el('th', { scope: 'col', text: 'Review' }),
 			el('th', { scope: 'col', text: 'Submitted' })
@@ -361,7 +365,7 @@
 						item.assigned_to_me ? badge('Assigned to you', 'info') : null
 					])
 				]),
-				el('td', {}, [el('div', { text: item.event_title }), el('div', { class: 'lnkup-muted', text: item.event_date || '' })]),
+				scopedEvent ? null : el('td', {}, [el('div', { text: item.event_title }), el('div', { class: 'lnkup-muted', text: item.event_date || '' })]),
 				el('td', {}, [
 					badge(item.status_label, item.group),
 					PAYMENT_LABELS[item.payment_state] ? el('div', { class: 'lnkup-muted', text: PAYMENT_LABELS[item.payment_state] }) : null,
@@ -583,6 +587,27 @@
 		]);
 	}
 
+	/** Previous / next application within the current filtered list (filters are kept). */
+	function panelNav(appId) {
+		var items = (state.data && state.data.items) || [];
+		var ids = items.map(function (item) { return item.id; });
+		var at = ids.indexOf(appId);
+		if (at === -1 || ids.length < 2) {
+			return null;
+		}
+		var prevId = at > 0 ? ids[at - 1] : 0;
+		var nextId = at < ids.length - 1 ? ids[at + 1] : 0;
+		var prev = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--outline lnkup-btn--sm', text: '← Previous', disabled: !prevId, 'data-testid': 'lnkup-review-prev' });
+		var next = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--outline lnkup-btn--sm', text: 'Next →', disabled: !nextId, 'data-testid': 'lnkup-review-next' });
+		prev.addEventListener('click', function () { if (prevId) { openPanel(prevId); } });
+		next.addEventListener('click', function () { if (nextId) { openPanel(nextId); } });
+		return el('nav', { class: 'lnkup-review__nav', 'aria-label': 'Move between applications' }, [
+			prev,
+			el('span', { class: 'lnkup-muted', text: (at + 1) + ' of ' + ids.length }),
+			next
+		]);
+	}
+
 	function section(title, children) {
 		return el('section', { class: 'lnkup-review__section' }, [el('h3', { text: title })].concat(children));
 	}
@@ -599,6 +624,10 @@
 		var actions = ws.actions || [];
 		var wrap = el('div', { class: 'lnkup-review__panel-body' });
 		wrap.appendChild(panelHead(ws.vendor_name || ('Application #' + ws.id), ws.event_title + (ws.opportunity ? ' · ' + ws.opportunity : '')));
+		var nav = panelNav(ws.id);
+		if (nav) {
+			wrap.appendChild(nav);
+		}
 		wrap.appendChild(el('div', { class: 'lnkup-review__meta' }, [
 			badge(ws.status_label, ws.group),
 			PAYMENT_LABELS[ws.payment_state] ? badge(PAYMENT_LABELS[ws.payment_state], ws.payment_state === 'paid' ? 'good' : 'warn') : null,

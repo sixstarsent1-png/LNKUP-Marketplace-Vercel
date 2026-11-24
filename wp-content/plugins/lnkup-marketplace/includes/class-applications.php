@@ -65,6 +65,10 @@ class LNKup_Applications {
 		if ( ! $opp || 'lnkup_opportunity' !== $opp->post_type ) {
 			return new WP_Error( 'invalid', __( 'Invalid opportunity.', 'lnkup-marketplace' ) );
 		}
+		$event_for_opp = (int) get_post_meta( $opportunity_id, '_lnkup_event_id', true );
+		if ( 'publish' !== $opp->post_status && ! LNKup_Capabilities::staff_can( $event_for_opp, 'view_roster', $user_id ) ) {
+			return new WP_Error( 'lnkup_not_found', __( 'This vendor opportunity is not available.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
 
 		$card      = lnkup_get_opportunity_card_data( $opportunity_id );
 		$opp_terms = self::opportunity_category_labels( $opportunity_id, $card );
@@ -131,7 +135,7 @@ class LNKup_Applications {
 			}
 		}
 
-		return array(
+		$context = array(
 			'opportunity'   => array_merge(
 				$card,
 				array(
@@ -171,6 +175,14 @@ class LNKup_Applications {
 				'tour_multi_apply' => class_exists( 'LNKup_Application_Groups' ) && LNKup_Application_Groups::enabled( $user_id ?: null ),
 			),
 		);
+
+		if ( ! $user_id ) {
+			$context['opportunity']['required_documents'] = array();
+			$context['questions']                         = array();
+			$context['documents_required_to_apply']       = null;
+			$context['access']                            = $card['access'] ?? array( 'gated' => true, 'cta' => LNKup_Access_Policy::guest_cta( 'apply' ) );
+		}
+		return $context;
 	}
 
 	/**

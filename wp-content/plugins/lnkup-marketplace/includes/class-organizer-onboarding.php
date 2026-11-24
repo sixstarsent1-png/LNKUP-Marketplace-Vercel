@@ -26,6 +26,12 @@ class LNKup_Organizer_Onboarding {
 			return new WP_Error( 'missing_name', __( 'Event name is required.', 'lnkup-marketplace' ) );
 		}
 
+		$location = self::location_from_input( $input );
+		if ( is_wp_error( $location ) ) {
+			return $location;
+		}
+		$input['_lnkup_location'] = $location;
+
 		$organizer_id = get_current_user_id();
 		$client_token = isset( $input['client_token'] ) ? sanitize_text_field( (string) $input['client_token'] ) : '';
 		if ( '' === $client_token ) {
@@ -46,6 +52,44 @@ class LNKup_Organizer_Onboarding {
 		} finally {
 			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
+	}
+
+	/**
+	 * Validated location from a create/edit/duplicate request (LNKup_Location_Service).
+	 *
+	 * Null when the request carries no city/state, or on edit when city/state are unchanged, so
+	 * events with legacy values never block unrelated edits. REST requests and forms that send
+	 * location_strict=1 get a 422 with suggestions; legacy forms save cleaned values flagged for
+	 * Location Health review.
+	 *
+	 * @param array<string, mixed> $input    Request input.
+	 * @param int                  $event_id Existing event (edit/duplicate source), 0 on create.
+	 * @return array<string, mixed>|WP_Error|null
+	 */
+	private static function location_from_input( array $input, int $event_id = 0 ) {
+		if ( ! class_exists( 'LNKup_Location_Service' ) || ( ! array_key_exists( 'city', $input ) && ! array_key_exists( 'state', $input ) ) ) {
+			return null;
+		}
+		$stored_city  = $event_id ? (string) get_post_meta( $event_id, '_lnkup_city', true ) : '';
+		$stored_state = $event_id ? (string) get_post_meta( $event_id, '_lnkup_state', true ) : '';
+		$city         = array_key_exists( 'city', $input ) ? sanitize_text_field( (string) $input['city'] ) : $stored_city;
+		$state        = array_key_exists( 'state', $input ) ? sanitize_text_field( (string) $input['state'] ) : $stored_state;
+		if ( $event_id && 0 === strcasecmp( trim( $city ), trim( $stored_city ) ) && 0 === strcasecmp( trim( $state ), trim( $stored_state ) ) ) {
+			return null;
+		}
+		$country = isset( $input['country'] ) ? sanitize_text_field( (string) $input['country'] ) : ( $event_id ? (string) get_post_meta( $event_id, '_lnkup_country', true ) : '' );
+		$strict  = isset( $input['location_mode'] )
+			? 'strict' === $input['location_mode']
+			: ( ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ! empty( $input['location_strict'] ) );
+		return LNKup_Location_Service::validate_for_save(
+			$city,
+			$state,
+			$country,
+			array(
+				'mode'      => $strict ? 'strict' : 'lenient',
+				'confirmed' => ! empty( $input['location_confirmed'] ),
+			)
+		);
 	}
 
 	/**
@@ -125,6 +169,9 @@ class LNKup_Organizer_Onboarding {
 		}
 		if ( ! empty( $input['ticketing_url'] ) ) {
 			update_post_meta( $event_id, '_lnkup_external_source_url', esc_url_raw( (string) $input['ticketing_url'] ) );
+		}
+		if ( is_array( $input['_lnkup_location'] ?? null ) ) {
+			LNKup_Location_Service::apply_to_event( (int) $event_id, $input['_lnkup_location'] );
 		}
 		update_post_meta( $event_id, '_lnkup_venue_hidden', ! empty( $input['venue_hidden'] ) );
 		if ( isset( $input['power_available'] ) ) {
@@ -825,6 +872,11 @@ class LNKup_Organizer_Onboarding {
 			return new WP_Error( 'forbidden', __( 'You cannot edit this event.', 'lnkup-marketplace' ) );
 		}
 
+		$location = self::location_from_input( $input, $event_id );
+		if ( is_wp_error( $location ) ) {
+			return $location;
+		}
+
 		$logistics_before = self::logistics_snapshot( $event_id );
 		$update           = array( 'ID' => $event_id );
 		if ( isset( $input['event_name'] ) || isset( $input['title'] ) ) {
@@ -856,6 +908,9 @@ class LNKup_Organizer_Onboarding {
 		}
 		if ( ! empty( $input['ticketing_url'] ) ) {
 			update_post_meta( $event_id, '_lnkup_external_source_url', esc_url_raw( (string) $input['ticketing_url'] ) );
+		}
+		if ( is_array( $location ) ) {
+			LNKup_Location_Service::apply_to_event( $event_id, $location );
 		}
 		if ( array_key_exists( 'venue_hidden', $input ) ) {
 			update_post_meta( $event_id, '_lnkup_venue_hidden', ! empty( $input['venue_hidden'] ) );
@@ -1120,6 +1175,22 @@ class LNKup_Organizer_Onboarding {
 		if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
 			return new WP_Error( 'missing_date', __( 'Choose a date for the duplicated event.', 'lnkup-marketplace' ) );
 		}
+		// A copy must state where it happens. Without this, a renamed copy silently keeps
+		// the source city, coordinates and market (e.g. a Greensboro copy still in Houston).
+		$keep_location = ! empty( $input['keep_location'] );
+		$new_city      = isset( $input['city'] ) ? trim( sanitize_text_field( (string) $input['city'] ) ) : '';
+		$new_state     = isset( $input['state'] ) ? trim( sanitize_text_field( (string) $input['state'] ) ) : '';
+		if ( ! $keep_location && ( '' === $new_city || '' === $new_state ) ) {
+			return new WP_Error( 'missing_location', __( 'Enter the city and state for the new event, or choose to keep the same location.', 'lnkup-marketplace' ) );
+		}
+		if ( $keep_location ) {
+			unset( $input['city'], $input['state'] );
+		}
+		$location = self::location_from_input( $input, $source_event_id );
+		if ( is_wp_error( $location ) ) {
+			return $location;
+		}
+		$input['_lnkup_location'] = $location;
 
 		$client_token = isset( $input['client_token'] ) ? sanitize_text_field( (string) $input['client_token'] ) : '';
 		if ( '' !== $client_token ) {
@@ -1195,6 +1266,7 @@ class LNKup_Organizer_Onboarding {
 			'venue_name'    => '_lnkup_venue_name',
 			'venue_address' => '_lnkup_venue_address',
 		);
+		$provided = array();
 		foreach ( $venue_overrides as $field => $meta_key ) {
 			if ( ! array_key_exists( $field, $input ) ) {
 				continue;
@@ -1202,10 +1274,31 @@ class LNKup_Organizer_Onboarding {
 			$value = 'venue_address' === $field
 				? sanitize_textarea_field( (string) $input[ $field ] )
 				: sanitize_text_field( (string) $input[ $field ] );
+			if ( '' === trim( $value ) ) {
+				continue;
+			}
 			update_post_meta( $new_id, $meta_key, $value );
+			$provided[ $meta_key ] = true;
+		}
+		if ( is_array( $input['_lnkup_location'] ?? null ) ) {
+			// A copy in a new city must not keep anything that pins it to the source venue.
+			foreach ( self::source_venue_meta_keys() as $stale_key ) {
+				if ( isset( $provided[ $stale_key ] ) ) {
+					continue;
+				}
+				delete_post_meta( $new_id, $stale_key );
+			}
+			LNKup_Location_Service::apply_to_event( $new_id, $input['_lnkup_location'] );
 		}
 
-		foreach ( array( 'lnkup_event_type', 'lnkup_market' ) as $taxonomy ) {
+		// A copy in a new city gets its market from the new location, never the source event's market.
+		$new_loc    = is_array( $input['_lnkup_location'] ?? null ) ? $input['_lnkup_location'] : array();
+		$moved      = $new_loc && (
+			0 !== strcasecmp( (string) ( $new_loc['city'] ?? '' ), (string) get_post_meta( $source_event_id, '_lnkup_city', true ) )
+			|| 0 !== strcasecmp( (string) ( $new_loc['state_code'] ?? '' ), (string) get_post_meta( $source_event_id, '_lnkup_state', true ) )
+		);
+		$taxonomies = $moved ? array( 'lnkup_event_type' ) : array( 'lnkup_event_type', 'lnkup_market' );
+		foreach ( $taxonomies as $taxonomy ) {
 			$term_ids = wp_get_object_terms( $source_event_id, $taxonomy, array( 'fields' => 'ids' ) );
 			if ( ! is_wp_error( $term_ids ) && $term_ids ) {
 				wp_set_object_terms( $new_id, $term_ids, $taxonomy );
@@ -1313,7 +1406,7 @@ class LNKup_Organizer_Onboarding {
 		$any_open        = false;
 		foreach ( self::event_slot_posts( $event_id ) as $opp ) {
 			$status = (string) get_post_meta( $opp->ID, '_lnkup_opportunity_status', true );
-			if ( '' !== $status && 'open' !== $status ) {
+			if ( ( '' !== $status && 'open' !== $status ) || 'publish' !== $opp->post_status || get_post_meta( $opp->ID, '_lnkup_invite_only', true ) ) {
 				continue;
 			}
 			$any_open = true;
@@ -1471,6 +1564,14 @@ class LNKup_Organizer_Onboarding {
 		$name = isset( $input['public_name'] ) ? sanitize_text_field( (string) $input['public_name'] ) : '';
 		if ( strlen( $name ) > 120 ) {
 			return new WP_Error( 'name_too_long', __( 'Organization name must be 120 characters or fewer.', 'lnkup-marketplace' ) );
+		}
+		if ( class_exists( 'LNKup_Location_Service' ) && ( ! empty( $input['city'] ) || ! empty( $input['state'] ) ) ) {
+			$location = LNKup_Location_Service::canonical_profile_location( (string) ( $input['city'] ?? '' ), (string) ( $input['state'] ?? '' ), '', empty( $input['location_strict'] ) && ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ? 'lenient' : 'strict' );
+			if ( is_wp_error( $location ) ) {
+				return $location;
+			}
+			$input['city']  = $location['city'];
+			$input['state'] = $location['state'];
 		}
 		update_user_meta( $user_id, '_lnkup_organizer_public_name', $name );
 		update_user_meta( $user_id, '_lnkup_organizer_bio', isset( $input['bio'] ) ? sanitize_textarea_field( (string) $input['bio'] ) : '' );
@@ -1728,6 +1829,28 @@ class LNKup_Organizer_Onboarding {
 			return;
 		}
 		update_user_meta( $user_id, $meta_key, $attachment_id );
+	}
+
+	/**
+	 * Venue-specific meta cleared from a duplicate whose city or state differs from the source.
+	 *
+	 * @return array<int, string>
+	 */
+	private static function source_venue_meta_keys(): array {
+		return array(
+			'_lnkup_lat',
+			'_lnkup_lng',
+			'_lnkup_zip',
+			'_lnkup_address_line1',
+			'_lnkup_address_line2',
+			'_lnkup_market',
+			'_lnkup_region',
+			'_lnkup_neighborhood',
+			'_lnkup_venue_name',
+			'_lnkup_venue_address',
+			'_lnkup_geocode_status',
+			'_lnkup_geocode_manual_override',
+		);
 	}
 
 	/**

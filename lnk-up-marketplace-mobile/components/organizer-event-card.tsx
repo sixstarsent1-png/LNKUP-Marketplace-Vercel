@@ -4,6 +4,7 @@ import { router, type Href } from "expo-router"
 
 import { AppIcon } from "@/components/ui/app-icon"
 import { AppText as Text } from "@/components/ui/app-text"
+import { CapacityBar } from "@/components/ui/capacity-bar"
 import { EventImage } from "@/components/ui/event-image"
 import { formatShortDate } from "@/lib/format/date"
 import { PressableScale } from "@/components/ui/pressable-scale"
@@ -48,7 +49,8 @@ export const OrganizerEventCard = memo(function OrganizerEventCard({
   const confirmed = event.paidCount ?? 0
   const applications = event.requestsCount ?? 0
   const actions = toReview + (event.needsInfoCount ?? 0) + due
-  const where = [formatShortDate(event.date), [event.city, event.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ")
+  const place = event.place ?? [event.city, event.state].filter(Boolean).join(", ")
+  const where = [formatShortDate(event.date), place].filter(Boolean).join(" · ")
   const href = `/(organizer)/events/${event.id}` as Href
 
   return (
@@ -99,6 +101,11 @@ export const OrganizerEventCard = memo(function OrganizerEventCard({
           <Metric value={due} label="Awaiting pay" attention={due > 0} />
           <Metric value={confirmed} label="Confirmed" />
         </View>
+        {event.capacity && event.capacity.total > 0 ? (
+          <View style={styles.capacity}>
+            <CapacityBar capacity={event.capacity} />
+          </View>
+        ) : null}
         {state === "draft" ? <Meta style={styles.draftHint}>Not visible to vendors yet — finish and publish.</Meta> : null}
       </PressableScale>
     </Surface>
@@ -124,5 +131,6 @@ const styles = StyleSheet.create({
   metricValue: { fontFamily: fonts.display, fontSize: typeScale.headline, color: colors.black },
   metricAttention: { color: colors.amber700 },
   metricLabel: { fontFamily: fonts.body, fontSize: typeScale.micro, color: colors.gray500, textAlign: "center" },
+  capacity: { marginTop: spacing.md },
   draftHint: { marginTop: spacing.sm, color: colors.gray700, fontFamily: fonts.bodySemi },
 })

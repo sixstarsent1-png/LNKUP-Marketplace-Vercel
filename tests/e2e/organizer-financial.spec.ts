@@ -41,8 +41,13 @@ test.describe('Organizer Financial Center', () => {
 
   test('tabs switch without errors', async ({ page }) => {
     await page.goto(FINANCIAL_URL);
+    const tabs = page.getByTestId('lnkup-money-tabs');
     for (const tab of ['wallet', 'payouts']) {
-      await page.locator(`.lnkup-fin-tab[data-tab="${tab}"]`).click();
+      const button = page.locator(`.lnkup-fin-tab[data-tab="${tab}"]`);
+      if (!(await button.isVisible())) {
+        await tabs.getByText('More', { exact: true }).click();
+      }
+      await button.click();
       const panel = page.locator(`#lnkup-fin-org-${tab}`);
       await expect(panel).toHaveClass(/is-active/);
       await expect(panel).not.toContainText(/could not load/i, { timeout: 15000 });

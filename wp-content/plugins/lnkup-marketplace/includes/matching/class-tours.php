@@ -309,12 +309,13 @@ class LNKup_Tours {
 				$app_status = $applied[ $opp_id ] ?? '';
 				$again      = 'cancelled' === $app_status
 					|| ( 'rejected' === $app_status && 'allowed' === ( LNKup_Applications::reapply_state( $opp_id, $user_id )['reapply'] ?? '' ) );
+				$guest      = LNKup_Access_Policy::is_guest();
 				$opps[]     = array(
 					'opportunity_id'     => $opp_id,
 					'title'              => lnkup_plain_title( $opp_id ),
-					'vendor_fee'         => (float) $row['vendor_fee'],
-					'spots_remaining'    => (int) $row['spots_remaining'],
-					'spots_unlimited'    => $unlimited,
+					'vendor_fee'         => $guest ? null : (float) $row['vendor_fee'],
+					'spots_remaining'    => $guest ? null : (int) $row['spots_remaining'],
+					'spots_unlimited'    => $guest ? null : $unlimited,
 					'deadline'           => $row['deadline'],
 					'is_open'            => $is_open,
 					'matches_me'         => in_array( $opp_id, $matched, true ),
@@ -332,8 +333,8 @@ class LNKup_Tours {
 				'state'         => (string) get_post_meta( $event_id, '_lnkup_state', true ),
 				'accepting'     => $open,
 				'matches_me'    => $match,
-				'fee_min'       => $fees ? min( $fees ) : null,
-				'fee_max'       => $fees ? max( $fees ) : null,
+				'fee_min'       => $fees && ! LNKup_Access_Policy::is_guest() ? min( $fees ) : null,
+				'fee_max'       => $fees && ! LNKup_Access_Policy::is_guest() ? max( $fees ) : null,
 				'opportunities' => $opps,
 			);
 		}

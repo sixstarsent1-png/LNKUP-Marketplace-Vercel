@@ -320,6 +320,25 @@ class LNKup_Portfolio_Tours {
 			'spots_total'      => $spots,
 			'spots_held'       => $held,
 			'manage_url'       => add_query_arg( 'event', (int) $event_id, lnkup_page_url_helper( 'organizer-dashboard' ) ),
+		) + self::stop_figures( (int) $event_id );
+	}
+
+	/**
+	 * Confirmed vendors and event-scope money for one stop (LNKup_Organizer_Presentation).
+	 *
+	 * @param int $event_id Stop.
+	 * @return array{confirmed:int,collected_gross:float,outstanding:float}
+	 */
+	private static function stop_figures( $event_id ) {
+		if ( ! class_exists( 'LNKup_Organizer_Presentation' ) ) {
+			return array( 'confirmed' => 0, 'collected_gross' => 0.0, 'outstanding' => 0.0 );
+		}
+		$counts = LNKup_Organizer_Presentation::status_counts( array( $event_id ) )[ $event_id ] ?? array();
+		$money  = LNKup_Organizer_Presentation::event_money( $event_id );
+		return array(
+			'confirmed'       => (int) ( $counts['paid'] ?? 0 ) + (int) ( $counts['completed'] ?? 0 ),
+			'collected_gross' => (float) $money['collected_gross'],
+			'outstanding'     => (float) $money['outstanding'],
 		);
 	}
 
@@ -700,6 +719,71 @@ class LNKup_Portfolio_Tours {
 		}
 		LNKup_Portfolio_Audit::log( 'event', $event_id, 'stop_detached', array( 'tour_id' => (int) $tour_id ), $organizer_id );
 		return array( 'event_id' => (int) $event_id, 'detached' => true );
+	}
+
+	/**
+	 * Add existing events to a tour as stops. Only the tour linkage and stop order change: the
+	 * events keep their IDs, URLs, applications and payments. Each attach is audited and can be
+	 * reversed with detach_stop().
+	 *
+	 * @param int   $tour_id      Tour.
+	 * @param int[] $event_ids    Events to attach.
+	 * @param int   $organizer_id Owner.
+	 * @return array|WP_Error
+	 */
+	public static function attach_events( $tour_id, array $event_ids, $organizer_id ) {
+		$tour_id   = (int) $tour_id;
+		$event_ids = array_values( array_unique( array_filter( array_map( 'absint', $event_ids ) ) ) );
+		if ( ! $event_ids ) {
+			return new WP_Error( 'lnkup_no_events', __( 'Choose at least one event to add.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$current = LNKup_Tours::stop_event_ids( $tour_id );
+		$new     = array();
+		$skipped = array();
+		foreach ( $event_ids as $event_id ) {
+			if ( 'lnkup_event' !== get_post_type( $event_id ) || ! LNKup_Capabilities::organizer_owns_event( $event_id, (int) $organizer_id ) ) {
+				return new WP_Error( 'lnkup_forbidden', __( 'You can only add your own events to a tour.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+			}
+			if ( in_array( $event_id, $current, true ) ) {
+				$skipped[] = array( 'event_id' => $event_id, 'reason' => 'already_in_tour' );
+				continue;
+			}
+			$other = (int) get_post_meta( $event_id, '_lnkup_tour_id', true );
+			if ( $other && $other !== $tour_id && 'lnkup_tour' === get_post_type( $other ) ) {
+				return new WP_Error(
+					'lnkup_event_in_tour',
+					/* translators: %s: event title */
+					sprintf( __( '"%s" already belongs to another tour. Remove it there first.', 'lnkup-marketplace' ), lnkup_plain_title( $event_id ) ),
+					array( 'status' => 409 )
+				);
+			}
+			$new[] = $event_id;
+		}
+		if ( count( $current ) + count( $new ) > LNKup_Tours::MAX_STOPS ) {
+			return new WP_Error( 'lnkup_too_many_stops', sprintf( /* translators: %d: max stops */ __( 'A tour can have up to %d stops.', 'lnkup-marketplace' ), LNKup_Tours::MAX_STOPS ), array( 'status' => 400 ) );
+		}
+		if ( $new ) {
+			usort(
+				$new,
+				static function ( $a, $b ) {
+					return strcmp( (string) get_post_meta( $a, '_lnkup_event_date', true ), (string) get_post_meta( $b, '_lnkup_event_date', true ) );
+				}
+			);
+			$saved = LNKup_Tours::save( (int) $organizer_id, array( 'event_ids' => array_merge( self::ordered( $current ), $new ) ), $tour_id );
+			if ( is_wp_error( $saved ) ) {
+				return $saved;
+			}
+			foreach ( $new as $event_id ) {
+				LNKup_Portfolio_Audit::log( 'event', $event_id, 'stop_attached', array( 'tour_id' => $tour_id ), (int) $organizer_id );
+			}
+		}
+		return array(
+			'tour_id'  => $tour_id,
+			'attached' => $new,
+			'skipped'  => $skipped,
+			'stops'    => self::ordered( LNKup_Tours::stop_event_ids( $tour_id ) ),
+			'warnings' => self::date_overlaps( $tour_id ),
+		);
 	}
 
 	/**

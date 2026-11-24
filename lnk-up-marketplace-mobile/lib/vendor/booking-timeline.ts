@@ -1,4 +1,5 @@
 import type { VendorRequest } from "@/lib/api/vendor-requests"
+import { formatShortDate } from "@/lib/format/date"
 import { isEventPast } from "@/lib/vendor/vendor-stage"
 
 export type TimelineState = "done" | "current" | "upcoming" | "stopped"
@@ -67,11 +68,36 @@ export function bookingTimeline(request: VendorRequest, now: Date = new Date()):
     state: paid ? "done" : s === "approved" || s === "payment_required" ? "current" : "upcoming",
   })
 
+  const checkedIn = serverStep(request, "checked_in")
   steps.push({
     key: "event",
-    label: s === "completed" || (paid && past) ? "Event completed" : "Event day check-in",
-    detail: request.eventDate,
-    state: s === "completed" || (paid && past) ? "done" : paid ? "current" : "upcoming",
+    label: checkedIn?.state === "done" ? "Checked in" : s === "completed" || (paid && past) ? "Event completed" : "Event day check-in",
+    detail: checkedIn?.at ? formatStamp(checkedIn.at) : request.eventDate,
+    state: checkedIn?.state === "done" || s === "completed" || (paid && past) ? "done" : paid ? "current" : "upcoming",
   })
-  return steps
+  return withServerTimestamps(steps, request)
+}
+
+/** Server timeline (single-booking endpoint) step by key. */
+function serverStep(request: VendorRequest, key: string) {
+  return request.timeline?.find((step) => step.key === key)
+}
+
+function formatStamp(at: string): string | undefined {
+  const day = at.slice(0, 10)
+  return formatShortDate(day) ?? undefined
+}
+
+const SERVER_KEY: Partial<Record<TimelineStep["key"], string>> = { applied: "submitted", decision: "approved", payment: "paid" }
+
+/** Add recorded dates to completed steps. Steps without a stored timestamp keep their text. */
+function withServerTimestamps(steps: TimelineStep[], request: VendorRequest): TimelineStep[] {
+  if (!request.timeline) return steps
+  return steps.map((step) => {
+    const key = SERVER_KEY[step.key]
+    const server = key ? serverStep(request, key) : undefined
+    if (step.state !== "done" || !server?.at) return step
+    const stamp = formatStamp(server.at)
+    return stamp ? { ...step, detail: step.key === "applied" ? `Submitted ${stamp}` : stamp } : step
+  })
 }

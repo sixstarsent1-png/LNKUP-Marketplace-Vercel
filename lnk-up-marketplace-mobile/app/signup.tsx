@@ -13,6 +13,8 @@ import { Redirect, router, useLocalSearchParams } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { LegalLinks } from "@/components/legal-links"
+import { LocationField } from "@/components/location-field"
+import { isLocationSubmittable, type LocationStatus } from "@/lib/api/locations"
 import { ErrorPanel } from "@/components/panel-states"
 import { Surface } from "@/components/ui/surface"
 import { Body, DisplayTitle, Meta, SectionTitle } from "@/components/ui/typography"
@@ -20,11 +22,16 @@ import { isLiveApiEnabled } from "@/lib/api/config"
 import { useAuth } from "@/lib/auth/auth-context"
 import type { HomeHref } from "@/lib/auth/roles"
 import { clearPendingAttribution, pickAttribution, readPendingAttribution } from "@/lib/navigation/pending-attribution"
+import { setPendingDestination } from "@/lib/navigation/pending-destination"
 import { constrainedColumnStyle, useBreakpoint } from "@/lib/layout/use-breakpoint"
 import { colors, fonts, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 export default function SignupScreen() {
-  const params = useLocalSearchParams<{ role?: string; ref?: string; org_ref?: string; cc?: string }>()
+  const params = useLocalSearchParams<{ role?: string; returnTo?: string; ref?: string; org_ref?: string; cc?: string }>()
+  useEffect(() => {
+    const value = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo
+    if (value) setPendingDestination(value)
+  }, [params.returnTo])
   const {
     isAuthenticated,
     isLoading,
@@ -41,6 +48,7 @@ export default function SignupScreen() {
   const [organizationName, setOrganizationName] = useState("")
   const [city, setCity] = useState("")
   const [stateCode, setStateCode] = useState("")
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [passwordConfirm, setPasswordConfirm] = useState("")
@@ -83,6 +91,10 @@ export default function SignupScreen() {
     }
     if (role === "organizer" && (!organizationName.trim() || !city.trim() || !stateCode.trim())) {
       setLocalError("Add your organization name and the city and state where you hold events.")
+      return
+    }
+    if (role === "organizer" && !isLocationSubmittable(locationStatus)) {
+      setLocalError("Choose your city and state from the suggestions.")
       return
     }
     if (!acceptedTerms) {
@@ -192,34 +204,16 @@ export default function SignupScreen() {
                     accessibilityLabel="Organization or business name"
                   />
                 </View>
-                <View style={styles.cityRow}>
-                  <View style={[styles.field, styles.cityField]}>
-                    <Meta style={styles.label}>Primary city</Meta>
-                    <TextInput
-                      autoCapitalize="words"
-                      value={city}
-                      onChangeText={setCity}
-                      placeholder="Houston"
-                      placeholderTextColor={colors.gray400}
-                      style={styles.input}
-                      maxLength={120}
-                      accessibilityLabel="Primary city"
-                    />
-                  </View>
-                  <View style={[styles.field, styles.stateField]}>
-                    <Meta style={styles.label}>State</Meta>
-                    <TextInput
-                      autoCapitalize="characters"
-                      value={stateCode}
-                      onChangeText={setStateCode}
-                      placeholder="TX"
-                      placeholderTextColor={colors.gray400}
-                      style={styles.input}
-                      maxLength={32}
-                      accessibilityLabel="State"
-                    />
-                  </View>
-                </View>
+                <LocationField
+                  cityLabel="Primary city"
+                  city={city}
+                  state={stateCode}
+                  onChange={(next) => {
+                    setCity(next.city)
+                    setStateCode(next.state)
+                  }}
+                  onStatusChange={setLocationStatus}
+                />
               </>
             ) : null}
 

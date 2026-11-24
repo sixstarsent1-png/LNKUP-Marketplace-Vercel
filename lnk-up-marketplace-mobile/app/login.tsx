@@ -102,7 +102,8 @@ export default function LoginScreen() {
   }
 
   function handleCreateAccount() {
-    router.push({ pathname: "/signup", params: { role: signupRole } })
+    const value = Array.isArray(returnTo) ? returnTo[0] : returnTo
+    router.push({ pathname: "/signup", params: value ? { role: signupRole, returnTo: value } : { role: signupRole } })
   }
 
   return (

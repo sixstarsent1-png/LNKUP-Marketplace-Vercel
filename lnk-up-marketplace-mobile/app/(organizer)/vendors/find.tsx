@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { router, useLocalSearchParams, type Href } from "expo-router"
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { Screen } from "@/components/screen"
+import { completedEventsLabel, shortCategory } from "@/components/organizer-vendors/discover-directory"
 import { vendorProfileHref } from "@/components/organizer-vendors/vendor-queue"
 import { AppIcon } from "@/components/ui/app-icon"
 import { BackLink } from "@/components/ui/back-link"
@@ -45,9 +46,11 @@ const STAGE_LABELS: Record<string, string> = {
 /** Organizer Find Vendors: matching discoverable vendors for one event, shortlist and batch invite. */
 export default function OrganizerFindVendorsScreen() {
   const { auth } = useAuth()
-  const params = useLocalSearchParams<{ event?: string }>()
+  const params = useLocalSearchParams<{ event?: string; eventId?: string; category?: string }>()
+  const initialEvent = params.eventId ?? params.event
   const [events, setEvents] = useState<OrganizerEventLite[]>([])
-  const [eventId, setEventId] = useState<number | null>(params.event ? Number(params.event) : null)
+  const [eventId, setEventId] = useState<number | null>(initialEvent ? Number(initialEvent) : null)
+  const [categoryFocus, setCategoryFocus] = useState<string>(typeof params.category === "string" ? params.category : "")
   const [section, setSection] = useState<OrganizerVendorSection>("recommended")
   const [matches, setMatches] = useState<EventVendorMatches | null>(null)
   const [recruitment, setRecruitment] = useState<RecruitmentSummary | null>(null)
@@ -102,7 +105,12 @@ export default function OrganizerFindVendorsScreen() {
     void load()
   }, [load])
 
-  const vendors: MatchedVendor[] = useMemo(() => (matches?.status === "ready" ? matches.items : []), [matches])
+  const vendors: MatchedVendor[] = useMemo(() => {
+    const all = matches?.status === "ready" ? matches.items : []
+    if (!categoryFocus) return all
+    const focus = categoryFocus.toLowerCase()
+    return all.filter((vendor) => shortCategory(vendor.primaryCategory).toLowerCase() === focus || vendor.primaryCategory.toLowerCase().includes(focus))
+  }, [matches, categoryFocus])
 
   function toggleSelected(profileId: number) {
     setSelected((current) => {
@@ -211,6 +219,13 @@ export default function OrganizerFindVendorsScreen() {
         </ScrollView>
       ) : null}
 
+      {categoryFocus ? (
+        <View style={styles.focus}>
+          <FilterChip label={`Recruiting: ${categoryFocus}`} selected onPress={() => setCategoryFocus("")} />
+          <Meta>Tap to see every category.</Meta>
+        </View>
+      ) : null}
+
       {recruitment?.suggestions.length ? (
         <View testID="recruitment-suggestions" style={styles.suggestions}>
           {recruitment.suggestions.slice(0, 3).map((s) => (
@@ -297,8 +312,9 @@ export default function OrganizerFindVendorsScreen() {
                   </Pressable>
                 </View>
                 <Meta>
-                  {[vendor.primaryCategory, [vendor.city, vendor.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}
+                  {[shortCategory(vendor.primaryCategory), [vendor.city, vendor.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}
                 </Meta>
+                <Meta>{completedEventsLabel(vendor.completedEvents)}</Meta>
                 {vendor.reasons.slice(0, 3).map((reason) => (
                   <Meta key={reason} style={styles.reason}>
                     • {reason}
@@ -319,6 +335,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   events: { gap: spacing.sm, paddingVertical: spacing.sm },
   suggestions: { gap: spacing.sm, marginBottom: spacing.md },
+  focus: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.sm },
   list: { gap: spacing.md },
   card: {
     borderWidth: 1,

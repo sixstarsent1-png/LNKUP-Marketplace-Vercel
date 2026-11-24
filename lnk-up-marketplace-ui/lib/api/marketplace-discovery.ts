@@ -40,6 +40,9 @@ export type MarketplaceSearchFilters = {
 export type MarketplaceOpportunity = {
   id: string
   opportunityId?: number
+  /** Server withheld pricing and inventory because the viewer is signed out. */
+  gated?: boolean
+  statusLabel?: string
   eventId?: string
   title: string
   eventDate?: string
@@ -132,13 +135,16 @@ export function mapWpToOpportunity(item: WpOpportunityItem): MarketplaceOpportun
 
   const categories = item.categories ?? item.categories_needed ?? []
   const eventTypes = (item as { event_types?: string[] }).event_types ?? []
-  const spotsRemaining = item.spots_remaining ?? 0
-  const totalSpots = item.total_spots ?? spotsRemaining
-  const isOpen = item.is_open !== false && spotsRemaining > 0
+  const gated = Boolean(item.access?.gated)
+  const guestOpen = ["open", "closing_soon"].includes(item.opportunity_status?.key ?? "open")
+  const spotsRemaining = gated ? (guestOpen ? 1 : 0) : (item.spots_remaining ?? 0)
+  const totalSpots = gated ? spotsRemaining : (item.total_spots ?? spotsRemaining)
 
   return {
     id: `opp-${opportunityId}`,
     opportunityId,
+    gated,
+    statusLabel: item.opportunity_status?.label,
     eventId: String((item as { event_id?: number }).event_id ?? opportunityId),
     title: item.name ?? item.event_name ?? "Event opportunity",
     eventDate: formatDate(item.date ?? item.event_date),
@@ -191,6 +197,8 @@ export function opportunityToEventItem(opp: MarketplaceOpportunity): EventItem {
   return {
     id: opp.id,
     opportunityId: opp.opportunityId,
+    gated: opp.gated,
+    statusLabel: opp.statusLabel,
     name: opp.title,
     image: opp.imageUrl ?? "",
     imageFit: opp.media?.fit,

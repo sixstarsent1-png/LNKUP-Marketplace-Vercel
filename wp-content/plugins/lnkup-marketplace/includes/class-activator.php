@@ -118,6 +118,9 @@ class LNKup_Activator {
 		if ( class_exists( 'LNKup_Meta_Tables' ) ) {
 			LNKup_Meta_Tables::create_tables();
 		}
+		if ( class_exists( 'LNKup_Location_Migration' ) ) {
+			LNKup_Location_Migration::create_table();
+		}
 	}
 
 	/**

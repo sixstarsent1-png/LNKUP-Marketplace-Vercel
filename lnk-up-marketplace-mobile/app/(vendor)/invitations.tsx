@@ -7,6 +7,7 @@ import { Screen } from "@/components/screen"
 import { BackLink } from "@/components/ui/back-link"
 import { InlineBanner } from "@/components/ui/banner"
 import { Button } from "@/components/ui/button"
+import { EventImage } from "@/components/ui/event-image"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Surface } from "@/components/ui/surface"
 import { Body, Meta, SectionTitle } from "@/components/ui/typography"
@@ -14,7 +15,7 @@ import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import { fetchVendorInvites, respondToVendorInvite, type VendorInvite } from "@/lib/api/vendor-invites"
 import { useAuth } from "@/lib/auth/auth-context"
 import { confirmAction, showToast } from "@/lib/feedback/feedback"
-import { spacing } from "@/lib/theme"
+import { radii, spacing } from "@/lib/theme"
 
 function whereAndWhen(invite: VendorInvite): string {
   const place = [invite.city, invite.state].filter(Boolean).join(", ")
@@ -131,6 +132,7 @@ export default function VendorInvitationsScreen() {
             const expires = expiresLabel(invite)
             return (
               <Surface key={invite.id} elevated style={styles.card}>
+                {invite.imageUrl ? <EventImage uri={invite.imageUrl} height={120} radius={radii.md} label="Event" /> : null}
                 <View style={styles.titleRow}>
                   <SectionTitle style={styles.title} numberOfLines={2}>
                     {invite.eventTitle || "Event invitation"}
@@ -140,6 +142,7 @@ export default function VendorInvitationsScreen() {
                 <Meta numberOfLines={2}>{whereAndWhen(invite)}</Meta>
                 {invite.organizerName ? <Meta>{`Invited by ${invite.organizerName}`}</Meta> : null}
                 {invite.message ? <Body>{invite.message}</Body> : null}
+                {invite.canRespond ? <Meta>An invitation isn't a booked booth. Accepting starts your application for the organizer to confirm.</Meta> : null}
                 {invite.opportunityId ? (
                   <Button label="View opportunity" variant="ghost" size="sm" onPress={() => router.push(`/opportunity/${invite.opportunityId}` as never)} />
                 ) : null}

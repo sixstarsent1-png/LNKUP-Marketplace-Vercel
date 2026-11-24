@@ -60,17 +60,7 @@ class LNKup_Public_Embed {
 	 * Whether the slot may be shown publicly right now (checked on every request, never cached).
 	 */
 	public static function visible( int $opp_id ): bool {
-		$opp = get_post( $opp_id );
-		if ( ! $opp || 'lnkup_opportunity' !== $opp->post_type || 'publish' !== $opp->post_status ) {
-			return false;
-		}
-		$slot = (string) get_post_meta( $opp_id, '_lnkup_opportunity_status', true );
-		if ( ( '' !== $slot && 'open' !== $slot ) || get_post_meta( $opp_id, '_lnkup_invite_only', true ) ) {
-			return false;
-		}
-		$event_id = (int) get_post_meta( $opp_id, '_lnkup_event_id', true );
-		$event    = $event_id ? get_post( $event_id ) : null;
-		return $event && 'publish' === $event->post_status && 'live' === (string) get_post_meta( $event_id, '_lnkup_event_status', true );
+		return LNKup_Access_Policy::opportunity_publicly_visible( $opp_id );
 	}
 
 	public static function payload( int $opp_id ): ?array {
@@ -86,8 +76,15 @@ class LNKup_Public_Embed {
 			$user     = get_userdata( $organizer );
 			$org_name = $user ? (string) $user->display_name : '';
 		}
-		$base = function_exists( 'lnkup_page_url_helper' ) ? lnkup_page_url_helper( 'opportunities' ) : home_url( '/opportunities/' );
-		$fee  = get_post_meta( $opp_id, '_lnkup_vendor_fee', true );
+		$base   = function_exists( 'lnkup_page_url_helper' ) ? lnkup_page_url_helper( 'opportunities' ) : home_url( '/opportunities/' );
+		$status = LNKup_Access_Policy::guest_opportunity_status(
+			array(
+				'deadline'        => (string) get_post_meta( $opp_id, '_lnkup_application_deadline', true ),
+				'total_spots'     => (int) get_post_meta( $opp_id, '_lnkup_spots_total', true ),
+				'spots_remaining' => (int) get_post_meta( $opp_id, '_lnkup_spots_remaining', true ),
+			)
+		);
+		// The embed is a shared public cache: pricing and inventory stay behind sign-in on LNKup.
 		return array(
 			'id'             => $opp_id,
 			'title'          => html_entity_decode( lnkup_plain_title( $opp ), ENT_QUOTES, 'UTF-8' ),
@@ -95,8 +92,9 @@ class LNKup_Public_Embed {
 			'event_date'     => (string) get_post_meta( $event_id, '_lnkup_event_date', true ),
 			'city'           => (string) get_post_meta( $event_id, '_lnkup_city', true ),
 			'state'          => (string) get_post_meta( $event_id, '_lnkup_state', true ),
-			'vendor_fee'     => '' === (string) $fee ? null : (float) $fee,
-			'spots_left'     => (int) get_post_meta( $opp_id, '_lnkup_spots_remaining', true ),
+			'vendor_fee'     => null,
+			'spots_left'     => null,
+			'status_label'   => $status['label'],
 			'deadline'       => (string) get_post_meta( $opp_id, '_lnkup_application_deadline', true ),
 			'organizer_name' => $org_name,
 			'organizer_slug' => class_exists( 'LNKup_Organizer_Onboarding' ) ? LNKup_Organizer_Onboarding::organizer_public_slug( $organizer ) : '',

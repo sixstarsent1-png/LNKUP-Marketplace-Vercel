@@ -4,19 +4,30 @@ import type { WpAuth } from "@/lib/api/wp-client"
 import { wpFetchJson } from "@/lib/api/wp-client"
 import type { WpOpportunityItem, WpSearchResponse } from "@/lib/api/types"
 import { mapEventMedia, type EventMedia } from "@/lib/api/event-media"
+import { groupOpportunitiesLocally, mapEventGroup, type EventGroup, type WpEventGroup } from "@/lib/api/event-groups"
 import { MOCK_OPPORTUNITIES } from "@/lib/data/fixtures"
 import { formatShortDate } from "@/lib/format/date"
 
 export type MarketplaceSort =
   | "recommended"
   | "newest"
+  | "soonest"
   | "closing_soon"
   | "fee_low"
+  | "fee_high"
   | "closest"
+
+/** Server `date_preset` values (`LNKup_Discovery::apply_date_filters`). */
+export type MarketplaceDatePreset = "this_weekend" | "this_month" | "next_30"
+
+/** Server `environment` values. */
+export type MarketplaceEnvironment = "indoor" | "outdoor"
 
 export type MarketplaceOpportunity = {
   id: string
   opportunityId?: number
+  /** Canonical event; opportunities of one event share it. */
+  eventId?: number
   title: string
   eventDate?: string
   /** Raw Y-m-d event day, for "already happened" checks. */
@@ -69,7 +80,26 @@ export type SearchParams = {
   lng?: number
   radiusMiles?: number
   sort?: MarketplaceSort | string
+  datePreset?: MarketplaceDatePreset
+  environment?: MarketplaceEnvironment
+  closingSoon?: boolean
   page?: number
+}
+
+export const DATE_PRESET_LABELS: Record<MarketplaceDatePreset, string> = {
+  this_weekend: "This weekend",
+  this_month: "This month",
+  next_30: "Next 30 days",
+}
+
+export const SORT_LABELS: Record<MarketplaceSort, string> = {
+  recommended: "Recommended",
+  soonest: "Upcoming date",
+  newest: "Recently added",
+  closing_soon: "Closing soon",
+  fee_low: "Lowest fee",
+  fee_high: "Highest fee",
+  closest: "Nearest",
 }
 
 export type SearchResult = {
@@ -88,8 +118,10 @@ export type ActiveFilterChip = {
 const SORT_TO_WP: Record<string, string> = {
   recommended: "recommended",
   newest: "newest",
+  soonest: "soonest",
   closing_soon: "closing_soon",
   fee_low: "fee_low",
+  fee_high: "fee_high",
   closest: "closest",
 }
 
@@ -119,6 +151,7 @@ export function mapWpToOpportunity(item: WpOpportunityItem): MarketplaceOpportun
   return {
     id: `opp-${opportunityId}`,
     opportunityId,
+    eventId: item.event_id ? Number(item.event_id) : undefined,
     title: item.name ?? item.event_name ?? "Event opportunity",
     eventDate: formatDate(item.date ?? item.event_date),
     eventDateIso: isoDay(item.date ?? item.event_date),
@@ -180,6 +213,9 @@ export function filtersToWpQuery(params: SearchParams): Record<string, string | 
   if (params.feeMin !== undefined) q.fee_min = params.feeMin
   if (params.feeMax !== undefined) q.fee_max = params.feeMax
   if (params.verifiedOrganizerOnly) q.verified_organizer = true
+  if (params.datePreset) q.date_preset = params.datePreset
+  if (params.environment) q.environment = params.environment
+  if (params.closingSoon) q.closing_soon = true
   if (
     params.radiusMiles &&
     params.lat !== undefined &&
@@ -206,6 +242,9 @@ export function hasActiveFilters(params: SearchParams): boolean {
       params.feeMin !== undefined ||
       params.feeMax !== undefined ||
       params.verifiedOrganizerOnly ||
+      params.datePreset ||
+      params.environment ||
+      params.closingSoon ||
       (params.lat !== undefined && params.lng !== undefined) ||
       (params.sort && params.sort !== "recommended"),
   )
@@ -220,11 +259,14 @@ export function filtersToChips(params: SearchParams): ActiveFilterChip[] {
   if (params.feeMax === 0) chips.push({ key: "fee", label: "Free" })
   else if (params.feeMax !== undefined) chips.push({ key: "fee", label: `Under $${params.feeMax}` })
   if (params.verifiedOrganizerOnly) chips.push({ key: "verified", label: "Verified organizers" })
+  if (params.datePreset) chips.push({ key: "date", label: DATE_PRESET_LABELS[params.datePreset] })
+  if (params.environment) chips.push({ key: "environment", label: params.environment === "indoor" ? "Indoor" : "Outdoor" })
+  if (params.closingSoon) chips.push({ key: "closing", label: "Closing soon" })
   if (params.lat !== undefined && params.lng !== undefined) {
     chips.push({ key: "near", label: `Near me · ${params.radiusMiles ?? 50} mi` })
   }
   if (params.sort && params.sort !== "recommended" && params.sort !== "closest") {
-    chips.push({ key: "sort", label: `Sort: ${params.sort.replace(/_/g, " ")}` })
+    chips.push({ key: "sort", label: `Sort: ${SORT_LABELS[params.sort as MarketplaceSort] ?? params.sort.replace(/_/g, " ")}` })
   }
   return chips
 }
@@ -240,6 +282,9 @@ export function clearFilterKey(params: SearchParams, key: string): SearchParams 
     next.feeMax = undefined
   }
   if (key === "verified") next.verifiedOrganizerOnly = undefined
+  if (key === "date") next.datePreset = undefined
+  if (key === "environment") next.environment = undefined
+  if (key === "closing") next.closingSoon = undefined
   if (key === "near") {
     next.lat = undefined
     next.lng = undefined
@@ -330,6 +375,92 @@ export async function searchMarketplace(
   )
 }
 
+export type GroupedSearchResult = {
+  groups: EventGroup[]
+  /** Unique events matching the search. */
+  totalEvents: number
+  /** Vendor options across those events (null when the server predates grouping). */
+  totalOptions: number | null
+  page: number
+  pages: number
+  empty: boolean
+}
+
+type WpGroupedSearchResponse = {
+  items?: Array<WpEventGroup & WpOpportunityItem>
+  grouped?: boolean
+  total?: number
+  total_events?: number
+  total_options?: number
+  page?: number
+  pages?: number
+  empty_state?: boolean
+}
+
+function mapGroupedResponse(data: WpGroupedSearchResponse): GroupedSearchResult {
+  if (data.grouped) {
+    const groups = (data.items ?? []).map(mapEventGroup).filter((g): g is EventGroup => g !== null)
+    return {
+      groups,
+      totalEvents: data.total_events ?? data.total ?? groups.length,
+      totalOptions: data.total_options ?? null,
+      page: data.page ?? 1,
+      pages: data.pages ?? 1,
+      empty: groups.length === 0,
+    }
+  }
+  const opportunities = mapWpOpportunityList(data.items)
+  const groups = groupOpportunitiesLocally(opportunities)
+  return {
+    groups,
+    totalEvents: groups.length,
+    totalOptions: data.total ?? opportunities.length,
+    page: data.page ?? 1,
+    pages: data.pages ?? 1,
+    empty: groups.length === 0,
+  }
+}
+
+/** Explore: one result per event (`group_by=event`), paginated by event on the server. */
+export async function searchMarketplaceGroups(
+  params: SearchParams = {},
+  auth?: WpAuth,
+  signal?: AbortSignal,
+): Promise<GroupedSearchResult> {
+  return withFixtureFallback(
+    "marketplace.search",
+    async () => {
+      const data = await wpFetchJson<WpGroupedSearchResponse>("/marketplace/search", {
+        auth,
+        query: { ...filtersToWpQuery(params), group_by: "event" },
+        signal,
+      })
+      return mapGroupedResponse(data)
+    },
+    () => {
+      const groups = groupOpportunitiesLocally(filterMock(params))
+      return { groups, totalEvents: groups.length, totalOptions: null, page: 1, pages: 1, empty: groups.length === 0 }
+    },
+  )
+}
+
+/** Home rails as event groups: `sections/recommended` and `sections/trending?section=closing_soon`. */
+export async function fetchSectionGroups(
+  section: "recommended" | "closing_soon",
+  auth?: WpAuth,
+  options?: { limit?: number },
+): Promise<EventGroup[]> {
+  const limit = options?.limit ?? 6
+  if (!isLiveApiEnabled()) {
+    return groupOpportunitiesLocally(MOCK_OPPORTUNITIES).slice(0, limit)
+  }
+  const path = section === "recommended" ? "/marketplace/sections/recommended" : "/marketplace/sections/trending"
+  const query: Record<string, string | number> = { limit, group_by: "event" }
+  if (section === "closing_soon") query.section = "closing_soon"
+  const data = await wpFetchJson<WpGroupedSearchResponse>(path, { auth, query })
+  return mapGroupedResponse(data).groups.slice(0, limit)
+}
+
 /** Home rail — WordPress `GET /marketplace/sections/recommended` (not search sort). */
 export async function fetchRecommendedOpportunities(
   auth?: WpAuth,
@@ -409,8 +540,13 @@ export function searchParamsToQueryRecord(params: SearchParams): Record<string, 
   if (params.lng !== undefined) out.lng = String(params.lng)
   if (params.radiusMiles !== undefined) out.radius = String(params.radiusMiles)
   if (params.sort) out.sort = params.sort
+  if (params.datePreset) out.date = params.datePreset
+  if (params.environment) out.env = params.environment
+  if (params.closingSoon) out.closing = "1"
   return out
 }
+
+const DATE_PRESETS = new Set<string>(Object.keys(DATE_PRESET_LABELS))
 
 export function queryRecordToSearchParams(query: Record<string, string | string[] | undefined>): SearchParams {
   const get = (key: string): string | undefined => {
@@ -437,6 +573,9 @@ export function queryRecordToSearchParams(query: Record<string, string | string[
     lng: num("lng"),
     radiusMiles: num("radius"),
     sort: (get("sort") as MarketplaceSort | undefined) ?? "recommended",
+    datePreset: DATE_PRESETS.has(get("date") ?? "") ? (get("date") as MarketplaceDatePreset) : undefined,
+    environment: get("env") === "indoor" || get("env") === "outdoor" ? (get("env") as MarketplaceEnvironment) : undefined,
+    closingSoon: get("closing") === "1" || undefined,
     page: 1,
   }
 }

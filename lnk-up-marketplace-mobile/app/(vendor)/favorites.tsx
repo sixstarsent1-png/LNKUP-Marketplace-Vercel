@@ -1,13 +1,16 @@
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { StyleSheet, View } from "react-native"
-import { router, useFocusEffect, type Href } from "expo-router"
+import { router, useFocusEffect } from "expo-router"
 
-import { OpportunityCard } from "@/components/opportunity-card"
+import { EventCard } from "@/components/marketplace/event-card"
+import { openEventGroup } from "@/components/marketplace/event-rail"
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/panel-states"
 import { Screen } from "@/components/screen"
 import { BackLink } from "@/components/ui/back-link"
 import { InlineBanner } from "@/components/ui/banner"
+import { Meta } from "@/components/ui/typography"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
+import { groupOpportunitiesLocally, type EventGroup } from "@/lib/api/event-groups"
 import type { MarketplaceOpportunity } from "@/lib/api/marketplace"
 import { fetchVendorFavorites, setVendorFavorite } from "@/lib/api/vendor-favorites"
 import { isLiveApiEnabled } from "@/lib/api/config"
@@ -15,7 +18,10 @@ import { useAuth } from "@/lib/auth/auth-context"
 import { showToast } from "@/lib/feedback/feedback"
 import { spacing } from "@/lib/theme"
 
-/** Saved opportunities. Unsaving is confirmed by the server before the card disappears. */
+/**
+ * Saved events, one card per event. Saves are stored per vendor option; unsaving an event
+ * removes every saved option of it, and the server confirms each before the card disappears.
+ */
 export default function VendorFavoritesScreen() {
   const { auth } = useAuth()
   const [loading, setLoading] = useState(true)
@@ -24,6 +30,7 @@ export default function VendorFavoritesScreen() {
   const [items, setItems] = useState<MarketplaceOpportunity[]>([])
   const busy = useRef(new Set<string>())
   const didFocusLoad = useRef(false)
+  const groups = useMemo(() => groupOpportunitiesLocally(items), [items])
 
   const load = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
@@ -51,42 +58,33 @@ export default function VendorFavoritesScreen() {
     }, [load]),
   )
 
-  async function handleUnsave(item: MarketplaceOpportunity) {
-    if (!item.opportunityId || busy.current.has(item.id)) return
-    busy.current.add(item.id)
+  async function handleUnsave(group: EventGroup) {
+    if (busy.current.has(group.key)) return
+    busy.current.add(group.key)
     try {
-      const stillSaved = isLiveApiEnabled() ? await setVendorFavorite(item.opportunityId, false, auth) : false
-      if (stillSaved) {
+      const ids = group.options.map((o) => o.opportunityId)
+      const results = isLiveApiEnabled() ? await Promise.all(ids.map((id) => setVendorFavorite(id, false, auth))) : ids.map(() => false)
+      if (results.some(Boolean)) {
         showToast("This event is still saved. Pull to refresh and try again.", "error")
         return
       }
-      setItems((prev) => prev.filter((row) => row.id !== item.id))
+      const removed = new Set(ids)
+      setItems((prev) => prev.filter((row) => !row.opportunityId || !removed.has(row.opportunityId)))
       showToast("Removed from saved events.", "success")
     } catch (err) {
       showToast(`Couldn't remove this event. ${appErrorFromWp(err).message}`, "error")
     } finally {
-      busy.current.delete(item.id)
+      busy.current.delete(group.key)
     }
   }
 
   return (
-    <Screen
-      title="Saved events"
-      subtitle="Opportunities you hearted"
-      refreshing={refreshing}
-      onRefresh={() => void load("refresh")}
-    >
-      <BackLink label="Profile" fallbackHref="/(vendor)/more" />
-
+    <Screen title="Saved events" refreshing={refreshing} onRefresh={() => void load("refresh")} header={<BackLink label="Profile" fallbackHref="/(vendor)/more" />}>
       {loading && items.length === 0 ? <LoadingPanel label="Loading saved events…" variant="skeleton" withMedia /> : null}
 
-      {!loading && error && items.length === 0 ? (
-        <ErrorPanel title={error.title} message={error.message} onAction={() => void load("refresh")} />
-      ) : null}
+      {!loading && error && items.length === 0 ? <ErrorPanel title={error.title} message={error.message} onAction={() => void load("refresh")} /> : null}
 
-      {error && items.length > 0 ? (
-        <InlineBanner tone="error" message={`Couldn't refresh. ${error.message}`} actionLabel="Retry" onAction={() => void load("refresh")} />
-      ) : null}
+      {error && items.length > 0 ? <InlineBanner tone="error" message={`Couldn't refresh. ${error.message}`} actionLabel="Retry" onAction={() => void load("refresh")} /> : null}
 
       {!loading && !error && items.length === 0 ? (
         <EmptyPanel
@@ -98,17 +96,11 @@ export default function VendorFavoritesScreen() {
         />
       ) : null}
 
-      {items.length > 0 ? (
+      {groups.length > 0 ? (
         <View style={styles.list}>
-          {items.map((item) => (
-            <OpportunityCard
-              key={item.id}
-              item={item}
-              saved
-              onToggleSave={() => void handleUnsave(item)}
-              onPress={item.opportunityId ? () => router.push(`/opportunity/${item.opportunityId}` as Href) : undefined}
-              onApply={item.opportunityId ? () => router.push(`/apply/${item.opportunityId}` as Href) : undefined}
-            />
+          <Meta>Saved events whose applications have closed drop off this list.</Meta>
+          {groups.map((group) => (
+            <EventCard key={group.key} group={group} variant="row" saved onToggleSave={() => void handleUnsave(group)} onPress={() => openEventGroup(group)} />
           ))}
         </View>
       ) : null}
@@ -117,5 +109,5 @@ export default function VendorFavoritesScreen() {
 }
 
 const styles = StyleSheet.create({
-  list: { gap: spacing.md },
+  list: { gap: spacing.sm },
 })

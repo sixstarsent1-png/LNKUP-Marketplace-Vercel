@@ -12,6 +12,7 @@ import { AppText as Text } from "@/components/ui/app-text"
 import { Button } from "@/components/ui/button"
 import { FilterChip } from "@/components/ui/chip"
 import { FormField } from "@/components/ui/form-field"
+import { LocationField } from "@/components/location-field"
 import { ListGroup, ListRow } from "@/components/ui/list-row"
 import { StickyActionBar } from "@/components/ui/sticky-action-bar"
 import { Surface } from "@/components/ui/surface"
@@ -342,21 +343,15 @@ export default function VendorProfileScreen() {
             <SectionTitle accessibilityRole="header" style={styles.groupTitle}>
               Location
             </SectionTitle>
-            <View style={styles.row}>
-              <View style={styles.flex}>
-                <FormField label="City" value={draft.city} onChangeText={(v) => update("city", v)} textContentType="addressCity" />
-              </View>
-              <View style={styles.state}>
-                <FormField
-                  label="State"
-                  value={draft.state}
-                  onChangeText={(v) => update("state", v.toUpperCase().slice(0, 2))}
-                  autoCapitalize="characters"
-                  maxLength={2}
-                  error={visibleErrors.state}
-                />
-              </View>
-            </View>
+            <LocationField
+              city={draft.city}
+              state={draft.state}
+              onChange={({ city, state }) => {
+                update("city", city)
+                update("state", state)
+              }}
+              stateError={visibleErrors.state}
+            />
           </View>
 
           <View style={styles.group}>

@@ -428,7 +428,10 @@ class LNKup_Transactions {
 		if ( ! $row ) {
 			return null;
 		}
-		$meta = ! empty( $row['metadata'] ) ? json_decode( $row['metadata'], true ) : array();
+		$meta    = ! empty( $row['metadata'] ) ? json_decode( $row['metadata'], true ) : array();
+		$context = class_exists( 'LNKup_Receipts' ) && method_exists( 'LNKup_Receipts', 'event_context' )
+			? LNKup_Receipts::event_context( (int) $row['event_id'], (int) $row['application_id'] )
+			: null;
 		$formatted = array(
 			'id'              => (int) $row['id'],
 			'public_id'       => $row['public_id'],
@@ -439,7 +442,11 @@ class LNKup_Transactions {
 			'vendor_user_id'  => (int) $row['vendor_user_id'],
 			'organizer_user_id' => (int) $row['organizer_user_id'],
 			'event_id'        => (int) $row['event_id'],
-			'event_title'     => (int) $row['event_id'] ? lnkup_plain_title( (int) $row['event_id'] ) : '',
+			'event_title'     => is_array( $context ) ? $context['title'] : ( (int) $row['event_id'] ? lnkup_plain_title( (int) $row['event_id'] ) : '' ),
+			'event_date'      => is_array( $context ) ? $context['date'] : '',
+			'place'           => is_array( $context ) ? $context['place'] : '',
+			'organizer_name'  => is_array( $context ) ? $context['organizer_name'] : '',
+			'payment_status'  => empty( $row['payment_post_id'] ) ? '' : ( 'lnkup_payment' === get_post_type( (int) $row['payment_post_id'] ) ? (string) get_post_meta( (int) $row['payment_post_id'], '_lnkup_payment_status', true ) : 'removed' ),
 			'application_id'  => (int) $row['application_id'],
 			'payment_post_id' => (int) $row['payment_post_id'],
 			'invoice_id'      => (int) $row['invoice_id'],

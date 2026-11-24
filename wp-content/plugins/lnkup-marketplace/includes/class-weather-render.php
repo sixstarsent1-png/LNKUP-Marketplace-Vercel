@@ -148,7 +148,7 @@ class LNKup_Weather_Render {
 			<div class="lnkup-weather-card lnkup-weather-card--<?php echo esc_attr( $status ); ?>" data-testid="<?php echo esc_attr( $test_id ); ?>" data-event-id="<?php echo esc_attr( (string) $event_id ); ?>">
 				<h3 class="lnkup-weather-card__title"><?php esc_html_e( 'Weather Readiness', 'lnkup-marketplace' ); ?></h3>
 				<p class="lnkup-alert lnkup-alert--info"><?php echo esc_html( $dto['message'] ?? __( 'Weather intelligence unavailable.', 'lnkup-marketplace' ) ); ?></p>
-				<?php if ( $event_id ) : ?>
+				<?php if ( $event_id && 'unconfigured' !== $status ) : ?>
 					<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline lnkup-weather-refresh" data-event-id="<?php echo esc_attr( (string) $event_id ); ?>"><?php esc_html_e( 'Retry', 'lnkup-marketplace' ); ?></button>
 				<?php endif; ?>
 			</div>

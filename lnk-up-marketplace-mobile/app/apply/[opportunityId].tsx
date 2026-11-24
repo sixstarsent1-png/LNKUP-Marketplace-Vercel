@@ -23,6 +23,7 @@ import {
   type DraftInput,
 } from "@/lib/api/apply"
 import { appErrorFromWp, WpFetchError, type AppErrorShape } from "@/lib/api/errors"
+import { formatMoney } from "@/lib/api/format-money"
 import { useAuth } from "@/lib/auth/auth-context"
 import { constrainedColumnStyle } from "@/lib/layout/use-breakpoint"
 import { safeBack } from "@/lib/navigation/safe-back"
@@ -41,6 +42,7 @@ export default function ApplyScreen() {
   const [accepted, setAccepted] = useState(false)
   const [termsError, setTermsError] = useState<string | null>(null)
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null)
+  const [submittedApplicationId, setSubmittedApplicationId] = useState<string | null>(null)
   const [setupNotes, setSetupNotes] = useState("")
   const [answers, setAnswers] = useState<Record<string, ApplyAnswerValue>>({})
   const [invalid, setInvalid] = useState<string[]>([])
@@ -187,6 +189,7 @@ export default function ApplyScreen() {
           auth,
         )
       }
+      setSubmittedApplicationId(result.applicationId ?? null)
       setSubmittedMessage(
         result.message ?? "Track it under Bookings. You only pay if the organizer approves you.",
       )
@@ -213,7 +216,7 @@ export default function ApplyScreen() {
 
   const canApplyForm = Boolean(context?.canApply && !context?.buttonDisabled && !blockedCode)
   const feeLabel =
-    context?.vendorFee == null ? "Fee unavailable" : context.vendorFee > 0 ? `$${context.vendorFee}` : "Free"
+    context?.vendorFee == null ? "Set by organizer" : context.vendorFee > 0 ? formatMoney(context.vendorFee) : "No booth fee"
   const blockReason = blockedCode ?? context?.blockReason
   const blockedTitle =
     blockReason === "duplicate" ? "You already applied" : blockReason === "previously_declined" ? "Application declined" : "Applications unavailable"
@@ -234,18 +237,26 @@ export default function ApplyScreen() {
 
       {submittedMessage ? (
         <View style={[styles.successWrap, constrainedColumnStyle(layout.contentMaxWidth)]}>
-          <View style={styles.successCard}>
-            <Text style={styles.successEyebrow}>LNKup</Text>
-            <Text style={styles.successTitle}>Application submitted</Text>
+          <View style={styles.successCard} testID="apply-success">
+            <Text style={styles.successEyebrow}>Submitted · waiting for organizer review</Text>
+            <Text style={styles.successTitle}>{context?.eventName ?? "Application submitted"}</Text>
             <Text style={styles.successMessage}>{submittedMessage}</Text>
+            <View style={styles.nextSteps}>
+              <Text style={styles.nextStepsTitle}>What happens next</Text>
+              <Text style={styles.nextStep}>1. The organizer reviews your application. This is not an approval yet.</Text>
+              <Text style={styles.nextStep}>2. If they have questions, you'll get a notification to reply.</Text>
+              <Text style={styles.nextStep}>3. If you're approved, you pay the booth fee to confirm your spot.</Text>
+            </View>
             <Button
-              label="View bookings"
-              icon="ticket-outline"
+              label="View application"
+              icon="document-text-outline"
               fullWidth
-              onPress={() => router.replace("/(vendor)/requests")}
+              onPress={() =>
+                router.replace((submittedApplicationId ? `/booking/${submittedApplicationId}` : "/(vendor)/requests") as Href)
+              }
             />
             <Button
-              label="Find more events"
+              label="Continue exploring"
               variant="secondary"
               fullWidth
               onPress={() => router.replace("/(vendor)/find")}
@@ -271,7 +282,6 @@ export default function ApplyScreen() {
             {!loading && context ? (
               <View style={[styles.content, constrainedColumnStyle(layout.contentMaxWidth)]}>
                 <View style={styles.summaryCard}>
-                  <Text style={styles.brand}>LNKup</Text>
                   <Text style={styles.title}>{context.eventName}</Text>
                   <Text style={styles.meta}>
                     {[context.eventDate, context.city, context.state].filter(Boolean).join(" · ")}
@@ -291,7 +301,7 @@ export default function ApplyScreen() {
                     <Text style={styles.detailsLink}>View full details</Text>
                   </Pressable>
                   <View style={styles.feeRow}>
-                    <Text style={styles.feeLabel}>Vendor fee</Text>
+                    <Text style={styles.feeLabel}>Booth fee · charged only if approved</Text>
                     <Text style={styles.feeValue}>{feeLabel}</Text>
                   </View>
                 </View>
@@ -493,13 +503,6 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.xs,
   },
-  brand: {
-    fontSize: typeScale.caption,
-    fontWeight: "800",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    color: colors.gray500,
-  },
   title: {
     fontSize: typeScale.title,
     fontWeight: "800",
@@ -692,4 +695,7 @@ const styles = StyleSheet.create({
     color: colors.gray700,
     lineHeight: 22,
   },
+  nextSteps: { gap: spacing.xs, paddingVertical: spacing.sm },
+  nextStepsTitle: { fontSize: typeScale.callout, fontWeight: "700", color: colors.black },
+  nextStep: { fontSize: typeScale.body, color: colors.gray700, lineHeight: 20 },
 })

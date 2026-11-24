@@ -729,6 +729,17 @@
 .lp-event__price { font-weight: 700; font-size: var(--lp-fs-sm); }
 .lp-event__spots { font-size: var(--lp-fs-xs); color: var(--lp-muted); font-weight: 600; }
 .lp-event__tour { position: relative; z-index: 2; font-size: var(--lp-fs-xs); font-weight: 600; color: var(--lp-text); }
+.lp-event__status { font-weight: 700; font-size: var(--lp-fs-sm); }
+.lp-event__gate { position: relative; z-index: 2; display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 999px; background: var(--lp-ink); color: var(--lp-lime); font-size: var(--lp-fs-xs); font-weight: 700; text-decoration: none; }
+.lp-event__gate:hover { background: var(--lp-ink-3); }
+.lp-event__gate:focus-visible { outline: 2px solid var(--lp-focus); outline-offset: 2px; }
+.lp-event__gate svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }
+.lp-gate { margin: var(--lp-space-5) 0; padding: var(--lp-space-5); border-radius: var(--lp-radius-lg); background: var(--lp-mist); border: 1px solid var(--lp-line); }
+.lp-gate__head { display: flex; align-items: center; gap: var(--lp-space-2); margin: 0 0 var(--lp-space-2); font-family: var(--lp-font-display); font-size: var(--lp-fs-lg); }
+.lp-gate__head svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; }
+.lp-gate__status { margin: 0 0 var(--lp-space-2); font-weight: 700; }
+.lp-gate__message { margin: 0 0 var(--lp-space-4); color: var(--lp-muted); }
+.lp-gate__actions { display: flex; flex-wrap: wrap; gap: var(--lp-space-3); align-items: center; }
 
 /* ---------- Category tiles ---------- */
 

@@ -68,9 +68,22 @@ class LNKup_Discovery {
 			'previous_organizers'=> false,
 			'vendor_user_id'     => 0,
 			'force_like'         => false,
+			'metro'              => false,
+			'market'             => '',
 		);
 
 		$args = wp_parse_args( $args, $defaults );
+		if ( class_exists( 'LNKup_Access_Policy' ) && LNKup_Access_Policy::is_guest() ) {
+			// Price and inventory filters/sorts would let guests infer gated values.
+			$args['fee_min']    = null;
+			$args['fee_max']    = null;
+			$args['fee_free']   = false;
+			$args['fee_bucket'] = '';
+			$args['almost_full'] = false;
+			if ( in_array( (string) $args['sort'], array( 'fee_low', 'fee_high', 'spots', 'spots_remaining' ), true ) ) {
+				$args['sort'] = 'newest';
+			}
+		}
 		$args = self::normalize_fee_bucket( $args );
 		$page    = max( 1, (int) $args['page'] );
 		$per_page = min( 48, max( 1, (int) $args['per_page'] ) );
@@ -78,6 +91,12 @@ class LNKup_Discovery {
 
 		$where  = array( '1=1' );
 		$params = array();
+		if ( class_exists( 'LNKup_Access_Policy' ) && LNKup_Access_Policy::exclude_invite_only() ) {
+			$owner_scope = ! empty( $args['organizer_id'] ) && (int) $args['organizer_id'] === get_current_user_id();
+			if ( ! $owner_scope ) {
+				$where[] = LNKup_Access_Policy::invite_only_exclusion_sql( $table );
+			}
+		}
 
 		$q            = self::normalize_query( $args['q'] );
 		$use_fulltext = false;
@@ -129,13 +148,26 @@ class LNKup_Discovery {
 			$params   = array_merge( $params, array( $lat, $lng, $lat, $radius ) );
 		}
 
-		if ( $args['city'] ) {
-			$where[]  = 'city LIKE %s';
-			$params[] = '%' . $wpdb->esc_like( $args['city'] ) . '%';
-		}
-		if ( $args['state'] ) {
-			$where[]  = 'UPPER(state) = %s';
-			$params[] = strtoupper( $args['state'] );
+		$place_pairs = self::place_pairs( $args );
+		if ( $place_pairs ) {
+			// Canonical city/state identity (LNKup_Location_Service), optionally the whole metro.
+			$ors = array();
+			foreach ( $place_pairs as $pair ) {
+				$ors[]    = '(LOWER(city) = %s AND UPPER(state) = %s)';
+				$params[] = strtolower( $pair['city'] );
+				$params[] = strtoupper( $pair['state'] );
+			}
+			$where[] = '(' . implode( ' OR ', $ors ) . ')';
+		} else {
+			if ( $args['city'] ) {
+				$where[]  = 'city LIKE %s';
+				$params[] = '%' . $wpdb->esc_like( $args['city'] ) . '%';
+			}
+			if ( $args['state'] ) {
+				$state_code = class_exists( 'LNKup_Location_Service' ) ? (string) LNKup_Location_Service::state_code( (string) $args['state'] ) : '';
+				$where[]    = 'UPPER(state) = %s';
+				$params[]   = '' !== $state_code ? $state_code : strtoupper( $args['state'] );
+			}
 		}
 
 		self::apply_date_filters( $args, $where, $params );
@@ -216,6 +248,10 @@ class LNKup_Discovery {
 			return self::search( array_merge( $args, array( 'force_like' => true ) ) );
 		}
 
+		if ( 'event' === ( $args['group_by'] ?? '' ) && class_exists( 'LNKup_Event_Groups' ) ) {
+			return self::search_grouped( $table, $select, $join, $where_sql, $order_sql, $params, $total, $page, $per_page, $q, $has_xy, $lat, $lng );
+		}
+
 		$sql        = "SELECT {$select} FROM {$table}{$join} WHERE {$where_sql} {$order_sql} LIMIT %d OFFSET %d";
 		$all_params = array_merge( $params, array( $per_page, $offset ) );
 		$rows       = $wpdb->get_results( $wpdb->prepare( $sql, $all_params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
@@ -244,6 +280,98 @@ class LNKup_Discovery {
 			'page'     => $page,
 			'per_page' => $per_page,
 			'pages'    => (int) ceil( $total / $per_page ),
+		);
+	}
+
+	/**
+	 * Paginate by event: scan the ordered matching opportunity IDs, group them by event in rank
+	 * order, then format only the opportunities on the requested page of events.
+	 *
+	 * @param string $table       Index table.
+	 * @param string $select      Select list.
+	 * @param string $join        Prepared join.
+	 * @param string $where_sql   Where clause with placeholders.
+	 * @param string $order_sql   Order clause (may contain placeholders for relevance).
+	 * @param array  $params      Placeholder values for where + order.
+	 * @param int    $total_opps  Matching opportunity count.
+	 * @param int    $page        Page of events.
+	 * @param int    $per_page    Events per page.
+	 * @param string $q           Normalized query.
+	 * @param bool   $has_xy      Whether coordinates were given.
+	 * @param float  $lat         Latitude.
+	 * @param float  $lng         Longitude.
+	 * @return array<string,mixed>
+	 */
+	private static function search_grouped( $table, $select, $join, $where_sql, $order_sql, $params, $total_opps, $page, $per_page, $q, $has_xy, $lat, $lng ) {
+		global $wpdb;
+		$scan_sql = "SELECT {$table}.opportunity_id, {$table}.event_id FROM {$table}{$join} WHERE {$where_sql} {$order_sql} LIMIT %d";
+		$scan     = $wpdb->get_results( $wpdb->prepare( $scan_sql, array_merge( $params, array( LNKup_Event_Groups::MAX_SCAN ) ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+
+		$groups = array();
+		foreach ( (array) $scan as $row ) {
+			$key = LNKup_Event_Groups::key( $row );
+			if ( ! isset( $groups[ $key ] ) ) {
+				$groups[ $key ] = array();
+			}
+			$groups[ $key ][] = (int) $row['opportunity_id'];
+		}
+		$total_events = count( $groups );
+		$page_groups  = array_slice( $groups, ( $page - 1 ) * $per_page, $per_page, true );
+		$page_ids     = array();
+		foreach ( $page_groups as $ids ) {
+			$page_ids = array_merge( $page_ids, $ids );
+		}
+
+		$items = array();
+		if ( $page_ids ) {
+			$in   = implode( ',', array_map( 'absint', $page_ids ) );
+			$rows = $wpdb->get_results( "SELECT {$select} FROM {$table}{$join} WHERE {$table}.opportunity_id IN ({$in})", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$by_id = array();
+			foreach ( (array) $rows as $row ) {
+				$by_id[ (int) $row['opportunity_id'] ] = $row;
+			}
+			if ( class_exists( 'LNKup_Event_Media' ) ) {
+				LNKup_Event_Media::prime( wp_list_pluck( (array) $rows, 'event_id' ) );
+			}
+			foreach ( $page_groups as $ids ) {
+				$slots = array();
+				foreach ( $ids as $opp_id ) {
+					if ( empty( $by_id[ $opp_id ] ) ) {
+						continue;
+					}
+					$row  = $by_id[ $opp_id ];
+					$item = lnkup_get_opportunity_card_data( $opp_id, $row );
+					if ( ! $item ) {
+						continue;
+					}
+					if ( $has_xy && $row['lat'] && $row['lng'] ) {
+						$item['distance_miles'] = round( LNKup_Geocoder::distance_miles( $lat, $lng, (float) $row['lat'], (float) $row['lng'] ), 1 );
+					}
+					if ( isset( $row['match_score'] ) && null !== $row['match_score'] ) {
+						$item['match_band'] = LNKup_Match_Engine::band( (int) $row['match_score'] );
+					}
+					if ( $q ) {
+						$item = self::highlight_item( $item, $q );
+					}
+					$slots[] = $item;
+				}
+				$summary = LNKup_Event_Groups::summarize( $slots );
+				if ( $summary ) {
+					$items[] = $summary;
+				}
+			}
+		}
+
+		return array(
+			'items'         => $items,
+			'grouped'       => true,
+			'total'         => $total_events,
+			'total_events'  => $total_events,
+			'total_options' => (int) $total_opps,
+			'scan_capped'   => count( (array) $scan ) >= LNKup_Event_Groups::MAX_SCAN,
+			'page'          => $page,
+			'per_page'      => $per_page,
+			'pages'         => (int) ceil( $total_events / $per_page ),
 		);
 	}
 
@@ -693,6 +821,40 @@ class LNKup_Discovery {
 	 *
 	 * @param string $table Index table name.
 	 */
+	/**
+	 * Canonical (city, state) pairs to match, or array() to fall back to substring city search.
+	 *
+	 * - market=<slug>: the market city plus its metro cities (market pages).
+	 * - city (+state) that resolves: that exact city; with metro=1 the market it belongs to.
+	 * Nearby cities are only included when the caller asks for the metro; each result still shows
+	 * its real city.
+	 *
+	 * @param array<string, mixed> $args Search args.
+	 * @return array<int, array{city: string, state: string}>
+	 */
+	private static function place_pairs( array $args ): array {
+		if ( ! class_exists( 'LNKup_Location_Service' ) ) {
+			return array();
+		}
+		if ( ! empty( $args['market'] ) ) {
+			return LNKup_Location_Service::market_cities( sanitize_title( (string) $args['market'] ) );
+		}
+		if ( empty( $args['city'] ) ) {
+			return array();
+		}
+		$resolved = LNKup_Location_Service::resolve( (string) $args['city'], (string) ( $args['state'] ?? '' ) );
+		if ( ! in_array( $resolved['status'], array( LNKup_Location_Service::VERIFIED, LNKup_Location_Service::NORMALIZED ), true ) || '' === $resolved['state_code'] ) {
+			return array();
+		}
+		if ( ! empty( $args['metro'] ) ) {
+			$market = LNKup_Location_Service::market_for( (string) $resolved['city'], (string) $resolved['state_code'] );
+			if ( '' !== $market ) {
+				return LNKup_Location_Service::market_cities( $market );
+			}
+		}
+		return array( array( 'city' => (string) $resolved['city'], 'state' => (string) $resolved['state_code'] ) );
+	}
+
 	private static function distance_sql( $table ) {
 		return "(3959 * ACOS(LEAST(1, COS(RADIANS(%f)) * COS(RADIANS({$table}.lat)) * COS(RADIANS({$table}.lng) - RADIANS(%f)) + SIN(RADIANS(%f)) * SIN(RADIANS({$table}.lat)))))";
 	}

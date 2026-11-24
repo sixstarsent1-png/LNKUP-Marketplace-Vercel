@@ -247,8 +247,12 @@ class LNKup_Vendor_Readiness {
 			$item_status = 'blocked';
 		}
 		$display = $done ? $label : ( $pending_label ? $pending_label : $label );
+		$owner   = in_array( $key, array( 'booth_assigned', 'parking_assigned', 'loadin_assigned', 'emergency_contacts' ), true )
+			? 'organizer'
+			: ( 'qr_ready' === $key ? 'system' : 'vendor' );
 		return array(
 			'key'          => $key,
+			'owner'        => $owner,
 			'label'        => $display,
 			'done_label'   => $label,
 			'pending_label'=> $pending_label,
@@ -462,7 +466,9 @@ class LNKup_Vendor_Readiness {
 				in_array( $doc_type, $approved_types, true ),
 				10,
 				'documents',
-				'overview'
+				'overview',
+				'',
+				sprintf( __( 'Finish %s', 'lnkup-marketplace' ), $label )
 			);
 		}
 
@@ -484,7 +490,8 @@ class LNKup_Vendor_Readiness {
 			5,
 			'day_of',
 			'packet',
-			'welcome'
+			'welcome',
+			__( 'Review your event packet', 'lnkup-marketplace' )
 		);
 		$items[] = self::make_item(
 			'rules_accepted',
@@ -493,7 +500,8 @@ class LNKup_Vendor_Readiness {
 			5,
 			'day_of',
 			'packet',
-			'rules'
+			'rules',
+			__( 'Accept the event rules', 'lnkup-marketplace' )
 		);
 		$items[] = self::make_item(
 			'booth_assigned',
@@ -501,7 +509,9 @@ class LNKup_Vendor_Readiness {
 			(bool) $booth,
 			8,
 			'logistics',
-			'map'
+			'map',
+			'',
+			__( 'Your organizer has not assigned a booth yet', 'lnkup-marketplace' )
 		);
 		$items[] = self::make_item(
 			'parking_assigned',
@@ -510,7 +520,8 @@ class LNKup_Vendor_Readiness {
 			8,
 			'logistics',
 			'packet',
-			'parking'
+			'parking',
+			__( 'Your organizer has not published parking yet', 'lnkup-marketplace' )
 		);
 		$items[] = self::make_item(
 			'loadin_assigned',
@@ -519,7 +530,8 @@ class LNKup_Vendor_Readiness {
 			8,
 			'logistics',
 			'packet',
-			'loadin'
+			'loadin',
+			__( 'Your organizer has not published a load-in time yet', 'lnkup-marketplace' )
 		);
 		$items[] = self::make_item(
 			'qr_ready',

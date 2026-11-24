@@ -584,7 +584,79 @@
       panel.appendChild(recurrenceBuilder(tour, reload));
     }
     panel.appendChild(stopsTable(tour, reload));
+    panel.appendChild(attachEventsBlock(tour, reload));
     panel.appendChild(addStopsForm(tour, reload));
+  }
+
+  /**
+   * "Add existing events": attach events that already exist (with their applications and
+   * payments) as stops. Only the tour link changes; POST /portfolio/tours/{id}/attach.
+   */
+  function attachEventsBlock(tour, reload) {
+    var wrap = h('div', { className: 'lnkup-portfolio__block', 'data-testid': 'lnkup-tour-attach' });
+    var status = h('div', { 'aria-live': 'polite' });
+    var list = h('div');
+    var open = h('button', { type: 'button', className: 'lnkup-btn lnkup-btn--outline lnkup-btn--sm', text: 'Add existing events', 'aria-expanded': 'false' });
+    wrap.appendChild(h('h3', { text: 'Add events you already created' }));
+    wrap.appendChild(h('p', { className: 'lnkup-muted', text: 'Events keep their applications, payments and links. You can take an event out of the tour later.' }));
+    wrap.appendChild(open);
+    wrap.appendChild(list);
+    wrap.appendChild(status);
+    open.addEventListener('click', function () {
+      var expanded = open.getAttribute('aria-expanded') === 'true';
+      open.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+      if (expanded) {
+        list.innerHTML = '';
+        return;
+      }
+      list.innerHTML = '';
+      list.appendChild(h('p', { className: 'lnkup-muted', text: 'Loading your events…' }));
+      api('GET', '/portfolio/events', { kind: 'single', per_page: 50, when: 'all' }).then(function (r) {
+        list.innerHTML = '';
+        if (!r.ok) {
+          errorCard(list, r.message, function () { open.click(); open.click(); });
+          return;
+        }
+        var items = (r.data && r.data.items) || [];
+        if (!items.length) {
+          list.appendChild(h('p', { className: 'lnkup-empty-state', text: 'Every event is already in a tour or series.' }));
+          return;
+        }
+        var form = h('form', { className: 'lnkup-portfolio__attach' });
+        var fieldset = h('fieldset', {}, h('legend', { className: 'screen-reader-text', text: 'Events to add' }));
+        items.forEach(function (ev) {
+          fieldset.appendChild(h('label', { className: 'lnkup-portfolio__attach-row' }, [
+            h('input', { type: 'checkbox', name: 'event_ids', value: ev.event_id }),
+            h('span', { text: ev.title }),
+            h('span', { className: 'lnkup-muted', text: [dateLabel(ev.event_date), [ev.city, ev.state_code].filter(Boolean).join(', ')].filter(Boolean).join(' · ') })
+          ]));
+        });
+        form.appendChild(fieldset);
+        var submit = h('button', { type: 'submit', className: 'lnkup-btn lnkup-btn--primary lnkup-btn--sm', text: 'Add to ' + (tour.type === 'recurring' ? 'series' : 'tour') });
+        form.appendChild(submit);
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var ids = Array.prototype.map.call(form.querySelectorAll('input[name="event_ids"]:checked'), function (c) { return parseInt(c.value, 10); });
+          if (!ids.length) {
+            flash(status, 'Choose at least one event.', 'error');
+            return;
+          }
+          submit.disabled = true;
+          api('POST', '/portfolio/tours/' + tour.id + '/attach', { event_ids: ids }).then(function (res) {
+            submit.disabled = false;
+            if (!res.ok) {
+              flash(status, res.message, 'error');
+              return;
+            }
+            var added = (res.data && res.data.attached) || [];
+            pendingFlash = added.length + (added.length === 1 ? ' event added.' : ' events added.');
+            reload();
+          });
+        });
+        list.appendChild(form);
+      });
+    });
+    return wrap;
   }
 
   function stopsTable(tour, reload) {
@@ -599,7 +671,9 @@
     table.appendChild(h('thead', {}, h('tr', {}, [
       h('th', { scope: 'col' }, h('span', { className: 'screen-reader-text', text: 'Select' })),
       h('th', { scope: 'col', text: 'Date' }), h('th', { scope: 'col', text: 'City' }), h('th', { scope: 'col', text: 'Venue' }),
-      h('th', { scope: 'col', text: 'Status' }), h('th', { scope: 'col', text: 'Ready?' }), h('th', { scope: 'col', text: 'Actions' })
+      h('th', { scope: 'col', text: 'Status' }), h('th', { scope: 'col', text: 'Applications' }), h('th', { scope: 'col', text: 'Confirmed / spaces' }),
+      h('th', { scope: 'col', text: 'Gross collected' }), h('th', { scope: 'col', text: 'Outstanding' }),
+      h('th', { scope: 'col', text: 'Ready?' }), h('th', { scope: 'col', text: 'Actions' })
     ])));
     var body = h('tbody');
     tour.stops.forEach(function (st, index) {
@@ -610,6 +684,10 @@
       row.appendChild(h('td', { text: [st.city, st.state_code].filter(Boolean).join(', ') || '—' }));
       row.appendChild(h('td', { text: st.venue_name || 'Venue to be confirmed' }));
       row.appendChild(h('td', {}, stateBadge(st.state)));
+      row.appendChild(h('td', { text: String(st.application_count || 0) }));
+      row.appendChild(h('td', { text: (st.confirmed || 0) + ' / ' + (st.spots_total || 0) }));
+      row.appendChild(h('td', { text: money(st.collected_gross || 0) }));
+      row.appendChild(h('td', { text: money(st.outstanding || 0) }));
       row.appendChild(h('td', {}, st.state === 'draft'
         ? (st.readiness.ready ? badge('Ready', 'success') : h('details', {}, [h('summary', { text: missing.length + ' to do' }), h('ul', {}, missing.map(function (m) { return h('li', { text: m }); }))]))
         : '—'));

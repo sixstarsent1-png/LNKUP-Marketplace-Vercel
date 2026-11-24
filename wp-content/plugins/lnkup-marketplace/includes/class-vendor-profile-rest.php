@@ -135,6 +135,20 @@ class LNKup_Vendor_Profile_REST {
 		if ( ! $business ) {
 			return new WP_Error( 'validation_error', __( 'Business name is required.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
+		if ( class_exists( 'LNKup_Location_Service' ) && ( array_key_exists( 'city', $body ) || array_key_exists( 'state', $body ) ) ) {
+			$old_city  = $profile_id ? (string) get_post_meta( $profile_id, '_lnkup_city', true ) : '';
+			$old_state = $profile_id ? (string) get_post_meta( $profile_id, '_lnkup_state', true ) : '';
+			$city      = array_key_exists( 'city', $body ) ? (string) $body['city'] : $old_city;
+			$state     = array_key_exists( 'state', $body ) ? (string) $body['state'] : $old_state;
+			if ( 0 !== strcasecmp( trim( $city ), $old_city ) || 0 !== strcasecmp( trim( $state ), $old_state ) ) {
+				$location = LNKup_Location_Service::canonical_profile_location( $city, $state );
+				if ( is_wp_error( $location ) ) {
+					return $location;
+				}
+				$body['city']  = $location['city'];
+				$body['state'] = $location['state'];
+			}
+		}
 
 		$data = array(
 			'post_title'  => $business,

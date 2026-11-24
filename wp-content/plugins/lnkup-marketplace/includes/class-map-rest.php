@@ -227,9 +227,15 @@ class LNKup_Map_REST {
 
 	public static function build_discovery_pins( WP_REST_Request $request ) {
 		global $wpdb;
+		if ( function_exists( 'lnkup_can_browse_marketplace' ) && ! lnkup_can_browse_marketplace() ) {
+			return array();
+		}
 		$table  = LNKup_Marketplace_Index::table_name();
 		$where  = array( 'lat IS NOT NULL', 'lng IS NOT NULL', 'lat != 0' );
 		$params = array();
+		if ( LNKup_Access_Policy::exclude_invite_only() ) {
+			$where[] = LNKup_Access_Policy::invite_only_exclusion_sql( $table );
+		}
 
 		if ( $request->get_param( 'city' ) ) {
 			$where[]  = 'city = %s';
@@ -257,7 +263,7 @@ class LNKup_Map_REST {
 		$pins = array();
 		foreach ( (array) $rows as $row ) {
 			$cats = json_decode( $row['categories'] ?? '[]', true ) ?: array();
-			$pins[] = array(
+			$pin  = array(
 				'opportunity_id'      => (int) $row['opportunity_id'],
 				'event_id'            => (int) $row['event_id'],
 				'title'               => $row['title'],
@@ -268,12 +274,19 @@ class LNKup_Map_REST {
 				'vendor_fee'          => (float) $row['vendor_fee'],
 				'attendance'          => (int) $row['attendance'],
 				'spots_remaining'     => (int) $row['spots_remaining'],
+				'total_spots'         => (int) $row['spots_total'],
 				'spots_total'         => (int) $row['spots_total'],
 				'deadline'            => $row['deadline'],
 				'categories'          => $cats,
 				'organizer_verified'  => (bool) $row['organizer_verified'],
 				'apply_url'           => add_query_arg( 'apply', (int) $row['opportunity_id'], lnkup_page_url_helper( 'opportunities' ) ),
 			);
+			$pin = LNKup_Access_Policy::scrub_opportunity_item( $pin );
+			if ( ! empty( $pin['access']['gated'] ) ) {
+				$pin['spots_total'] = null;
+			}
+			unset( $pin['total_spots'] );
+			$pins[] = $pin;
 		}
 		return $pins;
 	}
@@ -513,6 +526,9 @@ class LNKup_Map_REST {
 	public static function geocode_address( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
 		if ( ! empty( $body['event_id'] ) ) {
+			if ( ! LNKup_Capabilities::user_can_act_on_event( get_current_user_id(), absint( $body['event_id'] ), 'edit_ops' ) ) {
+				return new WP_Error( 'lnkup_forbidden', __( 'You can only update locations for events you manage.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
+			}
 			if ( ! empty( $body['lat'] ) && ! empty( $body['lng'] ) ) {
 				return rest_ensure_response( LNKup_Geocoder::set_manual_coords( absint( $body['event_id'] ), $body['lat'], $body['lng'] ) );
 			}

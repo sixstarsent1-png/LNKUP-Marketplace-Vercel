@@ -76,6 +76,11 @@ export default function OpportunityDetailScreen() {
       setLoading(false)
       return
     }
+    // Guests are redirected to sign-in below; never fetch marketplace detail without a session.
+    if (!auth) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
     setApplyCtxFailed(false)
@@ -88,7 +93,13 @@ export default function OpportunityDetailScreen() {
         fetchVendorFavorites(auth).catch(() => ({ opportunityIds: [] as number[], items: [] })),
         fetchVendorRequests(auth).catch(() => ({ items: [] as VendorRequest[], total: 0 })),
       ])
-      setExisting(mine.items.find((item) => item.opportunityId === String(id)) ?? null)
+      const applied = mine.items.find((item) => item.opportunityId === String(id)) ?? null
+      setExisting(applied)
+      if (!opp && applied?.eventId) {
+        // Full and closed options are not in marketplace search; the event still lists them.
+        router.replace(`/event/${applied.eventId}?option=${id}` as Href)
+        return
+      }
       if (!opp) {
         setError({
           code: "not_found",
@@ -116,6 +127,13 @@ export default function OpportunityDetailScreen() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // Opportunities that belong to an event open on the event, with this vendor option selected.
+  useEffect(() => {
+    if (detail?.eventId && detail.opportunityId === id) {
+      router.replace(`/event/${detail.eventId}?option=${id}` as Href)
+    }
+  }, [detail, id])
 
   if (!isAuthenticated) {
     return <Redirect href={{ pathname: "/login", params: { returnTo: `/opportunity/${id}` } }} />

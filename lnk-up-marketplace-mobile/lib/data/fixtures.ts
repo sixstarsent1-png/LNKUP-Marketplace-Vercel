@@ -257,12 +257,14 @@ export const MOCK_PASS_LOCKED: VendorEventPass = {
   ],
   wordpressUrl: "https://thelnkup.com/vendor-dashboard/?view=payments",
   paymentId: "pay-mock-1",
+  credentialState: "locked",
 }
 
 export const MOCK_PASS_UNLOCKED: VendorEventPass = {
   requestId: "r2",
   applicationId: "r2",
   status: "unlocked",
+  credentialState: "active",
   headline: "You're booked — your event pass is ready",
   message: "Your event pass is ready. Review logistics and check-in details below.",
   eventName: "Atlanta Food Fest",

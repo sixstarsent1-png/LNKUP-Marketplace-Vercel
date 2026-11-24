@@ -14,6 +14,10 @@ class LNKup_Vendor_Invites {
 	const STATUS_ACCEPTED = 'accepted';
 	const STATUS_DECLINED = 'declined';
 	const STATUS_EXPIRED  = 'expired';
+	const STATUS_CANCELLED = 'cancelled';
+
+	/** Minimum time between organizer reminders for one invite. */
+	const REMIND_INTERVAL = 2 * DAY_IN_SECONDS;
 
 	const EXPIRY_CRON  = 'lnkup_vendor_invites_expire';
 	const EXPIRY_BATCH = 200;
@@ -163,6 +167,9 @@ class LNKup_Vendor_Invites {
 		$vendor_id    = absint( $vendor_id );
 		if ( ! $vendor_id || ! get_userdata( $vendor_id ) || ! LNKup_Roles::is_vendor( $vendor_id ) ) {
 			return new WP_Error( 'invalid_vendor', __( 'Choose a vendor with an LNKup account.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		if ( $vendor_id === $organizer_id ) {
+			return new WP_Error( 'self_invite', __( 'You cannot invite your own vendor account to your event.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
 		}
 		$target = self::resolve_target( $organizer_id, absint( $args['event_id'] ?? 0 ), absint( $args['opportunity_id'] ?? 0 ) );
 		if ( is_wp_error( $target ) ) {
@@ -484,6 +491,7 @@ class LNKup_Vendor_Invites {
 		}
 		$status = $accept ? self::STATUS_ACCEPTED : self::STATUS_DECLINED;
 		update_post_meta( $invite->ID, '_lnkup_status', $status );
+		update_post_meta( $invite->ID, '_lnkup_responded_at', gmdate( 'Y-m-d H:i:s' ) );
 		do_action( 'lnkup_vendor_invite_status_changed', $invite->ID, $status );
 		LNKup_Organizer_CRM::log_activity(
 			$accept ? 'invite_accepted' : 'invite_declined',
@@ -699,5 +707,183 @@ class LNKup_Vendor_Invites {
 			);
 		}
 		return $items;
+	}
+
+	/**
+	 * The organizer's own invite, or an error. Other organizers' invites read as not found.
+	 *
+	 * @param int $invite_id    Invite ID.
+	 * @param int $organizer_id Organizer user ID.
+	 * @return WP_Post|WP_Error
+	 */
+	private static function owned_invite( $invite_id, $organizer_id ) {
+		$invite = get_post( absint( $invite_id ) );
+		if ( ! $invite instanceof WP_Post || 'lnkup_vendor_invite' !== $invite->post_type ) {
+			return new WP_Error( 'invite_not_found', __( 'This invite is no longer available.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		$owner = (int) get_post_meta( $invite->ID, '_lnkup_organizer_user_id', true );
+		if ( $owner !== absint( $organizer_id ) && ! LNKup_Capabilities::user_has_manage_all( absint( $organizer_id ) ) ) {
+			return new WP_Error( 'invite_not_found', __( 'This invite is no longer available.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		return $invite;
+	}
+
+	/**
+	 * Whether an invite can still be answered (sent or opened, not past its expiry).
+	 *
+	 * @param int $invite_id Invite ID.
+	 */
+	public static function is_open( $invite_id ) {
+		$status  = (string) get_post_meta( $invite_id, '_lnkup_status', true );
+		$expires = (string) get_post_meta( $invite_id, '_lnkup_expires_at', true );
+		return in_array( $status, array( self::STATUS_SENT, self::STATUS_OPENED ), true ) && ( '' === $expires || strtotime( $expires . ' UTC' ) >= time() );
+	}
+
+	/**
+	 * Organizer withdraws an open invite. The vendor's apply link stops working because the
+	 * status leaves sent/opened.
+	 *
+	 * @param int $invite_id    Invite ID.
+	 * @param int $organizer_id Organizer user ID.
+	 * @return array|WP_Error
+	 */
+	public static function cancel( $invite_id, $organizer_id ) {
+		$invite = self::owned_invite( $invite_id, $organizer_id );
+		if ( is_wp_error( $invite ) ) {
+			return $invite;
+		}
+		if ( ! self::is_open( $invite->ID ) ) {
+			return new WP_Error( 'invite_closed', __( 'This invite was already answered or has expired.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+		update_post_meta( $invite->ID, '_lnkup_status', self::STATUS_CANCELLED );
+		update_post_meta( $invite->ID, '_lnkup_cancelled_at', current_time( 'mysql', true ) );
+		do_action( 'lnkup_vendor_invite_status_changed', $invite->ID, self::STATUS_CANCELLED );
+		return self::organizer_row( $invite );
+	}
+
+	/**
+	 * Re-send an open invite through the existing invite notification, at most once per
+	 * REMIND_INTERVAL. Respects the same delivery path as the original invite.
+	 *
+	 * @param int $invite_id    Invite ID.
+	 * @param int $organizer_id Organizer user ID.
+	 * @return array|WP_Error
+	 */
+	public static function remind( $invite_id, $organizer_id ) {
+		$invite = self::owned_invite( $invite_id, $organizer_id );
+		if ( is_wp_error( $invite ) ) {
+			return $invite;
+		}
+		if ( ! self::is_open( $invite->ID ) ) {
+			return new WP_Error( 'invite_closed', __( 'This invite was already answered or has expired.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+		$last = (string) get_post_meta( $invite->ID, '_lnkup_reminded_at', true );
+		if ( '' !== $last && strtotime( $last . ' UTC' ) > time() - self::REMIND_INTERVAL ) {
+			return new WP_Error( 'reminder_too_soon', __( 'You already sent a reminder recently. Try again in a couple of days.', 'lnkup-marketplace' ), array( 'status' => 429 ) );
+		}
+		$token = (string) get_post_meta( $invite->ID, '_lnkup_token', true );
+		$link  = add_query_arg( 'invite', $token, lnkup_page_url_helper( 'opportunities' ) );
+		LNKup_Notifications::send_vendor_invite( $invite->ID, $link );
+		update_post_meta( $invite->ID, '_lnkup_reminded_at', current_time( 'mysql', true ) );
+		$count = (int) get_post_meta( $invite->ID, '_lnkup_reminder_count', true );
+		update_post_meta( $invite->ID, '_lnkup_reminder_count', $count + 1 );
+		return self::organizer_row( $invite );
+	}
+
+	/**
+	 * Organizer-facing invite row: business identity, event and option context, lifecycle dates
+	 * (all UTC) and the application the invite produced, if any.
+	 *
+	 * @param WP_Post $invite Invite post.
+	 * @return array<string,mixed>
+	 */
+	public static function organizer_row( WP_Post $invite ) {
+		$vendor_id  = (int) get_post_meta( $invite->ID, '_lnkup_vendor_user_id', true );
+		$event_id   = (int) get_post_meta( $invite->ID, '_lnkup_event_id', true );
+		$opp_id     = (int) get_post_meta( $invite->ID, '_lnkup_opportunity_id', true );
+		$profile_id = function_exists( 'lnkup_get_vendor_profile_id' ) ? (int) lnkup_get_vendor_profile_id( $vendor_id ) : 0;
+		$business   = $profile_id ? (string) get_post_meta( $profile_id, '_lnkup_business_name', true ) : '';
+		$user       = get_userdata( $vendor_id );
+		$status     = (string) get_post_meta( $invite->ID, '_lnkup_status', true );
+		$expires    = (string) get_post_meta( $invite->ID, '_lnkup_expires_at', true );
+		if ( in_array( $status, array( self::STATUS_SENT, self::STATUS_OPENED ), true ) && '' !== $expires && strtotime( $expires . ' UTC' ) < time() ) {
+			$status = self::STATUS_EXPIRED;
+		}
+		$app_ids = $opp_id ? get_posts(
+			array(
+				'post_type'      => 'lnkup_application',
+				'post_status'    => 'any',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_vendor_user_id', 'value' => $vendor_id ),
+					array( 'key' => '_lnkup_opportunity_id', 'value' => $opp_id ),
+				),
+			)
+		) : array();
+		$app_id = $app_ids ? (int) $app_ids[0] : 0;
+		return array(
+			'id'                 => (int) $invite->ID,
+			'vendor_user_id'     => $vendor_id,
+			'vendor_profile_id'  => $profile_id,
+			'business_name'      => '' !== $business ? $business : ( $user ? (string) $user->display_name : '' ),
+			'logo_url'           => $profile_id ? (string) get_the_post_thumbnail_url( $profile_id, 'thumbnail' ) : '',
+			'status'             => $status,
+			'type'               => (string) get_post_meta( $invite->ID, '_lnkup_type', true ),
+			'event_id'           => $event_id,
+			'event_title'        => $event_id && class_exists( 'LNKup_Vendor_Presentation' ) ? LNKup_Vendor_Presentation::customer_event_title( $event_id ) : '',
+			'event_date'         => $event_id ? (string) get_post_meta( $event_id, '_lnkup_event_date', true ) : '',
+			'opportunity_id'     => $opp_id,
+			'opportunity_title'  => $opp_id && function_exists( 'lnkup_plain_title' ) ? lnkup_plain_title( $opp_id ) : '',
+			'message'            => (string) get_post_meta( $invite->ID, '_lnkup_invite_message', true ),
+			'sent_at'            => get_gmt_from_date( $invite->post_date ),
+			'expires_at'         => $expires,
+			'reminded_at'        => (string) get_post_meta( $invite->ID, '_lnkup_reminded_at', true ),
+			'reminder_count'     => (int) get_post_meta( $invite->ID, '_lnkup_reminder_count', true ),
+			'cancelled_at'       => (string) get_post_meta( $invite->ID, '_lnkup_cancelled_at', true ),
+			'responded_at'       => (string) get_post_meta( $invite->ID, '_lnkup_responded_at', true ),
+			'can_remind'         => self::is_open( $invite->ID ),
+			'can_cancel'         => self::is_open( $invite->ID ),
+			'application_id'     => $app_id,
+			'application_status' => $app_id ? (string) get_post_meta( $app_id, '_lnkup_application_status', true ) : '',
+		);
+	}
+
+	/**
+	 * Organizer invites with full rows and lifecycle counts.
+	 *
+	 * @param int $organizer_id Organizer user ID.
+	 * @param int $limit        Max rows.
+	 * @return array{items:array<int,array<string,mixed>>,counts:array<string,int>}
+	 */
+	public static function organizer_overview( $organizer_id, $limit = 100 ) {
+		$invites = get_posts(
+			array(
+				'post_type'      => 'lnkup_vendor_invite',
+				'post_status'    => 'publish',
+				'posts_per_page' => min( 200, max( 1, absint( $limit ) ) ),
+				'meta_key'       => '_lnkup_organizer_user_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'     => absint( $organizer_id ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				'orderby'        => 'date',
+				'order'          => 'DESC',
+			)
+		);
+		$counts = array( 'sent' => 0, 'awaiting' => 0, 'accepted' => 0, 'declined' => 0, 'expired' => 0, 'cancelled' => 0, 'applied' => 0 );
+		$items  = array();
+		foreach ( $invites as $invite ) {
+			$row = self::organizer_row( $invite );
+			++$counts['sent'];
+			if ( in_array( $row['status'], array( self::STATUS_SENT, self::STATUS_OPENED ), true ) ) {
+				++$counts['awaiting'];
+			} elseif ( isset( $counts[ $row['status'] ] ) ) {
+				++$counts[ $row['status'] ];
+			}
+			if ( $row['application_id'] ) {
+				++$counts['applied'];
+			}
+			$items[] = $row;
+		}
+		return array( 'items' => $items, 'counts' => $counts );
 	}
 }

@@ -3,6 +3,8 @@ import { Pressable, Share, StyleSheet, View } from "react-native"
 import { router } from "expo-router"
 
 import { IsoDatePickerField } from "@/components/iso-date-picker-field"
+import { LocationField } from "@/components/location-field"
+import { isLocationSubmittable, type LocationStatus } from "@/lib/api/locations"
 import { LoadingPanel } from "@/components/panel-states"
 import { Screen } from "@/components/screen"
 import { AppIcon } from "@/components/ui/app-icon"
@@ -40,14 +42,8 @@ import {
 } from "@/lib/api/organizer-launch"
 import { useAuth } from "@/lib/auth/auth-context"
 import { confirmAction, showToast } from "@/lib/feedback/feedback"
+import { formatShortDate } from "@/lib/format/date"
 import { colors, fonts, layout, radii, spacing, typography, typeScale } from "@/lib/theme"
-
-const FEE_PRESETS = [
-  { label: "Free", value: 0 },
-  { label: "$100", value: 100 },
-  { label: "$250", value: 250 },
-  { label: "$500", value: 500 },
-] as const
 
 const DOC_MODES: Array<{ value: NonNullable<OrganizerLaunchDraft["opportunity"]["requiredDocumentsMode"]>; label: string; hint: string }> = [
   { value: "platform_defaults", label: "Standard documents", hint: "LNKup's default insurance and permit checks" },
@@ -73,6 +69,7 @@ export default function OrganizerLaunchScreen() {
   const [errors, setErrors] = useState<Array<{ field: string; message: string }>>([])
   const [banner, setBanner] = useState<{ tone: "error" | "attention" | "success"; message: string } | null>(null)
   const [published, setPublished] = useState<OrganizerLaunchPublishResult | null>(null)
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>("")
   const busy = useRef(false)
   const hydrated = useRef(false)
 
@@ -138,6 +135,9 @@ export default function OrganizerLaunchScreen() {
   function goTo(next: number) {
     if (next > step) {
       const blockers = validateLaunchStep(draft, step)
+      if (step === 1 && !isLocationSubmittable(locationStatus)) {
+        blockers.push({ field: "event.location", message: "Choose the event city and state from the suggestions." })
+      }
       if (blockers.length > 0) {
         setErrors(blockers)
         setBanner({ tone: "error", message: blockers[0]?.message ?? "Fix the highlighted fields." })
@@ -322,14 +322,14 @@ export default function OrganizerLaunchScreen() {
               <FormField label="End time" value={draft.event.endTime ?? ""} onChangeText={(endTime) => patchEvent({ endTime })} placeholder="18:00" keyboardType="numbers-and-punctuation" error={fieldError("event.time")} />
             </View>
           </View>
-          <View style={styles.row}>
-            <View style={styles.flex}>
-              <FormField label="City" value={draft.event.city ?? ""} onChangeText={(city) => patchEvent({ city })} error={fieldError("event.city")} />
-            </View>
-            <View style={styles.stateField}>
-              <FormField label="State" value={draft.event.state ?? ""} onChangeText={(state) => patchEvent({ state: state.toUpperCase().slice(0, 2) })} autoCapitalize="characters" maxLength={2} error={fieldError("event.state")} />
-            </View>
-          </View>
+          <LocationField
+            city={draft.event.city ?? ""}
+            state={draft.event.state ?? ""}
+            onChange={({ city, state }) => patchEvent({ city, state })}
+            onStatusChange={setLocationStatus}
+            cityError={fieldError("event.city") ?? fieldError("event.location")}
+            stateError={fieldError("event.state")}
+          />
           <FormField label="Venue" value={draft.event.venueName ?? ""} onChangeText={(venueName) => patchEvent({ venueName })} placeholder="Uptown Green" />
           <FormField label="Venue address" value={draft.event.venueAddress ?? ""} onChangeText={(venueAddress) => patchEvent({ venueAddress })} multiline hint="Only shared with vendors after they pay." />
         </View>
@@ -404,9 +404,7 @@ export default function OrganizerLaunchScreen() {
                 </View>
               </View>
               <View style={styles.chips}>
-                {FEE_PRESETS.map((preset) => (
-                  <FilterChip key={preset.label} label={preset.label} selected={row.vendorFee === preset.value} onPress={() => patchFeeRow(index, { vendorFee: preset.value })} />
-                ))}
+                <FilterChip label="Free booth" selected={row.vendorFee === 0} onPress={() => patchFeeRow(index, { vendorFee: 0 })} />
               </View>
             </Surface>
           ))}
@@ -447,7 +445,7 @@ export default function OrganizerLaunchScreen() {
             <Eyebrow>Vendor preview</Eyebrow>
             <SectionTitle style={styles.previewTitle}>{draft.event.title || "Untitled event"}</SectionTitle>
             <Meta>
-              {[draft.event.date, draft.event.startTime && draft.event.endTime ? `${draft.event.startTime}–${draft.event.endTime}` : null, [draft.event.venueName, draft.event.city, draft.event.state].filter(Boolean).join(", ")]
+              {[formatShortDate(draft.event.date), draft.event.startTime && draft.event.endTime ? `${draft.event.startTime}–${draft.event.endTime}` : null, [draft.event.venueName, draft.event.city, draft.event.state].filter(Boolean).join(", ")]
                 .filter(Boolean)
                 .join(" · ")}
             </Meta>

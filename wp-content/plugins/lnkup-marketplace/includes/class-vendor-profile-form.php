@@ -83,7 +83,7 @@ class LNKup_Vendor_Profile_Form {
 						</div>
 						<div class="lnkup-form-row">
 							<label for="city"><?php esc_html_e( 'City', 'lnkup-marketplace' ); ?></label>
-							<input type="text" id="city" name="city" value="<?php echo esc_attr( $meta['city'] ); ?>" data-preview="city" />
+							<input type="text" id="city" name="city" value="<?php echo esc_attr( $meta['city'] ); ?>" data-preview="city" data-lnkup-location-city />
 						</div>
 						<div class="lnkup-grid lnkup-grid--2">
 							<div class="lnkup-form-row">
@@ -148,7 +148,7 @@ class LNKup_Vendor_Profile_Form {
 					self::section_form( 'markets_served', __( 'Markets Served', 'lnkup-marketplace' ), $strength, $meta, function () use ( $meta ) {
 						?>
 						<div class="lnkup-grid lnkup-grid--2">
-							<div class="lnkup-form-row"><label for="state"><?php esc_html_e( 'Home State', 'lnkup-marketplace' ); ?></label><input type="text" id="state" name="state" maxlength="2" value="<?php echo esc_attr( $meta['state'] ); ?>" data-preview="state" /></div>
+							<div class="lnkup-form-row"><label for="state"><?php esc_html_e( 'Home State', 'lnkup-marketplace' ); ?></label><input type="text" id="state" name="state" maxlength="2" value="<?php echo esc_attr( $meta['state'] ); ?>" data-preview="state" data-lnkup-location-state /></div>
 							<div class="lnkup-form-row"><label for="cities_served"><?php esc_html_e( 'Cities Served', 'lnkup-marketplace' ); ?></label><input type="text" id="cities_served" name="cities_served" value="<?php echo esc_attr( $meta['cities_served'] ); ?>" /></div>
 							<div class="lnkup-form-row"><label for="states_served"><?php esc_html_e( 'States Served', 'lnkup-marketplace' ); ?></label><input type="text" id="states_served" name="states_served" value="<?php echo esc_attr( $meta['states_served'] ); ?>" /></div>
 							<div class="lnkup-form-row"><label for="service_radius_miles"><?php esc_html_e( 'Service Radius (miles)', 'lnkup-marketplace' ); ?></label><input type="number" id="service_radius_miles" name="service_radius_miles" min="0" value="<?php echo esc_attr( $meta['service_radius_miles'] ); ?>" /></div>

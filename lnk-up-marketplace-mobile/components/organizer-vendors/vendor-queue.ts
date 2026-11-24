@@ -1,4 +1,4 @@
-import type { OrganizerVendorRequestStatus } from "@/lib/api/organizer-requests"
+import type { OrganizerVendorRequest, OrganizerVendorRequestStatus } from "@/lib/api/organizer-requests"
 import type {
   OrganizerDiscoverFilters,
   OrganizerDiscoverSort,
@@ -49,6 +49,14 @@ export function matchesFilter(status: OrganizerVendorRequestStatus, filter: Filt
       return exhaustive
     }
   }
+}
+
+/**
+ * Vendors tab badge and Home's "Applications to review": submitted + under review, the same
+ * statuses the server counts (LNKup_Organizer_Presentation::PENDING_STATUSES).
+ */
+export function awaitingReviewCount(items: Pick<OrganizerVendorRequest, "status">[]): number {
+  return items.filter((item) => matchesFilter(item.status, "review")).length
 }
 
 export function canReview(status: OrganizerVendorRequestStatus): boolean {

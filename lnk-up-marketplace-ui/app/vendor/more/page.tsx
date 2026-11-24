@@ -24,34 +24,49 @@ import { VerificationBadge } from "@/components/marketplace/badges"
 import { Button } from "@/components/ui/button"
 import { useVendorReferrals } from "@/lib/hooks/use-vendor-referrals"
 import { useOrganizerRecruitReferrals } from "@/lib/hooks/use-organizer-recruit-referrals"
+import { useVendorProfile } from "@/lib/hooks/use-vendor-profile"
+import { isLiveApiEnabled } from "@/lib/api/config"
 import { currentVendor } from "@/lib/data"
 
-const groups: SettingsGroup[] = [
-  {
-    title: "Work",
-    items: [
-      { icon: FileText, label: "Documents", hint: "2 pending review", href: "/vendor/documents" },
-      { icon: Ticket, label: "Event operations", hint: "Passes & day-of info", href: "/vendor/operations" },
-      { icon: TrendingUp, label: "Growth", hint: "Score 87 · Top 12%", href: "/vendor/growth" },
-      { icon: Star, label: "Reviews", hint: `${currentVendor.reviews} reviews`, href: "/vendor/reviews" },
-      { icon: Heart, label: "Favorites", hint: "3 saved events", href: "/vendor/favorites" },
-    ],
-  },
-  {
-    title: "Account",
-    items: [
-      { icon: User, label: "Business profile", hint: currentVendor.name, href: "/vendor/profile" },
-      { icon: Bell, label: "Notifications", hint: "Alerts & updates", href: "/notifications" },
-      { icon: Bell, label: "Alert preferences", href: "/notifications/preferences" },
-      { icon: Bookmark, label: "Saved search alerts", href: "/notifications/preferences" },
-      { icon: Download, label: "Install app", hint: "Add LNKup to your home screen", href: "/vendor" },
-      { icon: Shield, label: "Privacy & security" },
-      { icon: HelpCircle, label: "Help & support" },
-    ],
-  },
-]
-
 export default function VendorMorePage() {
+  const live = isLiveApiEnabled()
+  const { profile, loading: profileLoading } = useVendorProfile()
+  const businessName = live
+    ? profile?.businessName || (profileLoading ? "Loading your business" : "Your business")
+    : currentVendor.name
+  const initials = businessName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "LN"
+  const place = live
+    ? [profile?.city, profile?.state].filter(Boolean).join(", ")
+    : `${currentVendor.city}, ${currentVendor.state}`
+  const groups: SettingsGroup[] = [
+    {
+      title: "Work",
+      items: [
+        { icon: FileText, label: "Documents", hint: "Required files and reviews", href: "/vendor/documents" },
+        { icon: Ticket, label: "Event operations", hint: "Passes and day-of info", href: "/vendor/operations" },
+        { icon: TrendingUp, label: "Growth", hint: "Spending and markets", href: "/vendor/growth" },
+        { icon: Star, label: "Reviews", href: "/vendor/reviews" },
+        { icon: Heart, label: "Favorites", href: "/vendor/favorites" },
+      ],
+    },
+    {
+      title: "Account",
+      items: [
+        { icon: User, label: "Business profile", hint: businessName, href: "/vendor/profile" },
+        { icon: Bell, label: "Notifications", hint: "Alerts and updates", href: "/notifications" },
+        { icon: Bell, label: "Alert preferences", href: "/notifications/preferences" },
+        { icon: Bookmark, label: "Saved search alerts", href: "/notifications/preferences" },
+        { icon: Download, label: "Install app", hint: "Add LNKup to your home screen", href: "/vendor" },
+        { icon: Shield, label: "Privacy & security" },
+        { icon: HelpCircle, label: "Help & support" },
+      ],
+    },
+  ]
   const { state, loading, generateInvite } = useVendorReferrals()
   const {
     state: orgRecruit,
@@ -74,17 +89,15 @@ export default function VendorMorePage() {
       >
         <Avatar className="size-14">
           <AvatarFallback className="bg-primary font-heading text-primary-foreground">
-            {currentVendor.initials}
+            {initials}
           </AvatarFallback>
         </Avatar>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-heading text-lg font-semibold">{currentVendor.name}</span>
-            {currentVendor.verified && <VerificationBadge />}
+            <span className="font-heading text-lg font-semibold">{businessName}</span>
+            {!live && currentVendor.verified ? <VerificationBadge /> : null}
           </div>
-          <span className="text-sm text-muted-foreground">
-            {currentVendor.category} · {currentVendor.city}, {currentVendor.state}
-          </span>
+          {place ? <span className="text-sm text-muted-foreground">{place}</span> : null}
         </div>
         <Button
           variant="outline"
