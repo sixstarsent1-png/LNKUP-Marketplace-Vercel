@@ -1,0 +1,61 @@
+{
+  "eventId": "968",
+  "screens": {
+    "create": {
+      "url": "/organizer-dashboard/?view=create",
+      "settledMs": 6026,
+      "requests": 2,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
+          "ms": 1431
+        },
+        {
+          "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
+          "ms": 2137
+        }
+      ]
+    },
+    "events": {
+      "url": "/organizer-dashboard/?view=events",
+      "settledMs": 6562,
+      "requests": 1,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
+          "ms": 3323
+        }
+      ]
+    },
+    "tours": {
+      "url": "/organizer-dashboard/?view=tours",
+      "settledMs": 7929,
+      "requests": 2,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
+          "ms": 2374
+        },
+        {
+          "url": "/wp-json/lnkup/v1/portfolio/overview",
+          "ms": 2566
+        }
+      ]
+    },
+    "start": {
+      "url": "/organizer-dashboard/?view=start",
+      "settledMs": 5148,
+      "requests": 2,
+      "calls": [
+        {
+          "url": "/wp-json/lnkup/v1/organizer/setups",
+          "ms": 1219
+        },
+        {
+          "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
+          "ms": 1738
+        }
+      ]
+    }
+  }
+}
