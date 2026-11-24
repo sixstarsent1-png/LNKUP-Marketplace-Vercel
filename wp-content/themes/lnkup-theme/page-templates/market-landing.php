@@ -85,7 +85,7 @@ $faqs       = array_filter(
 			/* translators: %s: city */
 			'q' => sprintf( __( 'How do I hear about new events in %s?', 'lnkup-theme' ), $name ),
 			/* translators: %s: city */
-			'a' => sprintf( __( 'Create a free vendor account and turn on alerts for %s. We email you a weekly summary when matching events open, and you can turn alerts off any time.', 'lnkup-theme' ), $name ),
+			'a' => sprintf( __( 'Create a free vendor account and turn on alerts for %s. We email you when a matching event opens, and you can pause or remove alerts any time.', 'lnkup-theme' ), $name ),
 		),
 		isset( $faq_org[1] ) ? array(
 			/* translators: %s: city */
@@ -235,7 +235,7 @@ get_header();
 				<div>
 					<p class="lp-eyebrow"><?php esc_html_e( 'Alerts', 'lnkup-theme' ); ?></p>
 					<h2 class="lp-h2" id="lnkup-market-alerts-title"><?php echo esc_html( sprintf( /* translators: %s: city */ __( 'Get alerts for %s', 'lnkup-theme' ), $name ) ); ?></h2>
-					<p class="lp-lead"><?php esc_html_e( 'One weekly email when events matching your category open here. Turn it off any time.', 'lnkup-theme' ); ?></p>
+					<p class="lp-lead"><?php esc_html_e( 'We email you when a new event matching your category opens here: one message per event. Pause or remove the alert any time in Saved searches.', 'lnkup-theme' ); ?></p>
 					<?php if ( $can_alert ) : ?>
 						<form class="lp-actions" data-lnkup-market-alert>
 							<label class="lp-visually-hidden" for="lnkup-market-alert-category"><?php esc_html_e( 'Category', 'lnkup-theme' ); ?></label>

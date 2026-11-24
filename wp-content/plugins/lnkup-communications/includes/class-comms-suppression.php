@@ -154,6 +154,7 @@ class LNKup_Comms_Suppression {
 		}
 		self::add( (string) $user->user_email, 'marketing' === $scope ? 'marketing' : 'category:' . $scope, 'unsubscribe' );
 		LNKup_Comms_Analytics::bump( 'unsubscribed', $scope );
+		do_action( 'lnkup_comms_unsubscribed', $user_id, $scope );
 	}
 
 	public static function add( string $email, string $scope, string $reason ): void {

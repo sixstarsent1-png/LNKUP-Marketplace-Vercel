@@ -444,13 +444,16 @@ class LNKup_Market_Registry {
 			? sprintf( __( '%1$s in %2$s', 'lnkup-marketplace' ), $label, $market['display_name'] )
 			/* translators: %s: market */
 			: sprintf( __( 'Events in %s', 'lnkup-marketplace' ), $market['display_name'] );
-		$result = LNKup_Saved_Searches::create( $user_id, $name, $filters, array( 'frequency' => 'weekly' ) );
+		$result = LNKup_Saved_Searches::create( $user_id, $name, $filters, array( 'frequency' => 'instant' ) );
 		if ( is_wp_error( $result ) ) {
 			if ( 'duplicate_search' === $result->get_error_code() ) {
 				$data = (array) $result->get_error_data();
 				return array( 'created' => false, 'id' => (string) ( $data['existing_id'] ?? '' ) );
 			}
 			return $result;
+		}
+		if ( class_exists( 'LNKup_Lifecycle' ) && is_array( $result ) && ! empty( $result['id'] ) ) {
+			LNKup_Lifecycle::register_market_alert( $user_id, (string) $result['id'], $slug, $label );
 		}
 		if ( class_exists( 'LNKup_Analytics_Taxonomy' ) ) {
 			LNKup_Analytics_Taxonomy::emit( 'market_alert_created', array( 'market' => $slug, 'category' => $label ), $user_id );

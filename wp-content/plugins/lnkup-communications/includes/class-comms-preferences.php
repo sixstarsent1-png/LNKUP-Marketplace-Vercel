@@ -235,6 +235,13 @@ class LNKup_Comms_Preferences {
 				update_user_meta( $user_id, self::META_TZ, $tz );
 			}
 		}
+		/**
+		 * Fires after a user's communication preferences change (consent records listen here).
+		 *
+		 * @param int   $user_id User.
+		 * @param array $input   Applied input.
+		 */
+		do_action( 'lnkup_comms_preferences_updated', $user_id, $input );
 		return self::get( $user_id );
 	}
 
