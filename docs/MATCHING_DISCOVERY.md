@@ -1,4 +1,4 @@
-# Matching & Discovery OS (v12.24.0, Phases 1–4)
+# Matching & Discovery OS (v12.24.0, Phases 1–4; Phases 5–9 through v12.34.0)
 
 Rules-based, explainable matching between vendors and open vendor opportunities, built on canonical WordPress data (CPTs + post meta). Every table added here is a derived index or cache and can be rebuilt.
 
@@ -194,8 +194,33 @@ Runbook: [MATCHING_ROLLOUT.md](MATCHING_ROLLOUT.md).
 - **Health:** queue age, consecutive failed runs, backfill progress; admin notice and an email (6-hour throttle) when matching is stale; "Rollout & health" tab.
 - **Tests:** `rollout-test.php` 32/32, `match-tuning-test.php` 31/31, `match-funnel-test.php` 24/24.
 
-## 12. Not built in this pass
+## 12. Phase 7: geographic supply and demand (plugin 12.34.0)
 
-- Phase 7: geographic supply & demand, Organizer Acquisition OS feed.
+Organizer Growth's vendor supply snapshot (SYSTEM_OVERVIEW §9.24) counts vendors and booths per city. Phase 7 adds whether they actually **match**, in a matching-owned table, and feeds the result into organizer acquisition and City Market Pages. Every figure is a record count; signals are threshold rules shown next to the counts.
+
+- **Search location:** `GET /marketplace/search` events (`search`, `search_no_results`) now carry `city`, `state`, `categories` (term names) and `page` (`LNKup_Marketplace_REST::search_location()`). A search narrowed by text, city or category with no results is recorded as `search_no_results`.
+- **Snapshot (`LNKup_Match_Market`, `includes/matching/class-match-market.php`):** `wp_lnkup_match_market_snapshots`, built daily on `lnkup_marketplace_daily` at priority 44 (before the supply snapshot at 45 and lead rescoring at 50) when matching is active. `GET_LOCK`, idempotent per day, 120 days kept, 500 busiest cities. Same city key as Organizer Growth (`lower(city)|UPPER(state)`), one all-categories row (`term_id` 0) plus one per category.
+
+| Column | Meaning |
+|---|---|
+| `open_opportunities` | Open booths (spots left, deadline and event not past) in the marketplace index |
+| `opps_thin` / `opps_unmatched` | Booths with fewer than `thin_below` (3) / zero recommended active vendors |
+| `matched_vendors`, `recommended_pairs` | Distinct vendors with a recommended booth in the city; vendor–booth pairs |
+| `idle_vendors` | Active, discoverable vendors based in or serving the city with no recommended booth there |
+| `applications_30d_from_recs` | `match_rec_application` events for booths in the city |
+| `searches_30d`, `zero_result_searches_30d` | First-page searches naming the city; those that found nothing. A search without a state counts toward the city only when one city of that name is known |
+
+- **Signals** (filter `lnkup_match_market_thresholds`): `unmet_search` (no booths and ≥ 3 zero-result searches), `idle_supply` (≥ 5 idle vendors and ≥ 2 per open booth), `thin_supply` (≥ 50% of booths thin), `insufficient_data`, otherwise `healthy`.
+- **Admin:** Marketplace Intelligence → **Supply & Demand** — filters (state, category, signal, sort), city table with 7-day change and the Organizer Growth signal side by side, city detail (thin booths with edit links, categories, 90-day trend, open leads with a link to the pre-filtered Organizer Growth leads list), CSV export (formula-safe) and Rebuild (10-minute throttle). REST (admin only, `LNKup_Match_REST::admin_permission`): `GET match/admin/market`, `GET match/admin/market/city?key=`, `GET match/admin/market/export`, `POST match/admin/market/rebuild`.
+- **Organizer Acquisition feed (`LNKup_Org_Market_Need`):** a city **needs organizers** when the supply signal is `recruit_organizers` or the match signal is `idle_supply` / `unmet_search`; it **needs vendors** when the supply signal is `recruit_vendors` or the match signal is `thin_supply`.
+  - Lead scoring factor `market_need` (weight 10): full points when the lead's city needs organizers, half when there are idle vendors or zero-result searches, with the counts in the explanation.
+  - Lead filter `market_signal=need_organizers|need_vendors` (REST, export, saved views) and a shared saved view "Leads in markets that need organizers".
+  - Optional research tasks (Organizer Growth setting `org_growth_market_tasks`, **off by default**): when a city starts needing organizers, one `research` task per open lead, at most 50 a day, deduplicated per lead per month with the tag `market-need-YYYY-MM`. The first run only records a baseline.
+  - The lead drawer supply card and the connector "Vendor supply in your cities" panel show the matching figures (connector vendor counts masked as `<3` like the supply counts).
+- **City Market Pages:** each market shows a suggested launch status (`recruiting_organizers`, `recruiting_vendors`, or `active` when healthy with live booths) with the reason. Nothing changes automatically: **Apply** recomputes the suggestion server-side, saves it, and logs it (option `lnkup_market_status_log`, plus the Trust audit log). "Suggested new markets" ranks cities without a page by matched vendors plus zero-result searches, with a "Create market page" link; new pages start in Prelaunch and disabled.
+- **Tests:** `scripts/e2e/php/match-market-test.php` (66 checks).
+
+## 13. Not built in this pass
+
 - Vendor centroids depend on Nominatim; profiles whose city cannot be located score geography by city/state strings only.
 - A/B testing between two rule sets (preview + versions + revert only).

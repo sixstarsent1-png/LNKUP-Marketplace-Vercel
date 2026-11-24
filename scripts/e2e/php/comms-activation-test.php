@@ -165,6 +165,13 @@ update_post_meta( $draft['event'], '_lnkup_event_status', 'live' );
 LNKup_Comms_Engine::deliver( (int) $draft_msgs[0]['id'] );
 lnkup_t_same( 'suppressed', lnkup_ct_message( (int) $draft_msgs[0]['id'] )['status'] ?? '', 'published before send → cancelled' );
 
+echo "App and web links\n";
+$link_for = static fn( string $trigger, array $ctx ): string => LNKup_Comms_Context::deep_link( (string) LNKup_Comms_Registry::get( $trigger )['link'], LNKup_Comms_Context::build( $ctx ), 'organizer' );
+lnkup_t_same( '/(organizer)/profile', $link_for( 'o_setup_profile', array( 'organizer_user_id' => $org ) ), 'profile nudge opens the organizer profile in the app' );
+lnkup_t_same( '/(organizer)/money', $link_for( 'o_setup_payouts', array( 'organizer_user_id' => $org_p ) ), 'payouts nudge opens Money' );
+lnkup_t_same( '/(organizer)/events/' . $draft['event'], $link_for( 'o_publish_draft', array( 'organizer_user_id' => $org_d, 'event_id' => $draft['event'] ) ), 'draft nudge opens that event' );
+lnkup_t_assert( false !== strpos( LNKup_Comms_Context::web_url( 'org_profile', LNKup_Comms_Context::build( array() ), 'organizer' ), 'step=organization' ), 'profile nudge web link opens the organization step' );
+
 echo "First paid booking (once)\n";
 $org_f  = lnkup_cat_org();
 $vendor = lnkup_ct_user( 'lnkup_vendor' );

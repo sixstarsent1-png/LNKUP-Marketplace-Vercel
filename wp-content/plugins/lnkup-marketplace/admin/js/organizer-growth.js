@@ -228,6 +228,16 @@
 		const flag = app.querySelector('[data-og-flag]');
 		flag.hidden = state.boot.enabled;
 		clear(flag).appendChild(h('p', { text: 'Organizer Growth is turned off. Enable it in Settings to start working leads.' }));
+		// Links from Marketplace Intelligence → Supply & Demand pre-filter the leads list.
+		const params = new URLSearchParams(location.search);
+		if (params.get('og_city') || params.get('og_market_signal')) {
+			Object.assign(state.leadFilters, {
+				search: params.get('og_city') || '',
+				state: params.get('og_state') || '',
+				market_signal: params.get('og_market_signal') || '',
+				page: 1,
+			});
+		}
 		window.addEventListener('hashchange', () => activate(location.hash.slice(1)));
 		activate(location.hash.slice(1) || 'overview');
 	}
@@ -311,6 +321,7 @@
 			field('Owner', select('assigned_user_id', teamOptions('Anyone'), f.assigned_user_id)),
 			field('Organizers', select('affiliation', [{ value: '', label: 'All' }, { value: 'independent', label: 'Independent' }, { value: 'house', label: 'House-affiliated' }], f.affiliation)),
 			field('Tag', select('tag', [{ value: '', label: 'Any' }].concat((state.boot.tags || []).map((t) => ({ value: t.tag, label: t.tag + ' (' + t.count + ')' }))), f.tag)),
+			field('Market', select('market_signal', [{ value: '', label: 'Any market' }, { value: 'need_organizers', label: 'Needs organizers' }, { value: 'need_vendors', label: 'Needs vendors' }], f.market_signal)),
 			h('label', { class: 'lnkup-og-check' }, h('input', { type: 'checkbox', name: 'follow_up_due', checked: !!f.follow_up_due }), ' Follow-up due'),
 			h('label', { class: 'lnkup-og-check' }, h('input', { type: 'checkbox', name: 'possible_duplicates', checked: !!f.possible_duplicates }), ' Possible duplicates'),
 			h('button', { class: 'button', type: 'submit', text: 'Apply filters' })
@@ -330,7 +341,7 @@
 
 	function readFilters(form) {
 		const data = new FormData(form);
-		['search', 'stage', 'outcome', 'tier', 'state', 'assigned_user_id', 'affiliation', 'tag'].forEach((k) => { state.leadFilters[k] = data.get(k) || ''; });
+		['search', 'stage', 'outcome', 'tier', 'state', 'assigned_user_id', 'affiliation', 'tag', 'market_signal'].forEach((k) => { state.leadFilters[k] = data.get(k) || ''; });
 		state.leadFilters.follow_up_due = data.get('follow_up_due') ? 1 : '';
 		state.leadFilters.possible_duplicates = data.get('possible_duplicates') ? 1 : '';
 	}
@@ -1371,16 +1382,24 @@
 		));
 	}
 
+	function marketLine(market) {
+		if (!market) {
+			return null;
+		}
+		return h('p', { 'data-testid': 'og-lead-market', text: 'Matching: ' + market.signal_label + ' · ' + market.matched_vendors + ' vendors with a recommended booth · ' + market.idle_vendors + ' with nothing to apply to · ' + market.thin_booths + ' booths short of matching vendors · ' + market.zero_result_searches + ' searches found nothing (30 days)' });
+	}
+
 	function leadSupplyCard(supply) {
 		if (!supply) {
 			return null;
 		}
 		if (!supply.available) {
-			return section('Vendor supply', h('p', { class: 'description', text: supply.vendors_active + ' active vendors based in this city. A full breakdown appears after the next supply snapshot.' }));
+			return section('Vendor supply', h('p', { class: 'description', text: supply.vendors_active + ' active vendors based in this city. A full breakdown appears after the next supply snapshot.' }), marketLine(supply.market));
 		}
 		return h('section', { class: 'lnkup-og-section', 'data-testid': 'og-lead-supply' },
 			h('h3', { text: 'Vendor supply' }),
 			h('p', {}, signalBadge(supply.signal), ' ' + supply.vendors_active + ' active vendors serve this city · ' + supply.open_slots + ' open booths'),
+			marketLine(supply.market),
 			supply.matching.length
 				? h('p', { text: 'Matches their categories: ' + supply.matching.map((c) => c.category + ' (' + c.vendors_active + ')').join(', ') })
 				: (supply.top_categories.length ? h('p', { class: 'description', text: 'Top categories here: ' + supply.top_categories.map((c) => c.category + ' (' + c.vendors_active + ')').join(', ') }) : null),
@@ -1546,7 +1565,7 @@
 			e.preventDefault();
 			const data = new FormData(form);
 			const payload = {};
-			['organizer_growth_enabled', 'organizer_growth_outreach_enabled'].forEach((k) => { payload[k] = data.get(k) ? true : false; });
+			['organizer_growth_enabled', 'organizer_growth_outreach_enabled', 'org_growth_market_tasks'].forEach((k) => { payload[k] = data.get(k) ? true : false; });
 			['org_growth_house_organizer_ids', 'org_growth_outreach_dedupe_days', 'org_growth_campaign_daily_cap', 'org_growth_approval_threshold', 'org_growth_contact_stale_days', 'org_growth_sender_name', 'org_growth_sender_postal_address', 'org_growth_import_max_rows', 'org_growth_activation_paid_bookings', 'org_growth_supply_min_active_vendors', 'org_growth_supply_surplus_ratio'].forEach((k) => { payload[k] = data.get(k) || ''; });
 			const res = await api('/settings', { method: 'POST', body: payload });
 			if (!res.ok) {
@@ -1566,6 +1585,7 @@
 			num('org_growth_activation_paid_bookings', 'Paid bookings to count as Activated'),
 			num('org_growth_supply_min_active_vendors', 'Active vendors before a city says "Recruit organizers"', 'Vendor Supply tab. Default 10.'),
 			num('org_growth_supply_surplus_ratio', 'Active vendors per open booth for "Recruit organizers"', 'Vendor Supply tab. Default 3.'),
+			check('org_growth_market_tasks', 'Create a research task for open leads when their city starts needing organizers (max 50 a day, once a month per lead)'),
 			num('org_growth_outreach_dedupe_days', 'Do not re-email a lead within (days)'),
 			num('org_growth_campaign_daily_cap', 'Default per-campaign daily cap'),
 			num('org_growth_approval_threshold', 'Campaigns larger than this need a second approver'),

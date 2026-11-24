@@ -1662,7 +1662,7 @@ Every report filters by house (Six Stars) vs independent organizers. Spend is no
 
 | Trigger | When | Re-checked before send |
 |---|---|---|
-| `o_setup_profile` | organization stage incomplete; day 1, follow-up day 7 (registered ≤ 30 days) | `organizer_activation_stage` |
+| `o_setup_profile` | organization stage incomplete; day 1, follow-up day 7 (registered ≤ 30 days); link `org_profile` opens `/(organizer)/profile` in the app and the Get started organization step on the web | `organizer_activation_stage` |
 | `o_setup_payouts` | Connect on, payouts incomplete, and a live event or approved vendor exists; day 2, follow-up after 5+ days; skipped within 3 days of `o_payout_setup` | `organizer_activation_stage` |
 | `o_publish_draft` | draft event with a slot, older than `draft_unpublished_days` (3), not past; once per event | `event_is_draft` |
 | `o_first_booking` | `lnkup_payment_completed` when the organizer's paid count is exactly 1; once ever | — |
@@ -1696,13 +1696,15 @@ At most one daily nudge goes to an organizer per run. A shared cooldown (`activa
 - Lead scoring's "existing vendor market" factor now counts active vendors who serve the city (`vendor_market_count()`), with a live home-city fallback before the first snapshot.
 - wp-admin **Organizer Growth → Vendor Supply** has filters, a city table with 7-day change, a city drawer (categories, gaps with vendors but no booths, 90-day trend, open leads, "View leads in this city"), CSV export and Rebuild now.
 - The lead drawer shows a supply card (`GET growth/leads/{id}` returns `supply`).
-- The connector **My Cities** view adds a "Vendor supply in your cities" panel.
+- The connector **My Cities** view adds a "Vendor supply in your cities" panel (web `connector.js`). On mobile, Expo `(partner)/cities` shows the same territories and supply, and the Partner Home has a "My cities" card naming the city that most needs organizers.
 
 **REST:**
 - `GET growth/supply` (`state`, `term_id`, `signal`, `min_active`, `sort`, `limit`), `GET growth/supply/city?key=`, `GET growth/supply/export` (audited), `POST growth/supply/rebuild` (audited, 429 within 10 minutes). All use the growth capability and require the flag.
 - `GET connector/supply` uses the connector permission and returns the connector's city/state territories, or their home city when none are assigned. It is aggregates only, and counts of 1–2 are returned as `"<3"`.
 
 **Tests:** `scripts/e2e/php/org-supply-intel-test.php`; Playwright Vendor Supply cases in `tests/e2e/organizer-growth.spec.ts`.
+
+**Match liquidity (12.34.0):** matching adds its own per-city snapshot (`LNKup_Match_Market`, priority 44) of thin and unmatched booths, matched and idle vendors, and searches that found nothing. `LNKup_Org_Market_Need` combines it with the supply signal for the `market_need` scoring factor, the `market_signal` lead filter, optional research tasks and the lead drawer / connector figures. See [MATCHING_DISCOVERY.md](MATCHING_DISCOVERY.md) §12.
 
 ---
 

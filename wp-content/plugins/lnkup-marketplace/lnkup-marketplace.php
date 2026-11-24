@@ -3,7 +3,7 @@
  * Plugin Name: LNKup Marketplace
  * Plugin URI: https://lnkup.com
  * Description: Custom marketplace functionality for LNKup — vendor opportunities, applications, payments, and event management.
- * Version: 12.33.4
+ * Version: 12.34.0
  * Author: LNKup
  * Author URI: https://lnkup.com
  * License: GPL v2 or later
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'LNKUP_VERSION', '12.33.4' );
+define( 'LNKUP_VERSION', '12.34.0' );
 define( 'LNKUP_PLUGIN_FILE', __FILE__ );
 define( 'LNKUP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LNKUP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -348,6 +348,7 @@ $lnkup_core_files = array(
 	'includes/matching/class-match-funnel.php',
 	'includes/matching/class-match-quality.php',
 	'includes/matching/class-match-simulator.php',
+	'includes/matching/class-match-market.php',
 	'includes/matching/class-match-cron.php',
 	'includes/matching/class-match-rest.php',
 	'includes/matching/class-recruitment.php',
@@ -394,6 +395,7 @@ $lnkup_core_files = array(
 	'includes/organizer-growth/class-org-growth-spend.php',
 	'includes/organizer-growth/class-org-growth-analytics.php',
 	'includes/organizer-growth/class-org-supply-intel.php',
+	'includes/organizer-growth/class-org-market-need.php',
 	'includes/organizer-growth/class-org-outreach.php',
 	'includes/organizer-growth/class-org-growth-rest.php',
 	'admin/class-organizer-growth-admin.php',
@@ -514,6 +516,7 @@ function lnkup_marketplace_init() {
 	LNKup_Match_Vendor_Index::init();
 	LNKup_Match_Cron::init();
 	LNKup_Match_Funnel::init();
+	LNKup_Match_Market::init();
 	LNKup_Match_REST::init();
 	LNKup_Recruitment::init();
 	LNKup_Recruitment_REST::init();

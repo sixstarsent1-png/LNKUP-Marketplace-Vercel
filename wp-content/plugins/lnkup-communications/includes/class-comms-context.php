@@ -770,6 +770,8 @@ class LNKup_Comms_Context {
 				return $event ? '/(organizer)/vendors?event=' . $event : '/(organizer)/vendors';
 			case 'org_money':
 				return '/(organizer)/money';
+			case 'org_profile':
+				return '/(organizer)/profile';
 			case 'org_event':
 				return $event ? '/(organizer)/events/' . $event : '/(organizer)/events';
 			case 'org_vendors':
@@ -840,6 +842,8 @@ class LNKup_Comms_Context {
 				return $org( 'applications', array( 'event_filter' => $event ? $event : '', 'filter' => 'pending' ) );
 			case 'org_money':
 				return $org( 'financial' );
+			case 'org_profile':
+				return $org( 'start', array( 'step' => 'organization' ) );
 			case 'org_event':
 				return $org( 'events', array( 'event' => $event ? $event : '' ) );
 			case 'org_vendors':

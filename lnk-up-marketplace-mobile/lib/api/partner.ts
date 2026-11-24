@@ -158,6 +158,36 @@ export type PartnerLeadResult = {
   message: string
 }
 
+export type PartnerTerritoryScope = "city" | "metro" | "state" | "region"
+
+export type PartnerTerritory = {
+  id: number
+  scope: PartnerTerritoryScope | string
+  value: string
+}
+
+export type PartnerTerritories = {
+  homeMarket: string
+  items: PartnerTerritory[]
+}
+
+export type PartnerSupplySignal = "recruit_organizers" | "recruit_vendors" | "balanced" | "insufficient_data"
+
+export type PartnerSupplyCity = {
+  label: string
+  /** Display count; WordPress masks 1–2 as "<3". */
+  activeVendors: string
+  vendorsInReach: string
+  openSlots: number
+  liveOrganizers: number
+  signal: PartnerSupplySignal
+}
+
+export type PartnerSupply = {
+  snapshotDate: string
+  items: PartnerSupplyCity[]
+}
+
 export const MILESTONE_LABELS: Record<PartnerReferralMilestone, string> = {
   registered: "Registered",
   profile_completed: "Profile completed",
@@ -177,6 +207,28 @@ export const LEDGER_STATUS_LABELS: Record<PartnerLedgerStatus, string> = {
   paid: "Paid",
   reversed: "Reversed",
   expired: "Expired",
+}
+
+export const TERRITORY_SCOPE_LABELS: Record<PartnerTerritoryScope, string> = {
+  city: "City",
+  metro: "Metro area",
+  state: "State",
+  region: "Region",
+}
+
+export const SUPPLY_SIGNAL_LABELS: Record<PartnerSupplySignal, string> = {
+  recruit_organizers: "Needs organizers",
+  recruit_vendors: "Needs vendors",
+  balanced: "Balanced",
+  insufficient_data: "Not enough data yet",
+}
+
+export function territoryScopeLabel(scope: string): string {
+  return TERRITORY_SCOPE_LABELS[scope as PartnerTerritoryScope] ?? "Area"
+}
+
+export function supplySignalLabel(signal: PartnerSupplySignal): string {
+  return SUPPLY_SIGNAL_LABELS[signal]
 }
 
 export function milestoneLabel(milestone: string): string {
@@ -390,6 +442,58 @@ export function normalizeLeads(raw: unknown): PartnerLeads {
   }
 }
 
+export function normalizeTerritories(raw: unknown): PartnerTerritories {
+  const t = obj(raw)
+  const items = (Array.isArray(t.items) ? t.items : [])
+    .map((row): PartnerTerritory | null => {
+      const r = obj(row)
+      const value = str(r.value).trim()
+      if (!value) return null
+      return { id: num(r.id), scope: str(r.scope_type) || "city", value }
+    })
+    .filter((r): r is PartnerTerritory => r !== null)
+  return {
+    homeMarket: [str(t.city).trim(), str(t.state).trim()].filter(Boolean).join(", "),
+    items,
+  }
+}
+
+const SUPPLY_SIGNALS = new Set<PartnerSupplySignal>(["recruit_organizers", "recruit_vendors", "balanced", "insufficient_data"])
+
+/** Keeps WordPress's small-count mask ("<3") as text; anything else becomes a whole number. */
+function maskedCount(value: unknown): string {
+  if (typeof value === "string" && value.trim().startsWith("<")) return value.trim()
+  return String(Math.max(0, Math.round(num(value))))
+}
+
+export function normalizeSupply(raw: unknown): PartnerSupply {
+  const s = obj(raw)
+  const items = (Array.isArray(s.items) ? s.items : [])
+    .map((row): PartnerSupplyCity | null => {
+      const r = obj(row)
+      const label = str(r.label).trim()
+      if (!label) return null
+      const signal = str(r.signal) as PartnerSupplySignal
+      return {
+        label,
+        activeVendors: maskedCount(r.vendors_active),
+        vendorsInReach: maskedCount(r.vendors_reach),
+        openSlots: Math.max(0, num(r.open_slots)),
+        liveOrganizers: Math.max(0, num(r.live_organizers)),
+        signal: SUPPLY_SIGNALS.has(signal) ? signal : "insufficient_data",
+      }
+    })
+    .filter((r): r is PartnerSupplyCity => r !== null)
+  return { snapshotDate: str(s.snapshot_date), items }
+}
+
+/** The city most worth bringing organizers to: "Needs organizers" with the most open booths. */
+export function topOrganizerCity(supply: PartnerSupply): PartnerSupplyCity | null {
+  const needs = supply.items.filter((c) => c.signal === "recruit_organizers")
+  if (!needs.length) return null
+  return needs.reduce((best, c) => (c.openSlots > best.openSlots ? c : best), needs[0])
+}
+
 // ---------------------------------------------------------------- Mocks (demo mode).
 
 const MOCK_TERMS = {
@@ -496,7 +600,31 @@ const MOCK_LEADS = {
   submitted_today: 0,
 }
 
+const MOCK_TERRITORIES = {
+  items: [{ id: 1, scope_type: "city", value: "Charlotte, NC" }],
+  city: "Charlotte",
+  state: "NC",
+}
+
+const MOCK_SUPPLY = {
+  snapshot_date: "2026-11-22",
+  items: [
+    { label: "Charlotte, NC", vendors_active: 42, vendors_reach: 61, open_slots: 6, live_organizers: 3, signal: "recruit_organizers" },
+    { label: "Concord, NC", vendors_active: "<3", vendors_reach: 8, open_slots: 12, live_organizers: 1, signal: "recruit_vendors" },
+  ],
+}
+
 // ---------------------------------------------------------------- Requests.
+
+export async function fetchPartnerTerritories(auth: WpAuth | undefined): Promise<PartnerTerritories> {
+  if (!isLiveApiEnabled()) return normalizeTerritories(MOCK_TERRITORIES)
+  return normalizeTerritories(await wpFetchJson<unknown>("/connector/territories", { auth }))
+}
+
+export async function fetchPartnerSupply(auth: WpAuth | undefined): Promise<PartnerSupply> {
+  if (!isLiveApiEnabled()) return normalizeSupply(MOCK_SUPPLY)
+  return normalizeSupply(await wpFetchJson<unknown>("/connector/supply", { auth }))
+}
 
 export async function fetchPartnerDashboard(auth: WpAuth | undefined): Promise<PartnerDashboard> {
   if (!isLiveApiEnabled()) return normalizeDashboard(MOCK_DASHBOARD)

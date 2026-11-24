@@ -137,7 +137,7 @@ Run locally: `powershell -File scripts/e2e/run-org-growth-php.ps1` and `PLAYWRIG
 - Reply detection / opens — only manual logging and the existing signup-link token; no tracking pixel.
 - Connector-facing lead views, organizer referral dashboard, anti-fraud, configurable organizer-acquisition rewards (Phase 5).
 - Onboarding center, application-question builder, migration tools (Phase 4).
-- Expo screens (Phase 8).
+- Phase 8 (mobile) shipped — see section 12.
 - Vendor supply intelligence (Phase 6) shipped — see section 11.
 - Phase 4 (onboarding/activation) shipped in v12.29 — see SYSTEM_OVERVIEW §9.21.
 
@@ -155,7 +155,22 @@ Signals tell the growth team where to recruit organizers (many vendors, few boot
 
 The scoring factor "existing vendor market" was too generous because it counted every published profile, including inactive and hidden ones. It now uses active vendors in reach. Connectors see aggregate counts for their own territories only, with counts of 1–2 masked as "<3". Architecture: SYSTEM_OVERVIEW §9.24.
 
+Since 12.34.0, matching data also feeds acquisition: lead scoring has a "City needs more organizers" factor (vendors who match but have nothing to apply to, or searches that found nothing), the leads list filters by market need with a shared saved view, and an optional setting (off by default) creates research tasks when a city starts needing organizers. See MATCHING_DISCOVERY.md §12.
+
 Limits:
 - City matching is by name and state, with no metro or region grouping, so connector "metro"/"region" territories don't map to cities yet.
 - The radius check needs geocoded coordinates (city centroid).
 - Snapshots are capped at the top 500 cities.
+
+## 12. Phase 8 — mobile
+
+**Already built by earlier work:**
+- Partner app: Home with share links, Referrals funnel, Leads with submission and daily limit, Earnings, inbox and push preferences.
+- Organizer referral invites, Launch, profile editing (which completes the activation "organization" stage), and activation stages on Organizer Home.
+
+**Added in Phase 8:**
+- Partner **My cities** screen (territories plus vendor supply, aggregate only) and a Home card.
+- A corrected deep link for the profile nudge (`org_profile`).
+- A Money fallback for payout-setup pushes.
+
+**Deliberately not on mobile:** the staff Organizer Growth CRM (import, pipeline, campaigns, analytics, spend, supply report) stays in wp-admin. No Stripe calls on mobile.

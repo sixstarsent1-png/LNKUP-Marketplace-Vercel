@@ -12,7 +12,14 @@ import { Button } from "@/components/ui/button"
 import { StatGrid, StatTile } from "@/components/ui/stat-tile"
 import { Eyebrow, Meta, SectionTitle } from "@/components/ui/typography"
 import { formatMoneyOrZero } from "@/lib/api/format-money"
-import { fetchPartnerDashboard, pendingTotal, termsSummary, type PartnerDashboard } from "@/lib/api/partner"
+import {
+  fetchPartnerDashboard,
+  fetchPartnerSupply,
+  pendingTotal,
+  termsSummary,
+  topOrganizerCity,
+  type PartnerDashboard,
+} from "@/lib/api/partner"
 import { useAuth } from "@/lib/auth/auth-context"
 import { useFocusResource } from "@/lib/hooks/use-focus-resource"
 import { colors, fonts, radii, spacing, typeScale } from "@/lib/theme"
@@ -43,13 +50,19 @@ export default function PartnerHomeScreen() {
   const { auth, session } = useAuth()
   const fetcher = useCallback(() => fetchPartnerDashboard(auth), [auth])
   const { data, loading, refreshing, error, reload } = useFocusResource(fetcher)
+  const supplyFetcher = useCallback(() => fetchPartnerSupply(auth), [auth])
+  const supply = useFocusResource(supplyFetcher)
+  const focusCity = supply.data ? topOrganizerCity(supply.data) : null
 
   return (
     <Screen
       title="Home"
       subtitle={data ? data.programLabel : "Partner"}
       refreshing={refreshing}
-      onRefresh={() => void reload("refresh")}
+      onRefresh={() => {
+        void reload("refresh")
+        void supply.reload("refresh")
+      }}
       rightSlot={
         <Button
           label="Inbox"
@@ -131,6 +144,26 @@ export default function PartnerHomeScreen() {
             </Meta>
           ) : null}
 
+          <SectionTitle>My cities</SectionTitle>
+          <View style={styles.cityCard} testID="partner-home-cities">
+            {focusCity ? (
+              <Text style={styles.cityBody}>
+                {focusCity.label} needs organizers: {focusCity.activeVendors} active vendors and {focusCity.openSlots} open
+                booths.
+              </Text>
+            ) : (
+              <Meta>See your markets and where LNKup has vendors waiting for more events.</Meta>
+            )}
+            <Button
+              label="View my cities"
+              variant="secondary"
+              size="sm"
+              icon="map-outline"
+              onPress={() => router.push("/(partner)/cities")}
+              testID="partner-home-cities-open"
+            />
+          </View>
+
           <Button
             label="Submit an organizer lead"
             variant="secondary"
@@ -154,6 +187,15 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   heroEyebrow: { color: colors.lime },
+  cityCard: {
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    gap: spacing.sm,
+    backgroundColor: colors.white,
+  },
+  cityBody: { fontFamily: fonts.body, fontSize: typeScale.callout, lineHeight: 20, color: colors.black },
   heroTitle: {
     fontFamily: fonts.display,
     fontSize: typeScale.headline,

@@ -282,7 +282,7 @@ class LNKup_Org_Growth_REST {
 	 * @return array<string, mixed>
 	 */
 	private static function filters( WP_REST_Request $r ): array {
-		$keys = array( 'search', 'stage', 'outcome', 'tier', 'city', 'state', 'category', 'source', 'org_type', 'priority', 'assigned_user_id', 'assigned_connector_id', 'import_id', 'partner_id', 'parent_lead_id', 'affiliation', 'tag', 'follow_up_due', 'possible_duplicates', 'unassigned', 'ids', 'page', 'per_page', 'orderby', 'order' );
+		$keys = array( 'search', 'stage', 'outcome', 'tier', 'city', 'state', 'category', 'source', 'org_type', 'priority', 'assigned_user_id', 'assigned_connector_id', 'import_id', 'partner_id', 'parent_lead_id', 'affiliation', 'tag', 'market_signal', 'follow_up_due', 'possible_duplicates', 'unassigned', 'ids', 'page', 'per_page', 'orderby', 'order' );
 		$out  = array();
 		foreach ( $keys as $key ) {
 			$value = $r->get_param( $key );

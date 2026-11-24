@@ -19,6 +19,8 @@ class LNKup_Match_Admin {
 		add_action( 'admin_post_lnkup_match_rebuild', array( __CLASS__, 'handle_rebuild' ) );
 		add_action( 'admin_post_lnkup_match_revert', array( __CLASS__, 'handle_revert' ) );
 		add_action( 'admin_post_lnkup_rollout_save', array( __CLASS__, 'handle_rollout_save' ) );
+		add_action( 'admin_post_lnkup_match_market_export', array( __CLASS__, 'handle_market_export' ) );
+		add_action( 'admin_post_lnkup_match_market_rebuild', array( __CLASS__, 'handle_market_rebuild' ) );
 	}
 
 	public static function add_menu() {
@@ -561,8 +563,198 @@ class LNKup_Match_Admin {
 		exit;
 	}
 
+	/**
+	 * Supply & Demand: match liquidity per city (with the Organizer Growth supply signal) and city detail.
+	 */
 	private static function render_supply() {
-		echo '<p>' . esc_html__( 'Geographic supply & demand reporting (vendor supply, organizer demand, liquidity, unmet demand, growth opportunities) is planned for Phase 7 and will build on the vendor index and match tables shown on the other tabs.', 'lnkup-marketplace' ) . '</p>';
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only filters.
+		$city_key = isset( $_GET['city'] ) ? sanitize_text_field( wp_unslash( $_GET['city'] ) ) : '';
+		$filters  = array(
+			'state'   => isset( $_GET['state'] ) ? sanitize_text_field( wp_unslash( $_GET['state'] ) ) : '',
+			'term_id' => isset( $_GET['term_id'] ) ? absint( $_GET['term_id'] ) : 0,
+			'signal'  => isset( $_GET['signal'] ) ? sanitize_key( wp_unslash( $_GET['signal'] ) ) : '',
+			'sort'    => isset( $_GET['sort'] ) ? sanitize_key( wp_unslash( $_GET['sort'] ) ) : 'idle_vendors',
+		);
+		// phpcs:enable
+		echo '<p class="description">' . esc_html__( 'Whether vendors actually match open booths, city by city: booths with too few recommended vendors, matching vendors with nothing to apply to, and searches that found nothing. Counts only; signals are threshold rules. Organizer Growth\'s supply signal is shown alongside when its snapshot exists.', 'lnkup-marketplace' ) . '</p>';
+		if ( '' !== $city_key ) {
+			self::render_supply_city( $city_key );
+			return;
+		}
+		$data = LNKup_Match_Market::cities( array_merge( $filters, array( 'limit' => 200 ) ) );
+
+		echo '<div style="display:flex;gap:8px;align-items:center;margin:8px 0">';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		wp_nonce_field( 'lnkup_match_market_rebuild' );
+		echo '<input type="hidden" name="action" value="lnkup_match_market_rebuild" />';
+		submit_button( __( 'Rebuild now', 'lnkup-marketplace' ), 'secondary', '', false );
+		echo '</form>';
+		if ( $data['items'] ) {
+			$export = wp_nonce_url( add_query_arg( array_merge( array( 'action' => 'lnkup_match_market_export' ), array_filter( $filters ) ), admin_url( 'admin-post.php' ) ), 'lnkup_match_market_export' );
+			echo '<a class="button" href="' . esc_url( $export ) . '">' . esc_html__( 'Export CSV', 'lnkup-marketplace' ) . '</a>';
+		}
+		echo '</div>';
+
+		if ( '' === $data['snapshot_date'] ) {
+			echo '<div class="notice notice-info inline"><p>' . esc_html__( 'No market snapshot yet. It builds nightly once matching is on, or use "Rebuild now".', 'lnkup-marketplace' ) . '</p></div>';
+			return;
+		}
+
+		echo '<form method="get" style="margin:8px 0"><input type="hidden" name="page" value="' . esc_attr( self::SLUG ) . '" /><input type="hidden" name="tab" value="supply" />';
+		echo '<label>' . esc_html__( 'State', 'lnkup-marketplace' ) . ' <input type="text" name="state" value="' . esc_attr( $filters['state'] ) . '" size="3" /></label> ';
+		echo '<label>' . esc_html__( 'Category', 'lnkup-marketplace' ) . ' <select name="term_id"><option value="0">' . esc_html__( 'All categories', 'lnkup-marketplace' ) . '</option>';
+		foreach ( $data['categories'] as $id => $name ) {
+			echo '<option value="' . (int) $id . '" ' . selected( $filters['term_id'], (int) $id, false ) . '>' . esc_html( $name ) . '</option>';
+		}
+		echo '</select></label> <label>' . esc_html__( 'Signal', 'lnkup-marketplace' ) . ' <select name="signal"><option value="">' . esc_html__( 'Any', 'lnkup-marketplace' ) . '</option>';
+		foreach ( LNKup_Match_Market::SIGNALS as $signal ) {
+			echo '<option value="' . esc_attr( $signal ) . '" ' . selected( $filters['signal'], $signal, false ) . '>' . esc_html( LNKup_Match_Market::signal_label( $signal ) ) . '</option>';
+		}
+		echo '</select></label> <label>' . esc_html__( 'Sort by', 'lnkup-marketplace' ) . ' <select name="sort">';
+		$sorts = array(
+			'idle_vendors'             => __( 'Idle matching vendors', 'lnkup-marketplace' ),
+			'opps_thin'                => __( 'Thin booths', 'lnkup-marketplace' ),
+			'zero_result_searches_30d' => __( 'Zero-result searches', 'lnkup-marketplace' ),
+			'matched_vendors'          => __( 'Matched vendors', 'lnkup-marketplace' ),
+			'open_opportunities'       => __( 'Open booths', 'lnkup-marketplace' ),
+			'delta_idle'               => __( 'Change in idle vendors (7 days)', 'lnkup-marketplace' ),
+		);
+		foreach ( $sorts as $key => $label ) {
+			echo '<option value="' . esc_attr( $key ) . '" ' . selected( $filters['sort'], $key, false ) . '>' . esc_html( $label ) . '</option>';
+		}
+		echo '</select></label> ';
+		submit_button( __( 'Filter', 'lnkup-marketplace' ), 'secondary', '', false );
+		echo '</form>';
+
+		echo '<p>' . esc_html( sprintf( __( 'Snapshot %1$s%2$s. %3$d cities.', 'lnkup-marketplace' ), $data['snapshot_date'], $data['compared_to'] ? ' ' . sprintf( __( '(changes vs. %s)', 'lnkup-marketplace' ), $data['compared_to'] ) : '', $data['total'] ) ) . '</p>';
+		if ( ! $data['items'] ) {
+			echo '<p class="description">' . esc_html__( 'No cities match these filters.', 'lnkup-marketplace' ) . '</p>';
+			return;
+		}
+		$heads = array( __( 'City', 'lnkup-marketplace' ), __( 'Match signal', 'lnkup-marketplace' ), __( 'Organizer Growth signal', 'lnkup-marketplace' ), __( 'Open booths', 'lnkup-marketplace' ), __( 'Thin booths', 'lnkup-marketplace' ), __( 'No match', 'lnkup-marketplace' ), __( 'Matched vendors', 'lnkup-marketplace' ), __( 'Idle vendors', 'lnkup-marketplace' ), __( 'Apps from recs (30d)', 'lnkup-marketplace' ), __( 'Searches (30d)', 'lnkup-marketplace' ), __( 'Zero results (30d)', 'lnkup-marketplace' ) );
+		echo '<table class="widefat striped" data-testid="lnkup-market-table"><thead><tr>';
+		foreach ( $heads as $head ) {
+			echo '<th>' . esc_html( $head ) . '</th>';
+		}
+		echo '</tr></thead><tbody>';
+		foreach ( $data['items'] as $row ) {
+			$url = add_query_arg( array( 'page' => self::SLUG, 'tab' => 'supply', 'city' => $row['city_key'] ), admin_url( 'admin.php' ) );
+			echo '<tr><td><a href="' . esc_url( $url ) . '">' . esc_html( $row['label'] ?: $row['city_key'] ) . '</a></td>';
+			echo '<td>' . esc_html( $row['signal_label'] ) . '</td><td>' . esc_html( $row['org_signal'] ? self::org_signal_label( $row['org_signal'] ) : '—' ) . '</td>';
+			echo '<td>' . (int) $row['open_opportunities'] . '</td>';
+			echo '<td>' . (int) $row['opps_thin'] . self::delta( $row['delta_thin'] ) . '</td>';
+			echo '<td>' . (int) $row['opps_unmatched'] . '</td>';
+			echo '<td>' . (int) $row['matched_vendors'] . '</td>';
+			echo '<td>' . (int) $row['idle_vendors'] . self::delta( $row['delta_idle'] ) . '</td>';
+			echo '<td>' . (int) $row['applications_30d_from_recs'] . '</td><td>' . (int) $row['searches_30d'] . '</td><td>' . (int) $row['zero_result_searches_30d'] . '</td></tr>';
+		}
+		echo '</tbody></table>';
+	}
+
+	/**
+	 * City detail: categories, thin booths, trend, link to Organizer Growth leads.
+	 *
+	 * @param string $city_key City key.
+	 */
+	private static function render_supply_city( $city_key ) {
+		$back = add_query_arg( array( 'page' => self::SLUG, 'tab' => 'supply' ), admin_url( 'admin.php' ) );
+		echo '<p><a href="' . esc_url( $back ) . '">&larr; ' . esc_html__( 'All cities', 'lnkup-marketplace' ) . '</a></p>';
+		$data = LNKup_Match_Market::city( $city_key );
+		if ( is_wp_error( $data ) ) {
+			echo '<div class="notice notice-warning inline"><p>' . esc_html( $data->get_error_message() ) . '</p></div>';
+			return;
+		}
+		$s = $data['summary'];
+		echo '<h2 data-testid="lnkup-market-city">' . esc_html( $s['label'] ) . '</h2>';
+		echo '<p><strong>' . esc_html( $s['signal_label'] ) . '</strong>' . ( $data['org_signal'] ? ' · ' . esc_html__( 'Organizer Growth:', 'lnkup-marketplace' ) . ' ' . esc_html( self::org_signal_label( $data['org_signal'] ) ) : '' ) . '</p>';
+		echo '<table class="widefat striped" style="max-width:720px"><tbody>';
+		$rows = array(
+			__( 'Open booths', 'lnkup-marketplace' )                                => $s['open_opportunities'],
+			__( 'Booths with too few recommended vendors', 'lnkup-marketplace' )   => $s['opps_thin'],
+			__( 'Booths with no recommended vendor', 'lnkup-marketplace' )         => $s['opps_unmatched'],
+			__( 'Vendors with a recommended booth here', 'lnkup-marketplace' )     => $s['matched_vendors'],
+			__( 'Vendors here with nothing recommended', 'lnkup-marketplace' )     => $s['idle_vendors'],
+			__( 'Applications after a recommendation (30 days)', 'lnkup-marketplace' ) => $s['applications_30d_from_recs'],
+			__( 'Searches naming this city (30 days)', 'lnkup-marketplace' )        => $s['searches_30d'],
+			__( 'Searches that found nothing (30 days)', 'lnkup-marketplace' )      => $s['zero_result_searches_30d'],
+		);
+		foreach ( $rows as $label => $value ) {
+			echo '<tr><th>' . esc_html( $label ) . '</th><td>' . (int) $value . '</td></tr>';
+		}
+		echo '</tbody></table>';
+
+		$leads_url = add_query_arg( array( 'page' => 'lnkup-organizer-growth', 'og_city' => $s['city'], 'og_state' => $s['state'] ), admin_url( 'admin.php' ) ) . '#leads';
+		echo '<p>' . esc_html( sprintf( _n( '%d open organizer lead in this city.', '%d open organizer leads in this city.', (int) $data['open_leads'], 'lnkup-marketplace' ), (int) $data['open_leads'] ) ) . ' <a href="' . esc_url( $leads_url ) . '">' . esc_html__( 'Open in Organizer Growth', 'lnkup-marketplace' ) . '</a></p>';
+
+		if ( $data['thin_booths'] ) {
+			echo '<h3>' . esc_html__( 'Booths that need more matching vendors', 'lnkup-marketplace' ) . '</h3><table class="widefat striped"><thead><tr><th>' . esc_html__( 'Event', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Booth', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Date', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Organizer', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Spots left', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Recommended vendors', 'lnkup-marketplace' ) . '</th></tr></thead><tbody>';
+			foreach ( $data['thin_booths'] as $booth ) {
+				$event = $booth['edit_url'] ? '<a href="' . esc_url( $booth['edit_url'] ) . '">' . esc_html( $booth['event'] ) . '</a>' : esc_html( $booth['event'] );
+				echo '<tr><td>' . $event . '</td><td>' . esc_html( $booth['title'] ) . '</td><td>' . esc_html( $booth['event_date'] ) . '</td><td>' . esc_html( $booth['organizer'] ) . '</td><td>' . (int) $booth['spots_remaining'] . '</td><td>' . (int) $booth['recommended'] . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $event is escaped above.
+			}
+			echo '</tbody></table>';
+		}
+		if ( $data['categories'] ) {
+			echo '<h3>' . esc_html__( 'By category', 'lnkup-marketplace' ) . '</h3><table class="widefat striped" style="max-width:960px"><thead><tr><th>' . esc_html__( 'Category', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Signal', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Open booths', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Thin', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Matched vendors', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Idle vendors', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Zero-result searches', 'lnkup-marketplace' ) . '</th></tr></thead><tbody>';
+			foreach ( $data['categories'] as $c ) {
+				echo '<tr><td>' . esc_html( $c['category'] ) . '</td><td>' . esc_html( $c['signal_label'] ) . '</td><td>' . (int) $c['open_opportunities'] . '</td><td>' . (int) $c['opps_thin'] . '</td><td>' . (int) $c['matched_vendors'] . '</td><td>' . (int) $c['idle_vendors'] . '</td><td>' . (int) $c['zero_result_searches_30d'] . '</td></tr>';
+			}
+			echo '</tbody></table>';
+		}
+		if ( count( $data['trend'] ) > 1 ) {
+			echo '<h3>' . esc_html__( 'Last 90 days', 'lnkup-marketplace' ) . '</h3><table class="widefat striped" style="max-width:720px"><thead><tr><th>' . esc_html__( 'Date', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Open booths', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Thin', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Matched', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Idle', 'lnkup-marketplace' ) . '</th></tr></thead><tbody>';
+			foreach ( array_slice( array_reverse( $data['trend'] ), 0, 15 ) as $point ) {
+				echo '<tr><td>' . esc_html( $point['date'] ) . '</td><td>' . (int) $point['open_opportunities'] . '</td><td>' . (int) $point['opps_thin'] . '</td><td>' . (int) $point['matched_vendors'] . '</td><td>' . (int) $point['idle_vendors'] . '</td></tr>';
+			}
+			echo '</tbody></table>';
+		}
+	}
+
+	private static function delta( $value ) {
+		if ( null === $value || 0 === (int) $value ) {
+			return '';
+		}
+		return ' <span class="description">(' . ( $value > 0 ? '+' : '' ) . (int) $value . ')</span>';
+	}
+
+	private static function org_signal_label( $signal ) {
+		$labels = array(
+			'recruit_organizers' => __( 'Recruit organizers', 'lnkup-marketplace' ),
+			'recruit_vendors'    => __( 'Recruit vendors', 'lnkup-marketplace' ),
+			'balanced'           => __( 'Balanced', 'lnkup-marketplace' ),
+			'insufficient_data'  => __( 'Not enough data', 'lnkup-marketplace' ),
+		);
+		return $labels[ $signal ] ?? (string) $signal;
+	}
+
+	public static function handle_market_export() {
+		self::require_admin();
+		check_admin_referer( 'lnkup_match_market_export' );
+		$filters = array();
+		foreach ( array( 'state', 'term_id', 'signal', 'sort' ) as $key ) {
+			if ( isset( $_GET[ $key ] ) ) {
+				$filters[ $key ] = sanitize_text_field( wp_unslash( $_GET[ $key ] ) );
+			}
+		}
+		nocache_headers();
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename=lnkup-market-supply-demand-' . current_time( 'Y-m-d' ) . '.csv' );
+		echo LNKup_Match_Market::export_csv( $filters ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CSV body, formula-safe.
+		exit;
+	}
+
+	public static function handle_market_rebuild() {
+		self::require_admin();
+		check_admin_referer( 'lnkup_match_market_rebuild' );
+		$result = LNKup_Match_Market::rest_rebuild();
+		$args   = array( 'page' => self::SLUG, 'tab' => 'supply' );
+		if ( is_wp_error( $result ) ) {
+			set_transient( self::error_key(), $result->get_error_message(), 5 * MINUTE_IN_SECONDS );
+		} else {
+			$args['updated'] = 1;
+		}
+		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php' ) ) );
+		exit;
 	}
 
 	/**

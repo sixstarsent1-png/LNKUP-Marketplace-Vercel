@@ -737,8 +737,9 @@ class LNKup_Org_Supply_Intel {
 			return null;
 		}
 		$data = self::city( self::key( $city, (string) ( $lead['state'] ?? '' ) ) );
+		$market = LNKup_Org_Market_Need::match_summary( $city, (string) ( $lead['state'] ?? '' ) );
 		if ( is_wp_error( $data ) ) {
-			return array( 'available' => false, 'vendors_active' => self::vendor_market_count( $city, (string) ( $lead['state'] ?? '' ) ) );
+			return array( 'available' => false, 'vendors_active' => self::vendor_market_count( $city, (string) ( $lead['state'] ?? '' ) ), 'market' => $market );
 		}
 		$wanted  = array_map( 'strtolower', LNKup_Org_Lead_Scoring::split_list( (string) ( $lead['event_categories'] ?? '' ) ) );
 		$overlap = array_values( array_filter( $data['categories'], static fn( $c ) => $c['vendors_active'] > 0 && in_array( strtolower( $c['category'] ), $wanted, true ) ) );
@@ -752,6 +753,7 @@ class LNKup_Org_Supply_Intel {
 			'signal'         => $data['summary']['signal'],
 			'top_categories' => array_map( static fn( $c ) => array( 'category' => $c['category'], 'vendors_active' => $c['vendors_active'] ), array_slice( $data['categories'], 0, 5 ) ),
 			'matching'       => array_map( static fn( $c ) => array( 'category' => $c['category'], 'vendors_active' => $c['vendors_active'] ), $overlap ),
+			'market'         => $market,
 		);
 	}
 
@@ -816,6 +818,7 @@ class LNKup_Org_Supply_Intel {
 			if ( ! $match ) {
 				continue;
 			}
+			$market  = LNKup_Org_Market_Need::match_summary( $row['city'], $row['state'] );
 			$items[] = array(
 				'label'           => $row['label'],
 				'vendors_active'  => self::mask( $row['vendors_active'] ),
@@ -823,6 +826,10 @@ class LNKup_Org_Supply_Intel {
 				'open_slots'      => $row['spots_remaining'],
 				'live_organizers' => $row['live_organizers'],
 				'signal'          => $row['signal'],
+				// Matching figures: vendor counts masked like the supply counts above.
+				'idle_vendors'    => null === $market ? null : self::mask( (int) $market['idle_vendors'] ),
+				'thin_booths'     => null === $market ? null : (int) $market['thin_booths'],
+				'zero_result_searches' => null === $market ? null : (int) $market['zero_result_searches'],
 			);
 		}
 		return array(

@@ -1440,7 +1440,11 @@
     }
     html += '<ul class="lnkup-connector-steps">';
     items.forEach(function (c) {
-      html += '<li><strong>' + escapeHtml(c.label) + ':</strong> ' + escapeHtml(c.vendors_active) + ' active vendors · ' + escapeHtml(c.open_slots) + ' open booths · ' + escapeHtml(signals[c.signal] || c.signal) + '</li>';
+      var matching = '';
+      if (c.idle_vendors !== null && c.idle_vendors !== undefined) {
+        matching = '<br><span class="lnkup-muted">' + escapeHtml(c.idle_vendors) + ' matching vendors with nothing to apply to · ' + escapeHtml(c.zero_result_searches) + ' searches found nothing (30 days)</span>';
+      }
+      html += '<li><strong>' + escapeHtml(c.label) + ':</strong> ' + escapeHtml(c.vendors_active) + ' active vendors · ' + escapeHtml(c.open_slots) + ' open booths · ' + escapeHtml(signals[c.signal] || c.signal) + matching + '</li>';
     });
     return html + '</ul>';
   }

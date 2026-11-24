@@ -41,6 +41,12 @@ const SECTIONS: ReadonlyArray<{ title: string; links: MoreLink[] }> = [
     title: "Program",
     links: [
       {
+        title: "My cities",
+        meta: "Your markets and vendor supply",
+        icon: "map-outline",
+        href: "/(partner)/cities",
+      },
+      {
         title: "Content and outreach",
         meta: "Scripts, resources and profile on the web",
         icon: "open-outline",

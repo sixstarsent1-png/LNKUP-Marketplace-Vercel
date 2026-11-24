@@ -6,8 +6,19 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
-**Plugin version:** 12.33.4  
+**Plugin version:** 12.34.0  
 **Theme version:** 1.6.1
+
+### v12.34.0 (Matching Phase 7: geographic supply and demand)
+
+Reference: [MATCHING_DISCOVERY.md](MATCHING_DISCOVERY.md) §12.
+
+- **Search location:** marketplace search events record city, state, category names and page; narrowed searches with no results are `search_no_results`.
+- **Match market snapshot** (`wp_lnkup_match_market_snapshots`, daily, priority 44): per city and category, thin and unmatched booths, matched and idle vendors, applications from recommendations, searches and zero-result searches, with signals (unmet search, idle supply, thin supply, healthy, not enough data).
+- **Marketplace Intelligence → Supply & Demand:** city table with 7-day change next to the Organizer Growth signal, city detail (thin booths, categories, trend, open leads), CSV export, Rebuild. Admin-only REST under `match/admin/market`.
+- **Organizer Growth:** `market_need` lead-scoring factor (weight 10), `market_signal` lead filter and shared saved view, optional research tasks (`org_growth_market_tasks`, off by default, max 50/day, once per lead per month), matching figures in the lead drawer and connector supply panel. Links from Supply & Demand open the leads list pre-filtered to the city.
+- **City Market Pages:** suggested launch status per market with a one-click, logged Apply (never automatic), "Suggested new markets", and an "Add a market" form (new pages start Prelaunch and disabled).
+- **Tests:** new `match-market-test.php` (66); org-supply-intel, org-growth, org-growth-integrity, org-growth-analytics, matching, matching-alerts, match-funnel, match-tuning, rollout and reapply-policy suites pass. `matching-test.php` now finds its own tour card instead of the first one, so seeded E2E tours no longer break it.
 
 ### v12.33.4 (Vendor Profile editor width)
 
@@ -206,6 +217,18 @@ Audit: [ORGANIZER_MANAGEMENT_OS_AUDIT.md](ORGANIZER_MANAGEMENT_OS_AUDIT.md) · A
   - New Playwright specs `organizer-review`, `organizer-team`, `organizer-waitlist` and `organizer-integrity`: 20 passed, 1 skipped (chromium, one worker). The skip is the booth-edit check, because `seed.php` clears booth assignments; the PHP suite covers that case.
   - Fixtures for the specs: run `scripts/e2e/seed-organizer-os.php on` after `seed.php`, and `off` afterwards so the classic Requests specs see the classic page.
   - The existing organizer Playwright specs were not re-run.
+
+### Organizer Acquisition Phase 8 — Mobile acquisition gaps (Expo + lnkup-communications 1.2.1)
+
+Most of the mobile acquisition side already existed:
+- the Partner app (Home, Referrals, Leads with submit, Earnings, inbox);
+- organizer referrals, Launch, profile editing and activation on Home;
+- push routing for partner and activation types.
+
+This pass filled the gaps:
+- **Partner My cities** (`app/(partner)/cities.tsx`, hidden tab): home market, assigned territories, and vendor supply per city (active vendors, open booths, live organizers, signal; masked "<3" counts kept). Reached from a new Partner Home "My cities" card that names the city most needing organizers, and from More. Uses `GET connector/territories` and `GET connector/supply` with Application Password auth, and keeps whichever part loaded when the other fails.
+- **Activation push links:** `o_setup_profile` now uses the new `org_profile` link, so it opens the organizer profile in the app and the Get started organization step on the web; before, it opened Launch or an event. `organizer_payout_setup` pushes fall back to Money when no server link is present.
+- **Tests:** new Jest `partner-supply.test.ts`; Expo Jest 200/200 across 25 suites; `tsc` clean. `comms-activation-test.php` asserts the profile, payouts and draft deep links, and all communications PHP suites pass.
 
 ### Organizer Acquisition Phase 6 — Vendor Supply Intelligence (organizer-growth schema 1.2.0)
 

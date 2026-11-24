@@ -238,7 +238,8 @@ LNKup_Match_Service::compute_for_vendor( $t_profile );
 $detail = LNKup_Tours::detail( $tour_id, $t_user );
 lnkup_t_same( 3, $detail['matching_stops'], 'vendor matches exactly three stops' );
 $section = LNKup_Tours::vendor_tour_section( LNKup_Match_Service::vendor_inputs( array( LNKup_Match_Vendor_Index::get_row( $t_profile ) ) )[ $t_profile ], 'tours', 1, 12 );
-lnkup_t_same( 3, $section['items'][0]['matching_stops'] ?? null, 'tour section groups the three matching stops into one card' );
+$card    = array_column( $section['items'], null, 'id' )[ $tour_id ] ?? array();
+lnkup_t_same( 3, $card['matching_stops'] ?? null, 'tour section groups the three matching stops into one card' );
 
 update_post_meta( $stops['Charlotte'][1], '_lnkup_spots_remaining', 0 );
 LNKup_Marketplace_Index::sync_opportunity( $stops['Charlotte'][1] );

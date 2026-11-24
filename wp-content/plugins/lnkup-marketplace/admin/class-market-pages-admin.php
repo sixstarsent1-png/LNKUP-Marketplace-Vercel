@@ -19,6 +19,19 @@ class LNKup_Market_Pages_Admin {
 		add_action( 'admin_post_lnkup_save_market_pages', array( __CLASS__, 'handle_save' ) );
 		add_action( 'admin_post_lnkup_save_market_pages_toggle', array( __CLASS__, 'handle_toggle' ) );
 		add_action( 'admin_post_lnkup_flush_market_rewrites', array( __CLASS__, 'handle_flush_rewrites' ) );
+		add_action( 'admin_post_lnkup_apply_market_suggestion', array( __CLASS__, 'handle_apply_suggestion' ) );
+		add_action( 'admin_post_lnkup_create_market', array( __CLASS__, 'handle_create' ) );
+	}
+
+	private static function can_manage(): bool {
+		return current_user_can( 'lnkup_manage_settings' ) || LNKup_Capabilities::user_has_manage_all();
+	}
+
+	/**
+	 * Whether the matching market snapshot is available for suggestions.
+	 */
+	private static function has_signals(): bool {
+		return class_exists( 'LNKup_Match_Market' ) && LNKup_Match_Tables::exists( LNKup_Match_Market::table() );
 	}
 
 	/**
@@ -62,6 +75,13 @@ class LNKup_Market_Pages_Admin {
 		if ( isset( $_GET['flushed'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Rewrite rules flushed.', 'lnkup-marketplace' ) . '</p></div>';
 		}
+		if ( isset( $_GET['applied'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Suggested status applied and logged.', 'lnkup-marketplace' ) . '</p></div>';
+		}
+		if ( isset( $_GET['market_error'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( sanitize_text_field( wp_unslash( (string) $_GET['market_error'] ) ) ) . '</p></div>'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+		$signals = self::has_signals();
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'City Market Pages', 'lnkup-marketplace' ); ?></h1>
@@ -163,6 +183,9 @@ class LNKup_Market_Pages_Admin {
 						<tr>
 							<th><?php esc_html_e( 'City', 'lnkup-marketplace' ); ?></th>
 							<th><?php esc_html_e( 'Status', 'lnkup-marketplace' ); ?></th>
+							<?php if ( $signals ) : ?>
+								<th><?php esc_html_e( 'Suggested status', 'lnkup-marketplace' ); ?></th>
+							<?php endif; ?>
 							<th><?php esc_html_e( 'Enabled', 'lnkup-marketplace' ); ?></th>
 							<th><?php esc_html_e( 'URL', 'lnkup-marketplace' ); ?></th>
 							<th></th>
@@ -175,6 +198,25 @@ class LNKup_Market_Pages_Admin {
 							<tr>
 								<td><?php echo esc_html( $norm['display_name'] . ', ' . $norm['state'] ); ?></td>
 								<td><?php echo esc_html( LNKup_Market_Pages::status_label( $norm['launch_status'] ) ); ?></td>
+								<?php if ( $signals ) : ?>
+									<td data-testid="market-suggestion">
+										<?php $suggestion = LNKup_Match_Market::suggest_market_status( $norm['city'], $norm['state'] ); ?>
+										<?php if ( ! $suggestion ) : ?>
+											<span class="description"><?php esc_html_e( 'Not enough data', 'lnkup-marketplace' ); ?></span>
+										<?php elseif ( $suggestion['status'] === $norm['launch_status'] ) : ?>
+											<span class="description" title="<?php echo esc_attr( $suggestion['reason'] ); ?>"><?php esc_html_e( 'Matches current status', 'lnkup-marketplace' ); ?></span>
+										<?php else : ?>
+											<strong><?php echo esc_html( LNKup_Market_Pages::status_label( $suggestion['status'] ) ); ?></strong>
+											<br><span class="description"><?php echo esc_html( $suggestion['reason'] ); ?></span>
+											<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:4px;">
+												<?php wp_nonce_field( 'lnkup_apply_market_suggestion_' . $norm['slug'] ); ?>
+												<input type="hidden" name="action" value="lnkup_apply_market_suggestion" />
+												<input type="hidden" name="market_slug" value="<?php echo esc_attr( $norm['slug'] ); ?>" />
+												<?php submit_button( __( 'Apply', 'lnkup-marketplace' ), 'small', 'submit', false ); ?>
+											</form>
+										<?php endif; ?>
+									</td>
+								<?php endif; ?>
 								<td><?php echo $norm['enabled'] ? esc_html__( 'Yes', 'lnkup-marketplace' ) : esc_html__( 'No', 'lnkup-marketplace' ); ?></td>
 								<td><a href="<?php echo esc_url( $norm['url'] ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $norm['url'] ); ?></a></td>
 								<td><a href="<?php echo esc_url( admin_url( 'admin.php?page=lnkup-city-markets&market=' . rawurlencode( $norm['slug'] ) ) ); ?>"><?php esc_html_e( 'Edit', 'lnkup-marketplace' ); ?></a></td>
@@ -182,9 +224,169 @@ class LNKup_Market_Pages_Admin {
 						<?php endforeach; ?>
 					</tbody>
 				</table>
+				<?php if ( $signals ) : ?>
+					<p class="description"><?php esc_html_e( 'Suggestions come from the daily matching and vendor supply snapshots. A status only changes when you click Apply, and every change is logged.', 'lnkup-marketplace' ); ?></p>
+					<?php self::render_status_log(); ?>
+					<?php self::render_new_market_suggestions(); ?>
+				<?php endif; ?>
+				<?php self::render_create_form(); ?>
 			<?php endif; ?>
 		</div>
 		<?php
+	}
+
+	private static function render_status_log(): void {
+		$log = LNKup_Match_Market::market_status_log( 10 );
+		if ( ! $log ) {
+			return;
+		}
+		echo '<h3>' . esc_html__( 'Recent status changes', 'lnkup-marketplace' ) . '</h3><ul data-testid="market-status-log">';
+		foreach ( $log as $entry ) {
+			$user = get_userdata( (int) $entry['user_id'] );
+			echo '<li>' . esc_html(
+				sprintf(
+					/* translators: 1: date, 2: market slug, 3: old status, 4: new status, 5: user, 6: reason. */
+					__( '%1$s — %2$s: %3$s → %4$s by %5$s (%6$s)', 'lnkup-marketplace' ),
+					$entry['at'],
+					$entry['slug'],
+					LNKup_Market_Pages::status_label( (string) $entry['from'] ),
+					LNKup_Market_Pages::status_label( (string) $entry['to'] ),
+					$user ? $user->display_name : __( 'unknown user', 'lnkup-marketplace' ),
+					$entry['reason']
+				)
+			) . '</li>';
+		}
+		echo '</ul>';
+	}
+
+	private static function render_new_market_suggestions(): void {
+		$rows = LNKup_Match_Market::suggested_new_markets( 10 );
+		echo '<h2>' . esc_html__( 'Suggested new markets', 'lnkup-marketplace' ) . '</h2>';
+		if ( ! $rows ) {
+			echo '<p class="description">' . esc_html__( 'No cities without a market page show vendor demand yet.', 'lnkup-marketplace' ) . '</p>';
+			return;
+		}
+		echo '<p class="description">' . esc_html__( 'Cities without a market page, ranked by vendors with a recommended booth there plus searches for the city that found nothing (30 days).', 'lnkup-marketplace' ) . '</p>';
+		echo '<table class="widefat striped" data-testid="market-new-suggestions"><thead><tr><th>' . esc_html__( 'City', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Matching vendors', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Searches found nothing', 'lnkup-marketplace' ) . '</th><th>' . esc_html__( 'Signal', 'lnkup-marketplace' ) . '</th><th></th></tr></thead><tbody>';
+		foreach ( $rows as $row ) {
+			$url = add_query_arg(
+				array(
+					'page'      => 'lnkup-city-markets',
+					'new_city'  => $row['city'],
+					'new_state' => $row['state'],
+				),
+				admin_url( 'admin.php' )
+			) . '#lnkup-create-market';
+			printf(
+				'<tr><td>%s</td><td>%d</td><td>%d</td><td>%s</td><td><a href="%s">%s</a></td></tr>',
+				esc_html( $row['label'] ),
+				(int) $row['matched_vendors'],
+				(int) $row['zero_result_searches_30d'],
+				esc_html( $row['signal_label'] ),
+				esc_url( $url ),
+				esc_html__( 'Create market page', 'lnkup-marketplace' )
+			);
+		}
+		echo '</tbody></table>';
+	}
+
+	private static function render_create_form(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$city  = isset( $_GET['new_city'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['new_city'] ) ) : '';
+		$state = isset( $_GET['new_state'] ) ? strtoupper( sanitize_text_field( wp_unslash( (string) $_GET['new_state'] ) ) ) : '';
+		// phpcs:enable
+		?>
+		<h2 id="lnkup-create-market"><?php esc_html_e( 'Add a market', 'lnkup-marketplace' ); ?></h2>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" data-testid="market-create-form">
+			<?php wp_nonce_field( 'lnkup_create_market' ); ?>
+			<input type="hidden" name="action" value="lnkup_create_market" />
+			<label><?php esc_html_e( 'City', 'lnkup-marketplace' ); ?> <input type="text" name="city" required value="<?php echo esc_attr( $city ); ?>" /></label>
+			<label><?php esc_html_e( 'State', 'lnkup-marketplace' ); ?> <input type="text" name="state" required maxlength="2" size="3" value="<?php echo esc_attr( $state ); ?>" /></label>
+			<?php submit_button( __( 'Create market page', 'lnkup-marketplace' ), 'secondary', 'submit', false ); ?>
+			<p class="description"><?php esc_html_e( 'New markets start in Prelaunch and disabled, so you can review the page before it goes live.', 'lnkup-marketplace' ); ?></p>
+		</form>
+		<?php
+	}
+
+	/**
+	 * Apply the suggested launch status (recomputed server-side) for one market.
+	 */
+	public static function handle_apply_suggestion(): void {
+		if ( ! self::can_manage() ) {
+			wp_die( esc_html__( 'Permission denied.', 'lnkup-marketplace' ) );
+		}
+		$slug = sanitize_title( wp_unslash( (string) ( $_POST['market_slug'] ?? '' ) ) );
+		check_admin_referer( 'lnkup_apply_market_suggestion_' . $slug );
+		$result = self::has_signals() ? LNKup_Match_Market::apply_market_suggestion( $slug ) : new WP_Error( 'lnkup_market_no_signals', __( 'Market signals are not available yet.', 'lnkup-marketplace' ) );
+		$args   = is_wp_error( $result ) ? array( 'market_error' => rawurlencode( $result->get_error_message() ) ) : array( 'applied' => 1 );
+		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php?page=lnkup-city-markets' ) ) );
+		exit;
+	}
+
+	/**
+	 * Create a market page (disabled, prelaunch) for a city.
+	 */
+	public static function handle_create(): void {
+		if ( ! self::can_manage() ) {
+			wp_die( esc_html__( 'Permission denied.', 'lnkup-marketplace' ) );
+		}
+		check_admin_referer( 'lnkup_create_market' );
+		$result = self::create_market( wp_unslash( (string) ( $_POST['city'] ?? '' ) ), wp_unslash( (string) ( $_POST['state'] ?? '' ) ) );
+		if ( is_wp_error( $result ) ) {
+			wp_safe_redirect( add_query_arg( 'market_error', rawurlencode( $result->get_error_message() ), admin_url( 'admin.php?page=lnkup-city-markets' ) ) );
+			exit;
+		}
+		flush_rewrite_rules( false );
+		wp_safe_redirect( admin_url( 'admin.php?page=lnkup-city-markets&market=' . rawurlencode( $result ) . '&updated=1' ) );
+		exit;
+	}
+
+	/**
+	 * @return string|WP_Error New market slug.
+	 */
+	public static function create_market( string $city, string $state ) {
+		$city  = sanitize_text_field( $city );
+		$state = strtoupper( sanitize_text_field( $state ) );
+		if ( '' === $city || ! preg_match( '/^[A-Z]{2}$/', $state ) ) {
+			return new WP_Error( 'lnkup_market_invalid', __( 'Enter a city and a two-letter state.', 'lnkup-marketplace' ) );
+		}
+		$markets = LNKup_Market_Pages::get_all_markets();
+		foreach ( $markets as $m ) {
+			if ( 0 === strcasecmp( (string) ( $m['city'] ?? '' ), $city ) && strtoupper( (string) ( $m['state'] ?? '' ) ) === $state ) {
+				return new WP_Error( 'lnkup_market_exists', __( 'That city already has a market page.', 'lnkup-marketplace' ) );
+			}
+		}
+		$slug = sanitize_title( $city );
+		if ( '' === $slug || isset( $markets[ $slug ] ) ) {
+			$slug = sanitize_title( $city . '-' . $state );
+		}
+		if ( '' === $slug || isset( $markets[ $slug ] ) ) {
+			return new WP_Error( 'lnkup_market_exists', __( 'A market with that address already exists.', 'lnkup-marketplace' ) );
+		}
+		$settings         = lnkup_get_settings();
+		$markets[ $slug ] = array(
+			'slug'                      => $slug,
+			'city'                      => $city,
+			'state'                     => $state,
+			'display_name'              => $city,
+			'region'                    => '',
+			'launch_status'             => 'prelaunch',
+			'vendor_goal'               => (int) ( $settings['launch_goal_vendors'] ?? 4000 ),
+			'organizer_goal'            => (int) ( $settings['launch_goal_organizers'] ?? 500 ),
+			'hero_headline'             => '',
+			'hero_description'          => '',
+			'featured_category_slugs'   => array(),
+			'featured_event_type_slugs' => array(),
+			'seo_title'                 => '',
+			'seo_description'           => '',
+			'og_image'                  => '',
+			'hero_image'                => 'block-party.svg',
+			'enabled'                   => false,
+			'indexable'                 => true,
+			'connector_cta_url'         => '',
+		);
+		LNKup_Market_Pages::save_markets( $markets );
+		return $slug;
 	}
 
 	/**

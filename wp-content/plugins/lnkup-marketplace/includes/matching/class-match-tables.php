@@ -49,6 +49,10 @@ class LNKup_Match_Tables {
 		return self::table( 'recruitment_jobs' );
 	}
 
+	public static function market_table() {
+		return self::table( 'match_market_snapshots' );
+	}
+
 	/**
 	 * Whether a table exists.
 	 *
@@ -207,6 +211,31 @@ class LNKup_Match_Tables {
 			PRIMARY KEY  (id),
 			KEY organizer_status (organizer_user_id, status),
 			KEY status (status)
+		) {$charset};"
+		);
+
+		$market = self::market_table();
+		dbDelta(
+			"CREATE TABLE {$market} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			snapshot_date date NOT NULL,
+			city_key varchar(140) NOT NULL,
+			city varchar(100) NOT NULL DEFAULT '',
+			state varchar(10) NOT NULL DEFAULT '',
+			term_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			open_opportunities int(11) NOT NULL DEFAULT 0,
+			opps_thin int(11) NOT NULL DEFAULT 0,
+			opps_unmatched int(11) NOT NULL DEFAULT 0,
+			matched_vendors int(11) NOT NULL DEFAULT 0,
+			idle_vendors int(11) NOT NULL DEFAULT 0,
+			recommended_pairs int(11) NOT NULL DEFAULT 0,
+			applications_30d_from_recs int(11) NOT NULL DEFAULT 0,
+			searches_30d int(11) NOT NULL DEFAULT 0,
+			zero_result_searches_30d int(11) NOT NULL DEFAULT 0,
+			created_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY date_city_term (snapshot_date, city_key, term_id),
+			KEY city_term (city_key, term_id)
 		) {$charset};"
 		);
 	}

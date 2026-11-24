@@ -709,6 +709,16 @@ class LNKup_Org_Leads {
 			$where[]  = '(l.name LIKE %s OR l.email LIKE %s OR l.city LIKE %s OR l.domain LIKE %s OR l.instagram LIKE %s)';
 			$values   = array_merge( $values, array( $like, $like, $like, $like, $like ) );
 		}
+		$need = sanitize_key( (string) ( $args['market_signal'] ?? '' ) );
+		if ( in_array( $need, LNKup_Org_Market_Need::FILTERS, true ) ) {
+			$keys = LNKup_Org_Market_Need::city_keys( $need );
+			if ( $keys ) {
+				$where[] = "CONCAT(LOWER(TRIM(l.city)), '|', UPPER(TRIM(l.state))) IN (" . implode( ',', array_fill( 0, count( $keys ), '%s' ) ) . ')';
+				$values  = array_merge( $values, $keys );
+			} else {
+				$where[] = '1 = 0';
+			}
+		}
 		$tag = sanitize_title( (string) ( $args['tag'] ?? '' ) );
 		if ( '' !== $tag ) {
 			$joins   .= ' INNER JOIN ' . LNKup_Org_Growth_Tables::table( LNKup_Org_Growth_Tables::TAGS ) . ' tg ON tg.lead_id = l.id';

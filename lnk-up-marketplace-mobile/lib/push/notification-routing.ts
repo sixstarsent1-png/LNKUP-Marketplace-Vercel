@@ -80,6 +80,7 @@ function routeForType(
         : list("/(organizer)/vendors")
     case "organizer_vendor_paid":
     case "organizer_payment_received":
+    case "organizer_payout_setup":
       return list("/(organizer)/money")
     case "partner_application":
       return list("/(partner)")

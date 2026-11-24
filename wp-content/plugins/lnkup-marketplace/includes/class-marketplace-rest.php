@@ -137,6 +137,30 @@ class LNKup_Marketplace_REST {
 		return $params;
 	}
 
+	/**
+	 * City, state, category names and page of a search (for analytics only).
+	 *
+	 * @param array $args Parsed search args.
+	 * @return array{city:string,state:string,categories:string[],page:int}
+	 */
+	public static function search_location( array $args ) {
+		$categories = array();
+		foreach ( array_slice( (array) ( $args['categories'] ?? array() ), 0, 10 ) as $cat ) {
+			$cat = sanitize_text_field( (string) $cat );
+			if ( '' === $cat ) {
+				continue;
+			}
+			$term         = is_numeric( $cat ) ? get_term( (int) $cat, 'lnkup_vendor_category' ) : get_term_by( 'slug', sanitize_title( $cat ), 'lnkup_vendor_category' );
+			$categories[] = $term && ! is_wp_error( $term ) ? (string) $term->name : $cat;
+		}
+		return array(
+			'city'       => substr( sanitize_text_field( (string) ( $args['city'] ?? '' ) ), 0, 100 ),
+			'state'      => strtoupper( substr( sanitize_text_field( (string) ( $args['state'] ?? '' ) ), 0, 10 ) ),
+			'categories' => array_values( array_unique( $categories ) ),
+			'page'       => max( 1, (int) ( $args['page'] ?? 1 ) ),
+		);
+	}
+
 	public static function search( WP_REST_Request $request ) {
 		try {
 			$args   = self::parse_search_args( $request );
@@ -151,14 +175,21 @@ class LNKup_Marketplace_REST {
 				);
 			}
 			try {
-				if ( 0 === (int) ( $result['total'] ?? 0 ) && ! empty( $request->get_param( 'q' ) ) ) {
-					LNKup_Marketplace_Analytics::track( 'search_no_results', array( 'q' => $request->get_param( 'q' ) ) );
+				// Where vendors look (city, state, categories) feeds supply & demand reporting.
+				$where = self::search_location( $args );
+				$q     = (string) ( $request->get_param( 'q' ) ?? '' );
+				$narrowed = '' !== $q || '' !== $where['city'] || array() !== $where['categories'];
+				if ( 0 === (int) ( $result['total'] ?? 0 ) && $narrowed ) {
+					LNKup_Marketplace_Analytics::track( 'search_no_results', array_merge( array( 'q' => $q ), $where ) );
 				} else {
 					LNKup_Marketplace_Analytics::track(
 						'search',
-						array(
-							'q'     => $request->get_param( 'q' ) ?? '',
-							'total' => $result['total'] ?? 0,
+						array_merge(
+							array(
+								'q'     => $q,
+								'total' => $result['total'] ?? 0,
+							),
+							$where
 						)
 					);
 				}

@@ -49,6 +49,7 @@ export default function PartnerLayout() {
             tabBarIcon: tabIcon("ellipsis-horizontal", "ellipsis-horizontal", tabIconSize),
           }}
         />
+        <Tabs.Screen name="cities" options={{ href: null }} />
         <Tabs.Screen name="notifications" options={{ href: null }} />
         <Tabs.Screen name="notification-settings" options={{ href: null }} />
       </Tabs>

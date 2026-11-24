@@ -28,6 +28,7 @@ class LNKup_Org_Lead_Scoring {
 		'manual_workflow'     => array( 'label' => 'Uses a manual / fragmented application workflow', 'weight' => 5 ),
 		'verified_contact'    => array( 'label' => 'Has a verified, current business contact', 'weight' => 5 ),
 		'vendor_market'       => array( 'label' => 'Operates in an existing LNKup vendor market', 'weight' => 5 ),
+		'market_need'         => array( 'label' => 'City needs more organizers (vendors with nothing to apply to)', 'weight' => 10 ),
 	);
 
 	const DEFAULT_TIERS = array(
@@ -172,6 +173,9 @@ class LNKup_Org_Lead_Scoring {
 		$vendors = self::vendor_count_for_city( (string) ( $lead['city'] ?? '' ), (string) ( $lead['state'] ?? '' ) );
 		$minimum = max( 1, $config['vendor_market_minimum'] );
 		$add( 'vendor_market', $vendors >= $minimum ? 1 : ( $vendors > 0 ? $vendors / $minimum : 0 ), sprintf( '%d active LNKup vendors serve this city', $vendors ) );
+
+		list( $need_share, $need_detail ) = LNKup_Org_Market_Need::factor( $lead );
+		$add( 'market_need', $need_share, $need_detail );
 
 		$score = array_sum( array_column( $items, 'points' ) );
 		$tier  = $score >= $config['tier_a'] ? 'A' : ( $score >= $config['tier_b'] ? 'B' : 'C' );
