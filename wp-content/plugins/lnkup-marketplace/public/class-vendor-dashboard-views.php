@@ -334,6 +334,7 @@ class LNKup_Vendor_Dashboard_Views {
 						<p class="lnkup-request-row__meta lnkup-request-row__note"><?php echo esc_html( $note ); ?></p>
 					<?php endif; ?>
 					<?php echo self::render_info_request_block( (int) $app->ID ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<?php echo class_exists( 'LNKup_Distribution' ) ? LNKup_Distribution::acceptance_card_for_request( (int) $app->ID ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in acceptance_card(). ?>
 				</div>
 			</div>
 			<span class="lnkup-request-row__fee"><?php echo esc_html( lnkup_currency( $meta['fee'] ) ); ?></span>

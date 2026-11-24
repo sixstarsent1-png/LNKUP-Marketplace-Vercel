@@ -760,10 +760,13 @@ class LNKup_Connector {
 			'studio'    => __( 'Content Studio', 'lnkup-marketplace' ),
 			'profile'   => __( 'Profile', 'lnkup-marketplace' ),
 		);
+		if ( class_exists( 'LNKup_Tracking_Links' ) && LNKup_Tracking_Links::active() ) {
+			$all = array_merge( array_slice( $all, 0, 3, true ), array( 'marketing' => __( 'Share & Track', 'lnkup-marketplace' ) ), array_slice( $all, 3, null, true ) );
+		}
 		if ( ! $connector || self::PROGRAM === self::program_of( $connector ) ) {
 			return $all;
 		}
-		return array_intersect_key( $all, array_flip( array( 'home', 'referrals', 'leads', 'earnings', 'resources', 'profile' ) ) );
+		return array_intersect_key( $all, array_flip( array( 'home', 'referrals', 'marketing', 'leads', 'earnings', 'resources', 'profile' ) ) );
 	}
 
 	/**

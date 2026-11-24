@@ -105,7 +105,7 @@ class LNKup_Tracking_Links {
 		}
 		switch ( $type ) {
 			case 'event':
-				return 'publish' === get_post_status( $target_id ) && self::can_promote_event( $target_id, $user_id );
+				return 'publish' === get_post_status( $target_id ) && ( self::can_promote_event( $target_id, $user_id ) || ( class_exists( 'LNKup_Distribution' ) && LNKup_Distribution::vendor_booked_event( $user_id, $target_id ) ) );
 			case 'opportunity':
 				$event = (int) get_post_meta( $target_id, '_lnkup_event_id', true );
 				return $event > 0 && 'publish' === get_post_status( $target_id ) && self::can_promote_event( $event, $user_id );

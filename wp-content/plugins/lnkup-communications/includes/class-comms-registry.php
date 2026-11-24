@@ -233,6 +233,10 @@ class LNKup_Comms_Registry {
 			'v_invite_expiring'       => array( 'role' => 'vendor', 'category' => 'opportunities', 'priority' => 'normal', 'channels' => $all, 'flag' => 'flow_discovery', 'link' => 'vendor_invites', 'type' => 'discovery_invite_expiring', 'validity' => 'invite_still_open', 'expires' => 2 * $day ),
 			'v_application_draft'     => array( 'role' => 'vendor', 'category' => 'applications', 'priority' => 'normal', 'channels' => $all, 'flag' => 'flow_vendor_engagement', 'link' => 'opportunity', 'type' => 'application_draft', 'validity' => 'draft_still_open', 'expires' => 2 * $day ),
 			'v_inactive'              => array( 'role' => 'vendor', 'category' => 'opportunities', 'priority' => 'promotional', 'channels' => $all, 'flag' => 'flow_vendor_engagement', 'link' => 'vendor_find', 'type' => 'discovery_reactivation', 'validity' => 'vendor_still_inactive', 'expires' => 3 * $day ),
+			// Marketing OS: opted-in alerts (market alerts, followed tours) and external-event claims.
+			'v_market_alert'          => array( 'role' => 'vendor', 'category' => 'opportunities', 'priority' => 'normal', 'channels' => $all, 'flag' => 'flow_discovery', 'link' => 'opportunity', 'type' => 'discovery_saved_search', 'expires' => 3 * $day ),
+			'v_followed_tour_new_stop' => array( 'role' => 'vendor', 'category' => 'opportunities', 'priority' => 'normal', 'channels' => $all, 'flag' => 'flow_discovery', 'link' => 'tour', 'type' => 'discovery_tour_match', 'expires' => 7 * $day ),
+			'v_external_event_claimed' => array( 'role' => 'vendor', 'category' => 'opportunities', 'priority' => 'normal', 'channels' => $all, 'flag' => 'flow_discovery', 'link' => 'opportunity', 'type' => 'discovery_invite', 'expires' => 14 * $day ),
 
 			// ---------------------------------------------------------------- Organizer: applications.
 			'o_application_received'  => array( 'role' => 'organizer', 'category' => 'applications', 'priority' => 'high', 'channels' => $all, 'flag' => 'flow_applications', 'link' => 'org_review', 'type' => 'organizer_new_vendor_request', 'validity' => 'org_has_pending', 'expires' => 3 * $day ),

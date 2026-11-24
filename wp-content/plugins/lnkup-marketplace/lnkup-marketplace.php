@@ -380,6 +380,9 @@ $lnkup_core_files = array(
 	'includes/marketing/class-qr.php',
 	'includes/marketing/class-organizer-marketing.php',
 	'includes/marketing/class-marketing-role.php',
+	'includes/marketing/class-distribution.php',
+	'includes/marketing/class-connector-marketing.php',
+	'includes/marketing/class-partner-landings.php',
 	'includes/matching/class-tours.php',
 	'includes/matching/class-tours-rest.php',
 	'includes/portfolio/class-portfolio-tables.php',
@@ -585,6 +588,9 @@ function lnkup_marketplace_init() {
 	LNKup_QR::init();
 	LNKup_Organizer_Marketing::init();
 	LNKup_Marketing_Role::init();
+	LNKup_Distribution::init();
+	LNKup_Connector_Marketing::init();
+	LNKup_Partner_Landings::init();
 	LNKup_Tours::init();
 	LNKup_Tours_REST::init();
 	LNKup_Portfolio_Tables::maybe_upgrade();

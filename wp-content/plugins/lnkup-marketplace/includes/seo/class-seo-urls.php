@@ -20,7 +20,7 @@ class LNKup_SEO_URLs {
 	const ORG_QUERY_VAR  = 'lnkup_org_slug';
 	const LEGACY_VAR     = 'lnkup_legacy_event';
 	const SIGNATURE_OPT  = 'lnkup_seo_rewrite_signature';
-	const VERSION        = '2';
+	const VERSION        = '3';
 
 	public static function init(): void {
 		add_filter( 'register_post_type_args', array( __CLASS__, 'event_args' ), 10, 2 );
