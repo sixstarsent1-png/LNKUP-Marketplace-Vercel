@@ -418,6 +418,8 @@ WordPress core (`wp-admin`, `wp-includes`, `wp-config.php`) and `uploads` are no
 |------|--------|
 | Tailwind CSS 4 CLI | `wp-content/themes/lnkup-theme/assets/dist/lnkup.css` |
 | Hand-written BEM | `assets/dist/components.css` |
+| Design System 5.0 (`npm run build:public`) | `assets/dist/public.css` — public pages only (`lp-` prefix); see [PUBLIC_WEBSITE_5.md](PUBLIC_WEBSITE_5.md) |
+| Responsive images (`npm run images`, sharp) | `assets/images/**/*-{640,1280,1920}w.webp` served by `lnkup_public_image()` |
 
 ### Testing
 

@@ -7,7 +7,19 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
 **Plugin version:** 12.34.0  
-**Theme version:** 1.6.1
+**Theme version:** 1.7.0
+
+### Public Website 5.0 (theme 1.7.0; marketplace `includes/public/*` ships with the next marketplace version)
+
+Reference: [PUBLIC_WEBSITE_5.md](PUBLIC_WEBSITE_5.md).
+
+- Design System 5.0 (`assets/src/public.css` → `assets/dist/public.css`, `lp-` prefix, public pages only) with a new header (dropdowns, Get started role menu, accessible drawer), footer and announcement bar.
+- Homepage 5.0 from live data: role-aware search with autocomplete, live counts, event tabs, categories, cities, tours, public vendors, verified-only proof, FAQ, signed-in strip.
+- Acquisition landings `/for-organizers/` and `/for-vendors/` with live Fee Engine pricing, revenue calculator, validated city/category narrowing and return-to-opportunity sign-up; campaign variants `/for-{audience}/{slug}/` managed in LNKup → Campaign Landings (noindex + canonical by default).
+- `LNKup_Public_Discovery` + REST `lnkup/v1/public/discovery`, `/public/discovery/cards`, `/public/vendors/featured` (anonymous, cached, public fields only).
+- Landing Settings: draft → preview → publish, proof blocks shown only when marked real, per-page FAQs; the custom stats override and the "Join thousands" footer claim were removed.
+- Meta: landing views reuse `ViewContent` (`content_category` organizer_landing / vendor_landing); `includes/meta/*` unchanged.
+- Tests: `tests/e2e/public-website.spec.ts`, `scripts/e2e/php/public-website-test.php` (+ `public-website-setup.php`).
 
 ### Engagement OS (lnkup-communications 1.3.0; marketplace changes ship with the next marketplace version)
 

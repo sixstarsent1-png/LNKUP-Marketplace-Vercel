@@ -34,7 +34,7 @@ test.describe('Launch homepage', () => {
     await expect(section).toBeVisible();
 
     if (await marketplaceIsOpen(page)) {
-      await expect(page.getByRole('link', { name: /view all events/i })).toBeVisible();
+      await expect(section.getByRole('link', { name: /browse all events/i })).toBeVisible();
       const card = page.getByTestId('lnkup-featured-card').first();
       if (await card.count()) {
         await expect(card).not.toHaveClass(/is-locked/);
@@ -62,12 +62,15 @@ test.describe('Launch homepage', () => {
     await expect(page.locator('#opportunities')).toBeAttached();
 
     const viewport = page.viewportSize();
-    const eventsLink = viewport && viewport.width < 768
-      ? page.locator('#lnkup-mobile-nav').getByRole('link', { name: /^events$/i })
-      : page.getByRole('navigation', { name: /primary/i }).getByRole('link', { name: /^events$/i });
-    if (viewport && viewport.width < 768) {
-      await page.getByRole('button', { name: /toggle menu/i }).click();
+    const isMobile = Boolean(viewport && viewport.width < 1024);
+    if (isMobile) {
+      await page.getByRole('button', { name: /open menu/i }).click();
+    } else {
+      await page.getByRole('navigation', { name: /primary/i }).getByRole('button', { name: /find events/i }).click();
     }
+    const eventsLink = isMobile
+      ? page.getByRole('dialog', { name: /menu/i }).getByRole('link', { name: /all open events/i })
+      : page.getByRole('navigation', { name: /primary/i }).getByRole('link', { name: /all open events/i });
     await expect(eventsLink).toBeVisible();
     await eventsLink.click();
     await expect(page).toHaveURL(/opportunities/);
@@ -96,21 +99,20 @@ test.describe('Launch homepage', () => {
     await expect(prelaunch.or(liveSearch)).toBeVisible({ timeout: 15000 });
   });
 
-  test('trust section does not show fake achievement stats', async ({ page }) => {
+  test('homepage shows only live counts, never goals or padded stats', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByText('98%')).toHaveCount(0);
     await expect(page.getByText('$2.4M')).toHaveCount(0);
+    await expect(page.getByText(/20,000\+|3,000\+|4,000\+/)).toHaveCount(0);
+    await expect(page.getByText(/join thousands/i)).toHaveCount(0);
 
-    if (await marketplaceIsOpen(page)) {
-      await expect(page.getByTestId('lnkup-trust-eyebrow')).toHaveText(/trusted by vendors/i);
-      await expect(page.getByTestId('lnkup-trust-disclaimer')).toHaveCount(0);
+    const stats = page.getByTestId('lp-live-stats');
+    if (!(await marketplaceIsOpen(page)) || !(await stats.count())) {
       return;
     }
-
-    await expect(page.getByTestId('lnkup-trust-eyebrow')).toHaveText(/launch goals/i);
-    await expect(page.getByTestId('lnkup-trust-disclaimer')).toBeVisible();
-    await expect(page.getByText('4,000+')).toBeVisible();
-    await expect(page.getByText('500+')).toBeVisible();
+    for (const value of await stats.getByRole('definition').allInnerTexts()) {
+      expect(value.trim()).toMatch(/^\d[\d,]*$/);
+    }
   });
 
   test('hero avoids fake vendor counts', async ({ page }) => {
@@ -128,7 +130,7 @@ test.describe('Launch homepage', () => {
     await expect(logo).toBeVisible();
     await expect(logo).toHaveAttribute('href', /https?:\/\//);
     await expect(page.locator('#lnkup-login, body.login')).toHaveCount(1);
-    await expect(page.locator('link[href*="login.css"]')).toHaveCount(1);
+    await expect(page.locator('link[href*="lnkup-theme/assets/css/login.css"]')).toHaveCount(1);
 
     await page.goto('/wp-login.php?action=lostpassword');
     await expect(page.getByText(/enter your account email/i)).toBeVisible();
