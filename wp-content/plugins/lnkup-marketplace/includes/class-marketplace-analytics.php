@@ -90,6 +90,7 @@ class LNKup_Marketplace_Analytics {
 			if ( 'filter_use' === $type && ! empty( $data['filter'] ) ) {
 				self::bump_filter_usage( $data['filter'] );
 			}
+			do_action( 'lnkup_analytics_tracked', sanitize_key( $type ), (array) $data, (int) ( $user_id ?: get_current_user_id() ), absint( $opp_id ) );
 		} catch ( Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
 			// Never let analytics crash Find / marketplace search.
 			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {

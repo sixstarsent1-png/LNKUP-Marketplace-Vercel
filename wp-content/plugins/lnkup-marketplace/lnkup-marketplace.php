@@ -372,6 +372,11 @@ $lnkup_core_files = array(
 	'includes/marketing/class-market-discovery.php',
 	'includes/marketing/class-event-distribution.php',
 	'includes/marketing/class-og-images.php',
+	'includes/marketing/class-marketing-tables.php',
+	'includes/marketing/class-tracking-links.php',
+	'includes/marketing/class-analytics-taxonomy.php',
+	'includes/marketing/class-ad-platforms.php',
+	'includes/marketing/class-revenue-attribution.php',
 	'includes/matching/class-tours.php',
 	'includes/matching/class-tours-rest.php',
 	'includes/portfolio/class-portfolio-tables.php',
@@ -570,6 +575,10 @@ function lnkup_marketplace_init() {
 	LNKup_Market_Discovery::init();
 	LNKup_OG_Images::init();
 	LNKup_Event_Distribution::init();
+	LNKup_Marketing_Tables::init();
+	LNKup_Tracking_Links::init();
+	LNKup_Analytics_Taxonomy::init();
+	LNKup_Ad_Platforms::init();
 	LNKup_Tours::init();
 	LNKup_Tours_REST::init();
 	LNKup_Portfolio_Tables::maybe_upgrade();

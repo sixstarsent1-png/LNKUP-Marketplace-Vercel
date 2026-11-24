@@ -31,7 +31,16 @@ class LNKup_Acquisition_Attribution {
 	const TTL          = 90 * DAY_IN_SECONDS;
 	const RETENTION_MONTHS = 24;
 
-	const PARAMS = array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'campaign_id', 'adset_id', 'ad_id', 'placement', 'fbclid' );
+	/** Query parameters that make a visit a campaign touch. */
+	const PARAMS = array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'utm_id', 'campaign_id', 'adset_id', 'ad_id', 'placement', 'fbclid', 'gclid', 'ttclid', 'ref', 'org_ref', 'cc', 'partner', 'lnk' );
+
+	/** Ad click identifiers: kept on the first-party touch, reduced to a flag in conversion snapshots. */
+	const CLICK_IDS = array( 'fbclid', 'gclid', 'ttclid' );
+
+	/** Referral, partner and tracking-link codes (measurement copies; the programs keep their own cookies). */
+	const CODES = array( 'utm_id', 'ref', 'org_ref', 'cc', 'partner', 'lnk' );
+
+	const DEVICES = array( 'mobile', 'tablet', 'desktop', 'app' );
 
 	public static function init(): void {
 		add_action( 'init', array( __CLASS__, 'capture' ), 8 );
@@ -57,6 +66,10 @@ class LNKup_Acquisition_Attribution {
 			$value = trim( (string) $raw[ $key ] );
 			if ( 'fbclid' === $key ) {
 				$value = LNKup_Meta_Cookies::sanitize_fbclid( $value );
+			} elseif ( in_array( $key, self::CLICK_IDS, true ) ) {
+				$value = substr( (string) preg_replace( '/[^A-Za-z0-9_.-]/', '', $value ), 0, 200 );
+			} elseif ( in_array( $key, self::CODES, true ) ) {
+				$value = substr( (string) preg_replace( '/[^A-Za-z0-9_-]/', '', $value ), 0, 64 );
 			} elseif ( in_array( $key, array( 'campaign_id', 'adset_id', 'ad_id' ), true ) ) {
 				$value = (string) preg_replace( '/[^0-9A-Za-z_{}.-]/', '', $value );
 				$value = substr( $value, 0, 40 );
@@ -74,6 +87,16 @@ class LNKup_Acquisition_Attribution {
 		if ( isset( $raw['landing'] ) && is_scalar( $raw['landing'] ) ) {
 			$path = (string) wp_parse_url( '/' . ltrim( (string) $raw['landing'], '/' ), PHP_URL_PATH );
 			$out['landing'] = substr( sanitize_text_field( $path ), 0, 200 );
+		}
+		$market = isset( $raw['market'] ) && is_scalar( $raw['market'] ) ? sanitize_title( (string) $raw['market'] ) : '';
+		if ( '' === $market && ! empty( $out['landing'] ) && preg_match( '#^/markets/([a-z0-9-]{1,60})/#', (string) $out['landing'] . '/', $m ) ) {
+			$market = $m[1];
+		}
+		if ( '' !== $market ) {
+			$out['market'] = substr( $market, 0, 60 );
+		}
+		if ( isset( $raw['device'] ) && in_array( $raw['device'], self::DEVICES, true ) ) {
+			$out['device'] = (string) $raw['device'];
 		}
 		if ( isset( $raw['referrer'] ) && is_scalar( $raw['referrer'] ) ) {
 			$host = strtolower( (string) preg_replace( '/[^a-z0-9.-]/i', '', (string) $raw['referrer'] ) );
@@ -160,7 +183,45 @@ class LNKup_Acquisition_Attribution {
 		}
 		$raw['landing'] = isset( $_SERVER['REQUEST_URI'] ) ? (string) wp_parse_url( (string) wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH ) : '/'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 		$raw['ts']      = time();
+		$raw['device']  = self::device_class();
+		if ( isset( $_GET['market'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$raw['market'] = wp_unslash( (string) $_GET['market'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput
+		}
 		return self::sanitize_touch( $raw );
+	}
+
+	/**
+	 * Coarse device class from the user agent (no fingerprinting; nothing else is read).
+	 */
+	public static function device_class(): string {
+		if ( class_exists( 'LNKup_Conversion_Registry' ) && LNKup_Conversion_Registry::is_app_request() ) {
+			return 'app';
+		}
+		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? (string) wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		if ( preg_match( '/iPad|Tablet|PlayBook|Silk|Android(?!.*Mobile)/i', $ua ) ) {
+			return 'tablet';
+		}
+		return wp_is_mobile() ? 'mobile' : 'desktop';
+	}
+
+	/**
+	 * Record a campaign touch from a server-side source (tracking links). Honors consent and
+	 * the same first/last rules as page visits.
+	 *
+	 * @param array<string,mixed> $raw Touch.
+	 */
+	public static function record_touch( array $raw ): void {
+		$touch = self::sanitize_touch( array_merge( array( 'ts' => time(), 'device' => self::device_class() ), $raw ) );
+		if ( ! self::is_campaign( $touch ) || 'denied' === LNKup_Tracking_Consent::state( get_current_user_id(), true ) ) {
+			return;
+		}
+		if ( array() === self::read_cookie( self::FIRST_COOKIE ) ) {
+			self::write_cookie( self::FIRST_COOKIE, $touch );
+		}
+		self::write_cookie( self::LAST_COOKIE, $touch );
+		if ( get_current_user_id() ) {
+			update_user_meta( get_current_user_id(), self::META_LAST, $touch );
+		}
 	}
 
 	private static function write_cookie( string $name, array $touch ): void {
@@ -284,10 +345,12 @@ class LNKup_Acquisition_Attribution {
 	 * @return array<string,mixed>
 	 */
 	private static function compact( array $touch ): array {
-		$keep = array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'campaign_id', 'adset_id', 'ad_id', 'placement', 'landing', 'referrer', 'ts' );
+		$keep = array( 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_id', 'campaign_id', 'adset_id', 'ad_id', 'placement', 'ref', 'org_ref', 'cc', 'partner', 'lnk', 'market', 'device', 'landing', 'referrer', 'ts' );
 		$out  = array_intersect_key( $touch, array_flip( $keep ) );
-		if ( ! empty( $touch['fbclid'] ) ) {
-			$out['fbclid'] = 1;
+		foreach ( self::CLICK_IDS as $click ) {
+			if ( ! empty( $touch[ $click ] ) ) {
+				$out[ $click ] = 1;
+			}
 		}
 		return $out;
 	}

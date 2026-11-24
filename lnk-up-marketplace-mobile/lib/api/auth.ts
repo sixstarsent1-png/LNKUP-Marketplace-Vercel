@@ -115,7 +115,32 @@ export type RegisterPayload = {
   organizationName?: string
   city?: string
   state?: string
+  /** Campaign / referral touch captured from the link that opened the app (sanitized by WordPress). */
+  attribution?: RegisterAttribution
 }
+
+/** Keys WordPress accepts in the registration `attribution` payload (LNKup_Acquisition_Attribution). */
+export type RegisterAttribution = Partial<
+  Record<
+    | "utm_source"
+    | "utm_medium"
+    | "utm_campaign"
+    | "utm_content"
+    | "utm_term"
+    | "utm_id"
+    | "gclid"
+    | "ttclid"
+    | "fbclid"
+    | "ref"
+    | "org_ref"
+    | "cc"
+    | "partner"
+    | "lnk"
+    | "market"
+    | "landing",
+    string
+  >
+>
 
 /**
  * Create a vendor or organizer account and return the same session as login.
@@ -130,6 +155,9 @@ export async function registerWithSitePassword(payload: RegisterPayload): Promis
       role: payload.role,
       full_name: payload.fullName.trim(),
       terms: payload.terms,
+      ...(payload.attribution && Object.keys(payload.attribution).length > 0
+        ? { attribution: { ...payload.attribution, device: "app" } }
+        : {}),
       ...(payload.role === "organizer"
         ? {
             organization_name: (payload.organizationName ?? "").trim(),

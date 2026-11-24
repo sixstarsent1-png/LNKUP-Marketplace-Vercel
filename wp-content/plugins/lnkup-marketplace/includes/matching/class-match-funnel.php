@@ -27,6 +27,7 @@ class LNKup_Match_Funnel {
 		'event_card_clicked', 'event_card_image_failed',
 		// WordPress JS.
 		'saved_search_match_clicked', 'market_page_view', 'market_opportunity_click',
+		'market_vendor_signup_click', 'market_organizer_signup_click', 'market_connector_click', 'market_alert_signup_click', 'market_alert_submit',
 		// Expo.
 		'organizer_experiment_viewed', 'organizer_experiment_recommendation_opened', 'organizer_experiment_recommendation_action_clicked',
 		'organizer_experiment_decision_recorded', 'tutorial_viewed', 'tutorial_step_clicked', 'tutorial_step_completed',

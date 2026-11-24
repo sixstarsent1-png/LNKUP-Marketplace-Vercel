@@ -452,8 +452,8 @@ class LNKup_Market_Registry {
 			}
 			return $result;
 		}
-		if ( class_exists( 'LNKup_Marketplace_Analytics' ) ) {
-			LNKup_Marketplace_Analytics::track( 'market_alert_created', array( 'market' => $slug, 'category' => $label ), $user_id );
+		if ( class_exists( 'LNKup_Analytics_Taxonomy' ) ) {
+			LNKup_Analytics_Taxonomy::emit( 'market_alert_created', array( 'market' => $slug, 'category' => $label ), $user_id );
 		}
 		return array( 'created' => true, 'id' => is_array( $result ) ? (string) ( $result['id'] ?? '' ) : (string) $result );
 	}
@@ -487,8 +487,8 @@ class LNKup_Market_Registry {
 		}
 		$seen[] = $market['slug'] . '|' . $category;
 		set_transient( $key, $seen, DAY_IN_SECONDS );
-		if ( class_exists( 'LNKup_Marketplace_Analytics' ) ) {
-			LNKup_Marketplace_Analytics::track( 'market_demand_signal', array( 'market' => $market['slug'], 'city' => $market['city'], 'state' => $market['state'], 'category' => $category ), get_current_user_id() );
+		if ( class_exists( 'LNKup_Analytics_Taxonomy' ) ) {
+			LNKup_Analytics_Taxonomy::emit( 'market_demand_signal', array( 'market' => $market['slug'], 'city' => $market['city'], 'state' => $market['state'], 'category' => $category ), 0, 0, true );
 		}
 		return rest_ensure_response( array( 'recorded' => true ) );
 	}

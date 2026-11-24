@@ -11,7 +11,14 @@
   if (navigator.globalPrivacyControl === true) return;
   if (/(?:^|;\s*)lnkup_tracking_optout=1(?:;|$)/.test(document.cookie || '')) return;
 
-  var PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'campaign_id', 'adset_id', 'ad_id', 'placement', 'fbclid'];
+  var PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'utm_id', 'campaign_id', 'adset_id', 'ad_id', 'placement', 'fbclid', 'gclid', 'ttclid', 'ref', 'org_ref', 'cc', 'partner', 'lnk'];
+  var LONG = ['fbclid', 'gclid', 'ttclid'];
+
+  function device() {
+    var ua = navigator.userAgent || '';
+    if (/iPad|Tablet|PlayBook|Silk|Android(?!.*Mobile)/i.test(ua)) return 'tablet';
+    return /Mobi|iPhone|Android/i.test(ua) ? 'mobile' : 'desktop';
+  }
   var IGNORED = ['stripe.com', 'stripe.network', 'paypal.com', 'accounts.google.com', 'appleid.apple.com'];
   var TTL = 90 * 24 * 60 * 60;
 
@@ -41,7 +48,7 @@
   PARAMS.forEach(function (key) {
     var value = query.get(key);
     if (value) {
-      touch[key] = value.slice(0, key === 'fbclid' ? 500 : 150);
+      touch[key] = value.slice(0, LONG.indexOf(key) > -1 ? 500 : 150);
       campaign = true;
     }
   });
@@ -58,6 +65,9 @@
 
   touch.landing = window.location.pathname.slice(0, 200);
   touch.ts = Math.floor(Date.now() / 1000);
+  touch.device = device();
+  var market = query.get('market') || (window.location.pathname.match(/^\/markets\/([a-z0-9-]{1,60})\//) || [])[1];
+  if (market) touch.market = String(market).toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 60);
 
   if (!readCookie('lnkup_ft')) writeCookie('lnkup_ft', touch);
   writeCookie('lnkup_lt', touch);
