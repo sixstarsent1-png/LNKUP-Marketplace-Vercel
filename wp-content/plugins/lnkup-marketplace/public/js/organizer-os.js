@@ -290,7 +290,39 @@
     }
   }
 
+  /** Close a tab "More" menu once a tab in it is chosen. */
+  function bindTabMore() {
+    document.addEventListener('click', function (e) {
+      var tab = e.target.closest && e.target.closest('.vos-tab-more__menu [role="tab"]');
+      var more = tab && tab.closest('details');
+      if (more) {
+        more.open = false;
+      }
+    });
+  }
+
+  /** Get started: expand or collapse a finished step, and reveal the rest of the drafts list. */
+  function bindStartToggles() {
+    document.addEventListener('click', function (e) {
+      var toggle = e.target.closest && e.target.closest('[data-start-toggle]');
+      if (toggle) {
+        var stage = toggle.closest('.lnkup-start__stage');
+        var collapsed = stage.classList.toggle('is-collapsed');
+        toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        toggle.textContent = collapsed ? 'Show' : 'Hide';
+        return;
+      }
+      var more = e.target.closest && e.target.closest('[data-start-show-drafts]');
+      if (more) {
+        document.querySelectorAll('[data-start-more-draft]').forEach(function (li) { li.hidden = false; });
+        more.remove();
+      }
+    });
+  }
+
   function init() {
+    bindTabMore();
+    bindStartToggles();
     bindImport();
     bindLayoutToggle();
     bindDuplicatePicker();

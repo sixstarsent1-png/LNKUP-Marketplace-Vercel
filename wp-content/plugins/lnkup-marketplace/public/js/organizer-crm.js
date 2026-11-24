@@ -395,7 +395,8 @@
         html += '<article class="lnkup-crm-invite-card" data-invite-status="' + inviteStatusKey(inv.status) + '">';
         html += '<div class="lnkup-crm-invite-card__header"><strong>' + escapeHtml(inv.vendor) + '</strong>';
         html += '<span class="lnkup-status-pill ' + inviteStatusClass(inv.status) + '">' + escapeHtml(inv.status || 'sent') + '</span></div>';
-        html += '<p class="lnkup-muted">' + eventLine + escapeHtml(inv.created || '') + '</p>';
+        var sentWhen = window.LNKupOS && window.LNKupOS.timeHtml && inv.created ? window.LNKupOS.timeHtml(inv.created) : escapeHtml(inv.created || '');
+        html += '<p class="lnkup-muted">' + eventLine + sentWhen + '</p>';
         html += '<div class="lnkup-crm-card__actions">';
         if (link) {
           html += '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost lnkup-crm-copy-invite" data-link="' + escapeHtml(link) + '">Copy link</button>';
@@ -1224,6 +1225,11 @@
     var status = card.querySelector('.lnkup-roster-card__status');
     if (status && item.ops_label) {
       status.textContent = item.ops_label;
+      var done = ['checked_in', 'late', 'setting_up', 'live_ready', 'checked_out'].indexOf(item.ops_status) !== -1;
+      status.setAttribute('data-tone', item.no_show ? 'danger'
+        : done ? 'success'
+        : (item.reason === 'invalid_booking' || item.reason === 'documents') ? 'warning'
+        : item.reason === 'payment_pending' ? 'hold' : 'info');
     }
     var note = card.querySelector('.lnkup-roster-card__note');
     if (note) {
@@ -1237,12 +1243,12 @@
       var actions = card.querySelector('.lnkup-roster-card__actions');
       var review = actions ? actions.querySelector('.lnkup-crm-review-open') : null;
       var labels = {
-        checked_in: 'Checked In',
-        no_show: 'No Show',
-        late_arrival: 'Late Arrival',
-        setup_started: 'Setup Started',
-        setup_complete: 'Setup Complete',
-        checked_out: 'Checked Out'
+        checked_in: 'Checked in',
+        no_show: 'No-show',
+        late_arrival: 'Late arrival',
+        setup_started: 'Setup started',
+        setup_complete: 'Setup complete',
+        checked_out: 'Checked out'
       };
       var bulk = {
         checked_in: 'check_in',

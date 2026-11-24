@@ -92,14 +92,6 @@
 
 	/* ---------- verification ---------- */
 
-	function indicatorRow(label, done, detail) {
-		return el('li', { class: 'lnkup-org-team__indicator' + (done ? ' is-done' : '') }, [
-			el('span', { class: 'lnkup-org-team__dot', 'aria-hidden': 'true' }),
-			el('span', { text: label }),
-			el('span', { class: 'lnkup-muted', text: detail })
-		]);
-	}
-
 	async function loadVerification() {
 		var res = await api('/organizer/verification');
 		if (!res.ok && res.status === 403) {
@@ -116,23 +108,62 @@
 		renderVerification(res.data.indicators || {});
 	}
 
+	/**
+	 * Put a form into its drawer and open it; without the drawer shell, show the form inline.
+	 */
+	function openInDrawer(drawerId, node, trigger, inlineWrap) {
+		var drawer = document.getElementById(drawerId);
+		var body = drawer && drawer.querySelector('[data-team-drawer-body]');
+		var os = window.LNKupOS;
+		if (!drawer || !body || !os || !os.open) {
+			inlineWrap.appendChild(node);
+			return;
+		}
+		var heading = node.querySelector('h3');
+		if (heading) {
+			heading.remove();
+		}
+		replace(body, node);
+		os.open(drawer, trigger);
+	}
+
+	function closeDrawers() {
+		['oos-team-domain-drawer', 'oos-team-review-drawer'].forEach(function (id) {
+			var drawer = document.getElementById(id);
+			if (drawer && !drawer.hidden && window.LNKupOS) {
+				window.LNKupOS.close(drawer, true);
+			}
+		});
+	}
+
+	function statusRow(label, done, detail, action) {
+		return el('li', { class: 'lnkup-org-team__indicator oos-verify-row' + (done ? ' is-done' : '') }, [
+			el('span', { class: 'oos-verify-row__icon', 'aria-hidden': 'true', text: done ? '✓' : '!' }),
+			el('span', { class: 'oos-verify-row__text' }, [el('strong', { text: label }), el('span', { class: 'lnkup-muted', text: detail })]),
+			action || null
+		]);
+	}
+
 	function renderVerification(ind) {
+		closeDrawers();
 		var wrap = el('div');
-		wrap.appendChild(el('ul', { class: 'lnkup-org-team__indicators' }, [
-			indicatorRow('Payouts', !!ind.payout_connected, ind.payout_connected ? 'Payouts active' : 'Finish payout setup in Money'),
-			indicatorRow('Website domain', !!ind.domain_verified, ind.domain_verified ? 'You control ' + ind.verified_domain : 'Not verified yet'),
-			indicatorRow('LNKup review', !!ind.identity_reviewed, ind.status_label || '')
+		var canRequest = ['not_started', 'info_required', 'declined', 'reverification_required'].indexOf(ind.status) !== -1;
+		var domainBtn = null;
+		var reviewBtn = null;
+		if (!ind.domain_verified) {
+			domainBtn = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--outline lnkup-btn--sm', text: ind.domain_pending ? 'Continue' : 'Verify domain', 'data-testid': 'lnkup-team-verify-domain' });
+			domainBtn.addEventListener('click', function () { openInDrawer('oos-team-domain-drawer', domainForm(ind.domain_pending), domainBtn, wrap); });
+		}
+		if (canRequest) {
+			reviewBtn = el('button', { type: 'button', class: 'lnkup-btn lnkup-btn--outline lnkup-btn--sm', text: 'Request review', 'data-testid': 'lnkup-team-request-review' });
+			reviewBtn.addEventListener('click', function () { openInDrawer('oos-team-review-drawer', requestForm(ind), reviewBtn, wrap); });
+		}
+		wrap.appendChild(el('ul', { class: 'lnkup-org-team__indicators oos-verify-rows' }, [
+			statusRow('Payouts', !!ind.payout_connected, ind.payout_connected ? 'Payouts active' : 'Finish payout setup in Money', ind.payout_connected ? null : el('a', { class: 'lnkup-btn lnkup-btn--ghost lnkup-btn--sm', href: (cfg.moneyUrl || '?view=financial'), text: 'Open Money' })),
+			statusRow('Website domain', !!ind.domain_verified, ind.domain_verified ? 'You control ' + ind.verified_domain : (ind.domain_pending ? 'Waiting for your confirmation' : 'Not verified yet'), domainBtn),
+			statusRow('LNKup review', !!ind.identity_reviewed, ind.status === 'pending_review' ? 'In review. We will email you when it is done.' : (ind.status_label || 'Not started'), reviewBtn)
 		]));
 		wrap.appendChild(el('p', { class: 'lnkup-muted', text: 'Verification shows vendors what LNKup checked. It is not a guarantee that an event will take place.' }));
-
-		if (!ind.domain_verified) {
-			wrap.appendChild(domainForm(ind.domain_pending));
-		}
-		if (['not_started', 'info_required', 'declined', 'reverification_required'].indexOf(ind.status) !== -1) {
-			wrap.appendChild(requestForm(ind));
-		} else if (ind.status === 'pending_review') {
-			wrap.appendChild(el('p', { class: 'lnkup-org-team__note', text: 'Your organization is in review. We will email you when it is done.' }));
-		}
 		replace(verifyRoot, wrap);
 	}
 
@@ -316,17 +347,33 @@
 			replace(root, el('p', { class: 'lnkup-muted', text: 'Team changes and review decisions will appear here.' }));
 			return;
 		}
-		var list = el('ul', { class: 'lnkup-org-team__activity' });
+		var os = window.LNKupOS || {};
+		var body = el('tbody', {});
 		items.forEach(function (item) {
-			list.appendChild(el('li', {}, [
-				el('strong', { text: item.actor }),
-				' ',
-				el('span', { text: ACTION_LABELS[item.action] || item.action.replace(/_/g, ' ') }),
-				' ',
-				el('time', { class: 'lnkup-muted', datetime: item.created_at, text: item.created_at + ' UTC' })
+			var label = ACTION_LABELS[item.action] || item.action.replace(/_/g, ' ');
+			var stamp = item.created_at + ' UTC';
+			var when = os.parseDate ? os.parseDate(stamp) : null;
+			body.appendChild(el('tr', {}, [
+				el('td', { class: 'vos-table__primary', text: item.actor }),
+				el('td', { text: label.charAt(0).toUpperCase() + label.slice(1) }),
+				el('td', {}, [el('time', {
+					class: 'lnkup-muted',
+					datetime: when ? when.toISOString() : item.created_at,
+					title: when && os.formatDate ? os.formatDate(when) : stamp,
+					text: when && os.relativeTime ? os.relativeTime(when) : stamp
+				})])
 			]));
 		});
-		replace(root, list);
+		var table = el('table', { class: 'vos-table' }, [
+			el('caption', { class: 'vos-sr', text: 'Team activity' }),
+			el('thead', {}, [el('tr', {}, [
+				el('th', { scope: 'col', text: 'Who' }),
+				el('th', { scope: 'col', text: 'What' }),
+				el('th', { scope: 'col', text: 'When' })
+			])]),
+			body
+		]);
+		replace(root, el('div', { class: 'vos-table-wrap' }, [table]));
 	}
 
 	function scopeSelect(data) {

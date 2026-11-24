@@ -23,42 +23,34 @@ test.describe('Event Weather Intelligence', () => {
       await loginOrganizer(page);
     });
 
-    test('organizer dashboard shows weather readiness card', async ({ page }) => {
-      await page.goto('/organizer-dashboard/');
-      const card = page.getByTestId('lnkup-weather-readiness-card');
-      await expect(card).toBeVisible({ timeout: 15000 });
-      await expect(card).not.toContainText('Loading', { timeout: 15000 });
+    test('weather shows once per event: on Overview, not repeated on Operations', async ({ page }) => {
+      const eventId = process.env.PLAYWRIGHT_ORGANIZER_EVENT_ID;
+      test.skip(!eventId, 'Run scripts/e2e/seed.php');
+      await page.goto(`/organizer-dashboard/?event=${eventId}`);
+      await expect(page.getByTestId('lnkup-event-weather')).not.toContainText('Loading', { timeout: 15000 });
+      await page.goto(`/organizer-dashboard/?event=${eventId}&ops=1`);
+      await expect(page.locator('#lnkup-ops-weather-panel')).toHaveCount(0);
     });
 
-    test('operations command center weather panel does not 500', async ({ page }) => {
-      await page.goto('/organizer-dashboard/#events');
-      const opsBtn = page.getByRole('link', { name: /^operations$/i }).first();
-      if (!(await opsBtn.count())) {
-        test.skip(true, 'No events with operations link');
-        return;
-      }
-      await opsBtn.click();
-      const weatherPanel = page.locator('#lnkup-ops-weather-panel');
+    test('event workspace weather card does not 500', async ({ page }) => {
+      const eventId = process.env.PLAYWRIGHT_ORGANIZER_EVENT_ID;
+      test.skip(!eventId, 'Run scripts/e2e/seed.php');
+      await page.goto(`/organizer-dashboard/?event=${eventId}`);
+      const weatherPanel = page.getByTestId('lnkup-event-weather');
       await expect(weatherPanel).toBeVisible({ timeout: 15000 });
-      const weatherCard = weatherPanel.getByTestId('lnkup-ops-weather');
-      if (await weatherCard.count()) {
-        await expect(weatherCard).toBeVisible();
-        await expect(weatherCard).toContainText(/weather readiness|weather intelligence|configure|location|forecast/i);
-      } else {
-        await expect(weatherPanel).not.toContainText('Fatal error');
-        await expect(weatherPanel).not.toContainText('500');
-      }
+      await expect(weatherPanel).toContainText(/weather|forecast|location/i);
+      await expect(weatherPanel).not.toContainText('Fatal error');
     });
 
     test('insights tab includes weather intelligence block when configured', async ({ page }) => {
-      await page.goto('/organizer-dashboard/#events');
-      const opsBtn = page.getByRole('link', { name: /^operations$/i }).first();
-      if (!(await opsBtn.count())) {
-        test.skip(true, 'No events with operations link');
-        return;
+      const eventId = process.env.PLAYWRIGHT_ORGANIZER_EVENT_ID;
+      test.skip(!eventId, 'Run scripts/e2e/seed.php');
+      await page.goto(`/organizer-dashboard/?event=${eventId}&ops=1`);
+      const insights = page.getByRole('tab', { name: /^insights$/i });
+      if (!(await insights.isVisible())) {
+        await page.locator('[data-oos-ops-more] > summary').click();
       }
-      await opsBtn.click();
-      await page.getByRole('button', { name: /^insights$/i }).click();
+      await insights.click();
       await expect(page.locator('#lnkup-event-insights')).toBeVisible({ timeout: 15000 });
       const intelWeather = page.locator('#lnkup-ops-weather-intel, .lnkup-weather-intel-block');
       if (await intelWeather.count()) {

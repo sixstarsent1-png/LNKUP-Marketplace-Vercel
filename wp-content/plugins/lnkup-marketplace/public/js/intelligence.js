@@ -147,7 +147,9 @@
     var kpis = data.kpis || [];
     var healthScore = data.health && data.health.score != null ? data.health : null;
 
-    if (healthScore) {
+    // The Intelligence page already shows the score in its server-rendered summary.
+    var ssrSummary = !!document.querySelector('#lnkup-organizer-intel-summary[data-ssr="1"]');
+    if (healthScore && !ssrSummary) {
       html += '<section class="lnkup-intel-hero">';
       html += '<div class="lnkup-intel-hero__score">' + scoreBlock({ score: healthScore.score, label: healthScore.label }) + '</div>';
       html += '<div class="lnkup-intel-hero__copy"><h3>Portfolio health</h3><p class="lnkup-muted">' + escapeHtml(healthScore.label || 'Overall event performance') + '</p></div>';
@@ -177,11 +179,11 @@
     }
 
     if (data.warnings && data.warnings.length) {
-      html += '<section class="lnkup-intel-section"><h3>Needs attention</h3><div class="lnkup-intel-attention-grid">';
+      html += '<section class="lnkup-intel-section"><h3>Needs attention</h3><ul class="lnkup-intel-attention-list" data-testid="lnkup-intel-attention">';
       data.warnings.forEach(function (w) {
-        html += '<article class="lnkup-intel-attention-card lnkup-intel-attention-card--' + escapeHtml(w.level || 'medium') + '">' + escapeHtml(w.message || '') + '</article>';
+        html += '<li class="lnkup-intel-attention-list__item lnkup-intel-attention-list__item--' + escapeHtml(w.level || 'medium') + '">' + escapeHtml(w.message || '') + '</li>';
       });
-      html += '</div></section>';
+      html += '</ul></section>';
     }
 
     if (data.summary && data.summary.application_funnel) {
@@ -205,11 +207,30 @@
     }
 
     if (data.summary && data.summary.recommended_actions && data.summary.recommended_actions.length) {
-      html += '<section class="lnkup-intel-section"><h3>Recommended actions</h3><div class="lnkup-intel-action-grid">';
+      var groups = [];
+      var byKey = {};
       data.summary.recommended_actions.forEach(function (a) {
-        html += '<article class="lnkup-intel-action-card"><strong>' + escapeHtml(a.title || '') + '</strong><p>' + escapeHtml(a.reason || '') + '</p>';
-        if (a.cta && a.cta.url) {
-          html += '<a href="' + escapeHtml(a.cta.url) + '" class="lnkup-btn lnkup-btn--sm lnkup-btn--primary">' + escapeHtml(a.cta.label || 'View') + '</a>';
+        var key = (a.title || '') + '|' + (a.reason || '');
+        if (!byKey[key]) {
+          byKey[key] = { title: a.title, reason: a.reason, events: [] };
+          groups.push(byKey[key]);
+        }
+        byKey[key].events.push({ title: a.event_title || '', cta: a.cta || null });
+      });
+      html += '<section class="lnkup-intel-section"><h3>Recommended actions</h3><div class="lnkup-intel-action-grid" data-testid="lnkup-intel-actions">';
+      groups.forEach(function (g) {
+        html += '<article class="lnkup-intel-action-card"><strong>' + escapeHtml(g.title || '') + '</strong><p>' + escapeHtml(g.reason || '') + '</p>';
+        if (g.events.length > 1) {
+          html += '<p class="lnkup-muted lnkup-intel-action-card__count">' + g.events.length + ' events</p><ul class="lnkup-intel-action-card__events">';
+          g.events.slice(0, 5).forEach(function (ev) {
+            html += '<li>' + (ev.cta && ev.cta.url
+              ? '<a href="' + escapeHtml(ev.cta.url) + '">' + escapeHtml(ev.title || ev.cta.label || 'Open') + '</a>'
+              : escapeHtml(ev.title)) + '</li>';
+          });
+          html += '</ul>';
+        } else if (g.events[0] && g.events[0].cta && g.events[0].cta.url) {
+          var only = g.events[0];
+          html += '<a href="' + escapeHtml(only.cta.url) + '" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline">' + escapeHtml(only.cta.label || 'View') + (only.title ? ' · ' + escapeHtml(only.title) : '') + '</a>';
         }
         html += '</article>';
       });

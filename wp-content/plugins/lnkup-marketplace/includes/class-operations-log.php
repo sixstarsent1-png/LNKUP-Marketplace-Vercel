@@ -93,6 +93,8 @@ class LNKup_Operations_Log {
 			'late_arrival'     => __( 'Late arrival recorded', 'lnkup-marketplace' ),
 			'no_show'          => __( 'No-show recorded', 'lnkup-marketplace' ),
 			'booth_assigned'   => __( 'Booth assigned', 'lnkup-marketplace' ),
+			'booth_unassigned' => __( 'Booth unassigned', 'lnkup-marketplace' ),
+			'booths_swapped'   => __( 'Booths swapped', 'lnkup-marketplace' ),
 			'parking_assigned' => __( 'Parking assigned', 'lnkup-marketplace' ),
 			'loadin_assigned'  => __( 'Load-in window assigned', 'lnkup-marketplace' ),
 			'support_opened'   => __( 'Support request opened', 'lnkup-marketplace' ),
@@ -103,7 +105,7 @@ class LNKup_Operations_Log {
 			'document_approved'=> __( 'Document approved', 'lnkup-marketplace' ),
 			'packet_viewed'    => __( 'Packet section viewed', 'lnkup-marketplace' ),
 		);
-		$label = $labels[ $type ] ?? ucwords( str_replace( '_', ' ', $type ) );
+		$label = $labels[ $type ] ?? ucfirst( str_replace( '_', ' ', $type ) );
 		if ( ! empty( $payload['business_name'] ) ) {
 			$label .= ' — ' . $payload['business_name'];
 		}

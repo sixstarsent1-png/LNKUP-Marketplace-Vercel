@@ -108,12 +108,12 @@ test.describe('Vendor dashboard UI', () => {
 });
 
 test.describe('Organizer dashboard UI', () => {
-  test('Requests view renders one page heading and one request list', async ({ page }) => {
+  test('Applications view renders one page heading and one request list', async ({ page }) => {
     test.skip(!organizerUser || !organizerPass, 'Run scripts/e2e/seed.php');
     await loginPage(page, organizerUser, organizerPass);
     await page.goto('/organizer-dashboard/?view=applications');
     await expect(page.locator('.lnkup-dashboard__content h1')).toHaveCount(1);
-    await expect(page.getByRole('heading', { level: 1, name: /^requests$/i })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: /^applications$/i })).toBeVisible();
     await expect(page.locator('#lnkup-app-intel-grid')).toHaveCount(1);
   });
 });

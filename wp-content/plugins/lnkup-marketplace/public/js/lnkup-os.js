@@ -417,6 +417,82 @@
     bindSelection();
   }
 
+  /**
+   * Parse "2026-11-24 10:07:32" (site time), "… UTC", ISO strings or epoch seconds into a Date.
+   */
+  function parseDate(value) {
+    if (value instanceof Date) {
+      return isNaN(value.getTime()) ? null : value;
+    }
+    if (typeof value === 'number') {
+      return new Date(value < 1e12 ? value * 1000 : value);
+    }
+    var s = String(value || '').trim();
+    if (!s) {
+      return null;
+    }
+    var utc = /\s?(UTC|GMT|Z)$/i.test(s);
+    s = s.replace(/\s?(UTC|GMT)$/i, '').replace(' ', 'T');
+    var naive = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(s);
+    if (naive && !utc) {
+      // WordPress "site time": shift by the site's UTC offset rather than the browser's.
+      var asUtc = new Date(s + 'Z');
+      return isNaN(asUtc.getTime()) ? null : new Date(asUtc.getTime() - (Number(cfg.tzOffset) || 0) * 60000);
+    }
+    var d = new Date(utc && s.slice(-1) !== 'Z' ? s + 'Z' : s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  /** "Nov 22, 9:16 PM" in the viewer's time zone; "Nov 22, 2025, 9:16 PM" outside the current year. */
+  function formatDate(value, opts) {
+    var d = parseDate(value);
+    if (!d) {
+      return String(value || '');
+    }
+    var withTime = !(opts && opts.dateOnly);
+    var o = { month: 'short', day: 'numeric' };
+    if (d.getFullYear() !== new Date().getFullYear()) {
+      o.year = 'numeric';
+    }
+    if (withTime) {
+      o.hour = 'numeric';
+      o.minute = '2-digit';
+    }
+    return d.toLocaleString(undefined, o);
+  }
+
+  /** "Just now", "5 min ago", "3 h ago", "2 days ago"; older than 7 days falls back to formatDate. */
+  function relativeTime(value) {
+    var d = parseDate(value);
+    if (!d) {
+      return String(value || '');
+    }
+    var secs = Math.round((Date.now() - d.getTime()) / 1000);
+    if (secs < 0 || secs >= 7 * 86400) {
+      return formatDate(d);
+    }
+    if (secs < 60) {
+      return 'Just now';
+    }
+    if (secs < 3600) {
+      return Math.floor(secs / 60) + ' min ago';
+    }
+    if (secs < 86400) {
+      return Math.floor(secs / 3600) + ' h ago';
+    }
+    var days = Math.floor(secs / 86400);
+    return days === 1 ? 'Yesterday' : days + ' days ago';
+  }
+
+  /** `<time>` markup with the relative label and the full local date as a tooltip. */
+  function timeHtml(value) {
+    var d = parseDate(value);
+    if (!d) {
+      return '';
+    }
+    return '<time datetime="' + d.toISOString() + '" title="' + formatDate(d) + '">' + relativeTime(d) + '</time>';
+  }
+
   window.LNKupOS = {
     open: open,
     close: close,
@@ -425,6 +501,10 @@
     fetchJson: fetchJson,
     selectedIds: selectedIds,
     toast: toast,
+    parseDate: parseDate,
+    formatDate: formatDate,
+    relativeTime: relativeTime,
+    timeHtml: timeHtml,
     config: cfg
   };
 

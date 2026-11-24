@@ -116,6 +116,7 @@ class LNKup_OS_UI {
 					'nonce'     => wp_create_nonce( 'wp_rest' ),
 					'role'      => $surface,
 					'dashboard' => esc_url_raw( function_exists( 'lnkup_page_url_helper' ) ? lnkup_page_url_helper( 'organizer' === $surface ? 'organizer-dashboard' : 'vendor-dashboard' ) : home_url( '/' ) ),
+					'tzOffset'  => (int) round( (float) get_option( 'gmt_offset', 0 ) * 60 ),
 				)
 			);
 		}
@@ -465,7 +466,8 @@ class LNKup_OS_UI {
 				$href       = add_query_arg( array( 'sort' => $sort_key, 'order' => $next ), $base );
 				$html      .= '<th scope="col"' . $class . $aria . '><a href="' . esc_url( $href ) . '">' . esc_html( (string) $col['label'] ) . '</a></th>';
 			} else {
-				$html .= '<th scope="col"' . $class . '>' . esc_html( (string) $col['label'] ) . '</th>';
+				$label = esc_html( (string) $col['label'] );
+				$html .= '<th scope="col"' . $class . '>' . ( ! empty( $col['sr_only'] ) ? '<span class="vos-sr">' . $label . '</span>' : $label ) . '</th>';
 			}
 		}
 		$html .= '</tr></thead><tbody>';

@@ -126,3 +126,66 @@ None. `scripts/audit-event-locations.php` is a dry-run report of events whose lo
   4. Run `tests/e2e/organizer-os.spec.ts` against staging.
   5. Optionally run `wp eval-file scripts/audit-event-locations.php` and review inherited locations.
   6. Promote to production.
+
+## 2.1 polish
+
+Ships as **lnkup-marketplace 12.39.0**. Second pass over every organizer screen from an audit of the 2.0 after-screenshots. Create Event and vendor screens were out of scope. After screenshots in `screenshots/after/` were recaptured at all 8 widths.
+
+### What changed
+
+| Area | Before (2.0) | After (2.1) |
+|---|---|---|
+| Event detail routes | Operations (`?ops=1`), roster (`?roster=1`) and check-in (`?scan=1`) had their own "← Back to event" headers | All three render the event workspace header and tabs (`LNKup_Organizer_Workspace_View::chrome()` via `LNKup_Shortcodes::event_detail_head()`). Team staff who do not own the event keep the standalone header. |
+| Top bar | Wrapped to two rows on event pages | One row from 768px; the breadcrumb truncates first, then the search narrows |
+| Event switcher / capacity | Native select; striped full-width "held" bar; "1 spaces" | Styled select; solid held segment; correct plurals |
+| Event Money tab | Outstanding $594.42 (ledger) vs Overview $90.00 | Same source as Overview (`event_money()`), "Collected (gross)", plus an "Approved, not yet paid" table. Cause in [DATA_INTEGRITY.md](DATA_INTEGRITY.md). |
+| Money copy | "Not synced with Stripe yet · Sync now", "Not released by Stripe yet", "PAID BY LNKUP" badge | "Balances update every few minutes · Refresh", "Being processed", no badge for platform-paid accounts |
+| Money overview | Flow strip repeated as a second card grid; two activity lists; empty chart with Retry | Flow strip plus one "Earnings after refunds · Refunds" line; one activity list; plain empty chart message |
+| Timestamps | "2026-11-22 21:16", UTC strings | `LNKupOS.formatDate` / `relativeTime` / `timeHtml` in local time; site-time strings are converted with the site's GMT offset (`lnkupOS.tzOffset`) |
+| Events | Wrapping titles, clipped last column, two status chips, all events on one page | Thumbnail and venue/tour line in the event cell, one status, labelled From/To dates, 25 per page |
+| Applications | Titled "Requests", clipped filter tabs | "Applications", scrolling tabs with an edge fade, initials avatars, full search placeholder |
+| Overview | 7-tile grid; readiness as key/value | 4-step funnel plus a secondary line; readiness checklist with status icons; weather card on the same heading style |
+| Operations | Section pills plus a second tab row, duplicate weather, Title Case | One tab row with More; weather only on Overview for owners; sentence case; OS card styling |
+| Roster | Readiness matrix plus a separate legacy card list; "Not eligible" with a green check | One table: selection, status chip with the right tone, readiness by requirement, check-in, next step, actions |
+| Check-in | Unbalanced layout | Counts as metrics; scanner, pass code and vendor search in one card; recent check-ins beside it |
+| Vendors | "Category not listed." / "Location not listed." filler | One muted "Profile incomplete" line; filters in a toolbar |
+| Tours | Blank thumbnails, unstyled brand field, lime hover ring | Initials art, styled field, subtle hover, explained templates empty state |
+| Intelligence | Score shown twice; the same recommendation 7 times | One score; identical recommendations grouped with the affected events; compact "Needs attention" list; secondary buttons |
+| Team | Long inline forms; UTC log | Three verification rows with drawers for domain and review forms; activity table with relative times |
+| Profile | Single column | Form plus sticky live preview |
+| Get started | Everything expanded, three meters, raw URLs, every draft | Finished steps collapse (Show/Hide), one meter, copy fields, 3 drafts plus "Show all" |
+| Help | Admin email shown; unstyled controls | Guide grid; contact only from the LNKup support email setting; switch for app suggestions |
+
+### Security fix
+
+`lnkup/v1/operations/*` read the event from `$request['id']`. WordPress gives JSON body params priority over URL params, so a body `id` (for example the booth being edited) replaced the route's event for both the permission check and the write. Editing a booth returned 404, and authorization was checked against whatever event the body named. Both now use `LNKup_Operations_REST::route_id()` (URL params only). Verified: the owner's booth edit returns 200; another organizer posting to the event with their own event in the body gets 403. `lnkup/v1/maps/*` uses the same `$request['id']` pattern, but its permission and handler read the same value, so it cannot target a different record. It is left as is and noted for follow-up.
+
+### Verification
+
+- `tests/e2e/organizer-os.spec.ts`: 31 tests, 30 passed, 1 skipped (team drawer test skips when the domain is already verified). New:
+  - Workspace chrome on ops, roster and check-in.
+  - Event Money outstanding equals Overview.
+  - Events pagination.
+  - Applications title.
+  - Team drawer.
+  - No Stripe wording, raw timestamps or leaked PHP on six routes.
+  - axe and overflow extended to Operations and Team.
+- `scripts/qa/os-leak-scan.mjs`: visible text on 20 organizer routes contains no PHP source, raw `YYYY-MM-DD HH:MM` timestamps or the word Stripe.
+- Regression (organizer, vendor, weather, trust-safety specs): all remaining failures are pre-existing or environmental:
+  - The same 10 environment failures as 2.0 (flags off, reviewer seed).
+  - `vendor-security` parallel submission: single-use seed opportunity, already applied to.
+  - `vendor-operations` vendor tab names: Vendor OS 2.0 markup, not changed here.
+  - `organizer-event-create`: the new event builder from a separate, in-progress workstream; not part of this release.
+- Tests updated for intended changes:
+  - Applications heading.
+  - Money flow strip.
+  - Weather location.
+  - Get started collapsed steps.
+  - Operations tabs.
+  - Organizer Operations navigation in `vendor-operations.spec.ts`.
+- `php -l` on all changed PHP; `node --check` on changed JS.
+
+### Not done
+
+- Native `select` elements are restyled, not replaced with a custom listbox.
+- Team drawers close and re-render after a domain verification step starts; the organizer reopens the drawer to enter the code.

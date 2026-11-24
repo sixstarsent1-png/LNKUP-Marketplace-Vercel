@@ -72,7 +72,7 @@ class LNKup_Operations_Render {
 			array( __( 'Approved', 'lnkup-marketplace' ), $kpis['approved_vendors'] ?? 0, '' ),
 			array( __( 'Paid', 'lnkup-marketplace' ), $kpis['paid_vendors'] ?? 0, '' ),
 			array( __( 'Readiness', 'lnkup-marketplace' ), $readiness_value, $readiness_sub ),
-			array( __( 'Checked In', 'lnkup-marketplace' ), $kpis['checked_in'] ?? 0, '' ),
+			array( __( 'Checked in', 'lnkup-marketplace' ), $kpis['checked_in'] ?? 0, '' ),
 			array( __( 'Late', 'lnkup-marketplace' ), $kpis['late_vendors'] ?? 0, '' ),
 			array( __( 'Missing', 'lnkup-marketplace' ), $kpis['missing_vendors'] ?? 0, '' ),
 			array( __( 'Support', 'lnkup-marketplace' ), $kpis['support_requests'] ?? 0, '' ),
@@ -361,8 +361,8 @@ class LNKup_Operations_Render {
 		$html    .= '<p><strong>' . esc_html( (string) ( $summary['percent'] ?? 0 ) ) . '%</strong> ' . esc_html__( 'avg readiness', 'lnkup-marketplace' ) . '</p>';
 		$html    .= '<ul class="lnkup-ops-readiness-dash__tiers">';
 		$html    .= '<li><span class="lnkup-ops-readiness__pill lnkup-ops-readiness__pill--ready">' . esc_html__( 'Ready', 'lnkup-marketplace' ) . '</span> ' . esc_html( (string) ( $summary['ready_count'] ?? 0 ) ) . '</li>';
-		$html    .= '<li><span class="lnkup-ops-readiness__pill lnkup-ops-readiness__pill--on_track">' . esc_html__( 'On Track', 'lnkup-marketplace' ) . '</span> ' . esc_html( (string) ( $summary['on_track_count'] ?? 0 ) ) . '</li>';
-		$html    .= '<li><span class="lnkup-ops-readiness__pill lnkup-ops-readiness__pill--at_risk">' . esc_html__( 'At Risk', 'lnkup-marketplace' ) . '</span> ' . esc_html( (string) ( $summary['at_risk_count'] ?? 0 ) ) . '</li>';
+		$html    .= '<li><span class="lnkup-ops-readiness__pill lnkup-ops-readiness__pill--on_track">' . esc_html__( 'On track', 'lnkup-marketplace' ) . '</span> ' . esc_html( (string) ( $summary['on_track_count'] ?? 0 ) ) . '</li>';
+		$html    .= '<li><span class="lnkup-ops-readiness__pill lnkup-ops-readiness__pill--at_risk">' . esc_html__( 'At risk', 'lnkup-marketplace' ) . '</span> ' . esc_html( (string) ( $summary['at_risk_count'] ?? 0 ) ) . '</li>';
 		$html    .= '</ul></div></div>';
 
 		if ( ! empty( $summary['vendors'] ) ) {
@@ -405,7 +405,8 @@ class LNKup_Operations_Render {
 		}
 		$html = '<ul class="lnkup-ops-feed" id="lnkup-ops-feed-list">';
 		foreach ( $items as $item ) {
-			$html .= '<li><strong>' . esc_html( $item['label'] ?? '' ) . '</strong> <span class="lnkup-muted">' . esc_html( $item['created_at'] ?? '' ) . '</span></li>';
+			$ts    = ! empty( $item['created_at'] ) ? (int) strtotime( (string) $item['created_at'] ) : 0;
+			$html .= '<li><strong>' . esc_html( $item['label'] ?? '' ) . '</strong> <span class="lnkup-muted">' . ( $ts && class_exists( 'LNKup_OS_UI' ) ? LNKup_OS_UI::relative_time( $ts ) : esc_html( $item['created_at'] ?? '' ) ) . '</span></li>';
 		}
 		$html .= '</ul>';
 		return $html;
@@ -457,7 +458,7 @@ class LNKup_Operations_Render {
 			lnkup_page_url_helper( 'organizer-dashboard' )
 		);
 		$html  = '<div class="lnkup-ops-panel lnkup-ops-readiness-overview">';
-		$html .= '<h3>' . esc_html__( 'Event Readiness', 'lnkup-marketplace' ) . '</h3>';
+		$html .= '<h3>' . esc_html__( 'Event readiness', 'lnkup-marketplace' ) . '</h3>';
 		$html .= '<p class="lnkup-ops-readiness-overview__pct"><strong>' . esc_html( (string) ( $summary['percent'] ?? 0 ) ) . '%</strong> ' . esc_html__( 'average across paid vendors', 'lnkup-marketplace' ) . '</p>';
 		if ( ( $summary['at_risk_count'] ?? 0 ) > 0 ) {
 			$html .= '<p class="lnkup-ops-alert lnkup-ops-alert--high">' . esc_html( sprintf(

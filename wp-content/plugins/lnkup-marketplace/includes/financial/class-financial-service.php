@@ -978,9 +978,9 @@ class LNKup_Financial_Service {
 	public static function pending_balance_hint( $next_available_on = null ) {
 		if ( $next_available_on && strtotime( (string) $next_available_on ) ) {
 			/* translators: %s: date the pending money becomes available */
-			return sprintf( __( 'Vendor payments received. Stripe releases this to Available on %s.', 'lnkup-marketplace' ), date_i18n( 'M j', strtotime( (string) $next_available_on . ' 12:00:00' ) ) );
+			return sprintf( __( 'Vendor payments received. They become available to cash out on %s.', 'lnkup-marketplace' ), date_i18n( 'M j', strtotime( (string) $next_available_on . ' 12:00:00' ) ) );
 		}
-		return __( 'Vendor payments received and settling at Stripe. This usually takes a few business days.', 'lnkup-marketplace' );
+		return __( 'Vendor payments received and being processed. This usually takes a few business days.', 'lnkup-marketplace' );
 	}
 
 	/**
@@ -1103,7 +1103,7 @@ class LNKup_Financial_Service {
 			if ( empty( $stripe_balance['synced'] ) ) {
 				return new WP_Error(
 					'balance_unavailable',
-					__( 'Could not load your Stripe payout balance. Refresh and try again.', 'lnkup-marketplace' ),
+					__( 'Could not load your payout balance. Refresh and try again.', 'lnkup-marketplace' ),
 					array( 'status' => 400 )
 				);
 			}

@@ -191,7 +191,7 @@ class LNKup_Financial_Render {
 		$m      = (array) ( $contract['metrics'] ?? array() );
 		$steps  = array(
 			'collected'  => array( __( 'Collected', 'lnkup-marketplace' ), __( 'After LNKup fees, all time', 'lnkup-marketplace' ) ),
-			'pending'    => array( __( 'Pending', 'lnkup-marketplace' ), __( 'Not released by Stripe yet', 'lnkup-marketplace' ) ),
+			'pending'    => array( __( 'Pending', 'lnkup-marketplace' ), __( 'Being processed', 'lnkup-marketplace' ) ),
 			'available'  => array( __( 'Available', 'lnkup-marketplace' ), __( 'Ready to cash out', 'lnkup-marketplace' ) ),
 			'in_transit' => array( __( 'In transit', 'lnkup-marketplace' ), __( 'On the way to your bank', 'lnkup-marketplace' ) ),
 			'paid_out'   => array( __( 'Paid out', 'lnkup-marketplace' ), __( 'Reached your bank, all time', 'lnkup-marketplace' ) ),
@@ -206,8 +206,8 @@ class LNKup_Financial_Render {
 		}
 		$html .= '</div><p class="vos-footnote">';
 		$html .= '' !== $synced
-			? esc_html( sprintf( /* translators: %s: date and time */ __( 'Balances last synced with Stripe %s.', 'lnkup-marketplace' ), date_i18n( 'M j, g:i a', (int) strtotime( $synced ) ) ) )
-			: esc_html__( 'Balances have not been synced with Stripe yet.', 'lnkup-marketplace' );
+			? esc_html( sprintf( /* translators: %s: date and time */ __( 'Balances updated %s.', 'lnkup-marketplace' ), date_i18n( 'M j, g:i a', (int) strtotime( $synced ) ) ) )
+			: esc_html__( 'Balances update every few minutes.', 'lnkup-marketplace' );
 		$html .= ' ' . esc_html__( 'Event pages show gross booth fees before LNKup fees.', 'lnkup-marketplace' ) . '</p></section>';
 		return $html;
 	}

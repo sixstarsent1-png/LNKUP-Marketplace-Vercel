@@ -170,10 +170,10 @@
     if (!money) {
       return '';
     }
-    var when = money.last_synced_at ? String(money.last_synced_at).slice(0, 16).replace('T', ' ') : '';
+    var when = money.last_synced_at ? fmtDate(money.last_synced_at, true) : '';
     return '<p class="lnkup-muted lnkup-fin-synced" data-testid="lnkup-fin-last-synced">' +
-      (when ? 'Last synced with Stripe ' + escapeHtml(when) : 'Not synced with Stripe yet') +
-      ' · <button type="button" class="lnkup-link-btn" data-fin-sync>Sync now</button></p>';
+      (when ? 'Balances updated ' + escapeHtml(when) : 'Balances update every few minutes') +
+      ' · <button type="button" class="lnkup-link-btn" data-fin-sync>Refresh</button></p>';
   }
 
   /** POST /financial/sync, then reload money panels. */
@@ -185,19 +185,19 @@
       btn.setAttribute('data-fin-sync-bound', '1');
       btn.addEventListener('click', function () {
         btn.disabled = true;
-        btn.textContent = 'Syncing…';
+        btn.textContent = 'Refreshing…';
         fetchFinancialJson('/sync', { method: 'POST', body: {} }).then(function (res) {
           btn.disabled = false;
-          btn.textContent = 'Sync now';
+          btn.textContent = 'Refresh';
           if (!res.ok) {
-            finToast(res.error || 'Could not sync with Stripe.', 'error');
+            finToast(res.error || 'Could not refresh balances. Try again in a moment.', 'error');
             return;
           }
           if (res.data && res.data.throttled) {
-            finToast('Synced moments ago. Try again in a few seconds.', 'info');
+            finToast('Updated moments ago. Try again in a few seconds.', 'info');
             return;
           }
-          finToast('Synced with Stripe.', 'success');
+          finToast('Balances updated.', 'success');
           document.querySelectorAll('#lnkup-organizer-financial .lnkup-fin-panel, #lnkup-vendor-financial .lnkup-fin-panel').forEach(function (panel) {
             panel.dataset.loaded = '';
           });
@@ -219,9 +219,9 @@
     }
     var date = shortDate(release.next_available_on || (stripeBalance && stripeBalance.next_available_on));
     if (date) {
-      return 'Vendor payments received. Stripe releases this to Available on ' + date + '.';
+      return 'Vendor payments received. They become available to cash out on ' + date + '.';
     }
-    return 'Vendor payments received and settling at Stripe. This usually takes a few business days.';
+    return 'Vendor payments received and being processed. This usually takes a few business days.';
   }
 
   /** "Nov 25" from a Y-m-d date (no timezone shift). */
@@ -436,6 +436,17 @@
     var div = document.createElement('div');
     div.textContent = str == null ? '' : String(str);
     return div.innerHTML;
+  }
+
+  /** Readable local date ("Nov 22, 9:16 PM"); falls back to the raw date part without the OS helpers. */
+  function fmtDate(value, withTime) {
+    if (!value) {
+      return '';
+    }
+    if (window.LNKupOS && window.LNKupOS.formatDate) {
+      return window.LNKupOS.formatDate(value, { dateOnly: !withTime });
+    }
+    return String(value).slice(0, withTime ? 16 : 10);
   }
 
   function statusChip(status) {
@@ -716,7 +727,7 @@
     }
     var html = '<ul class="lnkup-fin-activity">';
     items.forEach(function (item) {
-      html += '<li><span>' + escapeHtml(item.message) + '</span><span class="lnkup-muted">' + escapeHtml((item.created_at || '').slice(0, 16)) + '</span></li>';
+      html += '<li><span>' + escapeHtml(item.message) + '</span><span class="lnkup-muted">' + escapeHtml(fmtDate(item.created_at || '', true)) + '</span></li>';
     });
     html += '</ul>';
     return html;
@@ -872,7 +883,7 @@
     }
     var html = '<ul class="lnkup-fin-dispute-evidence">';
     list.forEach(function (item) {
-      html += '<li><span class="lnkup-muted">' + escapeHtml((item.at || '').slice(0, 16)) + '</span> — ' + escapeHtml(item.message || '') + '</li>';
+      html += '<li><span class="lnkup-muted">' + escapeHtml(fmtDate(item.at || '', true)) + '</span> — ' + escapeHtml(item.message || '') + '</li>';
     });
     html += '</ul>';
     return html;
@@ -969,7 +980,7 @@
           escapeHtml(t.event_title || t.public_id),
           escapeHtml('$' + Number(t.amount || 0).toFixed(2)),
           statusChip(t.status),
-          escapeHtml((t.created_at || '').slice(0, 10)),
+          escapeHtml(fmtDate(t.created_at || '')),
           action
         ];
       }));
@@ -1007,7 +1018,7 @@
       html += '<article class="lnkup-fin-txn-card">';
       html += '<div class="lnkup-fin-txn-card__head"><strong>' + escapeHtml(t.event_title || t.public_id) + '</strong>' + statusChip(t.status) + '</div>';
       html += '<p class="lnkup-fin-txn-card__amount">$' + Number(t.amount || 0).toFixed(2) + '</p>';
-      html += '<p class="lnkup-muted">' + escapeHtml((t.created_at || '').slice(0, 10)) + '</p>';
+      html += '<p class="lnkup-muted">' + escapeHtml(fmtDate(t.created_at || '')) + '</p>';
       if (t.status === 'pending' && t.payment_post_id) {
         html += '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--primary lnkup-pay-btn" data-payment-id="' + t.payment_post_id + '">Pay now</button>';
       }
@@ -1281,7 +1292,10 @@
     if (Number(balances.pending || 0) > 0) {
       html += '<p class="lnkup-muted lnkup-fin-pending-note" data-testid="lnkup-fin-pending-note">' + escapeHtml(pendingHint(balances.money || dash.money, dash.stripe_balance)) + '</p>';
     }
-    html += '<p class="lnkup-money-payout">' + payoutBadgeChip(connect, balances.payouts) + '</p>';
+    var payoutChip = payoutBadgeChip(connect, balances.payouts);
+    if (payoutChip) {
+      html += '<p class="lnkup-money-payout">' + payoutChip + '</p>';
+    }
     html += lastSyncedLine(balances.money);
     hero.innerHTML = html;
     bindSyncButtons(hero);
@@ -1370,7 +1384,7 @@
       html += '<td data-col="payment">' + escapeHtml(PAYMENT_STATE[pay] || (pay ? pay.replace(/_/g, ' ') : '—')) + '</td>';
       html += '<td data-col="settlement">' + settlementCell(t) + '</td>';
       html += '<td data-col="payout"><span class="lnkup-muted">' + (pay === 'paid' || pay === 'completed' || pay === 'partially_refunded' ? 'Batched with other payments · see Payouts' : '—') + '</span></td>';
-      html += '<td>' + escapeHtml((t.paid_at || t.created_at || '').slice(0, 10)) + '</td>';
+      html += '<td>' + escapeHtml(fmtDate(t.paid_at || t.created_at || '')) + '</td>';
       html += '<td>' + (pid && audit.can_reconcile
         ? '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-fin-reconcile" data-payment-id="' + pid + '">' + (audit.payment_status === 'paid' ? 'Reconcile' : 'Sync payment') + '</button>'
         : '') + '</td>';
@@ -1426,7 +1440,7 @@
       moneyFlowCell(r),
       parts.join('<br>') || '<span class="lnkup-muted">—</span>',
       escapeHtml(r.note || ''),
-      escapeHtml((r.created_at || '').slice(0, 10))
+      escapeHtml(fmtDate(r.created_at || ''))
     ];
   }
 
@@ -1570,7 +1584,11 @@
       if (!dashRes.ok && balanceRes.ok) {
         html += infoCard('Revenue summary', '<p class="lnkup-muted">Revenue charts could not load. Your tracked balance is still shown.</p><p><button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" data-fin-retry-overview>Retry</button></p>', 'warn');
       }
-      if (dash.money && dash.money.metrics) {
+      // Organizer OS shows collected, pending, available, in transit and paid out in the flow strip above.
+      var flowStrip = !!document.querySelector('[data-testid="lnkup-money-flow"]');
+      if (flowStrip && dash.money && dash.money.metrics) {
+        html += '<p class="lnkup-fin-net-line" data-testid="lnkup-fin-net-line">Earnings after refunds <strong>' + escapeHtml(metricLabel(dash.money.metrics.net_earnings)) + '</strong> · Refunds <strong>' + escapeHtml(metricLabel(dash.money.metrics.refunds)) + '</strong></p>';
+      } else if (dash.money && dash.money.metrics) {
         html += moneyContractGrid(dash.money);
       } else if (Array.isArray(dash.money_categories) && dash.money_categories.length) {
         html += moneyCategoryGrid(dash.money_categories, balances);
@@ -1588,7 +1606,7 @@
         html += eventBreakdownTable(byEvent);
       }
       if (balances.isDest && !balances.stripeSynced) {
-        html += infoCard(t('account_balance', 'Account balance'), '<p>We could not read your payout balance from Stripe right now, so Available and Pending show as unavailable instead of $0.</p>', 'warn');
+        html += infoCard(t('account_balance', 'Account balance'), '<p>We could not read your payout balance right now, so Available and Pending show as unavailable instead of $0.</p>', 'warn');
       } else if (balances.stripeSynced && !dash.money) {
         html += infoCard(t('account_balance', 'Account balance'), '<p>Available: <strong>$' + balances.available.toFixed(2) + '</strong> · Pending: <strong>$' + balances.pending.toFixed(2) + '</strong></p>', 'success');
       }
@@ -1601,16 +1619,21 @@
       var cashoutBody = cashoutReady
         ? '<p class="lnkup-fin-cashout-ready">You can request a cashout from your available balance.</p>'
         : '<p class="lnkup-muted">' + escapeHtml(notReadyCopy) + '</p>';
-      html += infoCard('Cashout readiness', cashoutBody, cashoutReady ? 'success' : '');
-      html += infoCard('Recent financial activity', activityList(activity));
+      html += infoCard('Cash-out readiness', cashoutBody, cashoutReady ? 'success' : '');
+      if (!flowStrip) {
+        html += infoCard('Recent financial activity', activityList(activity));
+      }
       html += '</div>';
       if (!hasRevenue && (!activity || !activity.length)) {
         html += '<div class="lnkup-empty-state lnkup-empty-state--compact"><p class="lnkup-empty-state__desc">' + escapeHtml((window.lnkupUiCopy && window.lnkupUiCopy.empty_financial) || 'No financial activity yet. Payments will appear here once vendors start booking.') + '</p></div>';
       }
       html += '<div class="lnkup-fin-chart-shell" data-testid="lnkup-fin-chart-shell">';
       var monthRows = dash.charts && dash.charts.revenue_by_month ? dash.charts.revenue_by_month : [];
-      if (monthRows.length) {
+      var monthHasRevenue = monthRows.some(function (r) { return Number(r.revenue) > 0; });
+      if (monthHasRevenue) {
         html += '<h3>Revenue by month</h3>' + chartBars(monthRows, 'revenue', 'month');
+      } else if (!hasRevenue || monthRows.length) {
+        html += '<h3>Revenue by month</h3><p class="lnkup-muted" data-testid="lnkup-fin-chart-empty">No monthly revenue to show yet. Totals appear here after vendors pay.</p>';
       } else {
         var chartMsg = (balances.stripeSynced || balances.available > 0 || balances.pending > 0)
           ? 'No chart data yet'
@@ -1777,7 +1800,7 @@
     if (status === 'pending' || status === 'pending_verification') {
       return {
         title: 'Payout Setup',
-        message: 'Stripe is reviewing your payout setup.',
+        message: 'Your payout setup is being reviewed.',
         badge: 'Under Review',
         badgeMod: 'pending',
         secondary: ''
@@ -1786,7 +1809,7 @@
     if (status === 'rejected') {
       return {
         title: 'Payout Setup',
-        message: 'Stripe could not approve this payout account. Contact support for help.',
+        message: 'This payout account could not be approved. Contact support for help.',
         badge: 'Not Approved',
         badgeMod: 'muted',
         secondary: ''
@@ -1795,7 +1818,7 @@
     if (status === 'restricted' || status === 'requirements_due' || status === 'verification_required') {
       return {
         title: 'Payout Setup',
-        message: 'Stripe needs more information before payouts can be enabled.',
+        message: 'A few more details are needed before payouts can start.',
         badge: 'Verification Needed',
         badgeMod: 'warn',
         secondary: ''
@@ -1844,6 +1867,10 @@
   }
 
   function payoutBadgeChip(connect, payouts) {
+    // Platform-paid accounts have nothing to act on; the card copy explains how payouts work.
+    if (payouts && payouts.state === 'manual') {
+      return '';
+    }
     var copy = payoutCopyFor(connect, payouts);
     return '<span class="lnkup-fin-payout-badge lnkup-fin-payout-badge--' + escapeHtml(copy.badgeMod) + '" data-testid="lnkup-fin-payout-badge">' + escapeHtml(copy.badge) + '</span>';
   }
@@ -2088,7 +2115,7 @@
         html += '<p class="lnkup-fin-connect-banner">Finish payout setup before cashing out.</p>';
       }
       if (!reasonCopy && balanceBlocked) {
-        html += '<p class="lnkup-fin-connect-banner">Could not load your live Stripe payout balance. Refresh and try again.</p>';
+        html += '<p class="lnkup-fin-connect-banner">Could not load your payout balance. Refresh and try again.</p>';
       } else if (reasonCopy) {
         html += lastSyncedLine(balances.money);
       } else if (settling && canInstant) {
@@ -2293,7 +2320,7 @@
         bindRefundForm(panel);
         finFetch('/refunds').then(function (rows) {
           document.getElementById('lnkup-refund-list').innerHTML = tableFromRows(['Amount', 'Type', 'Status', 'Date'], (rows || []).map(function (r) {
-            return ['$' + Number(r.amount).toFixed(2), escapeHtml(r.refund_type), statusChip(r.status), escapeHtml((r.created_at || '').slice(0, 10))];
+            return ['$' + Number(r.amount).toFixed(2), escapeHtml(r.refund_type), statusChip(r.status), escapeHtml(fmtDate(r.created_at || ''))];
           }));
         }).catch(function () {
           document.getElementById('lnkup-refund-list').innerHTML = '<p class="lnkup-muted">Could not load refunds.</p>';
@@ -2323,7 +2350,7 @@
           (rows || []).forEach(function (r) {
             html += '<article class="lnkup-fin-info-card">';
             html += '<h4 class="lnkup-fin-info-card__title">' + escapeHtml(r.event_title || ('Payment #' + r.payment_id)) + ' ' + statusChip(r.status) + '</h4>';
-            html += '<p>$' + Number(r.amount || 0).toFixed(2) + ' · ' + escapeHtml((r.created_at || '').slice(0, 10)) + '</p>';
+            html += '<p>$' + Number(r.amount || 0).toFixed(2) + ' · ' + escapeHtml(fmtDate(r.created_at || '')) + '</p>';
             html += '<p>' + escapeHtml(r.reason || '') + '</p>';
             if (r.resolution_note) {
               html += '<p class="lnkup-muted">Resolution: ' + escapeHtml(r.resolution_note) + '</p>';
@@ -2356,7 +2383,7 @@
             { label: 'Credits', value: String((data.credits || []).length) }
           ]);
           html += tableFromRows(['Type', 'Amount', 'Date'], (data.entries || []).map(function (r) {
-            return [escapeHtml(r.entry_type), '$' + Number(r.amount).toFixed(2), escapeHtml((r.created_at || '').slice(0, 10))];
+            return [escapeHtml(r.entry_type), '$' + Number(r.amount).toFixed(2), escapeHtml(fmtDate(r.created_at || ''))];
           }));
           return html;
         });
@@ -2381,11 +2408,11 @@
           html += '<h3>Referrals</h3>';
           html += tableFromRows(['Referred user', 'Status', 'Date'], (data.referrals || []).map(function (r) {
             var name = r.referred_name || ('User #' + (r.referred_user_id || ''));
-            return [escapeHtml(name), statusChip(r.status), escapeHtml((r.created_at || '').slice(0, 10))];
+            return [escapeHtml(name), statusChip(r.status), escapeHtml(fmtDate(r.created_at || ''))];
           }));
           html += '<h3>Rewards</h3>';
           html += tableFromRows(['Type', 'Amount', 'Status', 'Date'], (data.rewards || []).map(function (r) {
-            return [escapeHtml(r.event_type || ''), '$' + Number(r.amount || 0).toFixed(2), statusChip(r.status), escapeHtml((r.created_at || '').slice(0, 10))];
+            return [escapeHtml(r.event_type || ''), '$' + Number(r.amount || 0).toFixed(2), statusChip(r.status), escapeHtml(fmtDate(r.created_at || ''))];
           }));
           setTimeout(function () {
             var copyBtn = panel.querySelector('#lnkup-copy-ref-link');
@@ -2480,7 +2507,7 @@
             var view = r.view_url
               ? '<a class="lnkup-btn lnkup-btn--outline lnkup-btn--sm" href="' + escapeHtml(r.view_url) + '" target="_blank" rel="noopener">View</a>'
               : '';
-            html += '<article class="lnkup-fin-invoice-card"><div><p class="lnkup-type-label">' + escapeHtml(r.receipt_number || '') + '</p><h3>' + escapeHtml(title) + '</h3><p class="lnkup-type-meta">' + escapeHtml(r.payment_method || '') + ' · ' + escapeHtml((r.created_at || '').slice(0, 10)) + '</p></div><div class="lnkup-fin-invoice-card__side"><p>$' + Number(r.amount || 0).toFixed(2) + '</p>' + view + '</div></article>';
+            html += '<article class="lnkup-fin-invoice-card"><div><p class="lnkup-type-label">' + escapeHtml(r.receipt_number || '') + '</p><h3>' + escapeHtml(title) + '</h3><p class="lnkup-type-meta">' + escapeHtml(r.payment_method || '') + ' · ' + escapeHtml(fmtDate(r.created_at || '')) + '</p></div><div class="lnkup-fin-invoice-card__side"><p>$' + Number(r.amount || 0).toFixed(2) + '</p>' + view + '</div></article>';
           });
           html += '</div>';
           return html;
@@ -2535,7 +2562,7 @@
             }
           }
           var connect = data.connect || {};
-          html += '<h3>Connect status</h3>';
+          html += '<h3>Payout account</h3>';
           html += payoutStatusCard(connect, balances.payouts);
           html += connectWalletBanner(connect);
           if (connect.status !== 'active' && connect.available) {
@@ -2598,7 +2625,7 @@
             html += '<div class="lnkup-fin-payout-card">';
             html += '<div class="lnkup-fin-payout-card__header"><h4>$' + Number(r.net_amount).toFixed(2) + ' · ' + escapeHtml(r.payout_type) + '</h4>' + statusChip(r.status) + '</div>';
             html += payoutTimeline(r.status);
-            html += '<p class="lnkup-fin-payout-card__secondary lnkup-muted">' + escapeHtml((r.created_at || '').slice(0, 10)) + '</p>';
+            html += '<p class="lnkup-fin-payout-card__secondary lnkup-muted">' + escapeHtml(fmtDate(r.created_at || '')) + '</p>';
             if (r.status === 'failed' && r.failure_reason) {
               html += '<p class="lnkup-fin-payout-card__error lnkup-alert lnkup-alert--error" role="alert">' + escapeHtml(r.failure_reason) + '</p>';
             }
@@ -2680,7 +2707,7 @@
           (rows || []).forEach(function (r) {
             html += '<article class="lnkup-fin-info-card">';
             html += '<h4 class="lnkup-fin-info-card__title">' + escapeHtml(r.event_title || ('Payment #' + r.payment_id)) + ' ' + statusChip(r.status) + '</h4>';
-            html += '<p>$' + Number(r.amount || 0).toFixed(2) + ' · ' + escapeHtml(r.source || 'vendor') + ' · ' + escapeHtml((r.created_at || '').slice(0, 10)) + '</p>';
+            html += '<p>$' + Number(r.amount || 0).toFixed(2) + ' · ' + escapeHtml(r.source || 'vendor') + ' · ' + escapeHtml(fmtDate(r.created_at || '')) + '</p>';
             html += '<p>' + escapeHtml(r.reason || '') + '</p>';
             html += renderDisputeEvidence(r.evidence);
             if (r.resolution_note) {

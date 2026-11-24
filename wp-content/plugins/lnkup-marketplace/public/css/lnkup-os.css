@@ -729,12 +729,13 @@ body.lnkup-os .vos-capacity { display: grid; gap: 8px; }
 body.lnkup-os .vos-capacity__bar { display: flex; height: 10px; border-radius: 999px; background: var(--vos-line); overflow: hidden; }
 body.lnkup-os .vos-capacity__seg { display: block; height: 100%; }
 body.lnkup-os .vos-capacity__seg--confirmed { background: var(--vos-ink); }
-body.lnkup-os .vos-capacity__seg--held { background: repeating-linear-gradient(135deg, var(--vos-warning) 0 3px, color-mix(in oklch, var(--vos-warning) 55%, white) 3px 6px); }
+body.lnkup-os .vos-capacity__seg--held { background: color-mix(in oklch, var(--vos-warning) 65%, white); }
+body.lnkup-os .vos-capacity__seg + .vos-capacity__seg { box-shadow: inset 2px 0 0 var(--vos-surface); }
 body.lnkup-os .vos-capacity__legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--vos-ink-2); }
 body.lnkup-os .vos-capacity__legend li { display: inline-flex; align-items: center; gap: 6px; }
 body.lnkup-os .vos-capacity__key { width: 10px; height: 10px; border-radius: 3px; background: var(--vos-line); }
 body.lnkup-os .vos-capacity__key--confirmed { background: var(--vos-ink); }
-body.lnkup-os .vos-capacity__key--held { background: repeating-linear-gradient(135deg, var(--vos-warning) 0 2px, color-mix(in oklch, var(--vos-warning) 55%, white) 2px 4px); }
+body.lnkup-os .vos-capacity__key--held { background: color-mix(in oklch, var(--vos-warning) 65%, white); }
 body.lnkup-os .vos-capacity__key--open { border: 1px solid var(--vos-line-strong); background: var(--vos-surface); }
 body.lnkup-os .vos-capacity__legend strong { font-variant-numeric: tabular-nums; }
 

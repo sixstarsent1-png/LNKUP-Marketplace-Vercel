@@ -88,6 +88,26 @@ class LNKup_Organizer_Workspace_View {
 	}
 
 	/**
+	 * Workspace header and tabs for event detail routes rendered elsewhere (ops, roster, check-in).
+	 *
+	 * @param int    $event_id Event ID.
+	 * @param string $tab      Active tab key.
+	 */
+	public static function chrome( int $event_id, string $tab ): string {
+		if ( ! LNKup_Capabilities::organizer_owns_event( $event_id ) ) {
+			return '';
+		}
+		$summary = LNKup_Organizer_Presentation::event_summary( $event_id, false );
+		if ( ! $summary ) {
+			return '';
+		}
+		return '<div class="oos-workspace oos-workspace--chrome">'
+			. self::header( $summary, $tab )
+			. self::tabs( $summary, $tab, LNKup_Shortcodes::ops_tabs( $event_id ), LNKup_Capabilities::can_manage_event_financials( $event_id ) )
+			. '</div>';
+	}
+
+	/**
 	 * Compact persistent header: identity, switcher, one primary action, overflow menu.
 	 *
 	 * @param array  $summary Event summary.
@@ -239,11 +259,13 @@ class LNKup_Organizer_Workspace_View {
 		$funnel    = array(
 			array( __( 'Applied', 'lnkup-marketplace' ), (int) $apps['total'], $app_url( '' ) ),
 			array( __( 'To review', 'lnkup-marketplace' ), (int) $apps['pending'], $app_url( 'pending' ) ),
-			array( __( 'Info requested', 'lnkup-marketplace' ), (int) $apps['info_requested'], $app_url( 'needs_info' ) ),
 			array( __( 'Approved, unpaid', 'lnkup-marketplace' ), (int) $apps['held'], $app_url( 'unpaid' ) ),
 			array( __( 'Confirmed', 'lnkup-marketplace' ), (int) $apps['confirmed'], $app_url( 'paid' ) ),
-			array( __( 'Waitlisted', 'lnkup-marketplace' ), (int) $apps['waitlisted'], $app_url( 'waitlisted' ) ),
-			array( __( 'Declined', 'lnkup-marketplace' ), (int) $apps['declined'], $app_url( 'rejected' ) ),
+		);
+		$funnel_more = array(
+			array( __( 'info requested', 'lnkup-marketplace' ), (int) $apps['info_requested'], $app_url( 'needs_info' ) ),
+			array( __( 'waitlisted', 'lnkup-marketplace' ), (int) $apps['waitlisted'], $app_url( 'waitlisted' ) ),
+			array( __( 'declined', 'lnkup-marketplace' ), (int) $apps['declined'], $app_url( 'rejected' ) ),
 		);
 		$vendor_ready = class_exists( 'LNKup_Vendor_Readiness' ) ? LNKup_Vendor_Readiness::event_readiness_summary( $event_id ) : array();
 		$org_ready    = class_exists( 'LNKup_Event_Readiness' ) ? LNKup_Event_Readiness::evaluate( $event_id ) : array();
@@ -254,11 +276,20 @@ class LNKup_Organizer_Workspace_View {
 		<div class="oos-ws-grid" data-testid="lnkup-event-command">
 			<section class="vos-card" aria-labelledby="oos-ws-funnel" data-testid="lnkup-event-funnel">
 				<?php echo LNKup_OS_UI::section_head( __( 'Applications', 'lnkup-marketplace' ), __( 'Open applications', 'lnkup-marketplace' ), add_query_arg( 'tab', 'applications', $base ), 'oos-ws-funnel' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-				<ul class="oos-funnel">
+				<ol class="oos-funnel oos-funnel--steps">
 					<?php foreach ( $funnel as $stage ) : ?>
 						<li><a href="<?php echo esc_url( $stage[2] ); ?>"><span class="oos-funnel__n"><?php echo esc_html( (string) $stage[1] ); ?></span><span class="oos-funnel__label"><?php echo esc_html( $stage[0] ); ?></span></a></li>
 					<?php endforeach; ?>
-				</ul>
+				</ol>
+				<p class="oos-funnel__more">
+					<?php
+					$more_links = array();
+					foreach ( $funnel_more as $stage ) {
+						$more_links[] = '<a href="' . esc_url( $stage[2] ) . '"><strong>' . esc_html( (string) $stage[1] ) . '</strong> ' . esc_html( $stage[0] ) . '</a>';
+					}
+					echo implode( ' · ', $more_links ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					?>
+				</p>
 			</section>
 			<section class="vos-card" aria-labelledby="oos-ws-capacity" data-testid="lnkup-event-capacity">
 				<?php echo LNKup_OS_UI::section_head( __( 'Capacity', 'lnkup-marketplace' ), __( 'Edit inventory', 'lnkup-marketplace' ), add_query_arg( 'tab', 'inventory', $base ), 'oos-ws-capacity' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
@@ -266,7 +297,20 @@ class LNKup_Organizer_Workspace_View {
 					<?php echo LNKup_OS_UI::empty_state( __( 'No booth types yet', 'lnkup-marketplace' ), __( 'Add at least one booth type so vendors can apply.', 'lnkup-marketplace' ), __( 'Add booth type', 'lnkup-marketplace' ), add_query_arg( 'tab', 'inventory', $base ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 				<?php else : ?>
 					<?php echo LNKup_OS_UI::capacity_bar( $summary['capacity'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-					<p class="vos-footnote"><?php echo esc_html( sprintf( /* translators: 1: total spaces, 2: booth types */ _n( '%1$d spaces across %2$d booth type. Held spaces belong to approved vendors who have not paid yet.', '%1$d spaces across %2$d booth types. Held spaces belong to approved vendors who have not paid yet.', (int) $summary['capacity']['booth_types'], 'lnkup-marketplace' ), (int) $summary['capacity']['total'], (int) $summary['capacity']['booth_types'] ) ); ?></p>
+					<p class="vos-footnote"><?php
+					$cap_total = (int) $summary['capacity']['total'];
+					$cap_types = (int) $summary['capacity']['booth_types'];
+					echo esc_html(
+						sprintf(
+							/* translators: 1: "N spaces", 2: "N booth types" */
+							__( '%1$s across %2$s. Held spaces belong to approved vendors who have not paid yet.', 'lnkup-marketplace' ),
+							/* translators: %d: spaces */
+							sprintf( _n( '%d space', '%d spaces', $cap_total, 'lnkup-marketplace' ), $cap_total ),
+							/* translators: %d: booth types */
+							sprintf( _n( '%d booth type', '%d booth types', $cap_types, 'lnkup-marketplace' ), $cap_types )
+						)
+					);
+					?></p>
 				<?php endif; ?>
 			</section>
 			<section class="vos-card" aria-labelledby="oos-ws-money" data-testid="lnkup-event-money">
@@ -283,25 +327,57 @@ class LNKup_Organizer_Workspace_View {
 			</section>
 			<section class="vos-card" aria-labelledby="oos-ws-ready" data-testid="lnkup-event-readiness">
 				<?php echo LNKup_OS_UI::section_head( __( 'Readiness', 'lnkup-marketplace' ), '', '', 'oos-ws-ready' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-				<dl class="vos-kv">
-					<dt><?php esc_html_e( 'Vendors', 'lnkup-marketplace' ); ?></dt>
-					<dd>
-						<?php
-						echo empty( $vendor_ready['vendor_count'] )
-							? esc_html__( 'Appears once you approve vendors', 'lnkup-marketplace' )
-							: esc_html( sprintf( /* translators: 1: ready, 2: booked, 3: at risk */ __( '%1$d of %2$d booked vendors ready · %3$d at risk', 'lnkup-marketplace' ), (int) $vendor_ready['ready_count'], (int) $vendor_ready['vendor_count'], (int) $vendor_ready['at_risk_count'] ) );
-						?>
-					</dd>
-					<dt><?php esc_html_e( 'Your event setup', 'lnkup-marketplace' ); ?></dt>
-					<dd><?php echo empty( $org_ready ) ? '—' : esc_html( sprintf( /* translators: %d: percent */ __( '%d%% of checklist done', 'lnkup-marketplace' ), (int) $org_ready['percent'] ) ); ?></dd>
-				</dl>
-				<?php if ( ! empty( $org_ready['next_actions'] ) ) : ?>
-					<ul class="vos-timeline">
-						<?php foreach ( $org_ready['next_actions'] as $next ) : ?>
-							<li><a href="<?php echo esc_url( (string) $next['action_url'] ); ?>"><?php echo esc_html( (string) $next['label'] ); ?></a><span class="vos-timeline__meta"><?php echo esc_html( (string) $next['evidence'] ); ?></span></li>
-						<?php endforeach; ?>
-					</ul>
-				<?php endif; ?>
+				<?php
+				$booked   = (int) ( $vendor_ready['vendor_count'] ?? 0 );
+				$ready_n  = (int) ( $vendor_ready['ready_count'] ?? 0 );
+				$at_risk  = (int) ( $vendor_ready['at_risk_count'] ?? 0 );
+				$setup    = empty( $org_ready ) ? null : (int) $org_ready['percent'];
+				$checks   = array(
+					array(
+						'label' => __( 'Booked vendors ready', 'lnkup-marketplace' ),
+						'meta'  => $booked
+							/* translators: 1: ready, 2: booked, 3: at risk */
+							? sprintf( __( '%1$d of %2$d ready · %3$d at risk', 'lnkup-marketplace' ), $ready_n, $booked, $at_risk )
+							: __( 'Appears once you approve vendors', 'lnkup-marketplace' ),
+						'tone'  => ! $booked ? 'neutral' : ( $ready_n >= $booked ? 'success' : ( $at_risk ? 'danger' : 'warning' ) ),
+					),
+					array(
+						'label' => __( 'Your event setup', 'lnkup-marketplace' ),
+						/* translators: %d: percent */
+						'meta'  => null === $setup ? '—' : sprintf( __( '%d%% of checklist done', 'lnkup-marketplace' ), $setup ),
+						'tone'  => null === $setup ? 'neutral' : ( $setup >= 100 ? 'success' : 'warning' ),
+					),
+				);
+				foreach ( (array) ( $org_ready['next_actions'] ?? array() ) as $next ) {
+					$checks[] = array(
+						'label' => (string) $next['label'],
+						'meta'  => (string) $next['evidence'],
+						'href'  => (string) $next['action_url'],
+						'tone'  => 'warning',
+					);
+				}
+				$check_icons = array(
+					'success' => '✓',
+					'warning' => '!',
+					'danger'  => '!',
+					'neutral' => '•',
+				);
+				?>
+				<ul class="oos-checklist">
+					<?php foreach ( $checks as $check ) : ?>
+						<li class="oos-checklist__item oos-checklist__item--<?php echo esc_attr( $check['tone'] ); ?>">
+							<span class="oos-checklist__icon" aria-hidden="true"><?php echo esc_html( $check_icons[ $check['tone'] ] ); ?></span>
+							<span class="oos-checklist__text">
+								<?php if ( ! empty( $check['href'] ) ) : ?>
+									<a href="<?php echo esc_url( $check['href'] ); ?>"><?php echo esc_html( $check['label'] ); ?></a>
+								<?php else : ?>
+									<strong><?php echo esc_html( $check['label'] ); ?></strong>
+								<?php endif; ?>
+								<span class="lnkup-muted"><?php echo esc_html( $check['meta'] ); ?></span>
+							</span>
+						</li>
+					<?php endforeach; ?>
+				</ul>
 			</section>
 			<section class="vos-card" aria-labelledby="oos-ws-deadlines" data-testid="lnkup-event-deadlines">
 				<?php echo LNKup_OS_UI::section_head( __( 'Upcoming dates', 'lnkup-marketplace' ), '', '', 'oos-ws-deadlines' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>

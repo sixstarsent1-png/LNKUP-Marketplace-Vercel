@@ -187,17 +187,39 @@ class LNKup_Event_Roster {
 			}
 			$html .= '</div>';
 		}
-		$html .= '<div class="lnkup-roster"><div class="lnkup-roster__list">';
+		$cols   = array(
+			'payment_complete'   => __( 'Payment', 'lnkup-marketplace' ),
+			'documents_complete' => __( 'Documents', 'lnkup-marketplace' ),
+			'packet_viewed'      => __( 'Packet', 'lnkup-marketplace' ),
+			'booth_assigned'     => __( 'Booth', 'lnkup-marketplace' ),
+			'parking_assigned'   => __( 'Parking', 'lnkup-marketplace' ),
+			'loadin_assigned'    => __( 'Load-in', 'lnkup-marketplace' ),
+			'qr_ready'           => __( 'Pass', 'lnkup-marketplace' ),
+		);
+		$owners = array(
+			'vendor'    => __( 'Vendor', 'lnkup-marketplace' ),
+			'organizer' => __( 'You', 'lnkup-marketplace' ),
+			'system'    => __( 'LNKup', 'lnkup-marketplace' ),
+		);
+		$html  .= '<div class="lnkup-roster vos-table-wrap" data-testid="lnkup-roster-matrix"><table class="vos-table lnkup-roster-table">';
+		$html  .= '<caption class="vos-sr">' . esc_html__( 'Vendor roster and readiness by requirement', 'lnkup-marketplace' ) . '</caption><thead><tr>';
+		$html  .= '<th scope="col" class="vos-check"><span class="vos-sr">' . esc_html__( 'Select', 'lnkup-marketplace' ) . '</span></th>';
+		$html  .= '<th scope="col">' . esc_html__( 'Vendor', 'lnkup-marketplace' ) . '</th>';
+		foreach ( $cols as $label ) {
+			$html .= '<th scope="col">' . esc_html( $label ) . '</th>';
+		}
+		$html .= '<th scope="col">' . esc_html__( 'Check-in', 'lnkup-marketplace' ) . '</th><th scope="col">' . esc_html__( 'Next step · who', 'lnkup-marketplace' ) . '</th><th scope="col" class="vos-actions">' . esc_html__( 'Actions', 'lnkup-marketplace' ) . '</th></tr></thead><tbody class="lnkup-roster__list">';
 		foreach ( $rows as $row ) {
-			$groups = implode( ' ', (array) ( $membership[ $row['application_id'] ] ?? array() ) );
+			$app_id = (int) $row['application_id'];
+			$groups = implode( ' ', (array) ( $membership[ $app_id ] ?? array() ) );
 			$url    = $row['profile_id'] ? add_query_arg( 'vendor', $row['profile_id'], lnkup_page_url_helper( 'organizer-dashboard' ) ) : '#';
-			$html  .= '<article class="lnkup-roster-card" data-app-id="' . esc_attr( (string) $row['application_id'] ) . '" data-groups="' . esc_attr( $groups ) . '">';
-			$html  .= '<label class="lnkup-roster-card__pick"><input type="checkbox" class="lnkup-roster-pick" value="' . esc_attr( (string) $row['application_id'] ) . '" /><span class="screen-reader-text">' . esc_html( sprintf( /* translators: %s: vendor name */ __( 'Select %s', 'lnkup-marketplace' ), (string) $row['business_name'] ) ) . '</span></label>';
-			$html  .= '<div class="lnkup-roster-card__main"><strong><a href="' . esc_url( $url ) . '">' . esc_html( $row['business_name'] ) . '</a></strong>';
+			$html  .= '<tr class="lnkup-roster-card" data-app-id="' . esc_attr( (string) $app_id ) . '" data-groups="' . esc_attr( $groups ) . '">';
+			$html  .= '<td class="vos-check"><label class="lnkup-roster-card__pick"><input type="checkbox" class="lnkup-roster-pick" value="' . esc_attr( (string) $app_id ) . '" /><span class="screen-reader-text">' . esc_html( sprintf( /* translators: %s: vendor name */ __( 'Select %s', 'lnkup-marketplace' ), (string) $row['business_name'] ) ) . '</span></label></td>';
+			$html  .= '<td class="lnkup-roster-card__main"><a class="vos-table__primary" href="' . esc_url( $url ) . '">' . esc_html( $row['business_name'] ) . '</a>';
 			if ( ! empty( $row['vendor_score'] ) && LNKup_Capabilities::user_has_manage_all() ) {
 				$html .= ' <span class="lnkup-intel-score-inline" title="' . esc_attr__( 'Vendor score', 'lnkup-marketplace' ) . '">' . esc_html( (string) $row['vendor_score'] ) . '</span>';
 			}
-			$html .= '<span class="lnkup-roster-card__status lnkup-status lnkup-status--' . esc_attr( (string) ( $row['ops_status'] ?: $row['readiness'] ) ) . '">' . esc_html( (string) $row['ops_label'] ) . '</span>';
+			$html .= '<span class="lnkup-roster-card__status" data-tone="' . esc_attr( self::status_tone( $row ) ) . '">' . esc_html( (string) $row['ops_label'] ) . '</span>';
 			if ( class_exists( 'LNKup_Vendor_Reliability_Intel' ) && ! empty( $row['profile_id'] ) ) {
 				$intel = LNKup_Vendor_Reliability_Intel::for_profile( (int) $row['profile_id'] );
 				if ( $intel && ! empty( $intel['flags'] ) ) {
@@ -205,15 +227,74 @@ class LNKup_Event_Roster {
 					$html .= ' <span class="lnkup-intel-flag lnkup-intel-flag--' . esc_attr( $flag['type'] ) . '">' . esc_html( $flag['label'] ) . '</span>';
 				}
 			}
-			$html .= '<p class="lnkup-roster-card__note lnkup-muted">' . esc_html( (string) ( $row['message'] ?? '' ) ) . '</p>';
-			$html .= '<p class="lnkup-roster-card__activity lnkup-muted"></p>';
-			$html .= '</div>';
-			$html .= '<div class="lnkup-roster-card__actions">';
-			$html .= self::render_action_buttons( $row );
-			$html .= '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-crm-review-open" data-app-id="' . esc_attr( (string) $row['application_id'] ) . '">' . esc_html__( 'Review', 'lnkup-marketplace' ) . '</button>';
-			$html .= '</div></article>';
+			$html .= '<span class="lnkup-roster-card__note vos-table__sub">' . esc_html( (string) ( $row['message'] ?? '' ) ) . '</span>';
+			$html .= '<span class="lnkup-roster-card__activity vos-table__sub"></span></td>';
+			$html .= self::readiness_cells( $row, $cols, $owners );
+			$html .= '<td class="vos-actions"><span class="lnkup-roster-card__actions">' . self::render_action_buttons( $row );
+			$html .= '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--ghost lnkup-crm-review-open" data-app-id="' . esc_attr( (string) $app_id ) . '">' . esc_html__( 'Review', 'lnkup-marketplace' ) . '</button>';
+			$html .= '</span></td></tr>';
 		}
-		return $html . '</div></div>';
+		return $html . '</tbody></table></div>';
+	}
+
+	/**
+	 * Chip tone for a roster row: blocked bookings warn, holds wait, checked-in succeeds.
+	 *
+	 * @param array<string, mixed> $row Roster row.
+	 */
+	private static function status_tone( array $row ): string {
+		if ( ! empty( $row['no_show'] ) ) {
+			return 'danger';
+		}
+		if ( in_array( (string) $row['ops_status'], array( 'checked_in', 'late', 'setting_up', 'live_ready', 'checked_out' ), true ) ) {
+			return 'success';
+		}
+		$reason = (string) ( $row['reason'] ?? '' );
+		if ( 'invalid_booking' === $reason || 'documents' === $reason ) {
+			return 'warning';
+		}
+		if ( 'payment_pending' === $reason ) {
+			return 'hold';
+		}
+		return 'info';
+	}
+
+	/**
+	 * Readiness cells for booked vendors (approved or paid); one spanning note otherwise.
+	 *
+	 * @param array<string, mixed>  $row    Roster row.
+	 * @param array<string, string> $cols   Checklist key => label.
+	 * @param array<string, string> $owners Owner key => label.
+	 */
+	private static function readiness_cells( array $row, array $cols, array $owners ): string {
+		$app_id  = (int) $row['application_id'];
+		$checked = ! empty( $row['checked_in'] );
+		if ( ! in_array( (string) $row['status'], array( 'approved', 'payment_required', 'paid', 'completed' ), true ) || ! class_exists( 'LNKup_OS_UI' ) ) {
+			return '<td colspan="' . esc_attr( (string) ( count( $cols ) + 2 ) ) . '" class="lnkup-muted">' . esc_html__( 'Readiness starts once you approve this vendor.', 'lnkup-marketplace' ) . '</td>';
+		}
+		$items = array();
+		foreach ( (array) ( LNKup_Vendor_Readiness::checklist( $app_id )['items'] ?? array() ) as $item ) {
+			$items[ $item['key'] ] = $item;
+		}
+		$html = '';
+		$next = null;
+		foreach ( $cols as $key => $label ) {
+			if ( ! isset( $items[ $key ] ) ) {
+				$html .= '<td><span class="lnkup-muted">' . esc_html__( 'Not required', 'lnkup-marketplace' ) . '</span></td>';
+				continue;
+			}
+			$item = $items[ $key ];
+			if ( $item['done'] ) {
+				$html .= '<td>' . LNKup_OS_UI::status( __( 'Done', 'lnkup-marketplace' ), 'success' ) . '</td>';
+				continue;
+			}
+			$blocked = 'blocked' === ( $item['status'] ?? '' );
+			$html   .= '<td>' . LNKup_OS_UI::status( $blocked ? __( 'Blocked', 'lnkup-marketplace' ) : __( 'To do', 'lnkup-marketplace' ), $blocked ? 'danger' : 'warning' ) . '</td>';
+			$next    = $next ?? $item;
+		}
+		$html .= '<td>' . ( $checked ? LNKup_OS_UI::status( __( 'Checked in', 'lnkup-marketplace' ), 'success' ) : '<span class="lnkup-muted">—</span>' ) . '</td>';
+		$html .= '<td>' . ( $next ? esc_html( (string) ( $next['label'] ?? '' ) ) . '<span class="vos-table__sub">' . esc_html( $owners[ $next['owner'] ?? 'vendor' ] ?? '' ) . '</span>' : esc_html__( 'Ready', 'lnkup-marketplace' ) ) . '</td>';
+		return $html;
 	}
 
 	/**

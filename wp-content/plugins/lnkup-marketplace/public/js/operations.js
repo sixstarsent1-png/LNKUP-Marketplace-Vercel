@@ -79,6 +79,14 @@
     return div.innerHTML;
   }
 
+  /** Relative `<time>` markup for a log timestamp (escaped raw text without the OS helpers). */
+  function opsWhen(value) {
+    if (!value) {
+      return '';
+    }
+    return window.LNKupOS && window.LNKupOS.timeHtml ? window.LNKupOS.timeHtml(value) : escapeHtml(value);
+  }
+
   /**
    * Render QR code image into container.
    */
@@ -331,7 +339,7 @@
         html += '<div class="lnkup-ops-support-item__meta">';
         html += '<span class="lnkup-badge">' + escapeHtml(item.category_label || item.category || '') + '</span>';
         html += '<span class="lnkup-muted">' + escapeHtml(item.status || '') + '</span>';
-        html += '<span class="lnkup-muted">' + escapeHtml(item.created_at || '') + '</span>';
+        html += '<span class="lnkup-muted">' + opsWhen(item.created_at) + '</span>';
         html += '</div>';
         html += '<p>' + escapeHtml(item.message || '') + '</p>';
         if (item.assigned_staff) {
@@ -698,7 +706,7 @@
       if (snap.feed && feed) {
         var feedHtml = '<ul class="lnkup-ops-feed" id="lnkup-ops-feed-list">';
         snap.feed.forEach(function (item) {
-          feedHtml += '<li><strong>' + escapeHtml(item.label || '') + '</strong> <span class="lnkup-muted">' + escapeHtml(item.created_at || '') + '</span></li>';
+          feedHtml += '<li><strong>' + escapeHtml(item.label || '') + '</strong> <span class="lnkup-muted">' + opsWhen(item.created_at) + '</span></li>';
         });
         feedHtml += '</ul>';
         feed.innerHTML = feedHtml;
@@ -1738,7 +1746,7 @@
         name.textContent = (item.payload && item.payload.business_name) || item.label || 'Vendor';
         var when = document.createElement('span');
         when.className = 'lnkup-muted';
-        when.textContent = item.created_at || '';
+        when.innerHTML = opsWhen(item.created_at);
         li.appendChild(name);
         li.appendChild(when);
         list.appendChild(li);

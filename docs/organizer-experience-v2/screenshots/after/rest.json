@@ -3,353 +3,356 @@
   "screens": {
     "home": {
       "url": "/organizer-dashboard/?view=home",
-      "settledMs": 4985,
-      "requests": 1,
+      "settledMs": 5027,
+      "requests": 2,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 1594
+          "ms": 943
+        },
+        {
+          "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
+          "ms": 1816
         }
       ]
     },
     "events": {
       "url": "/organizer-dashboard/?view=events",
-      "settledMs": 9622,
+      "settledMs": 7031,
       "requests": 1,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 4136
+          "ms": 3338
         }
       ]
     },
     "applications": {
       "url": "/organizer-dashboard/?view=applications",
-      "settledMs": 8956,
+      "settledMs": 3893,
       "requests": 1,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 3819
+          "ms": 1195
         }
       ]
     },
     "vendors": {
       "url": "/organizer-dashboard/?view=vendors",
-      "settledMs": 7822,
-      "requests": 2,
-      "calls": [
-        {
-          "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 1699
-        },
-        {
-          "url": "/wp-json/lnkup/v1/crm/vendors?scope=discover&view=card&q=&sort=score&city=&category=",
-          "ms": 2868
-        }
-      ]
+      "settledMs": 1512,
+      "requests": 0,
+      "calls": []
     },
     "lists": {
       "url": "/organizer-dashboard/?view=lists",
-      "settledMs": 3450,
+      "settledMs": 4628,
       "requests": 2,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/crm/lists",
-          "ms": 929
+          "ms": 961
         },
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 935
+          "ms": 968
         }
       ]
     },
     "invites": {
       "url": "/organizer-dashboard/?view=invites",
-      "settledMs": 4207,
+      "settledMs": 6974,
       "requests": 2,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/crm/invites/list",
-          "ms": 1355
+          "ms": 1050
         },
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 1358
+          "ms": 1859
         }
       ]
     },
     "money": {
       "url": "/organizer-dashboard/?view=financial",
-      "settledMs": 7084,
+      "settledMs": 7861,
       "requests": 8,
       "calls": [
         {
-          "url": "/wp-json/lnkup/v1/financial/connect/status?role=organizer",
-          "ms": 1746
-        },
-        {
           "url": "/wp-json/lnkup/v1/financial/organizer-balances?role=organizer",
-          "ms": 1753
-        },
-        {
-          "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 1754
-        },
-        {
-          "url": "/wp-json/lnkup/v1/financial/dashboard?role=organizer",
-          "ms": 1774
-        },
-        {
-          "url": "/wp-json/lnkup/v1/financial/organizer-balances?role=organizer",
-          "ms": 2610
-        },
-        {
-          "url": "/wp-json/lnkup/v1/financial/connect/status?role=organizer",
-          "ms": 2629
+          "ms": 1195
         },
         {
           "url": "/wp-json/lnkup/v1/financial/activity?limit=8&role=organizer",
-          "ms": 2788
+          "ms": 1200
+        },
+        {
+          "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
+          "ms": 1201
         },
         {
           "url": "/wp-json/lnkup/v1/financial/dashboard?role=organizer",
-          "ms": 1687
+          "ms": 1214
+        },
+        {
+          "url": "/wp-json/lnkup/v1/financial/connect/status?role=organizer",
+          "ms": 2009
+        },
+        {
+          "url": "/wp-json/lnkup/v1/financial/organizer-balances?role=organizer",
+          "ms": 2505
+        },
+        {
+          "url": "/wp-json/lnkup/v1/financial/dashboard?role=organizer",
+          "ms": 1325
+        },
+        {
+          "url": "/wp-json/lnkup/v1/financial/connect/status?role=organizer",
+          "ms": 3918
         }
       ]
     },
     "operations": {
       "url": "/organizer-dashboard/?view=operations",
-      "settledMs": 9454,
+      "settledMs": 6951,
       "requests": 1,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 4128
+          "ms": 2852
         }
       ]
     },
     "marketing": {
       "url": "/organizer-dashboard/?view=marketing",
-      "settledMs": 4871,
+      "settledMs": 6689,
       "requests": 1,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 1727
+          "ms": 2592
         }
       ]
     },
     "intelligence": {
       "url": "/organizer-dashboard/?view=intelligence",
-      "settledMs": 7891,
+      "settledMs": 4824,
       "requests": 2,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/intelligence/dashboard",
-          "ms": 1787
+          "ms": 1085
         },
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 3012
+          "ms": 1918
         }
       ]
     },
     "tours": {
       "url": "/organizer-dashboard/?view=tours",
-      "settledMs": 4060,
+      "settledMs": 4410,
       "requests": 2,
       "calls": [
         {
-          "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 1310
+          "url": "/wp-json/lnkup/v1/portfolio/overview",
+          "ms": 1616
         },
         {
-          "url": "/wp-json/lnkup/v1/portfolio/overview",
-          "ms": 1417
+          "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
+          "ms": 1652
         }
       ]
     },
     "team": {
       "url": "/organizer-dashboard/?view=team",
-      "settledMs": 6059,
+      "settledMs": 8805,
       "requests": 4,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/organizer/verification",
-          "ms": 1398
-        },
-        {
-          "url": "/wp-json/lnkup/v1/org/team",
-          "ms": 1414
+          "ms": 1576
         },
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 2609
+          "ms": 1571
+        },
+        {
+          "url": "/wp-json/lnkup/v1/org/team",
+          "ms": 1592
         },
         {
           "url": "/wp-json/lnkup/v1/org/team/audit?per_page=25&owner_id=292",
-          "ms": 1754
+          "ms": 1901
         }
       ]
     },
     "profile": {
       "url": "/organizer-dashboard/?view=profile",
-      "settledMs": 10527,
+      "settledMs": 8595,
       "requests": 1,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 5597
+          "ms": 4002
         }
       ]
     },
     "settings": {
       "url": "/organizer-dashboard/?view=settings",
-      "settledMs": 4526,
+      "settledMs": 5012,
       "requests": 1,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 1833
+          "ms": 1714
         }
       ]
     },
     "start": {
       "url": "/organizer-dashboard/?view=start",
-      "settledMs": 5479,
+      "settledMs": 3930,
       "requests": 2,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/organizer/setups",
-          "ms": 1446
+          "ms": 1081
         },
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 1472
+          "ms": 1078
         }
       ]
     },
     "create": {
       "url": "/organizer-dashboard/?view=create",
-      "settledMs": 6818,
-      "requests": 1,
+      "settledMs": 8236,
+      "requests": 3,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 3859
+          "ms": 1042
+        },
+        {
+          "url": "/wp-json/lnkup/v1/organizer/builder/config",
+          "ms": 2661
+        },
+        {
+          "url": "/wp-json/lnkup/v1/organizer/builder/recommendations",
+          "ms": 3416
         }
       ]
     },
     "help": {
       "url": "/organizer-dashboard/?view=help",
-      "settledMs": 3573,
+      "settledMs": 10220,
       "requests": 1,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 1386
+          "ms": 5051
         }
       ]
     },
     "event-overview": {
       "url": "/organizer-dashboard/?event=968",
-      "settledMs": 5873,
+      "settledMs": 4184,
       "requests": 1,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 2485
+          "ms": 1866
         }
       ]
     },
     "event-inventory": {
       "url": "/organizer-dashboard/?event=968&tab=inventory",
-      "settledMs": 3939,
+      "settledMs": 9079,
       "requests": 1,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 1612
+          "ms": 3911
         }
       ]
     },
     "event-applications": {
       "url": "/organizer-dashboard/?event=968&tab=applications",
-      "settledMs": 8758,
+      "settledMs": 9412,
       "requests": 1,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 3549
+          "ms": 4149
         }
       ]
     },
     "event-money": {
       "url": "/organizer-dashboard/?event=968&tab=money",
-      "settledMs": 8951,
+      "settledMs": 3660,
       "requests": 1,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 3937
+          "ms": 945
         }
       ]
     },
     "event-ops": {
       "url": "/organizer-dashboard/?event=968&ops=1",
-      "settledMs": 6908,
+      "settledMs": 4491,
       "requests": 6,
       "calls": [
         {
-          "url": "/wp-json/lnkup/v1/operations/events/968/defaults",
-          "ms": 1817
-        },
-        {
           "url": "/wp-json/lnkup/v1/maps/events/968",
-          "ms": 1841
+          "ms": 1266
         },
         {
-          "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 1847
-        },
-        {
-          "url": "/wp-json/lnkup/v1/maps/events/968/live",
-          "ms": 1852
-        },
-        {
-          "url": "/wp-json/lnkup/v1/operations/events/968",
-          "ms": 1856
+          "url": "/wp-json/lnkup/v1/operations/events/968/defaults",
+          "ms": 1268
         },
         {
           "url": "/wp-json/lnkup/v1/operations/events/968/compliance",
-          "ms": 1866
+          "ms": 1271
+        },
+        {
+          "url": "/wp-json/lnkup/v1/operations/events/968",
+          "ms": 1368
+        },
+        {
+          "url": "/wp-json/lnkup/v1/maps/events/968/live",
+          "ms": 1518
+        },
+        {
+          "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
+          "ms": 1518
         }
       ]
     },
     "event-roster": {
       "url": "/organizer-dashboard/?event=968&roster=1",
-      "settledMs": 4618,
+      "settledMs": 9181,
       "requests": 1,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 1510
+          "ms": 3928
         }
       ]
     },
     "event-checkin": {
       "url": "/organizer-dashboard/?event=968&scan=1",
-      "settledMs": 4366,
+      "settledMs": 5699,
       "requests": 2,
       "calls": [
         {
           "url": "/wp-json/lnkup/v1/operations/events/968/feed",
-          "ms": 1463
+          "ms": 1707
         },
         {
           "url": "/wp-json/lnkup/v1/comms/inbox/count?role=organizer",
-          "ms": 1476
+          "ms": 2716
         }
       ]
     }

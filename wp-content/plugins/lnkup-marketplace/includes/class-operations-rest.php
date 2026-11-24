@@ -223,8 +223,19 @@ class LNKup_Operations_REST {
 	 */
 	private static function event_cap( $capability ) {
 		return static function ( WP_REST_Request $request ) use ( $capability ) {
-			return self::check_event_cap( absint( $request['id'] ), $capability );
+			return self::check_event_cap( self::route_id( $request ), $capability );
 		};
+	}
+
+	/**
+	 * The `{id}` from the route. `$request['id']` would prefer a JSON body "id" (a booth, window
+	 * or row being edited) over the URL, so authorization and writes could target different records.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	private static function route_id( WP_REST_Request $request ): int {
+		$params = $request->get_url_params();
+		return absint( $params['id'] ?? 0 );
 	}
 
 	/**
@@ -239,7 +250,7 @@ class LNKup_Operations_REST {
 		return static function ( WP_REST_Request $request ) use ( $table, $capability ) {
 			global $wpdb;
 			$name     = 'incidents' === $table ? LNKup_Operations_Tables::incidents_table() : LNKup_Operations_Tables::support_table();
-			$event_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$name} WHERE id = %d", absint( $request['id'] ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$event_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$name} WHERE id = %d", self::route_id( $request ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( ! $event_id ) {
 				return new WP_Error( 'not_found', __( 'Not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 			}
@@ -281,7 +292,7 @@ class LNKup_Operations_REST {
 	}
 
 	public static function vendor_app_permission( WP_REST_Request $request ) {
-		return LNKup_Capabilities::vendor_owns_application( absint( $request['id'] ) ) || self::organizer_for_app( $request );
+		return LNKup_Capabilities::vendor_owns_application( self::route_id( $request ) ) || self::organizer_for_app( $request );
 	}
 
 	public static function app_access_permission( WP_REST_Request $request ) {
@@ -295,7 +306,7 @@ class LNKup_Operations_REST {
 	 * @return bool|WP_Error
 	 */
 	public static function checkin_permission( WP_REST_Request $request ) {
-		$app_id = absint( $request['id'] );
+		$app_id = self::route_id( $request );
 		$post   = $app_id ? get_post( $app_id ) : null;
 		if ( ! $post || 'lnkup_application' !== $post->post_type ) {
 			return new WP_Error( 'not_found', __( 'Application not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
@@ -339,13 +350,13 @@ class LNKup_Operations_REST {
 	}
 
 	private static function organizer_for_app( WP_REST_Request $request ) {
-		$app_id = absint( $request['id'] ?? $request['app_id'] ?? 0 );
+		$app_id = ( self::route_id( $request ) ?: absint( $request['app_id'] ?? 0 ) );
 		$event_id = (int) get_post_meta( $app_id, '_lnkup_event_id', true );
 		return LNKup_Capabilities::staff_can( $event_id, 'view_roster' );
 	}
 
 	public static function event_snapshot( WP_REST_Request $request ) {
-		$event_id = absint( $request['id'] );
+		$event_id = self::route_id( $request );
 		if ( class_exists( 'LNKup_Event_Operations' ) ) {
 			LNKup_Event_Operations::bootstrap_from_event( $event_id );
 		}
@@ -357,7 +368,7 @@ class LNKup_Operations_REST {
 	}
 
 	public static function event_defaults( WP_REST_Request $request ) {
-		$event_id = absint( $request['id'] );
+		$event_id = self::route_id( $request );
 		if ( ! LNKup_Capabilities::organizer_owns_event( $event_id ) && ! LNKup_Capabilities::user_has_manage_all() ) {
 			return new WP_Error( 'forbidden', __( 'Permission denied.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 		}
@@ -365,22 +376,22 @@ class LNKup_Operations_REST {
 	}
 
 	public static function get_lifecycle( WP_REST_Request $request ) {
-		return rest_ensure_response( LNKup_Event_Lifecycle::get( absint( $request['id'] ) ) );
+		return rest_ensure_response( LNKup_Event_Lifecycle::get( self::route_id( $request ) ) );
 	}
 
 	public static function set_lifecycle( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
-		LNKup_Event_Lifecycle::set_stage( absint( $request['id'] ), $body['stage'] ?? '' );
-		return rest_ensure_response( LNKup_Event_Lifecycle::get( absint( $request['id'] ) ) );
+		LNKup_Event_Lifecycle::set_stage( self::route_id( $request ), $body['stage'] ?? '' );
+		return rest_ensure_response( LNKup_Event_Lifecycle::get( self::route_id( $request ) ) );
 	}
 
 	public static function event_vendors( WP_REST_Request $request ) {
-		return rest_ensure_response( array( 'columns' => LNKup_Event_Operations::vendors_for_kanban( absint( $request['id'] ) ) ) );
+		return rest_ensure_response( array( 'columns' => LNKup_Event_Operations::vendors_for_kanban( self::route_id( $request ) ) ) );
 	}
 
 	public static function set_vendor_status( WP_REST_Request $request ) {
 		$body     = $request->get_json_params() ?: $request->get_params();
-		$event_id = absint( $request['id'] );
+		$event_id = self::route_id( $request );
 		$app_id   = absint( $request['app_id'] );
 		$status   = sanitize_key( (string) ( $body['status'] ?? '' ) );
 		$map      = array(
@@ -422,11 +433,11 @@ class LNKup_Operations_REST {
 	}
 
 	public static function event_feed( WP_REST_Request $request ) {
-		return rest_ensure_response( array( 'items' => LNKup_Operations_Log::get_for_event( absint( $request['id'] ), 50 ) ) );
+		return rest_ensure_response( array( 'items' => LNKup_Operations_Log::get_for_event( self::route_id( $request ), 50 ) ) );
 	}
 
 	public static function event_compliance( WP_REST_Request $request ) {
-		$alerts = LNKup_Event_Operations::compliance_alerts( absint( $request['id'] ) );
+		$alerts = LNKup_Event_Operations::compliance_alerts( self::route_id( $request ) );
 		return rest_ensure_response(
 			array(
 				'alerts' => $alerts,
@@ -436,12 +447,12 @@ class LNKup_Operations_REST {
 	}
 
 	public static function get_booths( WP_REST_Request $request ) {
-		return rest_ensure_response( array( 'items' => LNKup_Booths::get_for_event( absint( $request['id'] ) ) ) );
+		return rest_ensure_response( array( 'items' => LNKup_Booths::get_for_event( self::route_id( $request ) ) ) );
 	}
 
 	public static function save_booth( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
-		$id = LNKup_Booths::save( absint( $request['id'] ), $body );
+		$id   = LNKup_Booths::save( self::route_id( $request ), $body );
 		if ( is_wp_error( $id ) ) {
 			return $id;
 		}
@@ -450,7 +461,7 @@ class LNKup_Operations_REST {
 
 	public static function assign_booth( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
-		$result = LNKup_Booths::assign( absint( $request['booth_id'] ), absint( $body['application_id'] ?? 0 ), absint( $request['id'] ) );
+		$result = LNKup_Booths::assign( absint( $request['booth_id'] ), absint( $body['application_id'] ?? 0 ), self::route_id( $request ) );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
@@ -458,7 +469,7 @@ class LNKup_Operations_REST {
 	}
 
 	public static function unassign_booth( WP_REST_Request $request ) {
-		$result = LNKup_Booths::unassign( absint( $request['booth_id'] ), absint( $request['id'] ) );
+		$result = LNKup_Booths::unassign( absint( $request['booth_id'] ), self::route_id( $request ) );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
@@ -467,7 +478,7 @@ class LNKup_Operations_REST {
 
 	public static function swap_booths( WP_REST_Request $request ) {
 		$body   = $request->get_json_params() ?: $request->get_params();
-		$result = LNKup_Booths::swap( absint( $body['booth_a'] ?? 0 ), absint( $body['booth_b'] ?? 0 ), absint( $request['id'] ) );
+		$result = LNKup_Booths::swap( absint( $body['booth_a'] ?? 0 ), absint( $body['booth_b'] ?? 0 ), self::route_id( $request ) );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
@@ -475,12 +486,12 @@ class LNKup_Operations_REST {
 	}
 
 	public static function get_parking( WP_REST_Request $request ) {
-		return rest_ensure_response( array( 'items' => LNKup_Parking::get_for_event( absint( $request['id'] ) ) ) );
+		return rest_ensure_response( array( 'items' => LNKup_Parking::get_for_event( self::route_id( $request ) ) ) );
 	}
 
 	public static function save_parking( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
-		$id = LNKup_Parking::save( absint( $request['id'] ), $body );
+		$id = LNKup_Parking::save( self::route_id( $request ), $body );
 		if ( is_wp_error( $id ) ) {
 			return $id;
 		}
@@ -488,29 +499,29 @@ class LNKup_Operations_REST {
 	}
 
 	public static function get_loadin( WP_REST_Request $request ) {
-		return rest_ensure_response( array( 'windows' => LNKup_Loadin_Schedule::get_windows( absint( $request['id'] ) ) ) );
+		return rest_ensure_response( array( 'windows' => LNKup_Loadin_Schedule::get_windows( self::route_id( $request ) ) ) );
 	}
 
 	public static function save_loadin( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
 		if ( ! empty( $body['assign'] ) ) {
-			$result = LNKup_Loadin_Schedule::assign( absint( $body['window_id'] ), absint( $body['application_id'] ), absint( $request['id'] ) );
+			$result = LNKup_Loadin_Schedule::assign( absint( $body['window_id'] ), absint( $body['application_id'] ), self::route_id( $request ) );
 			if ( is_wp_error( $result ) ) {
 				return $result;
 			}
 			return rest_ensure_response( array( 'success' => true ) );
 		}
-		$id = LNKup_Loadin_Schedule::create_window( absint( $request['id'] ), $body );
+		$id = LNKup_Loadin_Schedule::create_window( self::route_id( $request ), $body );
 		return rest_ensure_response( array( 'id' => $id ) );
 	}
 
 	public static function get_broadcasts( WP_REST_Request $request ) {
-		return rest_ensure_response( array( 'items' => LNKup_Broadcasts::get_for_event( absint( $request['id'] ) ) ) );
+		return rest_ensure_response( array( 'items' => LNKup_Broadcasts::get_for_event( self::route_id( $request ) ) ) );
 	}
 
 	public static function send_broadcast( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
-		$result = LNKup_Broadcasts::send( absint( $request['id'] ), get_current_user_id(), $body );
+		$result = LNKup_Broadcasts::send( self::route_id( $request ), get_current_user_id(), $body );
 		return rest_ensure_response( $result );
 	}
 
@@ -522,22 +533,22 @@ class LNKup_Operations_REST {
 		return rest_ensure_response(
 			array(
 				'audience'        => $audience,
-				'recipient_count' => count( LNKup_Broadcasts::resolve_audience( absint( $request['id'] ), $audience ) ),
+				'recipient_count' => count( LNKup_Broadcasts::resolve_audience( self::route_id( $request ), $audience ) ),
 			)
 		);
 	}
 
 	public static function get_staff( WP_REST_Request $request ) {
-		return rest_ensure_response( array( 'items' => LNKup_Event_Staff::get_for_event( absint( $request['id'] ) ) ) );
+		return rest_ensure_response( array( 'items' => LNKup_Event_Staff::get_for_event( self::route_id( $request ) ) ) );
 	}
 
 	public static function assign_staff( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
 		if ( ! empty( $body['remove'] ) ) {
-			LNKup_Event_Staff::remove( absint( $request['id'] ), absint( $body['user_id'] ) );
+			LNKup_Event_Staff::remove( self::route_id( $request ), absint( $body['user_id'] ) );
 			return rest_ensure_response( array( 'success' => true ) );
 		}
-		$id = LNKup_Event_Staff::assign( absint( $request['id'] ), absint( $body['user_id'] ), $body['staff_role'] ?? 'coordinator' );
+		$id = LNKup_Event_Staff::assign( self::route_id( $request ), absint( $body['user_id'] ), $body['staff_role'] ?? 'coordinator' );
 		if ( is_wp_error( $id ) ) {
 			return $id;
 		}
@@ -545,37 +556,37 @@ class LNKup_Operations_REST {
 	}
 
 	public static function event_analytics( WP_REST_Request $request ) {
-		return rest_ensure_response( LNKup_Ops_Analytics::for_event( absint( $request['id'] ) ) );
+		return rest_ensure_response( LNKup_Ops_Analytics::for_event( self::route_id( $request ) ) );
 	}
 
 	public static function get_incidents( WP_REST_Request $request ) {
-		return rest_ensure_response( array( 'items' => LNKup_Incidents::get_for_event( absint( $request['id'] ) ) ) );
+		return rest_ensure_response( array( 'items' => LNKup_Incidents::get_for_event( self::route_id( $request ) ) ) );
 	}
 
 	public static function create_incident( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
-		$id = LNKup_Incidents::create( absint( $request['id'] ), get_current_user_id(), $body );
+		$id = LNKup_Incidents::create( self::route_id( $request ), get_current_user_id(), $body );
 		return rest_ensure_response( array( 'id' => $id ) );
 	}
 
 	public static function update_incident( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
 		unset( $body['event_id'] );
-		LNKup_Incidents::update( absint( $request['id'] ), $body );
+		LNKup_Incidents::update( self::route_id( $request ), $body );
 		return rest_ensure_response( array( 'success' => true ) );
 	}
 
 	public static function app_readiness( WP_REST_Request $request ) {
-		return rest_ensure_response( LNKup_Vendor_Readiness::checklist( absint( $request['id'] ) ) );
+		return rest_ensure_response( LNKup_Vendor_Readiness::checklist( self::route_id( $request ) ) );
 	}
 
 	public static function app_packet( WP_REST_Request $request ) {
-		return rest_ensure_response( LNKup_Packets::get_dto( absint( $request['id'] ) ) );
+		return rest_ensure_response( LNKup_Packets::get_dto( self::route_id( $request ) ) );
 	}
 
 	public static function packet_engage( WP_REST_Request $request ) {
 		$body = $request->get_json_params() ?: $request->get_params();
-		$dto = LNKup_Packets::get_dto( absint( $request['id'] ) );
+		$dto = LNKup_Packets::get_dto( self::route_id( $request ) );
 		if ( empty( $dto['packet_id'] ) ) {
 			return new WP_Error( 'no_packet', __( 'Packet not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}
@@ -585,7 +596,7 @@ class LNKup_Operations_REST {
 
 	public static function app_checkin( WP_REST_Request $request ) {
 		$body   = $request->get_json_params() ?: $request->get_params();
-		$result = LNKup_Checkins::record( absint( $request['id'] ), $body['action'] ?? 'checked_in', sanitize_key( (string) ( $body['method'] ?? 'manual' ) ) );
+		$result = LNKup_Checkins::record( self::route_id( $request ), $body['action'] ?? 'checked_in', sanitize_key( (string) ( $body['method'] ?? 'manual' ) ) );
 		return LNKup_Checkins::rest_response( $result );
 	}
 
@@ -623,7 +634,7 @@ class LNKup_Operations_REST {
 
 	public static function update_support( WP_REST_Request $request ) {
 		$body   = $request->get_json_params() ?: $request->get_params();
-		$result = LNKup_Support_Requests::update( absint( $request['id'] ), $body );
+		$result = LNKup_Support_Requests::update( self::route_id( $request ), $body );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
@@ -631,7 +642,7 @@ class LNKup_Operations_REST {
 	}
 
 	public static function app_support( WP_REST_Request $request ) {
-		$app_id = absint( $request['id'] );
+		$app_id = self::route_id( $request );
 		return rest_ensure_response( array( 'items' => LNKup_Support_Requests::get_for_application( $app_id ) ) );
 	}
 

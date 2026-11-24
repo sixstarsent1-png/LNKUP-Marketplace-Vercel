@@ -6,8 +6,19 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
-**Plugin version:** 12.38.0 (lnkup-communications 1.4.0)  
+**Plugin version:** 12.39.0 (lnkup-communications 1.4.0)  
 **Theme version:** 1.7.0
+
+### Organizer Experience OS 2.1 polish (marketplace 12.39.0)
+
+Reference: [organizer-experience-v2/RESULTS.md](organizer-experience-v2/RESULTS.md#21-polish) (2.1 section).
+
+- **One workspace:** Operations, roster and check-in open inside the event workspace header and tabs; single-row top bar; Operations uses one tab row plus More.
+- **One number per fact:** the event Money tab reads the same source as Overview (gross collected, outstanding) and lists approved, unpaid vendors.
+- **Copy and formatting:** no Stripe wording on Money; relative local times (`LNKupOS.formatDate` / `relativeTime`) instead of raw timestamps; sentence-case labels; styled selects, dates and file inputs.
+- **Screens:** Events (thumbnails, one status, pagination), Applications (title, avatars, scrolling filters), Overview (funnel and readiness checklist), Money (no duplicate cards), roster as one readiness table, two-column check-in, Vendors, Tours, Intelligence (grouped recommendations), Team (status rows, drawers, activity table), Profile (live preview), Get started (collapsed finished steps), Help, Lists.
+- **Fixes:** `lnkup/v1/operations/*` now authorizes and writes against the route's `{id}` even when the JSON body sends an `id` (editing a booth returned 404); the event Money tab no longer counts orphaned pending checkouts ($594.42 vs $90.00 on the seed event).
+- **Tests:** `organizer-os.spec.ts` 31 (30 passed, 1 data-dependent skip), plus updated organizer, weather and vendor-dashboard specs.
 
 ### Organizer Experience OS 2.0 (marketplace 12.38.0)
 

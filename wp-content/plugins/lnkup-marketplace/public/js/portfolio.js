@@ -314,10 +314,18 @@
     ]);
   }
 
+  /** Two-letter initials for cover art when a tour has no image. */
+  function initialsOf(title) {
+    var words = String(title || '').replace(/[^\p{L}\p{N}\s]/gu, '').trim().split(/\s+/).filter(Boolean);
+    return ((words[0] || '').charAt(0) + (words[1] || '').charAt(0)).toUpperCase() || 'T';
+  }
+
   function tourCard(t) {
     var counts = t.counts || {};
     return h('article', { className: 'lnkup-portfolio__card', 'data-tour-id': t.id }, [
-      t.cover_url ? h('img', { src: t.cover_url, alt: '', className: 'lnkup-portfolio__cover', loading: 'lazy' }) : h('div', { className: 'lnkup-portfolio__cover lnkup-portfolio__cover--blank', 'aria-hidden': 'true' }),
+      t.cover_url
+        ? h('img', { src: t.cover_url, alt: '', className: 'lnkup-portfolio__cover', loading: 'lazy' })
+        : h('div', { className: 'lnkup-portfolio__cover lnkup-portfolio__cover--blank', 'aria-hidden': 'true' }, h('span', { text: initialsOf(t.title) })),
       h('div', { className: 'lnkup-portfolio__card-body' }, [
         h('p', { className: 'lnkup-portfolio__eyebrow', text: (TYPE_LABELS[t.type] || 'Tour') + (t.season ? ' · ' + t.season : '') + (t.brand ? ' · ' + t.brand.name : '') }),
         h('h3', {}, h('a', { href: cfg.viewUrl + '&tour=' + t.id, onclick: function (e) { e.preventDefault(); go({ tour: t.id }); }, text: t.title })),
@@ -338,7 +346,10 @@
     ]);
     var items = (overview && overview.templates) || [];
     if (!items.length) {
-      list.appendChild(h('li', { className: 'lnkup-empty-state', text: 'No templates yet.' }));
+      list.appendChild(h('li', { className: 'lnkup-portfolio__empty', 'data-testid': 'lnkup-portfolio-templates-empty' }, [
+        h('strong', { text: 'No templates yet' }),
+        h('span', { className: 'lnkup-muted', text: 'Open a tour, go to Settings and choose Save as template to reuse its booth types, prices and questions.' })
+      ]));
     }
     items.forEach(function (tpl) {
       list.appendChild(h('li', {}, [

@@ -453,7 +453,9 @@ class LNKup_Vendor_CRM_Profile {
 							<?php echo esc_html( $profile['business_name'] ); ?>
 						<?php endif; ?>
 					</h3>
-					<p class="lnkup-muted"><?php echo esc_html( $location ? $location : __( 'Location not listed.', 'lnkup-marketplace' ) ); ?></p>
+					<?php if ( $location ) : ?>
+						<p class="lnkup-muted"><?php echo esc_html( $location ); ?></p>
+					<?php endif; ?>
 				</div>
 			</div>
 			<?php
@@ -467,8 +469,22 @@ class LNKup_Vendor_CRM_Profile {
 				</ul>
 			<?php elseif ( $sell ) : ?>
 				<p class="lnkup-muted"><?php echo esc_html( wp_trim_words( $sell, 12, '…' ) ); ?></p>
-			<?php else : ?>
-				<p class="lnkup-muted"><?php esc_html_e( 'Category not listed.', 'lnkup-marketplace' ); ?></p>
+			<?php endif; ?>
+			<?php
+			$missing = array_filter(
+				array(
+					$location ? '' : __( 'location', 'lnkup-marketplace' ),
+					$categories || $sell ? '' : __( 'category', 'lnkup-marketplace' ),
+				)
+			);
+			?>
+			<?php if ( $missing ) : ?>
+				<p class="lnkup-vendor-card__missing lnkup-muted">
+					<?php
+					/* translators: %s: missing profile fields, e.g. "location and category" */
+					echo esc_html( sprintf( __( 'Profile incomplete: no %s yet', 'lnkup-marketplace' ), implode( __( ' or ', 'lnkup-marketplace' ), $missing ) ) );
+					?>
+				</p>
 			<?php endif; ?>
 			<?php if ( $completed_events > 0 ) : ?>
 				<p class="lnkup-muted"><?php echo esc_html( sprintf( _n( '%d event', '%d events', $completed_events, 'lnkup-marketplace' ), $completed_events ) ); ?></p>

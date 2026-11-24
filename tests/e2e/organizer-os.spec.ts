@@ -93,10 +93,10 @@ test.describe('Organizer Experience OS 2.0', () => {
 
       await page.goto(`${dashboard}?view=events&publication=draft`);
       const count = page.getByTestId('lnkup-events-count');
-      await expect(count).toHaveText(/Showing \d+ of \d+ events/);
-      const shown = Number((await count.innerText()).match(/Showing (\d+)/)?.[1] ?? -1);
+      await expect(count).toHaveText(/Showing \d+–\d+ of \d+ events/);
+      const matching = Number((await count.innerText()).match(/of (\d+) events/)?.[1] ?? -1);
       const drafts = (await portfolio(session)).filter((e) => (e as unknown as { publication: string }).publication === 'draft');
-      expect(shown).toBe(drafts.length);
+      expect(matching).toBe(drafts.length);
 
       await page.goto(`${dashboard}?view=events`);
       await page.getByRole('button', { name: /^grid$/i }).click();
@@ -160,8 +160,7 @@ test.describe('Organizer Experience OS 2.0', () => {
 
     test('Map Builder starts with explicit choices when no map exists', async ({ page }) => {
       await page.goto(`${dashboard}?event=${workspaceEventId}&ops=1`);
-      await page.getByRole('navigation', { name: 'Operations sections' }).getByRole('button', { name: 'Maps' }).click();
-      await page.getByRole('tab', { name: 'Map Builder' }).click();
+      await page.getByRole('tablist', { name: 'Operations sections' }).getByRole('tab', { name: 'Map Builder' }).click();
       const start = page.getByTestId('lnkup-map-start');
       const editor = page.locator('#lnkup-ops-map-builder-panel canvas, #lnkup-ops-map-builder-panel svg').first();
       await expect(start.or(editor)).toBeVisible();
@@ -217,7 +216,65 @@ test.describe('Organizer Experience OS 2.0', () => {
       await expect(page.locator('.lnkup-dashboard__nav-link.is-active[data-view="settings"]')).toHaveCount(1);
     });
 
-    for (const route of [`${dashboard}`, `${dashboard}?view=events`, `${dashboard}?view=settings`]) {
+    test('Events paginate at 25 per page', async ({ page }) => {
+      const total = (await portfolio(session)).length;
+      test.skip(total <= 25, 'Fewer than 26 events');
+      await page.goto(`${dashboard}?view=events`);
+      await expect(page.getByTestId('lnkup-events-count')).toHaveText(new RegExp(`Showing 1–25 of ${total} events`));
+      await page.getByTestId('lnkup-events-pagination').getByRole('link', { name: '2' }).click();
+      await expect(page.getByTestId('lnkup-events-count')).toHaveText(new RegExp(`Showing 26–${Math.min(50, total)} of ${total} events`));
+    });
+
+    test('Operations, roster and check-in open inside the event workspace', async ({ page }) => {
+      for (const [query, tab] of [['ops=1', 'Operations'], ['roster=1', 'Confirmed vendors'], ['scan=1', 'Check-in']] as const) {
+        await page.goto(`${dashboard}?event=${workspaceEventId}&${query}`);
+        const tabs = page.getByTestId('lnkup-event-workspace-tabs');
+        await expect(tabs, query).toBeVisible();
+        await expect(tabs.getByRole('link', { name: new RegExp(`^${tab}`) })).toHaveAttribute('aria-current', 'page');
+        await expect(page.getByText('← Back to event')).toHaveCount(0);
+      }
+    });
+
+    test('Event Money outstanding matches the Overview', async ({ page }) => {
+      await page.goto(`${dashboard}?event=${workspaceEventId}`);
+      const overviewMoney = page.getByTestId('lnkup-event-money');
+      const overviewOutstanding = (await overviewMoney.locator('dt', { hasText: 'Outstanding' }).locator('xpath=following-sibling::dd[1]').innerText()).trim();
+      await page.goto(`${dashboard}?event=${workspaceEventId}&tab=money`);
+      const moneyOutstanding = page.getByTestId('lnkup-event-financials').locator('.vos-metric', { hasText: 'Outstanding' }).locator('.vos-metric__value');
+      await expect(moneyOutstanding).toHaveText(overviewOutstanding);
+      await expect(page.getByTestId('lnkup-event-unpaid')).toBeVisible();
+    });
+
+    test('Applications page is titled to match the navigation', async ({ page }) => {
+      await page.goto(`${dashboard}?view=applications`);
+      await expect(page.getByRole('heading', { level: 1, name: 'Applications' })).toBeVisible();
+    });
+
+    test('Team verification forms open in drawers', async ({ page }) => {
+      await page.goto(`${dashboard}?view=team`);
+      await expect(page.locator('.oos-verify-rows')).toBeVisible({ timeout: 15_000 });
+      const verify = page.getByTestId('lnkup-team-verify-domain');
+      test.skip(!(await verify.isVisible()), 'Domain already verified');
+      await verify.click();
+      const drawer = page.getByTestId('lnkup-team-domain-drawer');
+      await expect(drawer).toBeVisible();
+      await expect(drawer.getByLabel('Domain', { exact: true })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(drawer).toBeHidden();
+    });
+
+    for (const route of ['', '?view=events', '?view=financial', '?view=team', '?view=invites', `?event=${workspaceEventId}&ops=1`]) {
+      test(`no Stripe jargon, raw timestamps or leaked source on ${route || 'Home'}`, async ({ page }) => {
+        await page.goto(`${dashboard}${route}`);
+        await page.waitForLoadState('networkidle');
+        const text = await page.locator('.lnkup-dashboard__main').innerText();
+        expect(text).not.toMatch(/\bStripe\b/);
+        expect(text).not.toMatch(/\b\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
+        expect(text).not.toMatch(/ob_get_clean|esc_html|<\?php/);
+      });
+    }
+
+    for (const route of [`${dashboard}`, `${dashboard}?view=events`, `${dashboard}?view=settings`, `${dashboard}?event=${workspaceEventId}&ops=1`, `${dashboard}?view=team`]) {
       test(`axe finds no serious or critical issues on ${route}`, async ({ page }) => {
         await page.goto(route);
         const results = await new AxeBuilder({ page }).include('.lnkup-dashboard__main, main').analyze();

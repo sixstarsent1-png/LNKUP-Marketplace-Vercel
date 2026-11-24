@@ -24,6 +24,16 @@ async function startRest(page: Page, method: string, path: string, body?: unknow
   );
 }
 
+/**
+ * Finished steps start collapsed; open them so their content can be checked.
+ */
+async function expandFinishedSteps(page: Page) {
+  const show = page.getByTestId('lnkup-organizer-start').getByRole('button', { name: 'Show', exact: true });
+  while ((await show.count()) > 0) {
+    await show.first().click();
+  }
+}
+
 test.describe('Organizer Get started', () => {
   test.describe.configure({ mode: 'serial', timeout: 120_000 });
 
@@ -47,6 +57,7 @@ test.describe('Organizer Get started', () => {
 
   test('organization step saves through the profile API', async ({ page }) => {
     await page.goto(START_URL);
+    await expandFinishedSteps(page);
     const form = page.getByTestId('lnkup-start-profile');
     const nameInput = form.getByLabel('Organization name');
     const cityInput = form.getByLabel('City');
@@ -88,15 +99,17 @@ test.describe('Organizer Get started', () => {
       expect(published.json.application_url).toContain('apply=');
       await page.reload();
     }
+    await expandFinishedSteps(page);
     const share = page.getByTestId('lnkup-start-share');
     await expect(share).toBeVisible();
     await expect(share.getByLabel('Your vendor apply link')).toHaveValue(/[?&]apply=\d+/);
     await expect(share.getByRole('link', { name: 'Get an Apply button for your website' })).toHaveAttribute('href', /view=marketing|tab=marketing/);
-    await expect(share.getByRole('button', { name: 'Copy link' })).toBeVisible();
+    await expect(share.getByRole('button', { name: 'Copy link' }).first()).toBeVisible();
   });
 
   test('saved setups panel loads for the organizer', async ({ page }) => {
     await page.goto(START_URL);
+    await expandFinishedSteps(page);
     const setups = page.getByTestId('lnkup-start-setups');
     await expect(setups.getByRole('heading', { name: 'Saved event setups' })).toBeVisible();
   });

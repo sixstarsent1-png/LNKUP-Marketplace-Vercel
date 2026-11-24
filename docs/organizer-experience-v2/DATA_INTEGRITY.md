@@ -79,6 +79,15 @@ Wraps `LNKup_Financial_Service::organizer_money_contract()` — the same contrac
 
 **After 2.0:** Home uses `financial_summary()` → the same `collected` metric as Money, labeled "Collected after LNKup fees · all time". Event-scope and portfolio tables show "Gross booth fees", labeled as such.
 
+### Event Outstanding ($594.42 vs $90.00, fixed in 2.1)
+
+On event 968 the workspace Overview showed Outstanding $90.00, but the event Money tab showed $594.42.
+
+- **Overview** used `LNKup_Organizer_Presentation::event_money()['outstanding']`: the booth fee of each application that is `approved` or `payment_required` right now. That is one application (1756) at $90.00.
+- **Money tab** used `LNKup_Financial_Reports::for_event()['pending_revenue']`. That is the sum of `payment` ledger rows with status `pending`. There were six such rows of $99.07: the checkout amount including fees, not the booth fee. Five of them belong to applications that no longer exist (seed data that was deleted and recreated), so their pending checkouts were never closed.
+
+**Fix:** the event Money tab now reads `event_money()`, the same source as Overview: "Collected (gross)", "Outstanding", "Paid vendors". It also lists the approved, unpaid applications behind the Outstanding figure. `for_event()` is still used for refunds. The orphaned ledger rows are left in place (no deletion of records). They no longer reach any organizer figure.
+
 ## Readiness denominators (Operations)
 
 | Metric | Numerator | Denominator |

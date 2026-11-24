@@ -38,7 +38,7 @@ class LNKup_Knowledge_Base {
 		$role     = sanitize_key( $role );
 		$articles = self::articles_for_role( $role );
 		$faq_url  = self::faq_url();
-		$support  = self::support_email();
+		$support  = self::support_email( $role );
 		$checklist_url = self::checklist_reset_target( $role );
 
 		ob_start();
@@ -188,12 +188,13 @@ class LNKup_Knowledge_Base {
 	/**
 	 * @return string
 	 */
-	private static function support_email(): string {
+	private static function support_email( string $role = '' ): string {
 		$settings = get_option( 'lnkup_settings', array() );
-		$email    = is_array( $settings ) && ! empty( $settings['support_email'] )
-			? (string) $settings['support_email']
-			: (string) get_option( 'admin_email' );
-		return sanitize_email( $email );
+		if ( is_array( $settings ) && ! empty( $settings['support_email'] ) ) {
+			return sanitize_email( (string) $settings['support_email'] );
+		}
+		// Organizers only see a contact LNKup configured; the WordPress admin address is often a placeholder.
+		return 'organizer' === $role ? '' : sanitize_email( (string) get_option( 'admin_email' ) );
 	}
 
 	/**

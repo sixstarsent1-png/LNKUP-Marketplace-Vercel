@@ -4,6 +4,7 @@ const organizerUser = process.env.PLAYWRIGHT_ORGANIZER_USER;
 const organizerPass = process.env.PLAYWRIGHT_ORGANIZER_PASS;
 const vendorUser = process.env.PLAYWRIGHT_VENDOR_USER;
 const vendorPass = process.env.PLAYWRIGHT_VENDOR_PASS;
+const opsEventId = process.env.PLAYWRIGHT_OPS_EVENT_ID;
 
 /**
  * Log into WordPress with organizer credentials.
@@ -48,40 +49,28 @@ test.describe('Vendor Operations', () => {
     });
 
     test('command center shell loads when event exists', async ({ page }) => {
-      await page.goto('/organizer-dashboard/#events');
-      const opsBtn = page.getByRole('link', { name: /^operations$/i }).first();
-      if (!(await opsBtn.count())) {
-        test.skip(true, 'No events with operations link');
-        return;
-      }
-      await opsBtn.click();
+      test.skip(!opsEventId, 'Run scripts/e2e/seed.php');
+      await page.goto(`/organizer-dashboard/?event=${opsEventId}&ops=1`);
       await expect(page.locator('#lnkup-event-ops')).toBeVisible({ timeout: 15000 });
       await expect(page.locator('.lnkup-ops-kpis')).toBeVisible();
       await expect(page.locator('.lnkup-ops-tabs')).toBeVisible();
-      await expect(page.getByRole('button', { name: /roster \/ kanban/i })).toBeVisible();
+      await expect(page.getByRole('tab', { name: /roster \/ kanban/i })).toBeVisible();
     });
 
     test('command center kanban tab switches panels', async ({ page }) => {
-      await page.goto('/organizer-dashboard/#events');
-      const opsBtn = page.getByRole('link', { name: /^operations$/i }).first();
-      if (!(await opsBtn.count())) {
-        test.skip(true, 'No events with operations link');
-        return;
-      }
-      await opsBtn.click();
+      test.skip(!opsEventId, 'Run scripts/e2e/seed.php');
+      await page.goto(`/organizer-dashboard/?event=${opsEventId}&ops=1`);
       await expect(page.locator('#lnkup-event-ops')).toBeVisible({ timeout: 15000 });
-      await page.getByRole('button', { name: /roster \/ kanban/i }).click();
+      await page.getByRole('tab', { name: /roster \/ kanban/i }).click();
       await expect(page.locator('#lnkup-ops-kanban-wrap')).toBeVisible();
       await expect(page.locator('.lnkup-ops-kanban')).toBeVisible();
     });
 
-    test('CRM widgets include operations metrics', async ({ page }) => {
+    test('Home quick actions link to operations', async ({ page }) => {
       await page.goto('/organizer-dashboard/');
-      await expect(page.locator('#lnkup-crm-widgets-grid')).toBeVisible({ timeout: 15000 });
-      const opsWidget = page.locator('.lnkup-crm-widget--ops').first();
-      if (await opsWidget.count()) {
-        await expect(opsWidget).toBeVisible();
-      }
+      const actions = page.getByTestId('lnkup-organizer-quick-actions');
+      await expect(actions).toBeVisible({ timeout: 15000 });
+      await expect(actions.getByRole('link', { name: /operations/i }).first()).toHaveAttribute('href', /ops=1|view=operations/);
     });
 
     test('command center mobile sticky bar visible at narrow viewport', async ({ page }) => {

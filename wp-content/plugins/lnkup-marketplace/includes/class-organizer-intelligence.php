@@ -137,7 +137,9 @@ class LNKup_Organizer_Intelligence {
 		}
 		foreach ( array_slice( $events, 0, 10 ) as $event_id ) {
 			foreach ( LNKup_Recommended_Actions::for_event( $event_id, $organizer_id ) as $action ) {
-				$all[] = $action;
+				$action['event_id']    = (int) $event_id;
+				$action['event_title'] = class_exists( 'LNKup_Organizer_Presentation' ) ? LNKup_Organizer_Presentation::title( (int) $event_id ) : lnkup_plain_title( (int) $event_id );
+				$all[]                 = $action;
 			}
 		}
 		usort(

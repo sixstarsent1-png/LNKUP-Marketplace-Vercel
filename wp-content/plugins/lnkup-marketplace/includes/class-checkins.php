@@ -16,12 +16,12 @@ class LNKup_Checkins {
 	 */
 	public static function actions() {
 		return array(
-			'checked_in'     => __( 'Checked In', 'lnkup-marketplace' ),
-			'setup_started'  => __( 'Setup Started', 'lnkup-marketplace' ),
-			'setup_complete' => __( 'Setup Complete', 'lnkup-marketplace' ),
-			'checked_out'    => __( 'Checked Out', 'lnkup-marketplace' ),
-			'late_arrival'   => __( 'Late Arrival', 'lnkup-marketplace' ),
-			'no_show'        => __( 'No Show', 'lnkup-marketplace' ),
+			'checked_in'     => __( 'Checked in', 'lnkup-marketplace' ),
+			'setup_started'  => __( 'Setup started', 'lnkup-marketplace' ),
+			'setup_complete' => __( 'Setup complete', 'lnkup-marketplace' ),
+			'checked_out'    => __( 'Checked out', 'lnkup-marketplace' ),
+			'late_arrival'   => __( 'Late arrival', 'lnkup-marketplace' ),
+			'no_show'        => __( 'No-show', 'lnkup-marketplace' ),
 		);
 	}
 

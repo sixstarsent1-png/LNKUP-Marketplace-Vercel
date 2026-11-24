@@ -24,8 +24,9 @@ test.describe('Organizer Financial Center', () => {
 
   test('overview never shows payment-provider jargon', async ({ page }) => {
     await page.goto(FINANCIAL_URL);
-    await expect(page.getByTestId('lnkup-fin-money-categories')).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('#lnkup-fin-org-overview')).not.toContainText(/stripe connect active|settlement: destination|syncing with stripe/i);
+    await expect(page.getByTestId('lnkup-money-flow')).toBeVisible();
+    await expect(page.getByTestId('lnkup-fin-net-line')).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('#lnkup-organizer-financial')).not.toContainText(/stripe|settlement: destination/i);
   });
 
   test('financial dashboard REST returns JSON with categories', async ({ page }) => {

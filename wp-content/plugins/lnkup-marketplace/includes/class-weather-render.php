@@ -20,7 +20,7 @@ class LNKup_Weather_Render {
 		if ( empty( $summary['has_event'] ) ) {
 			?>
 			<div class="lnkup-weather-card lnkup-weather-card--empty" data-testid="lnkup-weather-readiness-card">
-				<h3 class="lnkup-weather-card__title"><?php esc_html_e( 'Weather Readiness', 'lnkup-marketplace' ); ?></h3>
+				<h3 class="lnkup-weather-card__title"><?php esc_html_e( 'Weather', 'lnkup-marketplace' ); ?></h3>
 				<p class="lnkup-muted"><?php echo esc_html( $summary['message'] ?? __( 'Weather intelligence will appear for upcoming events.', 'lnkup-marketplace' ) ); ?></p>
 			</div>
 			<?php
@@ -146,7 +146,7 @@ class LNKup_Weather_Render {
 			ob_start();
 			?>
 			<div class="lnkup-weather-card lnkup-weather-card--<?php echo esc_attr( $status ); ?>" data-testid="<?php echo esc_attr( $test_id ); ?>" data-event-id="<?php echo esc_attr( (string) $event_id ); ?>">
-				<h3 class="lnkup-weather-card__title"><?php esc_html_e( 'Weather Readiness', 'lnkup-marketplace' ); ?></h3>
+				<h3 class="lnkup-weather-card__title"><?php esc_html_e( 'Weather', 'lnkup-marketplace' ); ?></h3>
 				<p class="lnkup-alert lnkup-alert--info"><?php echo esc_html( $dto['message'] ?? __( 'Weather intelligence unavailable.', 'lnkup-marketplace' ) ); ?></p>
 				<?php if ( $event_id && 'unconfigured' !== $status ) : ?>
 					<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline lnkup-weather-refresh" data-event-id="<?php echo esc_attr( (string) $event_id ); ?>"><?php esc_html_e( 'Retry', 'lnkup-marketplace' ); ?></button>
@@ -161,7 +161,7 @@ class LNKup_Weather_Render {
 		?>
 		<div class="lnkup-weather-card lnkup-weather-card--<?php echo esc_attr( $variant ); ?><?php echo ! empty( $dto['stale'] ) ? ' is-stale' : ''; ?>" data-testid="<?php echo esc_attr( $test_id ); ?>" data-event-id="<?php echo esc_attr( (string) $event_id ); ?>">
 			<div class="lnkup-weather-card__head">
-				<h3 class="lnkup-weather-card__title"><?php esc_html_e( 'Weather Readiness', 'lnkup-marketplace' ); ?></h3>
+				<h3 class="lnkup-weather-card__title"><?php esc_html_e( 'Weather', 'lnkup-marketplace' ); ?></h3>
 				<?php if ( $icon ) : ?>
 					<img class="lnkup-weather-card__icon" src="<?php echo esc_url( 'https://openweathermap.org/img/wn/' . rawurlencode( $icon ) . '@2x.png' ); ?>" alt="" width="48" height="48" loading="lazy" />
 				<?php endif; ?>
