@@ -6,8 +6,18 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
-**Plugin version:** 12.39.0 (lnkup-communications 1.4.0)  
+**Plugin version:** 12.40.0 (lnkup-communications 1.4.0)  
 **Theme version:** 1.7.0
+
+### Event Creation OS 3.0 (marketplace 12.40.0)
+
+Reference: [event-creation-os-v3/](event-creation-os-v3/) (`DEPLOYMENT_CHECKLIST.md`, `ROLLBACK.md`). Flags in `LNKup_Event_OS_Flags` — all **off** by default.
+
+- **Builder:** drafts, autosave, validation, live preview, publish checklist; `?classic=1` keeps legacy create/edit.
+- **Import:** SSRF-safe fetch, single/bulk URL + CSV/ICS jobs, review before publish, Eventbrite OAuth credential-gated.
+- **Portfolio:** recurring, tour/series stops, templates, Duplication 2.0, edit + external source sync with organizer-edit protection.
+- **Surfaces:** Imports Center, wp-admin Event Imports, public Official listing + attribution; mobile create/import on builder API.
+- **Deploy:** SiteGround via `scripts/deploy-siteground.ps1` or `dist/lnkup-marketplace.zip`; enable flags only after smoke with all off.
 
 ### Organizer Experience OS 2.1 polish (marketplace 12.39.0)
 
