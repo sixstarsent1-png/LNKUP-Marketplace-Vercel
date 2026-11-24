@@ -28,8 +28,8 @@ add_action(
 	'wp_enqueue_scripts',
 	function () {
 		$font = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700&display=swap';
-		if ( lnkup_theme_is_dashboard_page() ) {
-			$font = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700&display=swap';
+		if ( function_exists( 'lnkup_public_is_public_page' ) && lnkup_public_is_public_page() ) {
+			$font = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@700&display=swap';
 		}
 		wp_enqueue_style(
 			'lnkup-fonts',
@@ -70,7 +70,8 @@ add_action(
 			);
 		}
 
-		if ( is_front_page() || is_page_template( 'page-templates/sign-up.php' ) || is_page_template( 'page-templates/connector-interest.php' ) || get_query_var( 'lnkup_market_slug' ) ) {
+		$front_needs_launch_js = is_front_page() && ! lnkup_theme_marketplace_open();
+		if ( $front_needs_launch_js || is_page_template( 'page-templates/sign-up.php' ) || is_page_template( 'page-templates/connector-interest.php' ) || get_query_var( 'lnkup_market_slug' ) ) {
 			wp_enqueue_script(
 				'lnkup-landing',
 				LNKUP_THEME_URI . '/assets/js/landing.js',

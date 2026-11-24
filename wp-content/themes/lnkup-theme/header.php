@@ -9,7 +9,7 @@
 		var ua = navigator.userAgent || '';
 		var iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 		var android = /Android/i.test(ua);
-		document.documentElement.classList.add(iOS ? 'lnkup-ios' : (android ? 'lnkup-android' : 'lnkup-desktop'));
+		document.documentElement.classList.add(iOS ? 'lnkup-ios' : (android ? 'lnkup-android' : 'lnkup-desktop'), 'lp-js');
 	})();
 	</script>
 	<?php wp_head(); ?>

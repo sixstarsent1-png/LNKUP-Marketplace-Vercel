@@ -38,6 +38,8 @@ add_filter(
 		$templates['page-templates/vendor-shell.php']            = __( 'Vendor Shell', 'lnkup-theme' );
 		$templates['page-templates/market-landing.php']          = __( 'City Market Landing', 'lnkup-theme' );
 		$templates['page-templates/public-storefront.php']       = __( 'Public Storefront', 'lnkup-theme' );
+		$templates['page-templates/landing-organizers.php']      = __( 'Landing: Organizers', 'lnkup-theme' );
+		$templates['page-templates/landing-vendors.php']         = __( 'Landing: Vendors', 'lnkup-theme' );
 		return $templates;
 	}
 );

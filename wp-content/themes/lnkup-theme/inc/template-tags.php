@@ -192,7 +192,15 @@ function lnkup_theme_public_browse_page() {
 }
 
 /**
- * First-visit iPhone sheet. Skips sign-up, login, dashboards, and checkout.
+ * /for-organizers/ and /for-vendors/ (and their campaign variants): ad and partner traffic lands
+ * here, so app prompts stay out of the way of the sign-up call to action.
+ */
+function lnkup_theme_is_acquisition_landing() {
+	return is_page_template( array( 'page-templates/landing-organizers.php', 'page-templates/landing-vendors.php' ) );
+}
+
+/**
+ * First-visit iPhone sheet. Skips sign-up, login, acquisition landings, dashboards, and checkout.
  */
 function lnkup_theme_show_app_download_sheet() {
 	if ( ! lnkup_theme_show_app_download() ) {
@@ -202,6 +210,9 @@ function lnkup_theme_show_app_download_sheet() {
 		return false;
 	}
 	if ( is_page_template( 'page-templates/sign-up.php' ) || is_page( array( 'sign-up', 'login', 'log-in' ) ) ) {
+		return false;
+	}
+	if ( lnkup_theme_is_acquisition_landing() ) {
 		return false;
 	}
 	if ( is_singular( 'lnkup_event' ) ) {
@@ -378,36 +389,6 @@ function lnkup_landing_trust_stats() {
 	$marketplace_open = lnkup_theme_marketplace_open();
 	$launch_label     = lnkup_theme_launch_label();
 	$goals            = lnkup_theme_launch_goals();
-	$use_custom       = (bool) lnkup_landing_get( 'use_custom_stats', 0 );
-	$custom           = lnkup_landing_get( 'stats', array() );
-
-	if ( $use_custom && is_array( $custom ) ) {
-		$out = array();
-		foreach ( array_slice( $custom, 0, 4 ) as $i => $row ) {
-			$value      = trim( (string) ( $row['value'] ?? '' ) );
-			$sub        = trim( (string) ( $row['sub'] ?? '' ) );
-			$from_goal  = false;
-			if ( '' === $value ) {
-				if ( 0 === $i ) {
-					$value     = lnkup_theme_format_goal_number( $goals['vendors'] );
-					$from_goal = true;
-				} elseif ( 1 === $i ) {
-					$value     = lnkup_theme_format_goal_number( $goals['organizers'] );
-					$from_goal = true;
-				}
-			}
-			if ( $from_goal && '' === $sub && $launch_label ) {
-				$sub = sprintf( __( 'By %s', 'lnkup-theme' ), $launch_label );
-			}
-			$out[] = array(
-				'value' => $value,
-				'label' => (string) ( $row['label'] ?? '' ),
-				'sub'   => $sub,
-				'badge' => $from_goal ? __( 'Goal', 'lnkup-theme' ) : '',
-			);
-		}
-		return $out;
-	}
 
 	if ( ! $marketplace_open ) {
 		return array(
@@ -626,17 +607,18 @@ function lnkup_theme_nav_href( $hash ) {
 }
 
 /**
- * Editorial section kicker: lime rule, eyebrow, mono index.
+ * Editorial section kicker: lime rule and eyebrow. The index argument is kept for older callers;
+ * numbered labels ("01 / VENDORS") are no longer printed.
  *
- * @param string $index Index label such as "01 / VENDORS".
+ * @param string $index Unused.
  * @param string $label Eyebrow text.
  */
 function lnkup_theme_section_kicker( $index, $label ) {
+	unset( $index );
 	?>
 	<div class="lnkup-section__kicker">
 		<span class="lnkup-section__kicker-bar" aria-hidden="true"></span>
 		<p class="lnkup-eyebrow"><?php echo esc_html( $label ); ?></p>
-		<span class="lnkup-section__index"><?php echo esc_html( $index ); ?></span>
 	</div>
 	<?php
 }

@@ -2,11 +2,14 @@
   "name": "lnkup-theme",
   "private": true,
   "scripts": {
-    "build": "tailwindcss -i ./assets/src/main.css -o ./assets/dist/lnkup.css --minify",
+    "build": "tailwindcss -i ./assets/src/main.css -o ./assets/dist/lnkup.css --minify && npm run build:public",
+    "build:public": "tailwindcss -i ./assets/src/public.css -o ./assets/dist/public.css --minify",
+    "images": "node ./scripts/optimize-images.mjs",
     "watch": "tailwindcss -i ./assets/src/main.css -o ./assets/dist/lnkup.css --watch"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.2.0",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4.2.0"
   }
 }

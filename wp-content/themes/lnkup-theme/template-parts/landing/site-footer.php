@@ -1,62 +1,89 @@
 <?php
 /**
- * Site footer partial.
+ * Site footer 5.0. Only links to pages that exist; city links come from live listings.
  *
  * @package LNKup_Theme
  */
 
-$signup_url       = function_exists( 'lnkup_theme_signup_url' ) ? lnkup_theme_signup_url() : lnkup_theme_registration_url();
-$marketplace_open = lnkup_theme_marketplace_open();
-$launch_label     = lnkup_theme_launch_label();
-$footer_title     = (string) lnkup_landing_get( 'footer_title', '' );
-$footer_blurb     = (string) lnkup_landing_get( 'footer_blurb', '' );
-$footer_cta       = (string) lnkup_landing_get( 'footer_cta', __( 'Get started free', 'lnkup-theme' ) );
-$cta_label        = is_user_logged_in() ? __( 'Complete profile', 'lnkup-theme' ) : $footer_cta;
+$open      = lnkup_theme_marketplace_open();
+$feed      = lnkup_theme_opportunities_url();
+$discovery = lnkup_public_discovery();
+$cities    = array_slice( (array) ( $discovery['cities'] ?? array() ), 0, 5 );
+$tagline   = (string) lnkup_public_setting( 'footer_blurb', __( 'The vendor opportunity marketplace for live events. Organizers fill booths; vendors find their next event.', 'lnkup-theme' ) );
+$legal     = array(
+	array( 'label' => __( 'Privacy', 'lnkup-theme' ), 'url' => home_url( '/privacy/' ) ),
+	array( 'label' => __( 'Terms', 'lnkup-theme' ), 'url' => home_url( '/terms/' ) ),
+	array( 'label' => __( 'Contact', 'lnkup-theme' ), 'url' => home_url( '/contact/' ) ),
+);
+$columns   = array(
+	array(
+		'title' => __( 'Vendors', 'lnkup-theme' ),
+		'links' => array_filter(
+			array(
+				$open ? array( __( 'Find events', 'lnkup-theme' ), $feed ) : null,
+				array( __( 'Why LNKup for vendors', 'lnkup-theme' ), home_url( '/for-vendors/' ) ),
+				array( __( 'Vendor pricing', 'lnkup-theme' ), home_url( '/for-vendors/#pricing' ) ),
+				array( __( 'Create a vendor profile', 'lnkup-theme' ), lnkup_public_signup_url( 'vendor' ) ),
+			)
+		),
+	),
+	array(
+		'title' => __( 'Organizers', 'lnkup-theme' ),
+		'links' => array(
+			array( __( 'Why LNKup for organizers', 'lnkup-theme' ), home_url( '/for-organizers/' ) ),
+			array( __( 'Organizer pricing', 'lnkup-theme' ), home_url( '/for-organizers/#pricing' ) ),
+			array( __( 'Vendor directory', 'lnkup-theme' ), lnkup_page_url( 'vendors' ) ),
+			array( __( 'List your event', 'lnkup-theme' ), lnkup_public_signup_url( 'organizer' ) ),
+		),
+	),
+);
+if ( $open && $cities ) {
+	$city_links = array();
+	foreach ( $cities as $city ) {
+		$city_links[] = array( (string) $city['label'], (string) ( $city['market_url'] ? $city['market_url'] : $city['url'] ) );
+	}
+	$columns[] = array( 'title' => __( 'Cities', 'lnkup-theme' ), 'links' => $city_links );
+}
+$company = array(
+	array( __( 'Organizer directory', 'lnkup-theme' ), lnkup_page_url( 'organizers' ) ),
+	array( __( 'Log in', 'lnkup-theme' ), lnkup_theme_login_url() ),
+);
+if ( get_page_by_path( 'partners' ) ) {
+	$company[] = array( __( 'Partner program', 'lnkup-theme' ), lnkup_page_url( 'partners' ) );
+}
+$company[] = array( __( 'Contact', 'lnkup-theme' ), home_url( '/contact/' ) );
+$columns[] = array( 'title' => __( 'LNKup', 'lnkup-theme' ), 'links' => $company );
 ?>
-<footer class="lnkup-footer">
-	<div class="lnkup-container">
-		<div class="lnkup-footer__grid">
-			<div>
-				<h2 class="lnkup-heading lnkup-heading--footer"><?php echo esc_html( $footer_title ); ?></h2>
-				<p><?php echo esc_html( $footer_blurb ); ?></p>
-				<div class="lnkup-footer__actions">
-					<a href="<?php echo esc_url( is_user_logged_in() ? lnkup_page_url( 'vendor-profile' ) : $signup_url ); ?>" class="lnkup-btn lnkup-btn--accent lnkup-btn--lg"><?php echo esc_html( $cta_label ); ?></a>
+<footer class="lp-footer" data-testid="lp-footer">
+	<div class="lp-container">
+		<div class="lp-footer__top">
+			<div class="lp-footer__brand">
+				<a href="<?php echo esc_url( home_url( '/' ) ); ?>" aria-label="<?php esc_attr_e( 'LNKup home', 'lnkup-theme' ); ?>"><?php lnkup_logo(); ?></a>
+				<p class="lp-footer__tagline"><?php echo esc_html( $tagline ); ?></p>
+				<div class="lp-actions">
 					<?php lnkup_theme_app_store_badge( 'white', 'footer' ); ?>
 				</div>
 			</div>
-			<div class="lnkup-footer__cols">
-				<div>
-					<h3><?php esc_html_e( 'For vendors', 'lnkup-theme' ); ?></h3>
-					<ul>
-						<li><a href="<?php echo esc_url( $marketplace_open ? lnkup_page_url( 'opportunities' ) : $signup_url ); ?>"><?php echo $marketplace_open ? esc_html__( 'Find Events', 'lnkup-theme' ) : esc_html__( 'Sign up', 'lnkup-theme' ); ?></a></li>
-						<li><a href="<?php echo esc_url( $signup_url ); ?>"><?php esc_html_e( 'Create Account', 'lnkup-theme' ); ?></a></li>
-						<?php if ( ! is_user_logged_in() ) : ?>
-							<li><a href="<?php echo esc_url( function_exists( 'lnkup_theme_login_url' ) ? lnkup_theme_login_url() : wp_login_url() ); ?>"><?php esc_html_e( 'Log in', 'lnkup-theme' ); ?></a></li>
-						<?php endif; ?>
-						<li><a href="<?php echo esc_url( lnkup_page_url( 'vendor-dashboard' ) ); ?>"><?php esc_html_e( 'Applications', 'lnkup-theme' ); ?></a></li>
-					</ul>
-				</div>
-				<div>
-					<h3><?php esc_html_e( 'For organizers', 'lnkup-theme' ); ?></h3>
-					<ul>
-						<li><a href="<?php echo esc_url( lnkup_page_url( 'organizer-dashboard' ) ); ?>"><?php esc_html_e( 'Organizer Home', 'lnkup-theme' ); ?></a></li>
-						<li><a href="<?php echo esc_url( function_exists( 'lnkup_organizer_view_url' ) ? lnkup_organizer_view_url( 'create' ) : lnkup_page_url( 'organizer-dashboard' ) . '?view=create' ); ?>"><?php esc_html_e( 'Create Event', 'lnkup-theme' ); ?></a></li>
-						<li><a href="<?php echo esc_url( function_exists( 'lnkup_organizer_view_url' ) ? lnkup_organizer_view_url( 'events' ) : lnkup_page_url( 'organizer-dashboard' ) . '?view=events' ); ?>"><?php esc_html_e( 'Build Opportunity', 'lnkup-theme' ); ?></a></li>
-					</ul>
-				</div>
-				<div>
-					<h3><?php esc_html_e( 'Company', 'lnkup-theme' ); ?></h3>
-					<ul>
-						<li><a href="<?php echo esc_url( home_url( '/privacy/' ) ); ?>"><?php esc_html_e( 'Privacy', 'lnkup-theme' ); ?></a></li>
-						<li><a href="<?php echo esc_url( home_url( '/terms/' ) ); ?>"><?php esc_html_e( 'Terms', 'lnkup-theme' ); ?></a></li>
-						<li><a href="<?php echo esc_url( home_url( '/contact/' ) ); ?>"><?php esc_html_e( 'Contact', 'lnkup-theme' ); ?></a></li>
-					</ul>
-				</div>
-			</div>
+			<nav class="lp-footer__cols" aria-label="<?php esc_attr_e( 'Footer', 'lnkup-theme' ); ?>">
+				<?php foreach ( $columns as $column ) : ?>
+					<div class="lp-footer__col">
+						<h2><?php echo esc_html( $column['title'] ); ?></h2>
+						<ul>
+							<?php foreach ( $column['links'] as $link ) : ?>
+								<li><a href="<?php echo esc_url( $link[1] ); ?>"><?php echo esc_html( $link[0] ); ?></a></li>
+							<?php endforeach; ?>
+						</ul>
+					</div>
+				<?php endforeach; ?>
+			</nav>
 		</div>
-		<div class="lnkup-footer__bottom">
-			<span class="lnkup-footer__brand">LNK<span>up</span></span>
-			<p>&copy; <?php echo esc_html( gmdate( 'Y' ) ); ?> LNKup. <?php esc_html_e( 'The opportunity network for live events.', 'lnkup-theme' ); ?><?php echo $launch_label && ! $marketplace_open ? ' · ' . esc_html( sprintf( __( 'Launching %s', 'lnkup-theme' ), $launch_label ) ) : ''; ?></p>
+		<div class="lp-footer__bottom">
+			<p style="margin:0">&copy; <?php echo esc_html( gmdate( 'Y' ) ); ?> LNKup. <?php esc_html_e( 'LNKup is the vendor marketplace for events — not a ticketing platform.', 'lnkup-theme' ); ?></p>
+			<ul>
+				<?php foreach ( $legal as $link ) : ?>
+					<li><a href="<?php echo esc_url( $link['url'] ); ?>"><?php echo esc_html( $link['label'] ); ?></a></li>
+				<?php endforeach; ?>
+			</ul>
 		</div>
 	</div>
 </footer>
