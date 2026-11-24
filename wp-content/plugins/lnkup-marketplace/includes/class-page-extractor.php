@@ -165,7 +165,15 @@ class LNKup_Page_Extractor {
 			return new WP_Error( 'skipped_host', __( 'This host is not imported from Google Search.', 'lnkup-marketplace' ) );
 		}
 
-		$response = wp_remote_get(
+		if ( class_exists( 'LNKup_Safe_Fetch' ) ) {
+			$fetched = LNKup_Safe_Fetch::get( $url, array( 'html', 'text/plain' ) );
+			if ( is_wp_error( $fetched ) ) {
+				return $fetched;
+			}
+			return substr( $fetched['body'], 0, self::MAX_HTML_LEN );
+		}
+
+		$response = wp_safe_remote_get(
 			$url,
 			array(
 				'timeout'     => 20,

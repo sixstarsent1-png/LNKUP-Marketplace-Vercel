@@ -182,7 +182,7 @@ class LNKup_Event_Builder_Drafts {
 			if ( ! $draft ) {
 				continue;
 			}
-			$report = LNKup_Event_Builder_Validator::report( $draft['state'], $user_id );
+			$report = LNKup_Event_Builder_Validator::report( $draft['state'], $user_id, (int) $draft['source_event'] );
 			$out[]  = array(
 				'id'           => (int) $id,
 				'title'        => $draft['state']['event']['name'],

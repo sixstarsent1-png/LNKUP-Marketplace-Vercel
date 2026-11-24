@@ -19,10 +19,11 @@ class LNKup_Event_Builder_Validator {
 
 	/**
 	 * @param array<string,mixed> $state   Normalized state.
-	 * @param int                 $user_id Organizer.
+	 * @param int                 $user_id  Organizer.
+	 * @param int                 $event_id Event being edited (its own sources are not conflicts).
 	 * @return array{progress:int,publishable:bool,checks:array<int,array<string,mixed>>,steps:array<string,string>,location:array<string,mixed>,summary:array<string,mixed>}
 	 */
-	public static function report( array $state, int $user_id ): array {
+	public static function report( array $state, int $user_id, int $event_id = 0 ): array {
 		$ev     = $state['event'];
 		$checks = array();
 		$add    = static function ( string $key, string $step, string $level, bool $ok, string $label, string $message = '' ) use ( &$checks ): void {
@@ -98,8 +99,11 @@ class LNKup_Event_Builder_Validator {
 		if ( $state['sources'] || '' !== $state['import']['provider'] ) {
 			$add( 'attest', 'publish', 'required', $state['publish']['attest'], __( 'You organize this event', 'lnkup-marketplace' ), __( 'Confirm that you organize or are authorized to manage vendors for this event.', 'lnkup-marketplace' ) );
 		}
-		if ( '' !== $state['import']['conflict'] ) {
-			$add( 'ownership', 'publish', 'required', false, __( 'Event ownership', 'lnkup-marketplace' ), $state['import']['conflict'] );
+		$conflict = class_exists( 'LNKup_Event_Sources' ) && ( $state['sources'] || '' !== $state['import']['original_url'] )
+			? LNKup_Event_Sources::conflict_for_state( $state, $event_id ? ( (int) get_post_meta( $event_id, '_lnkup_organizer_user_id', true ) ?: $user_id ) : $user_id, $event_id )
+			: '';
+		if ( '' !== $conflict || '' !== $state['import']['conflict'] ) {
+			$add( 'ownership', 'publish', 'required', false, __( 'Event ownership', 'lnkup-marketplace' ), '' !== $conflict ? $conflict : $state['import']['conflict'] );
 		}
 		if ( 'schedule' === $state['publish']['when'] ) {
 			$add( 'schedule', 'publish', 'required', '' !== $state['publish']['at'] && $state['publish']['at'] > current_time( 'Y-m-d\TH:i' ), __( 'Publish time', 'lnkup-marketplace' ), __( 'Choose a publish time in the future.', 'lnkup-marketplace' ) );

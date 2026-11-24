@@ -269,7 +269,7 @@ class LNKup_Event_Builder_Editor {
 		if ( ! self::can_edit_event( $event_id, $user_id ) ) {
 			return new WP_Error( 'lnkup_builder_forbidden', __( 'You cannot edit this event.', 'lnkup-marketplace' ), array( 'status' => 403 ) );
 		}
-		$report = LNKup_Event_Builder_Validator::report( $draft['state'], $user_id );
+		$report = LNKup_Event_Builder_Validator::report( $draft['state'], $user_id, $event_id );
 		$blocks = array_values( array_filter( $report['checks'], static fn( $c ) => 'required' === $c['level'] && ! $c['ok'] && 'date_future' !== $c['key'] ) );
 		if ( $blocks ) {
 			return new WP_Error( 'lnkup_builder_not_ready', __( 'Fix the highlighted items before saving.', 'lnkup-marketplace' ), array( 'status' => 422, 'checks' => $blocks ) );

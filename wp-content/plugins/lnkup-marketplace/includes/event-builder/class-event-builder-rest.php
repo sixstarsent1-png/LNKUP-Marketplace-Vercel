@@ -112,7 +112,7 @@ class LNKup_Event_Builder_REST {
 		$user = get_current_user_id();
 		return array(
 			'draft'  => $draft,
-			'report' => LNKup_Event_Builder_Validator::report( $draft['state'], $user ),
+			'report' => LNKup_Event_Builder_Validator::report( $draft['state'], $user, (int) $draft['source_event'] ),
 			'fees'   => LNKup_Event_Builder_Validator::fee_preview( $draft['state']['options'], $user ),
 			'scheduled_at' => ( $ts = (int) get_post_meta( (int) $draft['id'], LNKup_Event_Builder_Publisher::SCHEDULE_META, true ) ) ? gmdate( 'c', $ts ) : '',
 		);
