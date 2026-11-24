@@ -6,8 +6,22 @@ For the full architecture reference, see [SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md
 
 **MVP scope:** Vendor-only marketplace layer — not attendee ticketing. Ticketing stays on Posh, Eventbrite, Universe, etc.
 
-**Plugin version:** 12.34.0  
+**Plugin version:** 12.37.0 (lnkup-communications 1.4.0)  
 **Theme version:** 1.7.0
+
+### Marketing, SEO & Distribution OS (marketplace 12.37.0, lnkup-communications 1.4.0)
+
+Reference: [marketing-distribution-os/README.md](marketing-distribution-os/README.md) (20 deliverables). Every feature is behind a flag in `LNKup_Marketing_Flags`, all off by default.
+
+- **SEO:** index policy shared by robots, sitemaps and schema; `/events/{slug}/`, `/organizers/{slug}/` canonicals with 301s; Event schema without booth-fee `offers`; core sitemap provider with lastmod; diagnostics; Search Console (credential-gated).
+- **Markets:** computed status and live health; staff-enabled city + category pages (≥3 open events); weekly digests; per-event market alerts; demand taps; OG images.
+- **Attribution:** tracked links `/l/{code}`, extended touches (click IDs, codes, market, device, app), analytics taxonomy + retention, gated GA4/Ads/TikTok, revenue attribution.
+- **Toolkits:** organizer Marketing workspace (links, local QR, graphics, copy, embeds, performance), connector Share & Track, vendor acceptance share, partner pages, external demand → leads.
+- **Campaigns:** approval + scheduling, saved segments, new filters, experiments, suppression bridge, `lnkup_marketing` role.
+- **Retention & content:** market alert / tour stop messages, consent records, resources hub, cohort pages.
+- **Mobile:** deep links for events, markets, tours and tracked links (`deep_links_v2`), public event screen, referral capture at signup, tracked native share.
+- **Admin:** LNKup → Marketing (Command Center).
+- **Tests:** PHP suites seo-policy 43, market-registry 60, attribution 60, organizer-marketing 35, marketing-campaigns 43, distribution 29, retention-content 35, app-links 49, marketing-command-center 43; Playwright `marketing-os-journeys.spec.ts` 16/16; Expo Jest 223/223.
 
 ### Public Website 5.0 (theme 1.7.0; marketplace `includes/public/*` ships with the next marketplace version)
 

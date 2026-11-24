@@ -1766,6 +1766,19 @@ Main routes (all have a `permission_callback`):
 | `GET /portfolio/events`, `GET /portfolio/jobs/{id}` | Portfolio event list, job status |
 | `GET /portfolio/public/tours/{slug}` (public), `GET\|POST\|DELETE /portfolio/tours/{id}/interest/me` (vendor) | Public data, tour interest |
 
+### 9.25 Marketing, SEO & Distribution OS (12.37.0, comms 1.4.0)
+
+Orchestration layer over existing systems, every part behind a flag in `LNKup_Marketing_Flags` (all default off). Full reference: [marketing-distribution-os/README.md](marketing-distribution-os/README.md).
+
+- **SEO** (`includes/seo/`): `LNKup_Index_Policy` decides robots, sitemap and schema together; `/events/{slug}/` and `/organizers/{slug}/` canonicals with 301s; Event schema without booth-fee `offers`; `lnkup` core sitemap provider; diagnostics; read-only Search Console (credentials in `wp-config.php`).
+- **Markets** (`includes/marketing/`): computed market status and live health, staff-enabled city + category pages (≥3 open events), weekly digests, per-event market alerts, anonymous demand taps, generated OG images.
+- **Attribution**: extended first-party touches (click IDs, referral/link codes, market, device, app payload); tracked links `/l/{code}` with daily aggregates; analytics taxonomy over existing events with rollup/retention; consent- and host-gated GA4/Ads/TikTok; revenue attribution (GMV vs net platform fee, refunds, commissions, spend).
+- **Toolkits**: organizer dashboard → Marketing (links, local QR, graphics, copy, embeds, performance); connector Share & Track; vendor acceptance share; partner pages `/with/{slug}/`; external demand → organizer leads and claim notifications.
+- **Campaigns** (comms): two-person approval, scheduling, saved segments, new audience filters, A/B variants, outreach suppression bridge, role `lnkup_marketing`.
+- **Retention & content**: market alert and tour stop messages (`flow_discovery`), consent records, `/resources/` + `/guides/` with editorial checklist, `/cohort/{slug}/`.
+- **Mobile**: `lnkup/v1/public/resolve`, `/public/events/{id}`, `/app/share-link`; Expo `app/link.tsx`, `app/event/[eventId].tsx`, attribution at signup; extra AASA paths only with `deep_links_v2`.
+- **Admin**: LNKup → Marketing (`LNKup_Marketing_Admin`, capability `lnkup_manage_marketing`).
+
 ## 10. Data Layer
 
 ### Dual-Storage Pattern
@@ -2901,6 +2914,7 @@ Third-party plugins or custom code should:
 | Document | Path | Purpose |
 |----------|------|---------|
 | Current State Inventory | [docs/CURRENT_STATE.md](CURRENT_STATE.md) | Feature inventory, production fixes, file counts |
+| Marketing, SEO & Distribution OS | [docs/marketing-distribution-os/README.md](marketing-distribution-os/README.md) | SEO policy, markets, attribution, toolkits, campaigns, deep links, Command Center (20 deliverables) |
 | App Gap Analysis | [docs/APP_GAP_ANALYSIS.md](APP_GAP_ANALYSIS.md) | App vs WordPress parity matrix, mock/live routes, upcoming BFF gaps |
 | Live API Integration | [docs/LIVE_API_INTEGRATION.md](LIVE_API_INTEGRATION.md) | Web BFF + native client auth notes, prelaunch gate |
 | Native mobile README | [lnk-up-marketplace-mobile/README.md](../lnk-up-marketplace-mobile/README.md) | Expo setup, env, Native Phases 1–10; [STORE_RELEASE.md](../lnk-up-marketplace-mobile/STORE_RELEASE.md) |

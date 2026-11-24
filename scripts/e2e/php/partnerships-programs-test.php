@@ -161,7 +161,8 @@ lnkup_t_assert( 0 === strpos( (string) $aff_code['code'], 'AFF-' ), 'affiliate c
 lnkup_t_same( 'affiliate', (string) $aff_code['program'], 'code tagged with the affiliate program' );
 lnkup_t_assert( is_wp_error( LNKup_Partner_Applications::transition( $aff_id, 'approve', $admin ) ), 'second approve rejected' );
 lnkup_t_same( 1, (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . LNKup_Financial_Tables::audit_table() . " WHERE action = 'partner_application_approve' AND entity_id = %d", $aff_id ) ), 'approval audited once' );
-lnkup_t_same( array( 'home', 'referrals', 'leads', 'earnings', 'resources', 'profile' ), array_keys( LNKup_Connector::dashboard_views( $aff_row ) ), 'affiliate dashboard has no ranks, studio, launch plan or cities' );
+$tracked_views = class_exists( 'LNKup_Tracking_Links' ) && LNKup_Tracking_Links::active();
+lnkup_t_same( $tracked_views ? array( 'home', 'referrals', 'marketing', 'leads', 'earnings', 'resources', 'profile' ) : array( 'home', 'referrals', 'leads', 'earnings', 'resources', 'profile' ), array_keys( LNKup_Connector::dashboard_views( $aff_row ) ), 'affiliate dashboard has no ranks, studio, launch plan or cities' );
 lnkup_t_same( 'home', LNKup_Connector::resolve_dashboard_view( 'ranks', $aff_row ), 'ranks view is not reachable for affiliates' );
 lnkup_t_assert( LNKup_Connector_Rewards::terms( $aff_id )['terms_pending'], 'affiliate terms are pending while the rule is a draft' );
 
@@ -248,7 +249,7 @@ $r3 = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$rewards} WHERE payment_id
 lnkup_t_same( '25.00', (string) ( $r3['amount'] ?? '' ), 'City Connector still earns 10% of the booth price' );
 lnkup_t_same( 'city_connector', (string) ( $r3['program'] ?? '' ), 'and the reward stays in the City Connector program' );
 lnkup_t_assert( ! LNKup_Connector_Rewards::terms( $cc_id )['terms_pending'], 'City Connector terms are never pending' );
-lnkup_t_assert( count( LNKup_Connector::dashboard_views( LNKup_Connector::get( $cc_id ) ) ) === 10, 'City Connector dashboard keeps every view' );
+lnkup_t_assert( count( LNKup_Connector::dashboard_views( LNKup_Connector::get( $cc_id ) ) ) === ( $tracked_views ? 11 : 10 ), 'City Connector dashboard keeps every view' );
 
 echo "\n[mobile sign-in]\n";
 $may_use_mobile = static function ( int $user_id ): bool {

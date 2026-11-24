@@ -580,7 +580,7 @@ class LNKup_Marketing_Admin {
 		}
 		self::table( array( 'Source', 'Bookings', 'GMV', 'Refunds', 'Net platform fees', 'Partner commissions', 'Net revenue', 'Ad spend' ), $rows, 'No paid bookings in this window.' );
 		if ( ! $report['spend_matched'] ) {
-			echo '<p class="description">' . esc_html__( 'Ad spend is not connected, so ROAS is not calculated.', 'lnkup-marketplace' ) . '</p>';
+			echo '<p class="description">' . esc_html__( 'Ad spend is recorded by channel or campaign in Organizer Growth, so it is compared only in the utm_source and utm_campaign views.', 'lnkup-marketplace' ) . '</p>';
 		}
 	}
 
