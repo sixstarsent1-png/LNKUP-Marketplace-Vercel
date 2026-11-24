@@ -68,7 +68,15 @@ export const OrganizerEventCard = memo(function OrganizerEventCard({
           .join(", ")}
       >
         <View style={styles.row}>
-          <EventImage uri={event.imageUrl} height={84} radius={radii.md} style={styles.thumb} icon="calendar-outline" />
+          <EventImage
+            uri={event.media?.thumbUrl || event.imageUrl}
+            fit={event.media?.fit}
+            background={event.media?.background}
+            height={84}
+            radius={radii.md}
+            style={styles.thumb}
+            icon="calendar-outline"
+          />
           <View style={styles.copy}>
             {showStatus ? <StatusBadge label={eventListingLabel(state)} tone={STATE_TONE[state]} /> : null}
             <SectionTitle style={styles.title} numberOfLines={2}>

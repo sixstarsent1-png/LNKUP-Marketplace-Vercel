@@ -419,7 +419,14 @@ export default function OrganizerEventWorkspaceScreen() {
           ) : null}
 
           <View style={styles.hero}>
-            <EventImage uri={event.imageUrl} label={event.title} height={140} icon="calendar-outline" />
+            <EventImage
+              uri={event.media?.largeUrl || event.imageUrl}
+              fit={event.media?.fit}
+              background={event.media?.background}
+              label={event.title}
+              height={140}
+              icon="calendar-outline"
+            />
             <View style={styles.heroRow}>
               <StatusBadge label={eventListingLabel(state)} tone={state === "draft" ? "waitlist" : state === "past" ? "neutral" : "approved"} />
               <Button label="Share" icon="share-outline" variant="secondary" size="sm" onPress={handleShare} testID="organizer-share-event" />

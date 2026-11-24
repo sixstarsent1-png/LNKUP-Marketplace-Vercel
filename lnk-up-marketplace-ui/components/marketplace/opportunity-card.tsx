@@ -194,18 +194,24 @@ export function OpportunityCard({
         )}
         data-testid={highlighted ? "opportunity-card-highlighted" : "opportunity-card"}
       >
-        <div className="relative aspect-[4/5] w-full bg-muted">
+        <div
+          className="relative aspect-[4/5] w-full bg-muted"
+          style={event.imageBackground ? { backgroundColor: event.imageBackground } : undefined}
+        >
           {event.image && event.image !== "/placeholder.svg" ? (
             <Image
               src={event.image}
-              alt={event.name}
+              alt={event.imageAlt || event.name}
               fill
-              className="object-cover object-top"
+              sizes="(max-width: 640px) 100vw, (max-width: 1100px) 50vw, 360px"
+              className={event.imageFit === "contain" ? "object-contain p-2" : "object-cover object-center"}
             />
           ) : (
-            <div className="flex h-full items-end p-3 text-sm font-semibold" role="img" aria-label={event.name}>
-              LNKup
-            </div>
+            <div
+              className="h-full w-full bg-gradient-to-br from-neutral-800 to-neutral-950"
+              role="img"
+              aria-label={event.name}
+            />
           )}
           <div className="absolute top-3 left-3 flex gap-2">
             {event.trending && (

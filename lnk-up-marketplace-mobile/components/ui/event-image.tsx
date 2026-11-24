@@ -17,6 +17,10 @@ type EventImageProps = {
   radius?: number
   style?: StyleProp<ViewStyle>
   accessibilityLabel?: string
+  /** "contain" shows the whole artwork (flyers, logos) on `background` instead of cropping. */
+  fit?: "cover" | "contain"
+  /** Frame color behind contained artwork (from WordPress media.background). */
+  background?: string
 }
 
 /**
@@ -32,15 +36,18 @@ export function EventImage({
   radius = radii.lg,
   style,
   accessibilityLabel,
+  fit = "cover",
+  background,
 }: EventImageProps) {
   const reduceMotion = useReducedMotion()
-  const [failed, setFailed] = useState(false)
-  const showImage = Boolean(uri) && !failed
+  const [failedUri, setFailedUri] = useState<string | null>(null)
+  const showImage = Boolean(uri) && failedUri !== uri
   const sizing = height != null ? { height } : { aspectRatio }
+  const contain = fit === "contain"
 
   return (
     <View
-      style={[styles.frame, sizing, { borderRadius: radius }, style]}
+      style={[styles.frame, sizing, { borderRadius: radius }, showImage && background ? { backgroundColor: background } : null, style]}
       accessible={Boolean(accessibilityLabel)}
       accessibilityRole={accessibilityLabel ? "image" : undefined}
       accessibilityLabel={accessibilityLabel}
@@ -48,13 +55,13 @@ export function EventImage({
       {showImage ? (
         <Image
           source={{ uri: uri as string }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          contentPosition="top center"
+          style={contain ? styles.contained : StyleSheet.absoluteFill}
+          contentFit={contain ? "contain" : "cover"}
+          contentPosition={contain ? "center" : "top center"}
           cachePolicy="memory-disk"
           transition={reduceMotion ? 0 : 180}
           recyclingKey={uri ?? undefined}
-          onError={() => setFailed(true)}
+          onError={() => setFailedUri(uri ?? null)}
           accessibilityIgnoresInvertColors
         />
       ) : (
@@ -78,6 +85,13 @@ const styles = StyleSheet.create({
     width: "100%",
     overflow: "hidden",
     backgroundColor: colors.limeMuted,
+  },
+  contained: {
+    position: "absolute",
+    top: spacing.sm,
+    right: spacing.sm,
+    bottom: spacing.sm,
+    left: spacing.sm,
   },
   placeholder: {
     position: "absolute",

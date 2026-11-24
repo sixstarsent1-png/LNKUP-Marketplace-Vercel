@@ -1,4 +1,7 @@
+import type { WpEventMedia } from "./event-media"
+
 export type WpOpportunityItem = {
+  media?: WpEventMedia | null
   opportunity_id?: number
   id?: number
   item_type?: string
@@ -163,6 +166,7 @@ export type WpVendorApplicationItem = {
   currency?: string
   vendor_fee?: number
   featured_image?: string
+  media?: WpEventMedia | null
   payment_id?: number
   payment_status?: string
   rejection_reason?: string

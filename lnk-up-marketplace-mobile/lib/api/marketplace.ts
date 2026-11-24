@@ -3,6 +3,7 @@ import { withFixtureFallback } from "@/lib/api/fixture-honesty"
 import type { WpAuth } from "@/lib/api/wp-client"
 import { wpFetchJson } from "@/lib/api/wp-client"
 import type { WpOpportunityItem, WpSearchResponse } from "@/lib/api/types"
+import { mapEventMedia, type EventMedia } from "@/lib/api/event-media"
 import { MOCK_OPPORTUNITIES } from "@/lib/data/fixtures"
 import { formatShortDate } from "@/lib/format/date"
 
@@ -44,8 +45,10 @@ export type MarketplaceOpportunity = {
   applicationStatus?: string
   /** Server says the vendor may apply again (withdrawn, or declined and re-opened). */
   canApplyAgain?: boolean
-  /** Event cover (or the theme's category image when the organizer has not uploaded one). */
+  /** Resolved event image URL (card size); always set by current servers. */
   imageUrl?: string
+  /** Resolved event media (fit/background for flyers and logos, hero size). */
+  media?: EventMedia
   gallery?: Array<{
     id: number
     url: string
@@ -140,7 +143,8 @@ export function mapWpToOpportunity(item: WpOpportunityItem): MarketplaceOpportun
     loadInTime: item.load_in_time || undefined,
     applicationStatus: item.application_status?.trim() || undefined,
     canApplyAgain: item.can_apply_again === true,
-    imageUrl: item.featured_image?.trim() || undefined,
+    imageUrl: mapEventMedia(item.media, item.featured_image)?.url,
+    media: mapEventMedia(item.media, item.featured_image),
     gallery: Array.isArray(item.gallery)
       ? item.gallery
           .map((g) => {

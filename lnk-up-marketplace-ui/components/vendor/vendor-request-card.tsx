@@ -32,13 +32,10 @@ export function VendorRequestCard({
 
   return (
     <Card className="flex-row items-center gap-3 rounded-2xl p-3" data-testid="vendor-request-card">
-      <div className="relative size-16 shrink-0 overflow-hidden rounded-xl">
-        <Image
-          src={request.eventImage || "/placeholder.svg"}
-          alt={request.eventName}
-          fill
-          className="object-cover"
-        />
+      <div className="relative size-16 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-neutral-800 to-neutral-950">
+        {request.eventImage && request.eventImage !== "/placeholder.svg" ? (
+          <Image src={request.eventImage} alt={request.eventName} fill sizes="64px" className="object-cover" />
+        ) : null}
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">

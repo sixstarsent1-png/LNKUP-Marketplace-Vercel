@@ -60,4 +60,50 @@ describe("money contract v1 (shared fixture with the WordPress contract test)", 
     expect(blocked.connect.canCashout).toBe(false)
     expect(blocked.payoutStatus).toBe("setup_required")
   })
+
+  const settlingMetrics = {
+    ...contract.metrics,
+    available: { cents: 0, status: "ok", source: "stripe_connect", synced_at: "2026-11-24T04:00:00Z" },
+  }
+
+  it("offers Instant while Standard available is $0 but Stripe has instant-eligible funds", () => {
+    const settling = mapOrganizerFinancialSnapshot(
+      payload({
+        ...contract,
+        metrics: settlingMetrics,
+        payouts: {
+          ...contract.payouts,
+          can_cash_out: false,
+          cash_out_reason: "no_available_balance",
+          instant_enabled: true,
+          can_instant_cash_out: true,
+          instant_available_cents: 92000,
+        },
+      }),
+    )
+    expect(settling.availableBalance).toBe(0)
+    expect(settling.canInstantCashout).toBe(true)
+    expect(settling.instantAvailable).toBe(920)
+    expect(settling.cashOutReason).toBeUndefined()
+  })
+
+  it("hides Instant when the marketplace has it turned off", () => {
+    const off = mapOrganizerFinancialSnapshot(
+      payload({
+        ...contract,
+        metrics: settlingMetrics,
+        payouts: {
+          ...contract.payouts,
+          can_cash_out: false,
+          cash_out_reason: "no_available_balance",
+          instant_enabled: false,
+          can_instant_cash_out: false,
+          instant_available_cents: 92000,
+        },
+      }),
+    )
+    expect(off.canInstantCashout).toBeUndefined()
+    expect(off.instantAvailable).toBeUndefined()
+    expect(off.cashOutReason).toBe("no_available_balance")
+  })
 })

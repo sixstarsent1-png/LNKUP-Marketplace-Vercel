@@ -43,6 +43,10 @@ export type OrganizerFinancialSnapshot = {
   balanceUnavailable?: boolean
   /** Why Cash Out is disabled (server money contract), e.g. "no_available_balance". */
   cashOutReason?: string
+  /** Stripe instant-eligible dollars; can be above zero while `availableBalance` is $0. */
+  instantAvailable?: number
+  /** Server says an Instant cash out can be requested now. Undefined without a money contract. */
+  canInstantCashout?: boolean
   lastSyncedAt?: string
   categories: MoneyCategory[]
   connect: OrganizerConnectState
@@ -70,7 +74,16 @@ export type MoneyContract = {
   version: number
   settlement_mode: string
   last_synced_at?: string | null
-  payouts?: { state: string; label: string; method?: string; can_cash_out: boolean; cash_out_reason: string }
+  payouts?: {
+    state: string
+    label: string
+    method?: string
+    can_cash_out: boolean
+    cash_out_reason: string
+    instant_enabled?: boolean
+    can_instant_cash_out?: boolean
+    instant_available_cents?: number
+  }
   metrics: Record<string, MoneyContractMetric | undefined>
 }
 
@@ -569,6 +582,9 @@ function applyMoneyContract(
       : payouts.state === "verifying"
         ? "pending"
         : "setup_required"
+  const instantEnabled = Boolean(payouts?.instant_enabled)
+  const canInstantCashout = instantEnabled ? Boolean(payouts?.can_instant_cash_out) : undefined
+  const instantAvailable = instantEnabled ? Math.max(0, Number(payouts?.instant_available_cents) || 0) / 100 : undefined
 
   return {
     ...base,
@@ -582,7 +598,9 @@ function applyMoneyContract(
     stripeSynced: money.settlement_mode === "destination" ? m.available?.status === "ok" : undefined,
     balanceSource: m.available?.source,
     balanceUnavailable: m.available?.status === "unavailable",
-    cashOutReason: payouts?.can_cash_out ? undefined : payouts?.cash_out_reason || undefined,
+    cashOutReason: payouts?.can_cash_out || canInstantCashout ? undefined : payouts?.cash_out_reason || undefined,
+    instantAvailable,
+    canInstantCashout,
     lastSyncedAt: money.last_synced_at ?? undefined,
     payoutStatus,
     connect: { ...base.connect, canCashout: eligible },

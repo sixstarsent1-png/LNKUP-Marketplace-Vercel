@@ -1,4 +1,5 @@
 import type { WpVendorApplicationItem, WpVendorApplicationsResponse } from "@/lib/api/types"
+import { mapEventMedia } from "@/lib/api/event-media"
 
 export type VendorRequestStatus =
   | "submitted"
@@ -129,7 +130,7 @@ export function mapWpVendorApplication(item: WpVendorApplicationItem): VendorReq
     opportunityId: item.opportunity_id ? String(item.opportunity_id) : undefined,
     eventId: item.event_id ? String(item.event_id) : undefined,
     eventName: item.event_name ?? "Event",
-    eventImage: item.featured_image || "/placeholder.svg",
+    eventImage: mapEventMedia(item.media, item.featured_image)?.thumbUrl ?? "",
     eventDate: formatDate(item.event_date) ?? item.event_date,
     city: formatLocation(item.city, item.state) || item.city,
     state: item.state,

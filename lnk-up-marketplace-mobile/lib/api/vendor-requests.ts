@@ -8,6 +8,7 @@ import {
 import type { WpAuth } from "@/lib/api/wp-client"
 import { wpFetchJson } from "@/lib/api/wp-client"
 import type { WpVendorApplicationItem, WpVendorApplicationsResponse } from "@/lib/api/types"
+import { mapEventMedia } from "@/lib/api/event-media"
 import { MOCK_REQUESTS } from "@/lib/data/fixtures"
 import { formatShortDate, localIsoDay } from "@/lib/format/date"
 import {
@@ -135,7 +136,7 @@ export function mapWpVendorApplication(item: WpVendorApplicationItem): VendorReq
     paymentId: item.payment_id ? String(item.payment_id) : undefined,
     paymentStatus: item.payment_status || undefined,
     infoRequest: mapInfoRequest(item.info_request),
-    imageUrl: typeof item.featured_image === "string" && item.featured_image ? item.featured_image : undefined,
+    imageUrl: mapEventMedia(item.media, item.featured_image)?.thumbUrl,
   }
 }
 

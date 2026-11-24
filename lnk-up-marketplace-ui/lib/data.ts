@@ -30,6 +30,10 @@ export type EventItem = {
   opportunityId?: number
   name: string
   image: string
+  /** "contain" for flyers/logos (show the whole artwork on imageBackground). */
+  imageFit?: "cover" | "contain"
+  imageBackground?: string
+  imageAlt?: string
   date: string
   city: string
   state: string

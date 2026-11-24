@@ -2,6 +2,7 @@ import { getOrganizerDashboardUrl, isLiveApiEnabled } from "@/lib/api/config"
 import { cachedRequest, invalidateCache, type CachedRequestOptions } from "@/lib/api/request-cache"
 import type { WpAuth } from "@/lib/api/wp-client"
 import { wpFetchJson } from "@/lib/api/wp-client"
+import { mapEventMedia, type EventMedia, type WpEventMedia } from "@/lib/api/event-media"
 import { MOCK_ORGANIZER_EVENTS } from "@/lib/data/fixtures"
 import { parseCalendarDate } from "@/lib/format/date"
 
@@ -32,6 +33,7 @@ export type OrganizerEventLite = {
   /** WordPress post status: publish | draft | pending | private (absent on older servers). */
   publishStatus?: string
   imageUrl?: string
+  media?: EventMedia
   opportunitiesCount?: number
   opportunities?: OrganizerEventOpportunity[]
   requestsCount?: number
@@ -86,6 +88,7 @@ type WpInviteOption = {
   /** live | draft — draft until the event has an open vendor slot. */
   listing_status?: string
   image_url?: string
+  media?: WpEventMedia | null
   counts?: {
     total?: number
     to_review?: number
@@ -217,7 +220,8 @@ export function mapInviteOptionToEventLite(item: WpInviteOption): OrganizerEvent
         : item.listing_status === "draft"
           ? "draft"
           : item.post_status || undefined,
-    imageUrl: item.image_url || undefined,
+    imageUrl: mapEventMedia(item.media, item.image_url)?.url,
+    media: mapEventMedia(item.media, item.image_url),
     ...(counts
       ? {
           countsFromServer: true,

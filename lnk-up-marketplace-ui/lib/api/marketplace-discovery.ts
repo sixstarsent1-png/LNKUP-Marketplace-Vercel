@@ -1,5 +1,6 @@
 import type { EventItem } from "@/lib/data"
 import type { WpOpportunityItem } from "@/lib/api/types"
+import { mapEventMedia, type EventMedia } from "@/lib/api/event-media"
 
 export type MarketplaceSort =
   | "recommended"
@@ -59,6 +60,7 @@ export type MarketplaceOpportunity = {
   outdoor?: boolean
   documentsRequired?: boolean
   imageUrl?: string
+  media?: EventMedia
   gallery?: Array<{
     id: number
     url: string
@@ -155,7 +157,8 @@ export function mapWpToOpportunity(item: WpOpportunityItem): MarketplaceOpportun
     indoor: Boolean((item as { indoor?: boolean }).indoor),
     outdoor: Boolean((item as { outdoor?: boolean }).outdoor),
     documentsRequired: Boolean((item as { doc_required?: boolean }).doc_required),
-    imageUrl: item.featured_image || "",
+    imageUrl: mapEventMedia(item.media, item.featured_image)?.url,
+    media: mapEventMedia(item.media, item.featured_image),
     gallery: Array.isArray((item as { gallery?: unknown }).gallery)
       ? ((item as { gallery: Array<Record<string, unknown>> }).gallery
           .map((g) => {
@@ -189,7 +192,10 @@ export function opportunityToEventItem(opp: MarketplaceOpportunity): EventItem {
     id: opp.id,
     opportunityId: opp.opportunityId,
     name: opp.title,
-    image: opp.imageUrl ?? "/placeholder.svg",
+    image: opp.imageUrl ?? "",
+    imageFit: opp.media?.fit,
+    imageBackground: opp.media?.background,
+    imageAlt: opp.media?.alt,
     date: opp.eventDate ?? "Date TBA",
     city: opp.city ?? "",
     state: opp.state ?? "",

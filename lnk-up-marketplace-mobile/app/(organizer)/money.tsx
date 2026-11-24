@@ -8,6 +8,7 @@ import { EmptyPanel, ErrorPanel } from "@/components/panel-states"
 import { Screen } from "@/components/screen"
 import { InlineBanner } from "@/components/ui/banner"
 import { Button } from "@/components/ui/button"
+import { SegmentedControl } from "@/components/ui/chip"
 import { FormField } from "@/components/ui/form-field"
 import { ListGroup, ListRow } from "@/components/ui/list-row"
 import { SectionHeader } from "@/components/ui/section-header"
@@ -53,6 +54,34 @@ const HERO_KEY = "available"
 const PAYOUT_HISTORY_LIMIT = 10
 const UNAVAILABLE_LABEL = "Unavailable"
 
+type PayoutType = "standard" | "instant"
+
+const PAYOUT_TYPE_OPTIONS: ReadonlyArray<{ value: PayoutType; label: string }> = [
+  { value: "standard", label: "Standard" },
+  { value: "instant", label: "Instant" },
+]
+
+/**
+ * Which payout type the form is on and its limit. Defaults to Instant only when Standard has
+ * nothing to send but Instant does (card funds still settling for Standard).
+ */
+function resolveCashoutOptions(
+  summary: OrganizerFinancialSnapshot | null,
+  choice: PayoutType | null,
+): { type: PayoutType; limit: number | undefined; showInstant: boolean; canInstant: boolean } {
+  const canInstant = Boolean(summary?.canInstantCashout)
+  const showInstant = summary?.canInstantCashout !== undefined
+  const standardHasFunds = !summary?.balanceUnavailable && (summary?.availableBalance ?? 0) > 0
+  const preferred: PayoutType = choice ?? (!standardHasFunds && canInstant ? "instant" : "standard")
+  const type: PayoutType = preferred === "instant" && showInstant ? "instant" : "standard"
+  return {
+    type,
+    limit: type === "instant" ? summary?.instantAvailable : summary?.availableBalance,
+    showInstant,
+    canInstant: showInstant && canInstant,
+  }
+}
+
 export default function OrganizerMoneyScreen() {
   const { auth } = useAuth()
   const { connect: connectParam } = useLocalSearchParams<{ connect?: string }>()
@@ -66,6 +95,7 @@ export default function OrganizerMoneyScreen() {
   const [payoutsError, setPayoutsError] = useState<string | null>(null)
   const [connectMessage, setConnectMessage] = useState<string | null>(null)
   const [cashoutAmount, setCashoutAmount] = useState("")
+  const [payoutChoice, setPayoutChoice] = useState<PayoutType | null>(null)
   const [cashoutError, setCashoutError] = useState<string | null>(null)
   const [refreshError, setRefreshError] = useState<string | null>(null)
   const didFocusLoad = useRef(false)
@@ -157,25 +187,31 @@ export default function OrganizerMoneyScreen() {
   const [cashout, cashoutBusy] = useSingleFlight(async () => {
     const amount = Number(cashoutAmount)
     const currencyCode = summary?.currency ?? "USD"
+    const options = resolveCashoutOptions(summary, payoutChoice)
+    const isInstant = options.type === "instant"
     setCashoutError(null)
     if (!Number.isFinite(amount) || amount <= 0) {
       setCashoutError("Enter an amount greater than zero.")
       return
     }
-    if (summary?.availableBalance != null && amount > summary.availableBalance) {
-      setCashoutError(`Available is ${formatMoneyOrZero(summary.availableBalance, currencyCode)}.`)
+    if (options.limit != null && amount > options.limit) {
+      setCashoutError(
+        `${isInstant ? "Instant available" : "Available"} is ${formatMoneyOrZero(options.limit, currencyCode)}.`,
+      )
       return
     }
     // One token per confirmed intent: a retry after a dropped response returns the same payout.
     const clientToken = newClientToken()
     const confirmed = await confirmAction({
-      title: "Confirm cash out",
-      message: `Cash out ${formatMoney(amount, currencyCode)} to your payout account?`,
-      confirmLabel: "Cash out",
+      title: isInstant ? "Confirm instant cash out" : "Confirm cash out",
+      message: isInstant
+        ? `Instant cash out ${formatMoney(amount, currencyCode)} to your debit card or bank? Stripe charges an instant payout fee.`
+        : `Cash out ${formatMoney(amount, currencyCode)} to your payout account?`,
+      confirmLabel: isInstant ? "Cash out instantly" : "Cash out",
     })
     if (!confirmed) return
     try {
-      const result = await requestOrganizerCashout(auth, amount, "standard", clientToken)
+      const result = await requestOrganizerCashout(auth, amount, options.type, clientToken)
       showToast(result.message ?? "Cash out requested.", "success")
       setCashoutAmount("")
       await load("refresh")
@@ -221,7 +257,11 @@ export default function OrganizerMoneyScreen() {
   const heroAmount = heroCategory?.amount ?? availableAmt
   const heroUnavailable = Boolean(heroCategory?.unavailable || summary?.balanceUnavailable)
   const heroText = heroUnavailable ? UNAVAILABLE_LABEL : formatMoneyOrZero(heroAmount, currency)
-  const cashoutEnabled = Boolean(connect?.canCashout) && !heroUnavailable && heroAmount > 0
+  const standardEnabled = Boolean(connect?.canCashout) && !heroUnavailable && heroAmount > 0
+  const cashoutOptions = resolveCashoutOptions(summary, payoutChoice)
+  const isInstant = cashoutOptions.type === "instant"
+  const cashoutEnabled = isInstant ? cashoutOptions.canInstant : standardEnabled
+  const instantText = formatMoneyOrZero(summary?.instantAvailable, currency)
   const cashOutReason = cashOutReasonCopy(summary?.cashOutReason)
   const anyConnectBusy = onboardBusy || manageBusy
   const visiblePayouts = (payouts ?? []).slice(0, PAYOUT_HISTORY_LIMIT)
@@ -269,12 +309,21 @@ export default function OrganizerMoneyScreen() {
               <View
                 style={styles.hero}
                 accessible
-                accessibilityLabel={`${heroCategory?.label ?? "Available to cash out"} ${heroText}`}
+                accessibilityLabel={`${heroCategory?.label ?? "Available to cash out"} ${heroText}${
+                  cashoutOptions.canInstant ? `. Instant payout available now: ${instantText}` : ""
+                }`}
               >
                 <Eyebrow style={styles.heroEyebrow}>{heroCategory?.label ?? "Available to cash out"}</Eyebrow>
                 <Text style={styles.heroValue} adjustsFontSizeToFit numberOfLines={1}>
                   {heroText}
                 </Text>
+                {cashoutOptions.canInstant ? (
+                  <View style={styles.heroInstant}>
+                    <Text style={styles.heroInstantText} numberOfLines={1}>
+                      Instant payout available now: {instantText}
+                    </Text>
+                  </View>
+                ) : null}
                 <Meta style={styles.heroBody}>
                   {netCategory
                     ? `${netCategory.label}: ${formatMoneyOrZero(netCategory.amount, currency)}`
@@ -329,9 +378,19 @@ export default function OrganizerMoneyScreen() {
 
               {connect.canCashout ? (
                 <View style={styles.cashoutBlock}>
+                  {cashoutOptions.showInstant ? (
+                    <SegmentedControl
+                      options={PAYOUT_TYPE_OPTIONS}
+                      value={cashoutOptions.type}
+                      onChange={(next) => {
+                        setCashoutError(null)
+                        setPayoutChoice(next)
+                      }}
+                    />
+                  ) : null}
                   <FormField
                     label="Cash out amount"
-                    hint={`Available to cash out: ${heroText}`}
+                    hint={isInstant ? `Instant available: ${instantText}` : `Available to cash out: ${heroText}`}
                     value={cashoutAmount}
                     onChangeText={(raw) => {
                       setCashoutError(null)
@@ -344,14 +403,20 @@ export default function OrganizerMoneyScreen() {
                     editable={cashoutEnabled}
                   />
                   <Button
-                    label="Cash out"
+                    label={isInstant ? "Cash out instantly" : "Cash out"}
                     loadingLabel="Requesting…"
-                    icon="arrow-down-circle-outline"
+                    icon={isInstant ? "flash-outline" : "arrow-down-circle-outline"}
                     loading={cashoutBusy}
                     disabled={!cashoutEnabled || anyConnectBusy}
                     onPress={() => void cashout()}
                   />
-                  {!cashoutEnabled ? (
+                  {isInstant && cashoutEnabled ? (
+                    <Meta>Arrives in minutes. Stripe charges an instant payout fee (about 1.5%).</Meta>
+                  ) : null}
+                  {!isInstant && !standardEnabled && cashoutOptions.canInstant ? (
+                    <Meta>Standard payouts open once card payments finish processing. Switch to Instant to cash out now.</Meta>
+                  ) : null}
+                  {!cashoutEnabled && !(!isInstant && cashoutOptions.canInstant) ? (
                     <Meta>{cashOutReason ?? "Nothing to cash out yet. Paid booth fees show here once they settle."}</Meta>
                   ) : null}
                 </View>
@@ -574,6 +639,18 @@ const styles = StyleSheet.create({
   heroBody: {
     fontSize: typeScale.body,
     color: colors.gray900,
+  },
+  heroInstant: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.black,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  heroInstantText: {
+    fontFamily: fonts.bodySemi,
+    fontSize: typeScale.footnote,
+    color: colors.lime,
   },
   card: {
     gap: spacing.sm,

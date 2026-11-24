@@ -58,7 +58,14 @@ export function OpportunityCard({
           accessibilityRole="button"
           accessibilityLabel={[`View details for ${item.title}`, item.eventDate, location, fee].filter(Boolean).join(", ")}
         >
-          <EventImage uri={image?.thumb || image?.url || item.imageUrl} label={category ?? "Event"} height={168} radius={0} />
+          <EventImage
+            uri={item.media?.url || item.imageUrl || image?.thumb || image?.url}
+            fit={item.media?.fit}
+            background={item.media?.background}
+            label={category ?? "Event"}
+            height={168}
+            radius={0}
+          />
         </Pressable>
         <View style={styles.overlayRow} pointerEvents="box-none">
           {category ? (
