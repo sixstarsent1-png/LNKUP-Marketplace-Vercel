@@ -53,7 +53,7 @@ Evidence: `screenshots/before/before-home-*.webp`, `before-opportunities-*.webp`
 | Landing content admin | Partial | Extended (drafts, proof blocks, FAQs); silent stat override removed |
 | App promotion | Verified | Kept; suppressed on acquisition landings (see §16) |
 | Marketplace index hygiene | **Broken locally** | 9 index rows point at deleted opportunities; existing search still returns them. Public discovery now joins against published posts. **Needs production check.** |
-| Find Events feed layout | **Broken locally** | 3 feed cards render 2 px wide on `/opportunities/` at 1280 (reproduced with the new CSS/JS blocked, so it predates this work) |
+| Find Events feed layout | Verified | The 2 px "cards" first reported here are the hidden skeleton loader cards (`.lnkup-event-card--skeleton` inside a `display:none` loader), not a layout bug |
 
 ## 4. Initial design scorecard
 
@@ -263,7 +263,6 @@ Design System 5.0; Homepage 5.0; `/for-organizers/` and `/for-vendors/`; campaig
 1. Confirm `/for-organizers/` and `/for-vendors/` are created on first wp-admin load and permalinks flushed (variants 404 otherwise).
 2. Check the production marketplace index for orphan rows (local had 9) and reindex if needed.
 3. With the Meta Pixel live, use Meta Test Events to confirm one ViewContent per landing view with `content_category` organizer_landing/vendor_landing.
-4. Review the Find Events feed card width issue (§3) on production.
 5. Confirm Fee Engine settings (commission %, service fee, `fee_payer_mode`) are the intended public prices before ads point at the landings.
 6. Lighthouse on production (CDN, caching and fonts differ from wp-env).
 
