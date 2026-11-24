@@ -387,6 +387,8 @@ $lnkup_core_files = array(
 	'includes/marketing/class-resources-hub.php',
 	'includes/marketing/class-cohort-landings.php',
 	'includes/marketing/class-app-deep-links.php',
+	'includes/marketing/class-search-console.php',
+	'admin/class-marketing-admin.php',
 	'includes/matching/class-tours.php',
 	'includes/matching/class-tours-rest.php',
 	'includes/portfolio/class-portfolio-tables.php',
@@ -599,6 +601,7 @@ function lnkup_marketplace_init() {
 	LNKup_Resources_Hub::init();
 	LNKup_Cohort_Landings::init();
 	LNKup_App_Deep_Links::init();
+	LNKup_Marketing_Admin::init();
 	LNKup_Tours::init();
 	LNKup_Tours_REST::init();
 	LNKup_Portfolio_Tables::maybe_upgrade();
