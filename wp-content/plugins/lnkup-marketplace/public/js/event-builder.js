@@ -1719,6 +1719,280 @@
     }).catch(function (e) { toast(e.message, 'error'); });
   }
 
+  /* ------------------------------------------------------------------ import (Phase 7) */
+
+  var IMPORT_FIELDS = [
+    ['name', 'Event name'], ['date', 'Date'], ['end_date', 'End date'], ['start_time', 'Starts'], ['end_time', 'Ends'],
+    ['venue_name', 'Venue'], ['address', 'Address'], ['city', 'City'], ['state', 'State'], ['zip', 'ZIP'], ['description', 'Description']
+  ];
+  var IMPORT_DRAFT_KEY = { address: 'venue_address', zip: 'postal_code' };
+  var ORIGIN_LABEL = { structured: 'From listing', page_meta: 'From page preview' };
+
+  function importValue(key, val) {
+    if (key === 'date' || key === 'end_date') return fmtDate(val);
+    if (key === 'description') return String(val).length > 220 ? String(val).slice(0, 220) + '…' : String(val);
+    return String(val);
+  }
+
+  function liveSteps(labels) {
+    var list = h('ul', { class: 'eb-steps-live', 'aria-live': 'polite' }, labels.map(function (l, i) { return h('li', { 'data-state': i === 0 ? 'active' : 'pending', text: l }); }));
+    var i = 0;
+    var timer = setInterval(function () {
+      if (i >= labels.length - 2) return;
+      list.children[i].setAttribute('data-state', 'done');
+      i++;
+      list.children[i].setAttribute('data-state', 'active');
+    }, 900);
+    list.stop = function () { clearInterval(timer); };
+    return list;
+  }
+
+  /** Field picker rows for an import preview. `current` = draft event values (import into draft). */
+  function fieldPicker(preview, current) {
+    var picks = {};
+    var rows = IMPORT_FIELDS.filter(function (f) { return preview.fields[f[0]] !== undefined && preview.fields[f[0]] !== ''; }).map(function (f) {
+      var key = f[0];
+      var mine = current ? current[IMPORT_DRAFT_KEY[key] || key] : '';
+      var differs = current && mine !== undefined && mine !== null && String(mine) !== '' && String(mine) !== String(preview.fields[key]);
+      picks[key] = { keep: !differs, replace: false, differs: !!differs };
+      var box = h('input', { type: 'checkbox', checked: !differs, 'data-field': key, onchange: function (e) { picks[key].keep = e.target.checked; picks[key].replace = differs && e.target.checked; } });
+      return h('label', { class: 'eb-pick' }, [
+        box,
+        h('span', { class: 'eb-pick__body' }, [
+          h('span', { class: 'eb-pick__label' }, [f[1], h('span', { class: 'eb-prov', text: ORIGIN_LABEL[preview.provenance[key]] || 'From listing' })]),
+          h('span', { class: 'eb-pick__value', text: importValue(key, preview.fields[key]) }),
+          differs ? h('span', { class: 'eb-pick__mine', text: 'Yours: ' + importValue(key, mine) + ' — tick to replace' }) : null
+        ])
+      ]);
+    });
+    return { rows: rows, picks: picks };
+  }
+
+  function relationNotice(preview, onAssociate) {
+    var rel = preview.relation || {};
+    if (rel.state === 'other' || rel.state === 'claimed_other') {
+      return h('div', { class: 'eb-notice eb-notice--danger', role: 'alert', 'data-testid': 'eb-import-conflict' }, h('div', {}, [h('strong', { text: 'This event is already managed on LNKup' }), h('span', { text: rel.message })]));
+    }
+    if (rel.state === 'own' || rel.state === 'own_listing') {
+      return h('div', { class: 'eb-notice', 'data-testid': 'eb-import-own' }, h('div', {}, [
+        h('strong', { text: 'Already on LNKup: ' + (rel.event_title || 'your event') }),
+        h('span', { text: rel.message }),
+        h('div', { class: 'eb-notice__actions' }, [
+          h('a', { class: 'eb-btn eb-btn--dark eb-btn--sm', href: rel.edit_url, text: 'Open event' }),
+          h('a', { class: 'eb-btn eb-btn--sm', href: cfg.urls.create + (cfg.urls.create.indexOf('?') >= 0 ? '&' : '?') + 'duplicate=' + rel.event_id, text: 'Duplicate for a new date' })
+        ])
+      ]));
+    }
+    if (rel.state === 'unclaimed_listing') {
+      return h('div', { class: 'eb-notice' }, h('div', {}, [h('strong', { text: 'Vendors may already follow this event' }), h('span', { text: rel.message })]));
+    }
+    if (preview.duplicates && preview.duplicates.length) {
+      return h('div', { class: 'eb-notice eb-notice--warning', 'data-testid': 'eb-import-duplicate' }, h('div', {}, [
+        h('strong', { text: 'Looks like an event you already have' }),
+        h('span', { text: 'Link this listing to it instead of creating a second event.' }),
+        h('div', { class: 'eb-notice__actions' }, preview.duplicates.map(function (d) {
+          return h('button', { type: 'button', class: 'eb-btn eb-btn--sm', text: 'Link to “' + d.title + '”' + (d.city ? ' · ' + d.city : ''), onclick: function () { onAssociate(d.event_id, d.title); } });
+        }))
+      ]));
+    }
+    return null;
+  }
+
+  function importScreen() {
+    var wrap = h('div', { class: 'eb-import', 'data-testid': 'eb-import' });
+    var input = h('input', { type: 'url', id: 'eb-import-url', inputmode: 'url', autocomplete: 'off', spellcheck: 'false', placeholder: 'https://posh.vip/e/your-event', value: cfg.importUrl || '', 'aria-describedby': 'eb-import-detect' });
+    var detect = h('p', { id: 'eb-import-detect', class: 'eb-help', 'aria-live': 'polite' });
+    var result = h('div', { class: 'eb-import__result' });
+    var go = h('button', { type: 'submit', class: 'eb-btn eb-btn--primary', 'data-testid': 'eb-import-go', text: 'Import' });
+    var providersBox = h('div', { class: 'eb-method__meta' });
+
+    function showDetect() {
+      var p = providerFor(input.value.trim());
+      clear(detect);
+      if (!input.value.trim()) return append(detect, 'POSH, Eventbrite, Eventeny, TicketLeap, Luma and most event websites work.');
+      if (!p) return append(detect, h('span', { class: 'eb-error', text: 'That does not look like a full link yet.' }));
+      append(detect, [h('span', { class: 'eb-chip eb-chip--line', text: p.label }), ' ', p.key === 'website' ? 'We will read the page\'s public event details.' : 'Detected ' + p.label + '.']);
+    }
+    input.addEventListener('input', showDetect);
+
+    function run(e) {
+      if (e) e.preventDefault();
+      var value = input.value.trim();
+      if (!providerFor(value)) { input.focus(); showDetect(); return; }
+      go.disabled = true;
+      clear(result);
+      var steps = liveSteps(['Checking the link', 'Reading public event details', 'Checking for events already on LNKup', 'Preparing your review']);
+      append(result, h('div', { class: 'eb-card' }, steps));
+      api('organizer/import/preview', { method: 'POST', body: { url: value } }).then(function (pv) {
+        steps.stop();
+        go.disabled = false;
+        navigate({ method: 'import', url: value }, true);
+        renderReview(pv);
+      }).catch(function (err) {
+        steps.stop();
+        go.disabled = false;
+        clear(result);
+        append(result, h('div', { class: 'eb-notice eb-notice--danger', role: 'alert' }, h('div', {}, [h('strong', { text: 'We could not import that link' }), h('span', { text: err.message }),
+          h('div', { class: 'eb-notice__actions' }, [h('button', { type: 'button', class: 'eb-btn eb-btn--sm', text: 'Start without importing', onclick: function () { createDraft({ method: 'single' }); } })])])));
+      });
+    }
+
+    function associate(eventId, title) {
+      confirmDialog('Link this listing?', 'We\'ll add it to “' + title + '” as an official event listing. No new event is created and nothing else changes.', 'Link listing').then(function (ok) {
+        if (!ok) return;
+        api('organizer/import/associate', { method: 'POST', body: { url: input.value.trim(), event_id: eventId } }).then(function (r) {
+          toast(r.message);
+          window.location.href = r.edit_url;
+        }).catch(function (err) { toast(err.message, 'error'); });
+      });
+    }
+
+    function renderReview(pv) {
+      clear(result);
+      var blocked = pv.relation && ['other', 'claimed_other', 'own', 'own_listing'].indexOf(pv.relation.state) >= 0;
+      var picker = fieldPicker(pv, null);
+      var useImage = { on: !!pv.fields.image_url };
+      var occurrence = { idx: -1 };
+      var cards = [];
+
+      cards.push(h('div', { class: 'eb-import__source' }, [
+        h('span', { class: 'eb-provider', text: (pv.provider.label || '?').slice(0, 2).toUpperCase() }),
+        h('div', {}, [h('strong', { text: pv.provider.label }), h('a', { class: 'eb-help', href: pv.url, target: '_blank', rel: 'noopener noreferrer', text: pv.url.replace(/^https?:\/\//, '').slice(0, 70) })]),
+        h('span', { class: 'eb-chip ' + (pv.status === 'complete' ? 'eb-chip--success' : pv.status === 'partial' ? 'eb-chip--warning' : 'eb-chip--line'), text: { complete: 'Details found', partial: 'Some details found', nothing: 'Link only', link_only: 'Link only', unreachable: 'Not readable' }[pv.status] || pv.status })
+      ]));
+      var rel = relationNotice(pv, associate);
+      if (rel) cards.push(rel);
+      (pv.warnings || []).forEach(function (w) { cards.push(h('div', { class: 'eb-notice eb-notice--warning' }, h('div', {}, h('span', { text: w })))); });
+      cards.push(h('p', { class: 'eb-help', text: pv.message }));
+
+      if (picker.rows.length) {
+        cards.push(h('div', { class: 'eb-card' }, [
+          h('div', { class: 'eb-card__head' }, [h('div', {}, [h('h2', { text: 'Review imported details' }), h('p', { text: 'Untick anything you don\'t want. You can edit every field in the next step.' })])]),
+          pv.fields.image_url ? h('label', { class: 'eb-pick eb-pick--image' }, [
+            h('input', { type: 'checkbox', checked: true, onchange: function (e) { useImage.on = e.target.checked; } }),
+            h('img', { src: pv.fields.image_url, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onerror: function (e) { e.target.closest('label').remove(); useImage.on = false; } }),
+            h('span', { class: 'eb-pick__body' }, [h('span', { class: 'eb-pick__label', text: 'Event image' }), h('span', { class: 'eb-help', text: 'Copied into your media library. Confirm you have the right to use it.' })])
+          ]) : null,
+          h('div', { class: 'eb-picks' }, picker.rows)
+        ]));
+      }
+      if (pv.occurrences && pv.occurrences.length > 1) {
+        cards.push(h('div', { class: 'eb-card' }, [
+          h('div', { class: 'eb-card__head' }, [h('div', {}, [h('h2', { text: pv.occurrences.length + ' dates on this listing' }), h('p', { text: 'Pick the date to import now. Each date is its own LNKup event with its own vendors.' })])]),
+          h('div', { class: 'eb-cal', role: 'radiogroup', 'aria-label': 'Choose a date' }, pv.occurrences.map(function (o, i) {
+            return h('label', { class: 'eb-cal__day eb-cal__pick' }, [
+              h('input', { type: 'radio', name: 'eb-occ', checked: i === 0, onchange: function () { occurrence.idx = i; } }),
+              h('strong', { text: fmtDate(o.date) }),
+              h('span', { text: [o.start_time, o.city].filter(Boolean).join(' · ') || 'Time not listed' })
+            ]);
+          }))
+        ]));
+        occurrence.idx = 0;
+      }
+      if (pv.missing && pv.missing.length && pv.status !== 'link_only' && pv.status !== 'unreachable') {
+        cards.push(h('div', { class: 'eb-import__missing' }, [h('span', { class: 'eb-help', text: 'You\'ll add:' })].concat(pv.missing.map(function (m) { return h('span', { class: 'eb-chip eb-chip--line', text: m.label }); }))));
+      }
+      cards.push(h('p', { class: 'eb-help', text: 'Ticket prices and attendee capacity are not imported — vendor booth pricing is set separately in LNKup.' }));
+
+      var cont = h('button', { type: 'button', class: 'eb-btn eb-btn--primary', 'data-testid': 'eb-import-continue', disabled: blocked, text: picker.rows.length ? 'Continue to builder' : 'Continue with link only', onclick: function () {
+        var keep = Object.keys(picker.picks).filter(function (k) { return picker.picks[k].keep; });
+        if (useImage.on) keep.push('image_url');
+        cont.disabled = true;
+        screen(loading('Creating your draft…'));
+        api('organizer/import/draft', { method: 'POST', body: { url: pv.url, keep: keep, use_image: useImage.on, occurrence: occurrence.idx } }).then(function (r) {
+          useDraft(r);
+          navigate({ draft: r.draft.id, step: 'info' }, true);
+          renderBuilder();
+          toast('Imported. Review the details, then add your vendor options.');
+          (r.warnings || []).slice(0, 1).forEach(function (w) { setTimeout(function () { toast(w, 'error'); }, 1200); });
+        }).catch(function (err) { importScreen(); toast(err.message, 'error'); });
+      } });
+      append(result, [h('div', { class: 'eb-import__review' }, cards), h('div', { class: 'eb-actionbar' }, [
+        h('button', { type: 'button', class: 'eb-btn', text: 'Try another link', onclick: function () { clear(result); input.value = ''; showDetect(); input.focus(); } }),
+        cont
+      ])]);
+      syncBottomOffset();
+    }
+
+    append(wrap, [
+      h('div', { class: 'eb-hero' }, [
+        h('div', {}, [
+          h('span', { class: 'eb-eyebrow', text: 'Import' }),
+          h('h1', { text: 'Bring in an event you already list' }),
+          h('p', { text: 'Paste the link from your ticketing page or website. We read only what the listing shares publicly — attendee tickets stay on your platform, vendors are managed here.' })
+        ]),
+        h('button', { type: 'button', class: 'eb-btn', text: 'Back', onclick: function () { navigate({}); boot(); } })
+      ]),
+      h('form', { class: 'eb-card eb-import__form', onsubmit: run, novalidate: true }, [
+        h('div', { class: 'eb-field' }, [
+          h('label', { for: 'eb-import-url', text: 'Event link' }),
+          h('div', { class: 'eb-import-input' }, [input, go]),
+          detect
+        ]),
+        providersBox
+      ]),
+      result
+    ]);
+    screen(wrap);
+    showDetect();
+    api('organizer/import/providers').then(function (r) {
+      (r.providers || []).filter(function (p) { return p.enabled && p.url_import && p.key !== 'website'; }).slice(0, 8).forEach(function (p) {
+        append(providersBox, h('span', { class: 'eb-chip', title: p.limitations || '', text: p.label }));
+      });
+    }).catch(function () { /* chips are decorative */ });
+    if (cfg.importUrl || new URL(window.location.href).searchParams.get('url')) {
+      input.value = input.value || new URL(window.location.href).searchParams.get('url');
+      cfg.importUrl = '';
+      run();
+    } else {
+      input.focus();
+    }
+  }
+  Builder.screens['import'] = importScreen;
+
+  /** Fill the open draft from a listing; organizer-entered values are only replaced when ticked. */
+  Builder.importIntoDraft = function () {
+    var input = h('input', { type: 'url', class: 'eb-input', inputmode: 'url', autocomplete: 'off', placeholder: 'https://…', 'aria-label': 'Event link' });
+    var body = h('div', { class: 'eb-import__dialog' });
+    var state = { preview: null, picker: null };
+    var action = h('button', { type: 'button', class: 'eb-btn eb-btn--primary', text: 'Read link' });
+    var d = dialog({ title: 'Import details from a link', wide: true, body: [h('div', { class: 'eb-field' }, [input, h('p', { class: 'eb-help', text: 'Empty fields are filled. Anything you typed stays unless you tick it.' })]), body], foot: [h('button', { type: 'button', class: 'eb-btn', text: 'Cancel', onclick: function () { d.close(null); } }), action] });
+    action.addEventListener('click', function () {
+      if (!state.preview) {
+        if (!providerFor(input.value.trim())) { input.focus(); return; }
+        action.disabled = true;
+        clear(body);
+        var steps = liveSteps(['Checking the link', 'Reading public event details', 'Comparing with your draft']);
+        append(body, steps);
+        api('organizer/import/preview', { method: 'POST', body: { url: input.value.trim() } }).then(function (pv) {
+          steps.stop();
+          action.disabled = false;
+          state.preview = pv;
+          state.picker = fieldPicker(pv, S.draft.state.event);
+          clear(body);
+          var rel = relationNotice(pv, function () { toast('Open that event from your events list to link this listing.'); });
+          append(body, [rel, (pv.warnings || []).map(function (w) { return h('div', { class: 'eb-notice eb-notice--warning' }, h('div', {}, h('span', { text: w }))); }), h('p', { class: 'eb-help', text: pv.message }), h('div', { class: 'eb-picks' }, state.picker.rows)]);
+          action.textContent = 'Apply to draft';
+          if (pv.relation && (pv.relation.state === 'other' || pv.relation.state === 'claimed_other')) action.disabled = true;
+        }).catch(function (err) { steps.stop(); action.disabled = false; clear(body); append(body, h('p', { class: 'eb-error', role: 'alert', text: err.message })); });
+        return;
+      }
+      var picks = state.picker.picks;
+      var keep = Object.keys(picks).filter(function (k) { return picks[k].keep; });
+      var replace = Object.keys(picks).filter(function (k) { return picks[k].replace; });
+      action.disabled = true;
+      flush().then(function () {
+        return api('organizer/import/drafts/' + S.draft.id, { method: 'POST', body: { url: state.preview.url, keep: keep.concat(['image_url']), replace: replace, revision: S.draft.revision, use_image: true } });
+      }).then(function (r) {
+        d.close(true);
+        useDraft(r);
+        renderBuilder();
+        toast(r.skipped && r.skipped.length ? 'Imported. Kept your ' + r.skipped.length + ' existing value' + (r.skipped.length === 1 ? '' : 's') + '.' : 'Imported into your draft.');
+      }).catch(function (err) { action.disabled = false; toast(err.message, 'error'); });
+    });
+    setTimeout(function () { input.focus(); }, 0);
+  };
+
   /* ------------------------------------------------------------------ boot */
 
   Builder.methodCard = methodCard;

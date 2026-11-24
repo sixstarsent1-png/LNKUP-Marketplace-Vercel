@@ -22,6 +22,7 @@ $fake_dns = array(
 	'v6bad.lnkup-test.example'  => array( '::ffff:127.0.0.1' ),
 	'www.eventbrite.com'        => array( '93.184.216.34' ),
 	'posh.vip'                  => array( '93.184.216.34' ),
+	'img.lnkup-test.example'    => array( '93.184.216.34' ),
 );
 add_filter( 'lnkup_safe_fetch_resolve', static fn( $ips, $host ) => $fake_dns[ $host ] ?? ( preg_match( '/\.lnkup-test\.example$/', $host ) ? array() : $ips ), 10, 2 );
 add_filter( 'lnkup_safe_fetch_rate', static fn() => 1000 );
@@ -247,5 +248,90 @@ if ( class_exists( 'LNKup_External_Events' ) ) {
 } else {
 	lnkup_t_skip( 'external events module not loaded' );
 }
+
+echo "REST import\n";
+/**
+ * REST call as a user against lnkup/v1/organizer/import.
+ *
+ * @return array{status:int,data:mixed}
+ */
+function lnkup_imp_rest( string $method, string $route, array $body, int $user ): array {
+	wp_set_current_user( $user );
+	$req = new WP_REST_Request( $method, '/lnkup/v1/organizer/import' . $route );
+	if ( 'GET' !== $method ) {
+		$req->set_header( 'content-type', 'application/json' );
+		$req->set_body( (string) wp_json_encode( $body ) );
+	}
+	$res = rest_do_request( $req );
+	wp_set_current_user( 0 );
+	$data = $res->get_data();
+	if ( is_array( $data ) && isset( $data['draft']['id'] ) ) {
+		update_post_meta( (int) $data['draft']['id'], '_lnkup_test_run', '1' );
+		$GLOBALS['lnkup_test_cleanup'][] = array( 'post', (int) $data['draft']['id'] );
+	}
+	return array( 'status' => $res->get_status(), 'data' => $data );
+}
+$vendor = lnkup_t_user( 'lnkup_vendor' );
+LNKup_Event_OS_Flags::override( 'event_import_v3', false );
+lnkup_t_assert( in_array( lnkup_imp_rest( 'POST', '/preview', array( 'url' => $url ), $org )['status'], array( 401, 403 ), true ), 'import routes are off without event_import_v3' );
+LNKup_Event_OS_Flags::override( 'event_import_v3', true );
+$GLOBALS['lnkup_m_extra_cleanup'][] = static fn() => LNKup_Event_OS_Flags::override( 'event_import_v3', null );
+lnkup_t_assert( in_array( lnkup_imp_rest( 'POST', '/preview', array( 'url' => $url ), $vendor )['status'], array( 401, 403 ), true ), 'vendors cannot import' );
+lnkup_t_same( 400, lnkup_imp_rest( 'POST', '/preview', array( 'url' => 'http://169.254.169.254/latest/meta-data/' ), $org )['status'], 'metadata endpoint is refused through REST' );
+
+$fresh = 'https://www.eventbrite.com/e/makers-night-tickets-555666777';
+$routes[ $fresh ] = array( 'code' => 200, 'headers' => array( 'content-type' => 'text/html' ), 'body' => str_replace( array( 'queen-city-night-market-tickets-987654321', 'Queen City Night Market' ), array( 'makers-night-tickets-555666777', 'Makers Night' ), '<script type="application/ld+json">' . wp_json_encode( array_merge( array( array( '@type' => 'Event', 'name' => 'Makers Night', 'startDate' => $date . 'T18:00', 'image' => 'https://img.lnkup-test.example/m.png', 'location' => array( '@type' => 'Place', 'name' => 'The Hall', 'address' => array( 'addressLocality' => 'Raleigh', 'addressRegion' => 'NC' ) ) ) ), $series ) ) . '</script>' ) );
+/**
+ * Builder draft fixture for the user (removed at the end).
+ *
+ * @param array<string,mixed> $state Initial state.
+ * @return array<string,mixed>
+ */
+function lnkup_eb_new_draft( int $user, array $state ): array {
+	$d = LNKup_Event_Builder_Drafts::create( $user, $state );
+	$GLOBALS['lnkup_test_cleanup'][] = array( 'post', (int) $d['id'] );
+	return $d;
+}
+$png = base64_decode( 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' );
+$routes['https://img.lnkup-test.example/m.png'] = array( 'code' => 200, 'headers' => array( 'content-type' => 'image/png' ), 'body' => $png );
+$pv = lnkup_imp_rest( 'POST', '/preview', array( 'url' => $fresh ), $org );
+lnkup_t_same( 200, $pv['status'], 'organizer preview succeeds' );
+lnkup_t_assert( ! isset( $pv['data']['body'] ) && false === strpos( (string) wp_json_encode( $pv['data'] ), '<script' ), 'preview never returns raw page HTML' );
+lnkup_t_same( 4, count( $pv['data']['occurrences'] ?? array() ), 'listing dates are offered' );
+$pick = 1;
+$want = $pv['data']['occurrences'][ $pick ] ?? array();
+$dr   = lnkup_imp_rest( 'POST', '/draft', array( 'url' => $fresh, 'keep' => array( 'name', 'date', 'start_time', 'city', 'state', 'image_url' ), 'use_image' => true, 'occurrence' => $pick ), $org );
+$ds   = $dr['data']['draft']['state'] ?? array();
+lnkup_t_same( 201, $dr['status'], 'draft created from the import' );
+lnkup_t_same( array( 'import', $want['date'] ?? 'x', '', 'Raleigh' ), array( $ds['method'] ?? '', $ds['event']['date'] ?? '', $ds['event']['venue_name'] ?? '', $ds['event']['city'] ?? '' ), 'chosen date is used; unticked fields (venue) are left empty' );
+$att = (int) ( $ds['event']['featured_image_id'] ?? 0 );
+lnkup_t_assert( $att > 0 && (int) get_post_meta( $att, '_lnkup_uploaded_by', true ) === $org, 'imported image is copied into the organizer\'s own media' );
+if ( $att ) {
+	$GLOBALS['lnkup_test_cleanup'][] = array( 'post', $att );
+}
+lnkup_t_same( 404, lnkup_imp_rest( 'POST', '/drafts/' . (int) ( $dr['data']['draft']['id'] ?? 0 ), array( 'url' => $fresh ), $other )['status'], 'another organizer cannot import into this draft' );
+
+$bd = lnkup_eb_new_draft( $org, array( 'event' => array( 'name' => 'My Own Name', 'city' => '' ) ) );
+$in = lnkup_imp_rest( 'POST', '/drafts/' . $bd['id'], array( 'url' => $fresh, 'revision' => $bd['revision'] ), $org );
+lnkup_t_same( array( 200, 'My Own Name', 'Raleigh' ), array( $in['status'], $in['data']['draft']['state']['event']['name'] ?? '', $in['data']['draft']['state']['event']['city'] ?? '' ), 'importing into a draft fills empty fields and keeps organizer edits' );
+lnkup_t_assert( in_array( 'name', $in['data']['skipped'] ?? array(), true ), 'kept organizer values are reported' );
+$in2 = lnkup_imp_rest( 'POST', '/drafts/' . $bd['id'], array( 'url' => $fresh, 'revision' => $in['data']['draft']['revision'] ?? 0, 'replace' => array( 'name' ) ), $org );
+lnkup_t_same( array( 'Makers Night', 1 ), array( $in2['data']['draft']['state']['event']['name'] ?? '', count( $in2['data']['draft']['state']['sources'] ?? array() ) ), 'explicit replace overwrites; the listing is not added twice' );
+lnkup_t_same( 409, lnkup_imp_rest( 'POST', '/drafts/' . $bd['id'], array( 'url' => $fresh, 'revision' => 1 ), $org )['status'], 'stale revision is rejected' );
+
+$mine2 = lnkup_m_event( array( 'organizer_user_id' => $org, 'event_date' => $date ), false, 'Makers Night' );
+$GLOBALS['lnkup_m_extra_cleanup'][] = static function () use ( $mine2 ) {
+	global $wpdb;
+	$wpdb->delete( LNKup_Event_Import_Tables::sources(), array( 'event_id' => $mine2['event'] ) );
+};
+$pv2 = lnkup_imp_rest( 'POST', '/preview', array( 'url' => $fresh ), $org );
+lnkup_t_same( array( $mine2['event'] ), wp_list_pluck( $pv2['data']['duplicates'] ?? array(), 'event_id' ), 'probable duplicate of an existing event is detected' );
+lnkup_t_same( 403, lnkup_imp_rest( 'POST', '/associate', array( 'url' => $fresh, 'event_id' => $mine2['event'] ), $other )['status'], 'cannot link a listing to someone else\'s event' );
+$as = lnkup_imp_rest( 'POST', '/associate', array( 'url' => $fresh, 'event_id' => $mine2['event'] ), $org );
+lnkup_t_same( array( 200, 1 ), array( $as['status'], count( $as['data']['sources'] ?? array() ) ), 'listing linked to the existing event (no new event)' );
+lnkup_t_same( 'own', lnkup_imp_rest( 'POST', '/preview', array( 'url' => $fresh ), $org )['data']['relation']['state'] ?? '', 'after linking, previews point to the existing event' );
+$opv = lnkup_imp_rest( 'POST', '/preview', array( 'url' => $fresh ), $other )['data'];
+lnkup_t_same( array( 'other', 0 ), array( $opv['relation']['state'] ?? '', $opv['relation']['event_id'] ?? -1 ), 'other organizers see a conflict without the event ID' );
+lnkup_t_same( 409, lnkup_imp_rest( 'POST', '/associate', array( 'url' => $fresh, 'event_id' => lnkup_m_event( array( 'organizer_user_id' => $other ), false )['event'] ), $other )['status'], 'a listing linked to another organizer cannot be associated' );
 
 lnkup_m_finish();

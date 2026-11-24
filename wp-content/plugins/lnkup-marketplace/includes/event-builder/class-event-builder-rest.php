@@ -105,7 +105,7 @@ class LNKup_Event_Builder_REST {
 	/**
 	 * @param array<string,mixed>|null $draft Draft.
 	 */
-	private static function draft_payload( ?array $draft ): array {
+	public static function draft_payload( ?array $draft ): array {
 		if ( ! $draft ) {
 			return array();
 		}

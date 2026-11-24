@@ -382,5 +382,38 @@ button.eb-chip[aria-pressed="true"] { background: var(--eb-ink); color: #fff; bo
 .eb-cal__day { padding: 10px; border-radius: 10px; border: 1px solid var(--eb-line); background: #fff; display: grid; gap: 4px; font-size: 13px; }
 .eb-cal__day[data-skip="true"] { opacity: .5; background: var(--eb-canvas); text-decoration: line-through; }
 .eb-cal__day strong { font-size: 14px; }
+.eb-import { display: grid; gap: 16px; padding-bottom: 24px; }
+.eb-import__form { display: grid; gap: 14px; }
+.eb-import__form .eb-import-input input { min-height: 52px; font-size: 16px; }
+.eb-import__form .eb-import-input .eb-btn { min-height: 52px; padding-inline: 26px; }
+.eb-import__result { display: grid; gap: 14px; }
+.eb-import__review { display: grid; gap: 14px; }
+.eb-import__source { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px 16px; border-radius: var(--eb-radius); background: #141414; color: #fff; }
+.eb-import__source .eb-provider { background: var(--eb-lime); color: #141414; }
+.eb-import__source strong { display: block; font-size: 15px; }
+.eb-import__source a.eb-help { color: rgb(255 255 255 / .7); overflow-wrap: anywhere; }
+.eb-import__missing { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.eb-picks { display: grid; gap: 8px; }
+.eb-pick { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 14px; border-radius: var(--eb-radius-sm); border: 1px solid var(--eb-line); background: var(--eb-surface); cursor: pointer; transition: border-color .15s, background .15s; }
+.eb-pick:hover { border-color: var(--eb-line-strong); }
+.eb-pick:has(input:checked) { border-color: var(--eb-ink); background: var(--eb-lime-soft); }
+.eb-pick input { width: 18px; height: 18px; margin-top: 2px; accent-color: #141414; }
+.eb-pick--image { grid-template-columns: auto 96px minmax(0, 1fr); align-items: center; margin-bottom: 8px; }
+.eb-pick--image img { width: 96px; height: 64px; object-fit: cover; border-radius: 8px; background: var(--eb-canvas); }
+.eb-pick__body { display: grid; gap: 3px; min-width: 0; }
+.eb-pick__label { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px; font-weight: 700; color: var(--eb-muted); text-transform: uppercase; letter-spacing: .03em; }
+.eb-pick__value { font-size: 14.5px; font-weight: 600; overflow-wrap: anywhere; white-space: pre-line; }
+.eb-pick__mine { font-size: 12.5px; color: var(--eb-warning); }
+.eb-prov { font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 6px; background: var(--eb-info-bg); color: var(--eb-info); text-transform: none; letter-spacing: 0; }
+.eb-cal__pick { cursor: pointer; grid-template-columns: auto 1fr; column-gap: 8px; }
+.eb-cal__pick input { grid-row: span 2; accent-color: #141414; margin-top: 3px; }
+.eb-cal__pick:has(input:checked) { border-color: var(--eb-ink); background: var(--eb-lime-soft); }
+.eb-import__dialog { display: grid; gap: 10px; margin-top: 10px; max-height: 55vh; overflow: auto; }
+@media (max-width: 600px) {
+  .eb-import__source { grid-template-columns: auto minmax(0, 1fr); }
+  .eb-import__source > .eb-chip { grid-column: 1 / -1; justify-self: start; }
+  .eb-pick--image { grid-template-columns: auto 72px minmax(0, 1fr); }
+  .eb-pick--image img { width: 72px; height: 52px; }
+}
 .eb-badge-inherit { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px; background: var(--eb-canvas); color: var(--eb-muted); }
 .eb-badge-override { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 6px; background: var(--eb-lime-soft); color: #141414; }
