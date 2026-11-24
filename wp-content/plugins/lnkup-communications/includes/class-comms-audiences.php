@@ -148,7 +148,64 @@ class LNKup_Comms_Audiences {
 			'onboarding_incomplete' => ! empty( $raw['onboarding_incomplete'] ),
 			'no_upcoming'         => ! empty( $raw['no_upcoming'] ),
 			'registered_days'     => absint( $raw['registered_days'] ?? 0 ),
+			// Marketing OS filters.
+			'market'              => sanitize_title( (string) ( $raw['market'] ?? '' ) ),
+			'saved_opportunity'   => ! empty( $raw['saved_opportunity'] ),
+			'open_spaces'         => ! empty( $raw['open_spaces'] ),
+			'followed_tour'       => absint( $raw['followed_tour'] ?? 0 ),
+			'follows_any_tour'    => ! empty( $raw['follows_any_tour'] ),
+			'verified'            => in_array( (string) ( $raw['verified'] ?? '' ), array( 'yes', 'no' ), true ) ? (string) $raw['verified'] : '',
+			'inactive_days'       => min( 730, absint( $raw['inactive_days'] ?? 0 ) ),
 		);
+	}
+
+	/**
+	 * Most recent known activity: recorded login or any analytics event (UTC timestamp, 0 = none).
+	 */
+	public static function last_activity( int $user_id ): int {
+		global $wpdb;
+		$login = (int) get_user_meta( $user_id, '_lnkup_last_login_at', true );
+		$table = $wpdb->prefix . 'lnkup_analytics_events';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$event = (string) $wpdb->get_var( $wpdb->prepare( "SELECT MAX(created_at) FROM {$table} WHERE user_id = %d", $user_id ) );
+		return max( $login, '' !== $event ? (int) strtotime( $event ) : 0 );
+	}
+
+	/**
+	 * Market filter → city/state, so campaigns reuse the market registry instead of free text.
+	 *
+	 * @return array{city:string,state:string}|null
+	 */
+	private static function market_place( string $slug ): ?array {
+		if ( '' === $slug || ! class_exists( 'LNKup_Market_Pages' ) ) {
+			return null;
+		}
+		$market = LNKup_Market_Pages::get_market_by_slug( $slug, false );
+		return $market ? array( 'city' => (string) $market['city'], 'state' => (string) $market['state'] ) : null;
+	}
+
+	/**
+	 * Marketing OS filters shared by vendors and organizers. Returns false when any fails.
+	 */
+	private static function matches_marketing( int $user_id, array $filters ): bool {
+		if ( $filters['inactive_days'] > 0 ) {
+			$user  = get_userdata( $user_id );
+			$since = max( self::last_activity( $user_id ), $user ? (int) strtotime( $user->user_registered . ' UTC' ) : 0 );
+			if ( $since > time() - $filters['inactive_days'] * DAY_IN_SECONDS ) {
+				return false;
+			}
+		}
+		if ( $filters['followed_tour'] || $filters['follows_any_tour'] ) {
+			$favs  = class_exists( 'LNKup_Vendor_Personalization' ) ? LNKup_Vendor_Personalization::get_favorites( $user_id ) : array();
+			$tours = array_map( 'intval', (array) ( $favs['tours'] ?? array() ) );
+			if ( $filters['followed_tour'] && ! in_array( $filters['followed_tour'], $tours, true ) ) {
+				return false;
+			}
+			if ( $filters['follows_any_tour'] && array() === $tours ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -182,8 +239,34 @@ class LNKup_Comms_Audiences {
 	 * Whether a user matches the segment filters (real records only).
 	 */
 	public static function matches( int $user_id, array $filters ): bool {
+		$filters = array_merge( self::clean_filters( array() ), $filters );
+		$place   = self::market_place( (string) $filters['market'] );
+		if ( '' !== $filters['market'] && null === $place ) {
+			return false;
+		}
+		if ( $place ) {
+			$filters['city']  = '' !== $filters['city'] ? $filters['city'] : $place['city'];
+			$filters['state'] = '' !== $filters['state'] ? $filters['state'] : $place['state'];
+		}
+		if ( ! self::matches_marketing( $user_id, $filters ) ) {
+			return false;
+		}
 		if ( 'vendor' === $filters['role'] ) {
 			$profile_id = function_exists( 'lnkup_get_vendor_profile_id' ) ? (int) lnkup_get_vendor_profile_id( $user_id ) : 0;
+			if ( $filters['saved_opportunity'] ) {
+				$favs  = class_exists( 'LNKup_Vendor_Personalization' ) ? LNKup_Vendor_Personalization::get_favorites( $user_id ) : array();
+				$saved = ! empty( $favs['opportunities'] ) || ! empty( $favs['events'] );
+				if ( ! $saved ) {
+					return false;
+				}
+			}
+			if ( '' !== $filters['verified'] ) {
+				$record   = ( $profile_id && class_exists( 'LNKup_Verification_Records' ) ) ? LNKup_Verification_Records::current( $profile_id, 'business_identity' ) : array();
+				$verified = 'verified' === (string) ( $record['status'] ?? '' );
+				if ( ( 'yes' === $filters['verified'] ) !== $verified ) {
+					return false;
+				}
+			}
 			if ( '' !== $filters['city'] ) {
 				$city   = strtolower( (string) get_post_meta( $profile_id, '_lnkup_city', true ) );
 				$served = strtolower( (string) get_post_meta( $profile_id, '_lnkup_cities_served', true ) );
@@ -239,7 +322,29 @@ class LNKup_Comms_Audiences {
 		if ( $filters['no_upcoming'] && array() !== LNKup_Comms_Context::organizer_upcoming_events( $user_id ) ) {
 			return false;
 		}
+		if ( '' !== $filters['verified'] && class_exists( 'LNKup_Organizer_Onboarding' ) ) {
+			$verified = (bool) LNKup_Organizer_Onboarding::organizer_is_publicly_verified( $user_id );
+			if ( ( 'yes' === $filters['verified'] ) !== $verified ) {
+				return false;
+			}
+		}
+		if ( $filters['open_spaces'] && ! self::organizer_has_open_spaces( $user_id ) ) {
+			return false;
+		}
 		return true;
+	}
+
+	/**
+	 * Organizer has at least one upcoming published event with an open, unfilled slot.
+	 */
+	private static function organizer_has_open_spaces( int $user_id ): bool {
+		global $wpdb;
+		if ( ! class_exists( 'LNKup_Marketplace_Index' ) ) {
+			return false;
+		}
+		$today = current_time( 'Y-m-d' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT 1 FROM ' . LNKup_Marketplace_Index::table_name() . ' WHERE organizer_user_id = %d AND spots_remaining > 0 AND ( event_date IS NULL OR event_date >= %s ) LIMIT 1', $user_id, $today ) );
 	}
 
 	/**

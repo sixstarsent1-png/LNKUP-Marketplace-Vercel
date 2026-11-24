@@ -17,7 +17,7 @@ declare(strict_types=1);
 defined( 'ABSPATH' ) || exit;
 
 define( 'LNKUP_COMMS_VERSION', '1.3.0' );
-define( 'LNKUP_COMMS_DB_VERSION', '1.1.0' );
+define( 'LNKUP_COMMS_DB_VERSION', '1.2.0' );
 define( 'LNKUP_COMMS_FILE', __FILE__ );
 define( 'LNKUP_COMMS_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LNKUP_COMMS_URL', plugin_dir_url( __FILE__ ) );
@@ -73,7 +73,10 @@ function lnkup_comms_files(): array {
 		'includes/automations/class-comms-auto-matching.php',
 		'includes/automations/class-comms-auto-engagement.php',
 		'includes/class-comms-campaigns.php',
+		'includes/class-comms-segments.php',
+		'includes/class-comms-campaign-workflow.php',
 		'includes/rest/class-comms-rest.php',
+		'includes/rest/class-comms-marketing-rest.php',
 		'includes/rest/class-comms-organizer-rest.php',
 		'includes/rest/class-comms-admin-rest.php',
 		'public/class-comms-shortcodes.php',
@@ -122,6 +125,8 @@ function lnkup_comms_boot(): void {
 	LNKup_Comms_Engagement::init();
 	LNKup_Comms_Automations::init();
 	LNKup_Comms_Campaigns::init();
+	LNKup_Comms_Campaign_Workflow::init();
+	LNKup_Comms_Marketing_REST::init();
 	LNKup_Comms_REST::init();
 	LNKup_Comms_Organizer_REST::init();
 	LNKup_Comms_Admin_REST::init();

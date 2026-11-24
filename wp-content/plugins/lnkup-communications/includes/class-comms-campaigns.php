@@ -38,12 +38,16 @@ class LNKup_Comms_Campaigns {
 	/**
 	 * Template variables for campaign messages.
 	 */
-	public static function variables( int $id ): array {
+	public static function variables( int $id, string $variant = '' ): array {
 		static $cache = array();
-		if ( ! isset( $cache[ $id ] ) ) {
-			$row          = self::get( $id );
-			$content      = $row ? (array) $row['content'] : array();
-			$cache[ $id ] = array(
+		$key = $id . '|' . $variant;
+		if ( ! isset( $cache[ $key ] ) ) {
+			$row     = self::get( $id );
+			$content = $row ? (array) $row['content'] : array();
+			if ( $row && '' !== $variant && class_exists( 'LNKup_Comms_Campaign_Workflow' ) ) {
+				$content = array_merge( $content, LNKup_Comms_Campaign_Workflow::variant_content( $row, $variant ) );
+			}
+			$cache[ $key ] = array(
 				'campaign_subject'   => (string) ( $content['subject'] ?? '' ),
 				'campaign_body'      => (string) ( $content['body'] ?? '' ),
 				'campaign_cta'       => (string) ( $content['cta'] ?? '' ),
@@ -52,7 +56,14 @@ class LNKup_Comms_Campaigns {
 				'announcement_body'  => (string) ( $content['body'] ?? '' ),
 			);
 		}
-		return $cache[ $id ];
+		return $cache[ $key ];
+	}
+
+	/**
+	 * Audience filters (saved segment rules when the campaign links one).
+	 */
+	private static function filters_of( array $row ): array {
+		return class_exists( 'LNKup_Comms_Campaign_Workflow' ) ? LNKup_Comms_Campaign_Workflow::filters_for( $row ) : LNKup_Comms_Audiences::clean_filters( (array) $row['filters'] );
 	}
 
 	private static function clean_content( array $raw ): array {
@@ -112,7 +123,7 @@ class LNKup_Comms_Campaigns {
 		if ( ! $row ) {
 			return null;
 		}
-		$preview = LNKup_Comms_Audiences::segment_preview( (array) $row['filters'], (string) $row['category'], explode( ',', (string) $row['channels'] ) );
+		$preview = LNKup_Comms_Audiences::segment_preview( self::filters_of( $row ), (string) $row['category'], explode( ',', (string) $row['channels'] ) );
 		self::update( $id, array( 'total_eligible' => (int) $preview['recipients'] ) );
 		return $preview;
 	}
@@ -147,8 +158,11 @@ class LNKup_Comms_Campaigns {
 	 */
 	public static function start( int $id, int $confirm_count ) {
 		$row = self::get( $id );
-		if ( ! $row || ! in_array( $row['status'], array( 'draft', 'paused' ), true ) ) {
+		if ( ! $row || ! in_array( $row['status'], array( 'draft', 'paused', 'scheduled' ), true ) ) {
 			return new WP_Error( 'lnkup_comms_campaign', __( 'This campaign cannot be started.', 'lnkup-communications' ), array( 'status' => 409 ) );
+		}
+		if ( 'draft' === $row['status'] && 'admin' === $row['campaign_type'] && class_exists( 'LNKup_Comms_Campaign_Workflow' ) && LNKup_Comms_Campaign_Workflow::active() ) {
+			return new WP_Error( 'lnkup_comms_needs_approval', __( 'Submit this campaign for approval. A second team member approves it before it sends.', 'lnkup-communications' ), array( 'status' => 409 ) );
 		}
 		if ( 'admin' === $row['campaign_type'] && ! LNKup_Comms_Settings::enabled( 'campaigns_enabled' ) ) {
 			return new WP_Error( 'lnkup_comms_campaign', __( 'Campaigns are disabled in Communications settings.', 'lnkup-communications' ), array( 'status' => 409 ) );
@@ -207,6 +221,16 @@ class LNKup_Comms_Campaigns {
 		if ( ! $row || 'running' !== $row['status'] ) {
 			return;
 		}
+		try {
+			self::process_batch_unsafe( $id, $row );
+		} catch ( Throwable $e ) {
+			self::update( $id, array( 'status' => 'failed', 'completed_at' => LNKup_Comms_Schema::now() ) );
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( 'LNKup campaign ' . $id . ' failed: ' . $e->getMessage() );
+		}
+	}
+
+	private static function process_batch_unsafe( int $id, array $row ): void {
 		$channels = explode( ',', (string) $row['channels'] );
 		$queued   = 0;
 		$excluded = 0;
@@ -226,19 +250,24 @@ class LNKup_Comms_Campaigns {
 		}
 
 		$batch_size = max( 10, min( 500, LNKup_Comms_Settings::int( 'campaign_batch_size' ) ) );
-		$filters    = (array) $row['filters'];
-		$batch      = LNKup_Comms_Audiences::user_batch( LNKup_Comms_Audiences::clean_filters( $filters ), (int) $row['cursor_id'], $batch_size );
+		$filters    = self::filters_of( $row );
+		$workflow   = class_exists( 'LNKup_Comms_Campaign_Workflow' );
+		$batch      = LNKup_Comms_Audiences::user_batch( $filters, (int) $row['cursor_id'], $batch_size );
 		$cursor     = (int) $row['cursor_id'];
 		foreach ( $batch as $user_id ) {
 			$cursor = $user_id;
-			if ( ! LNKup_Comms_Audiences::matches( $user_id, LNKup_Comms_Audiences::clean_filters( $filters ) ) ) {
+			if ( ! LNKup_Comms_Audiences::matches( $user_id, $filters ) ) {
+				continue;
+			}
+			if ( $workflow && ! LNKup_Comms_Campaign_Workflow::allowed_recipient( $row, $user_id ) ) {
+				++$excluded;
 				continue;
 			}
 			$sent = LNKup_Comms_Engine::dispatch(
 				'campaign_message',
 				$user_id,
 				array(),
-				array( 'campaign_id' => $id, 'window' => 'c' . $id, 'channels' => $channels, 'category' => (string) $row['category'], 'role' => (string) $row['audience_role'], 'link' => (string) ( $row['content']['link'] ?? 'home' ), 'source' => 'campaign' )
+				array( 'campaign_id' => $id, 'window' => 'c' . $id, 'channels' => $channels, 'category' => (string) $row['category'], 'role' => (string) $row['audience_role'], 'link' => (string) ( $row['content']['link'] ?? 'home' ), 'source' => 'campaign', 'experiment_variant' => $workflow ? LNKup_Comms_Campaign_Workflow::variant_for( $row, $user_id ) : '' )
 			);
 			$sent ? ++$queued : ++$excluded;
 		}

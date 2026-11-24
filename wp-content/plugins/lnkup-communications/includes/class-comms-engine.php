@@ -102,6 +102,7 @@ class LNKup_Comms_Engine {
 			}
 		}
 		$stored_ctx['_variant']  = sanitize_key( (string) ( $opts['variant'] ?? '' ) );
+		$stored_ctx['_xv']       = sanitize_key( (string) ( $opts['experiment_variant'] ?? '' ) );
 		$stored_ctx['_items']    = is_array( $opts['items'] ?? null ) ? array_slice( $opts['items'], 0, 10 ) : array();
 		$stored_ctx['_channels'] = is_array( $opts['channels'] ?? null ) ? array_values( array_intersect( (array) $opts['channels'], array( 'inbox', 'email', 'push' ) ) ) : array();
 		$stored_ctx['_role']     = $role;
@@ -330,7 +331,7 @@ class LNKup_Comms_Engine {
 			$vars = array_merge( $vars, LNKup_Comms_Context::live_variables( LNKup_Comms_Templates::placeholders( $template ), array_merge( $ctx, array( '_role' => $role ) ), $user ) );
 		}
 		if ( (int) $message['campaign_id'] ) {
-			$vars = array_merge( $vars, LNKup_Comms_Campaigns::variables( (int) $message['campaign_id'] ) );
+			$vars = array_merge( $vars, LNKup_Comms_Campaigns::variables( (int) $message['campaign_id'], (string) ( $stored['_xv'] ?? '' ) ) );
 		}
 		$rendered = LNKup_Comms_Templates::render( (string) $message['template_key'], $vars, $role, (array) ( $stored['_items'] ?? array() ) );
 		if ( is_wp_error( $rendered ) ) {

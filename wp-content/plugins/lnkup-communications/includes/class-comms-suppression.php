@@ -186,7 +186,16 @@ class LNKup_Comms_Suppression {
 		$placeholders = implode( ',', array_fill( 0, count( $scopes ), '%s' ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 		$reason = $wpdb->get_var( $wpdb->prepare( "SELECT reason FROM {$table} WHERE email_hash = %s AND scope IN ({$placeholders}) LIMIT 1", array_merge( array( self::hash_email( $email ) ), $scopes ) ) );
-		return is_string( $reason ) && '' !== $reason ? 'suppressed_' . $reason : '';
+		$result = is_string( $reason ) && '' !== $reason ? 'suppressed_' . $reason : '';
+		/**
+		 * Other suppression lists (organizer outreach) can block an address for every sender.
+		 *
+		 * @param string $result      '' when sendable, otherwise the reason.
+		 * @param string $email       Address.
+		 * @param string $category    Preference category.
+		 * @param bool   $promotional Promotional message.
+		 */
+		return (string) apply_filters( 'lnkup_comms_email_suppressed', $result, $email, $category, $promotional );
 	}
 
 	// ------------------------------------------------------------------ Provider webhooks.

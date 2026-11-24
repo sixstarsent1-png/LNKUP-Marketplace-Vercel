@@ -198,10 +198,33 @@ class LNKup_Comms_Schema {
   scheduled_at datetime NULL,
   started_at datetime NULL,
   completed_at datetime NULL,
+  meta longtext NULL,
+  segment_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  submitted_by bigint(20) unsigned NOT NULL DEFAULT 0,
+  approved_by bigint(20) unsigned NOT NULL DEFAULT 0,
+  approved_at datetime NULL,
+  approved_count int(11) NOT NULL DEFAULT 0,
   created_at datetime NOT NULL,
   updated_at datetime NOT NULL,
   PRIMARY KEY  (id),
   KEY type_event (campaign_type,event_id),
+  KEY status (status)
+) {$charset};"
+		);
+
+		$segments = self::table( 'segments' );
+		dbDelta(
+			"CREATE TABLE {$segments} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  name varchar(191) NOT NULL DEFAULT '',
+  role varchar(20) NOT NULL DEFAULT 'vendor',
+  rules longtext NULL,
+  status varchar(16) NOT NULL DEFAULT 'active',
+  created_by bigint(20) unsigned NOT NULL DEFAULT 0,
+  updated_by bigint(20) unsigned NOT NULL DEFAULT 0,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY  (id),
   KEY status (status)
 ) {$charset};"
 		);
