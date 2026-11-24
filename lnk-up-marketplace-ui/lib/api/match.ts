@@ -171,6 +171,100 @@ export const RECRUITMENT_STAGES = [
 
 export type RecruitmentStage = (typeof RECRUITMENT_STAGES)[number]
 
+export const ORGANIZER_VENDOR_SECTIONS = ["recommended", "new_nearby", "previously_booked", "saved", "recently_viewed"] as const
+
+export type OrganizerVendorSection = (typeof ORGANIZER_VENDOR_SECTIONS)[number]
+
+export const ORGANIZER_VENDOR_SECTION_LABELS: Record<OrganizerVendorSection, { label: string; empty: string }> = {
+  recommended: { label: "Recommended for this event", empty: "No matching vendors yet. Add vendor categories and an address to your event, or share your application link." },
+  new_nearby: { label: "New vendors near you", empty: "No new matching vendors in the last two weeks. New vendors who match this event will appear here." },
+  previously_booked: { label: "Previously booked", empty: "Vendors you booked before appear here when they match this event." },
+  saved: { label: "Saved vendors", empty: "Favorite vendors or add them to a list to see them here." },
+  recently_viewed: { label: "Recently viewed", empty: "Vendors whose profiles you open appear here." },
+}
+
+export function isOrganizerVendorSection(value: unknown): value is OrganizerVendorSection {
+  return typeof value === "string" && (ORGANIZER_VENDOR_SECTIONS as readonly string[]).includes(value)
+}
+
+export type FulfillmentAction = { key: string; label: string; cta: string; view: string }
+
+export interface EventFulfillment {
+  eventId: string
+  eventTitle: string
+  daysToEvent: number | null
+  daysToDeadline: number | null
+  capacity: number
+  held: number
+  paid: number
+  awaitingPayment: number
+  remaining: number
+  unlimitedSlots: number
+  openOpportunities: number
+  pendingReview: number
+  fillRate: number | null
+  categories: Array<{ key: string; label: string; remaining: number; unlimited: boolean; open: boolean }>
+  invites: { total: number; accepted: number; declined: number; applications: number }
+  matchingVendors: number
+  actions: FulfillmentAction[]
+}
+
+export type WpFulfillmentResponse = {
+  event_id?: number
+  event_title?: string
+  days_to_event?: number | null
+  days_to_deadline?: number | null
+  fill_rate?: number | null
+  totals?: Partial<Record<"capacity" | "held" | "paid" | "awaiting_payment" | "remaining" | "unlimited" | "open_opportunities" | "pending_review", number>>
+  categories?: Array<{ key?: string; label?: string; remaining?: number; unlimited?: boolean; open?: boolean }>
+  invites?: { total?: number; applications?: number; by_status?: Record<string, number> }
+  matching_vendors?: number
+  actions?: Array<{ key?: string; label?: string; cta?: string; view?: string }>
+}
+
+export function mapFulfillment(data: WpFulfillmentResponse | undefined): EventFulfillment {
+  const t = data?.totals ?? {}
+  return {
+    eventId: String(data?.event_id ?? ""),
+    eventTitle: data?.event_title ?? "",
+    daysToEvent: data?.days_to_event ?? null,
+    daysToDeadline: data?.days_to_deadline ?? null,
+    capacity: Number(t.capacity ?? 0),
+    held: Number(t.held ?? 0),
+    paid: Number(t.paid ?? 0),
+    awaitingPayment: Number(t.awaiting_payment ?? 0),
+    remaining: Number(t.remaining ?? 0),
+    unlimitedSlots: Number(t.unlimited ?? 0),
+    openOpportunities: Number(t.open_opportunities ?? 0),
+    pendingReview: Number(t.pending_review ?? 0),
+    fillRate: data?.fill_rate ?? null,
+    categories: (data?.categories ?? []).map((c) => ({
+      key: c.key ?? "",
+      label: c.label ?? "",
+      remaining: Number(c.remaining ?? 0),
+      unlimited: Boolean(c.unlimited),
+      open: Boolean(c.open),
+    })),
+    invites: {
+      total: Number(data?.invites?.total ?? 0),
+      accepted: Number(data?.invites?.by_status?.accepted ?? 0),
+      declined: Number(data?.invites?.by_status?.declined ?? 0),
+      applications: Number(data?.invites?.applications ?? 0),
+    },
+    matchingVendors: Number(data?.matching_vendors ?? 0),
+    actions: (data?.actions ?? []).map((a) => ({ key: a.key ?? "", label: a.label ?? "", cta: a.cta ?? "", view: a.view ?? "" })),
+  }
+}
+
+/** Open categories with spots left, e.g. "4 Food Vendor"; the catch-all bucket is left out. */
+export function openCategoryLabels(f: EventFulfillment): string[] {
+  return f.categories.filter((c) => c.open && (c.unlimited || c.remaining > 0) && c.key !== "_any").map((c) => (c.unlimited ? c.label : `${c.remaining} ${c.label}`))
+}
+
+export function hasOpenSlots(f: EventFulfillment): boolean {
+  return f.openOpportunities > 0 && (f.remaining > 0 || f.unlimitedSlots > 0)
+}
+
 export interface MatchedVendor {
   profileId: string
   vendorUserId: string

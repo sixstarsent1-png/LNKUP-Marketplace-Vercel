@@ -24,6 +24,7 @@ import { PageHeader, SectionHeader } from "@/components/marketplace/page-header"
 import { StatCard } from "@/components/marketplace/stat-card"
 import { LaunchChecklist } from "@/components/marketplace/launch-checklist"
 import { OrganizerEventCard } from "@/components/organizer/organizer-event-card"
+import { FillSlotsCard } from "@/components/organizer/fill-slots-card"
 import { OrganizerVendorRequestCard } from "@/components/organizer/organizer-vendor-request-card"
 import { OrganizerFinancialSnapshot } from "@/components/organizer/organizer-financial-snapshot"
 import { OrganizerIntelligencePanel } from "@/components/organizer/organizer-intelligence-panel"
@@ -220,6 +221,8 @@ function OrganizerHomeContent() {
             }))}
           />
         )}
+
+        {live && !qaOverride && <FillSlotsCard />}
 
         {showAttention && (
           <section>

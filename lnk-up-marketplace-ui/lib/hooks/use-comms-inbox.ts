@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { CommsInboxResponse, InboxTab } from "@/lib/api/comms"
+import type { CommsInboxCount, CommsInboxResponse, InboxTab } from "@/lib/api/comms"
 import { isLiveApiEnabled } from "@/lib/api/config"
 import type { LnkupNotification } from "@/lib/api/notifications"
 import { parseApiResponse } from "@/lib/api/parse-api-error"
@@ -20,7 +20,20 @@ export function useCommsInbox(role: "vendor" | "organizer") {
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(live)
   const [error, setError] = useState<string | null>(null)
+  const [counts, setCounts] = useState<Partial<Record<InboxTab, number>>>({})
+  const [markingAll, setMarkingAll] = useState(false)
   const request = useRef(0)
+
+  const refreshCounts = useCallback(async () => {
+    if (!live) return
+    try {
+      const response = await fetch(`/api/notifications/inbox/count?role=${role}`)
+      const { data } = await parseApiResponse<CommsInboxCount>(response)
+      if (data?.available) setCounts(data.byTab)
+    } catch (err) {
+      console.error("[useCommsInbox] counts", err)
+    }
+  }, [live, role])
 
   const load = useCallback(
     async (nextTab: InboxTab, nextPage = 1) => {
@@ -43,6 +56,7 @@ export function useCommsInbox(role: "vendor" | "organizer") {
         })
         setPage(data.page)
         setHasMore(data.hasMore)
+        if (nextPage === 1) void refreshCounts()
       } catch (err) {
         console.error("[useCommsInbox]", err)
         if (current === request.current) setError(err instanceof Error ? err.message : "We couldn't load notifications.")
@@ -50,19 +64,63 @@ export function useCommsInbox(role: "vendor" | "organizer") {
         if (current === request.current) setLoading(false)
       }
     },
-    [live, role],
+    [live, refreshCounts, role],
   )
 
   useEffect(() => {
     void load(tab, 1)
   }, [load, tab])
 
-  const markRead = useCallback((id: string) => {
-    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, readAt: n.readAt ?? new Date().toISOString() } : n)))
-    void fetch(`/api/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }).catch(() => undefined)
-  }, [])
+  // Read on another device or in the app while this tab was in the background.
+  useEffect(() => {
+    if (!live) return
+    const onFocus = () => {
+      if (document.visibilityState === "visible") void refreshCounts()
+    }
+    document.addEventListener("visibilitychange", onFocus)
+    window.addEventListener("focus", onFocus)
+    return () => {
+      document.removeEventListener("visibilitychange", onFocus)
+      window.removeEventListener("focus", onFocus)
+    }
+  }, [live, refreshCounts])
+
+  const markRead = useCallback(
+    (id: string) => {
+      setItems((prev) => prev.map((n) => (n.id === id ? { ...n, readAt: n.readAt ?? new Date().toISOString() } : n)))
+      void fetch(`/api/notifications/${encodeURIComponent(id)}/read`, { method: "POST" })
+        .then(() => refreshCounts())
+        .catch(() => undefined)
+    },
+    [refreshCounts],
+  )
+
+  const markAll = useCallback(async () => {
+    if (markingAll) return
+    setMarkingAll(true)
+    const previous = items
+    const now = new Date().toISOString()
+    setItems((prev) => prev.map((n) => (n.readAt ? n : { ...n, readAt: now })))
+    try {
+      const response = await fetch("/api/notifications/inbox/read-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role, tab }),
+      })
+      const { error: apiError } = await parseApiResponse<{ ok: boolean }>(response)
+      if (apiError) throw new Error(apiError.message)
+      await refreshCounts()
+    } catch (err) {
+      console.error("[useCommsInbox] mark all", err)
+      setItems(previous)
+      setError("We couldn't mark these notifications as read. Try again.")
+    } finally {
+      setMarkingAll(false)
+    }
+  }, [items, markingAll, refreshCounts, role, tab])
 
   return {
+    role,
     available,
     tab,
     setTab,
@@ -71,8 +129,12 @@ export function useCommsInbox(role: "vendor" | "organizer") {
     loading,
     error,
     hasMore,
+    counts,
+    markingAll,
+    unreadInTab: counts[tab] ?? items.filter((n) => !n.readAt).length,
     loadMore: () => void load(tab, page + 1),
     retry: () => void load(tab, 1),
     markRead,
+    markAll: () => void markAll(),
   }
 }

@@ -7,6 +7,7 @@ import type {
   EventVendorMatchesResult,
   InviteJob,
   InvitePreview,
+  OrganizerVendorSection,
   RecruitmentSummary,
   VendorMatchSection,
   VendorMatchSectionResult,
@@ -97,6 +98,8 @@ export interface EventVendorFilters {
   radius?: number
   excludeApplied?: boolean
   page?: number
+  perPage?: number
+  section?: OrganizerVendorSection
 }
 
 export function useEventVendorMatches(eventId: string | null, filters: EventVendorFilters) {
@@ -123,6 +126,8 @@ export function useEventVendorMatches(eventId: string | null, filters: EventVend
       if (parsedFilters.radius) qs.set("radius", String(parsedFilters.radius))
       qs.set("exclude_applied", parsedFilters.excludeApplied === false ? "0" : "1")
       if (parsedFilters.page) qs.set("page", String(parsedFilters.page))
+      if (parsedFilters.perPage) qs.set("per_page", String(parsedFilters.perPage))
+      if (parsedFilters.section && parsedFilters.section !== "recommended") qs.set("section", parsedFilters.section)
       const response = await fetch(`/api/match/organizer/events/${encodeURIComponent(eventId)}/vendors?${qs.toString()}`)
       const { data, error: apiError } = await parseApiResponse<EventVendorMatchesResult>(response)
       if (apiError || !data) throw new Error(apiError?.message ?? "We couldn't load matching vendors.")

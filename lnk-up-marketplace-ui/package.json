@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "phase25:verify": "node scripts/phase25-verify.mjs",
+    "check:comms-types": "node scripts/check-comms-types.mjs",
     "generate-icons": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {

@@ -1,4 +1,5 @@
 import type { CommsPreferences } from "@/lib/api/comms"
+import { COMMS_TYPE_LABELS, isCommsServerType, type CommsServerType } from "@/lib/api/comms-types"
 import type { OrganizerHomeSummary } from "@/lib/api/organizer-home"
 import type { OrganizerVendorRequest } from "@/lib/api/organizer-requests"
 import type { SavedSearch } from "@/lib/api/saved-searches"
@@ -32,6 +33,7 @@ export type LnkupNotificationType =
   | "organizer_vendor_missing_documents"
   | "organizer_event_needs_attention"
   | "system"
+  | CommsServerType
 
 export type LnkupNotification = {
   id: string
@@ -139,7 +141,7 @@ export function isActionRequiredNotification(n: LnkupNotification): boolean {
 }
 
 export function notificationTypeLabel(type: LnkupNotificationType): string {
-  const labels: Record<LnkupNotificationType, string> = {
+  const labels: Partial<Record<LnkupNotificationType, string>> = {
     application_submitted: "Application submitted",
     application_under_review: "Under review",
     application_approved: "Approved",
@@ -164,7 +166,7 @@ export function notificationTypeLabel(type: LnkupNotificationType): string {
     organizer_event_needs_attention: "Event needs attention",
     system: "Update",
   }
-  return labels[type] ?? "Notification"
+  return labels[type] ?? (isCommsServerType(type) ? COMMS_TYPE_LABELS[type] : "Notification")
 }
 
 const NOTIFICATION_SEVERITY: Partial<

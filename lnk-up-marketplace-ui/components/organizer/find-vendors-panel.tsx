@@ -4,7 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { BadgeCheck, CalendarPlus, Lightbulb, Send, Sparkles, Users } from "lucide-react"
 import { trackLnkupEvent } from "@/lib/analytics/track-event"
-import type { InviteJob, InvitePreview, MatchedVendor, RecruitmentStage } from "@/lib/api/match"
+import {
+  isOrganizerVendorSection,
+  ORGANIZER_VENDOR_SECTION_LABELS,
+  ORGANIZER_VENDOR_SECTIONS,
+  type InviteJob,
+  type InvitePreview,
+  type MatchedVendor,
+  type OrganizerVendorSection,
+  type RecruitmentStage,
+} from "@/lib/api/match"
 import { useOrganizerEvents } from "@/lib/hooks/use-organizer-events"
 import {
   fetchInviteJob,
@@ -42,6 +51,7 @@ export function FindVendorsPanel({ initialEventId }: { initialEventId?: string |
   const [eventId, setEventId] = useState<string | null>(initialEventId ?? null)
   const [city, setCity] = useState("")
   const [verified, setVerified] = useState(false)
+  const [section, setSection] = useState<OrganizerVendorSection>("recommended")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [message, setMessage] = useState("")
   const [preview, setPreview] = useState<InvitePreview | null>(null)
@@ -53,7 +63,7 @@ export function FindVendorsPanel({ initialEventId }: { initialEventId?: string |
     if (!eventId && upcoming[0]) setEventId(upcoming[0].id)
   }, [eventId, upcoming])
 
-  const filters = useMemo(() => ({ city: city.trim() || undefined, verified }), [city, verified])
+  const filters = useMemo(() => ({ city: city.trim() || undefined, verified, section }), [city, verified, section])
   const { result, loading, error, retry } = useEventVendorMatches(eventId, filters)
   const { summary } = useRecruitment(eventId)
 
@@ -161,7 +171,22 @@ export function FindVendorsPanel({ initialEventId }: { initialEventId?: string |
 
   return (
     <div className="flex flex-col gap-4" data-testid="find-vendors-panel">
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-4">
+        <select
+          className="h-9 rounded-md border bg-background px-2 text-sm"
+          value={section}
+          onChange={(e) => {
+            if (isOrganizerVendorSection(e.target.value)) setSection(e.target.value)
+          }}
+          aria-label="Show"
+          data-testid="find-vendors-section"
+        >
+          {ORGANIZER_VENDOR_SECTIONS.map((key) => (
+            <option key={key} value={key}>
+              {ORGANIZER_VENDOR_SECTION_LABELS[key].label}
+            </option>
+          ))}
+        </select>
         <select
           className="h-9 rounded-md border bg-background px-2 text-sm"
           value={eventId ?? ""}
@@ -283,8 +308,8 @@ export function FindVendorsPanel({ initialEventId }: { initialEventId?: string |
       ) : result.items.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="No matching vendors yet"
-          description="Add vendor categories and an address to your event, or share your application link."
+          title={section === "recommended" ? "No matching vendors yet" : `Nothing in ${ORGANIZER_VENDOR_SECTION_LABELS[section].label}`}
+          description={ORGANIZER_VENDOR_SECTION_LABELS[section].empty}
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2" data-testid="find-vendors-results">

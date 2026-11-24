@@ -45,8 +45,8 @@
                 "organizer"
             ],
             "tabs": {
-                "vendor": "opportunities",
-                "organizer": "operations"
+                "vendor": "events",
+                "organizer": "account"
             }
         },
         {
@@ -850,8 +850,8 @@
                 "organizer"
             ],
             "tabs": {
-                "vendor": "account",
-                "organizer": "account"
+                "vendor": "payments",
+                "organizer": "payments"
             }
         },
         {
@@ -949,8 +949,8 @@
                 "organizer"
             ],
             "tabs": {
-                "vendor": "account",
-                "organizer": "account"
+                "vendor": "payments",
+                "organizer": "payments"
             }
         },
         {
@@ -1314,8 +1314,8 @@
                 "admin"
             ],
             "tabs": {
-                "vendor": "account",
-                "organizer": "account"
+                "vendor": "events",
+                "organizer": "events"
             }
         }
     ]

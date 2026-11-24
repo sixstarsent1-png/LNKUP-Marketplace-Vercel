@@ -8,9 +8,12 @@ import {
   mockVendorNotifications,
   type NotificationCount,
 } from "@/lib/api/notifications"
+import type { CommsInboxCount } from "@/lib/api/comms"
 import { getReadIds } from "@/lib/notifications/read-state"
 import { parseApiResponse } from "@/lib/api/parse-api-error"
 import { useAuth } from "@/lib/hooks/use-auth"
+
+const POLL_MS = 60_000
 
 export function useNotificationCount(enabled = true) {
   const live = isLiveApiEnabled()
@@ -37,6 +40,17 @@ export function useNotificationCount(enabled = true) {
 
     setLoading(true)
     try {
+      const serverRes = await fetch("/api/notifications/inbox/count")
+      if (serverRes.status === 401) {
+        setCount({ unread: 0 })
+        return
+      }
+      const server = await parseApiResponse<CommsInboxCount>(serverRes)
+      if (server.data?.available) {
+        setCount({ unread: server.data.unread, actionRequired: server.data.actionRequired, updatedAt: new Date().toISOString() })
+        return
+      }
+
       const [countRes, listRes] = await Promise.all([
         fetch("/api/notifications/count"),
         fetch("/api/notifications"),
@@ -68,6 +82,23 @@ export function useNotificationCount(enabled = true) {
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  useEffect(() => {
+    if (!enabled || !live || !isAuthenticated) return
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh()
+    }
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh()
+    }, POLL_MS)
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("focus", onVisible)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("focus", onVisible)
+    }
+  }, [enabled, live, isAuthenticated, refresh])
 
   return { count, loading, refresh, isLive: live }
 }

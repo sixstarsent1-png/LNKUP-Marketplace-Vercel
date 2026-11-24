@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server"
 import { isLiveApiEnabled } from "@/lib/api/config"
-import { isCommsUnavailable, mapCommsItem, type CommsInboxResponse, type InboxTab } from "@/lib/api/comms"
+import { INBOX_TABS, isCommsUnavailable, mapCommsItem, type CommsInboxResponse, type InboxTab } from "@/lib/api/comms"
 import { authRequiredResponse, toErrorResponse } from "@/lib/api/normalize-wp-error"
 import { wpFetchJson } from "@/lib/api/wp-fetch"
 import { getSession, toWpAuth } from "@/lib/auth/session"
 
-const TABS = new Set<InboxTab>(["all", "applications", "payments", "events", "opportunities", "operations"])
+const TABS = new Set<InboxTab>(INBOX_TABS)
 
 /**
  * Categorized, paginated inbox from lnkup-communications. Responds `available: false` when the

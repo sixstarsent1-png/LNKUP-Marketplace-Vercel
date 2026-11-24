@@ -1,11 +1,24 @@
 import { WpFetchError } from "@/lib/api/wp-fetch"
+import { isCommsServerType } from "@/lib/api/comms-types"
 import type { LnkupNotification, LnkupNotificationType } from "@/lib/api/notifications"
 
 /** lnkup-communications types shared by BFF routes and client components. */
 
 export type CommsRole = "vendor" | "organizer"
 export type EmailMode = "immediate" | "daily" | "weekly" | "off"
-export type InboxTab = "all" | "applications" | "payments" | "events" | "opportunities" | "operations"
+export const INBOX_TABS = ["all", "applications", "payments", "events", "opportunities", "operations", "invitations", "account"] as const
+export type InboxTab = (typeof INBOX_TABS)[number]
+
+export function isInboxTab(value: unknown): value is InboxTab {
+  return typeof value === "string" && (INBOX_TABS as readonly string[]).includes(value)
+}
+
+export type CommsInboxCount = {
+  available: boolean
+  unread: number
+  actionRequired: number
+  byTab: Partial<Record<InboxTab, number>>
+}
 
 export type CommsPreferenceCategory = {
   key: string
@@ -62,6 +75,10 @@ export function inboxTabLabel(tab: InboxTab): string {
       return "Opportunities"
     case "operations":
       return "Operations"
+    case "invitations":
+      return "Invitations"
+    case "account":
+      return "Account"
     default: {
       const exhaustive: never = tab
       return exhaustive
@@ -117,7 +134,7 @@ export function mapCommsItem(raw: WpCommsItem): LnkupNotification | null {
   const severity = ["info", "success", "warning", "urgent"].includes(String(raw.severity)) ? (raw.severity as LnkupNotification["severity"]) : "info"
   return {
     id: String(raw.id),
-    type: (WEB_TYPES.has(String(raw.type)) ? raw.type : "system") as LnkupNotificationType,
+    type: (WEB_TYPES.has(String(raw.type)) || isCommsServerType(raw.type) ? raw.type : "system") as LnkupNotificationType,
     title: String(raw.title),
     message: raw.message || undefined,
     createdAt: raw.createdAt || undefined,

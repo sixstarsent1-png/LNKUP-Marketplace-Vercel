@@ -45,6 +45,9 @@ function OrganizerVendorsContent() {
   const showFindVendors = !live || findVendorsEnabled
   const searchParams = useSearchParams()
   const eventFilter = searchParams.get("event")
+  const tabParam = searchParams.get("tab") ?? ""
+  const initialTab =
+    ["discover", "approved", "lists", "invites"].includes(tabParam) || (tabParam === "find" && showFindVendors) ? tabParam : "requests"
   const { state: qaState, retry: qaRetry } = usePanelState()
   const { items, loading, error, unauthenticated, reviewUnavailable, queueBuckets, retry } = useOrganizerRequests()
   const [query, setQuery] = useState("")
@@ -271,7 +274,7 @@ function OrganizerVendorsContent() {
         </Card>
       )}
 
-      <Tabs defaultValue="requests">
+      <Tabs defaultValue={initialTab}>
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
           <TabsList variant="line" className="w-max">
             <TabsTrigger value="requests">Requests ({pending.length})</TabsTrigger>

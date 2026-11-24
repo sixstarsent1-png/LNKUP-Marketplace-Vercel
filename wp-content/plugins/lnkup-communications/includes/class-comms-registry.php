@@ -337,10 +337,13 @@ class LNKup_Comms_Registry {
 		static $map = null;
 		if ( null === $map ) {
 			$map = array();
+			// Several triggers share a type; the first (primary) definition decides its tab. Admin-only
+			// triggers never reach a user inbox, so they must not claim a shared type such as "system".
 			foreach ( self::triggers() as $def ) {
-				$cat = self::category( (string) $def['category'] );
-				if ( $cat ) {
-					$map[ (string) $def['type'] ] = $cat['tab'];
+				$cat  = self::category( (string) $def['category'] );
+				$type = (string) $def['type'];
+				if ( $cat && 'admin' !== $def['role'] && ! isset( $map[ $type ] ) ) {
+					$map[ $type ] = $cat['tab'];
 				}
 			}
 			$core = array(

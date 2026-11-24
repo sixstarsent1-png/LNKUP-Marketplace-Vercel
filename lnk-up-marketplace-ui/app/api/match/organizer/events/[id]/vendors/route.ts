@@ -4,7 +4,7 @@ import { authRequiredResponse, toErrorResponse } from "@/lib/api/normalize-wp-er
 import { getSession, toWpAuth } from "@/lib/auth/session"
 import { mapEventVendorMatches, type WpEventVendorsResponse } from "@/lib/api/match"
 
-const FORWARDED = ["opportunity_id", "category", "city", "state", "verified", "radius", "exclude_applied", "stage", "page"] as const
+const FORWARDED = ["opportunity_id", "category", "city", "state", "verified", "radius", "exclude_applied", "stage", "page", "section", "per_page"] as const
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
