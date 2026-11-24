@@ -362,6 +362,12 @@ $lnkup_core_files = array(
 	'includes/public/class-public-discovery.php',
 	'includes/public/class-public-discovery-rest.php',
 	'includes/public/class-campaign-landings.php',
+	'includes/marketing/class-marketing-flags.php',
+	'includes/seo/class-index-policy.php',
+	'includes/seo/class-seo-urls.php',
+	'includes/seo/class-seo-schema.php',
+	'includes/seo/class-sitemaps.php',
+	'includes/seo/class-seo-diagnostics.php',
 	'includes/matching/class-tours.php',
 	'includes/matching/class-tours-rest.php',
 	'includes/portfolio/class-portfolio-tables.php',
@@ -552,6 +558,10 @@ function lnkup_marketplace_init() {
 	LNKup_Public_Discovery::init();
 	LNKup_Public_Discovery_REST::init();
 	LNKup_Campaign_Landings::init();
+	LNKup_SEO_URLs::init();
+	LNKup_SEO_Schema::init();
+	LNKup_Sitemaps::init();
+	LNKup_SEO_Diagnostics::init();
 	LNKup_Tours::init();
 	LNKup_Tours_REST::init();
 	LNKup_Portfolio_Tables::maybe_upgrade();

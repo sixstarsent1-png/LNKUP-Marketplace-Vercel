@@ -237,6 +237,13 @@ function lnkup_seo_should_noindex() {
 		}
 	}
 
+	if ( class_exists( 'LNKup_Index_Policy' ) && LNKup_Index_Policy::active() ) {
+		$decision = LNKup_Index_Policy::current();
+		if ( null !== $decision && ! $decision['index'] ) {
+			return true;
+		}
+	}
+
 	return false;
 }
 
@@ -444,7 +451,38 @@ function lnkup_seo_get_context_copy() {
 	}
 
 	if ( is_singular( array( 'lnkup_opportunity', 'lnkup_event' ) ) ) {
-		return lnkup_seo_opportunity_copy( get_queried_object_id() );
+		$copy = lnkup_seo_opportunity_copy( get_queried_object_id() );
+		if ( $copy && class_exists( 'LNKup_Index_Policy' ) && LNKup_Index_Policy::active() && is_singular( 'lnkup_event' ) ) {
+			$reason = LNKup_Index_Policy::event( get_queried_object_id() )['reason'];
+			$name   = function_exists( 'lnkup_plain_title' ) ? lnkup_plain_title( get_queried_object_id() ) : get_the_title();
+			if ( 'cancelled' === $reason ) {
+				/* translators: %s: event name */
+				$copy['description'] = sprintf( __( '%s has been cancelled. See upcoming events from this organizer and other vendor opportunities nearby on LNKup.', 'lnkup-marketplace' ), $name );
+			} elseif ( 'past' === $reason ) {
+				/* translators: %s: event name */
+				$copy['description'] = sprintf( __( '%s has ended. See upcoming events from this organizer and other vendor opportunities on LNKup.', 'lnkup-marketplace' ), $name );
+			} elseif ( 'postponed' === $reason ) {
+				/* translators: %s: event name */
+				$copy['description'] = sprintf( __( '%s has been postponed. Follow the organizer on LNKup for the new date and vendor applications.', 'lnkup-marketplace' ), $name );
+			}
+		}
+		return $copy;
+	}
+
+	if ( class_exists( 'LNKup_Portfolio_Public' ) && '' !== (string) get_query_var( LNKup_Portfolio_Public::QUERY_VAR ) && class_exists( 'LNKup_Index_Policy' ) && LNKup_Index_Policy::active() ) {
+		$tour_id = LNKup_Portfolio_Public::tour_id_from_slug( (string) get_query_var( LNKup_Portfolio_Public::QUERY_VAR ) );
+		if ( $tour_id ) {
+			$type  = 'tour' === get_post_meta( $tour_id, '_lnkup_tour_type', true ) ? __( 'Tour', 'lnkup-marketplace' ) : __( 'Series', 'lnkup-marketplace' );
+			$about = trim( wp_strip_all_tags( (string) get_post_field( 'post_content', $tour_id ) ) );
+			return array(
+				/* translators: 1: tour name, 2: Tour or Series */
+				'title'       => sprintf( __( '%1$s — %2$s Vendor Opportunities | LNKup', 'lnkup-marketplace' ), get_the_title( $tour_id ), $type ),
+				'description' => '' !== $about
+					? wp_trim_words( $about, 28, '…' )
+					/* translators: %s: tour name */
+					: sprintf( __( 'Vendor opportunities at every stop of %s. See dates, cities and booth availability, then apply on LNKup.', 'lnkup-marketplace' ), get_the_title( $tour_id ) ),
+			);
+		}
 	}
 
 	return null;
@@ -476,6 +514,7 @@ class LNKup_SEO {
 
 		add_filter( 'pre_get_document_title', array( __CLASS__, 'filter_title' ) );
 		add_filter( 'get_canonical_url', array( __CLASS__, 'filter_wp_canonical' ), 10, 2 );
+		add_filter( 'wp_robots', array( __CLASS__, 'filter_wp_robots' ) );
 		add_action( 'wp_head', array( __CLASS__, 'print_fallback_meta' ), 1 );
 		add_action( 'admin_notices', array( __CLASS__, 'rankmath_missing_notice' ) );
 	}
@@ -616,8 +655,41 @@ class LNKup_SEO {
 			return $robots;
 		}
 		$directives['index']  = 'noindex';
-		$directives['follow'] = 'nofollow';
+		$directives['follow'] = self::policy_follows() ? 'follow' : 'nofollow';
 		return $directives;
+	}
+
+	/**
+	 * Policy-driven noindex pages (past/cancelled events, thin markets…) still pass link equity.
+	 */
+	private static function policy_follows(): bool {
+		if ( ! class_exists( 'LNKup_Index_Policy' ) || ! LNKup_Index_Policy::active() ) {
+			return false;
+		}
+		$decision = LNKup_Index_Policy::current();
+		return null !== $decision && ! $decision['index'] && ! in_array( $decision['reason'], array( 'app_page', 'not_public' ), true );
+	}
+
+	/**
+	 * Fallback mode: feed our robots decision into core's single robots tag (no duplicate tag).
+	 *
+	 * @param array<string,bool|string> $robots Core robots.
+	 * @return array<string,bool|string>
+	 */
+	public static function filter_wp_robots( $robots ) {
+		$robots     = is_array( $robots ) ? $robots : array();
+		$directives = self::filter_robots( array() );
+		if ( ! empty( $directives['index'] ) && 'noindex' === $directives['index'] ) {
+			$robots['noindex'] = true;
+			unset( $robots['index'] );
+			if ( 'nofollow' === ( $directives['follow'] ?? '' ) ) {
+				$robots['nofollow'] = true;
+				unset( $robots['follow'] );
+			} else {
+				$robots['follow'] = true;
+			}
+		}
+		return $robots;
 	}
 
 	/**
@@ -631,14 +703,18 @@ class LNKup_SEO {
 		if ( $description ) {
 			echo '<meta name="description" content="' . esc_attr( $description ) . '" />' . "\n";
 		}
-		$robots = self::filter_robots( array() );
-		if ( ! empty( $robots['index'] ) && 'noindex' === $robots['index'] ) {
-			$follow = ! empty( $robots['follow'] ) ? $robots['follow'] : 'follow';
-			echo '<meta name="robots" content="' . esc_attr( 'noindex, ' . $follow ) . '" />' . "\n";
-		}
 		$fallback_url = is_singular() ? (string) get_permalink( get_queried_object_id() ) : home_url( '/' );
 		$canonical    = self::filter_canonical( $fallback_url );
 		if ( $canonical ) {
+			$market_page = class_exists( 'LNKup_Market_Pages' ) && LNKup_Market_Pages::is_market_request();
+			$tour_page   = class_exists( 'LNKup_Portfolio_Public' ) && '' !== (string) get_query_var( LNKup_Portfolio_Public::QUERY_VAR );
+			if ( ! is_singular() && ( $market_page || $tour_page ) ) {
+				if ( $tour_page && ! $market_page ) {
+					$tour_id   = LNKup_Portfolio_Public::tour_id_from_slug( (string) get_query_var( LNKup_Portfolio_Public::QUERY_VAR ) );
+					$canonical = $tour_id ? LNKup_Portfolio_Public::tour_url( $tour_id ) : $canonical;
+				}
+				echo '<link rel="canonical" href="' . esc_url( $canonical ) . '" />' . "\n";
+			}
 			echo '<meta property="og:url" content="' . esc_url( $canonical ) . '" />' . "\n";
 		}
 		$title = self::filter_title( '' );
@@ -672,6 +748,28 @@ class LNKup_SEO {
 	 * @param object $jsonld JsonLD instance.
 	 */
 	public static function filter_json_ld( $data, $jsonld ) {
+		if ( ! class_exists( 'LNKup_Index_Policy' ) || ! LNKup_Index_Policy::active() ) {
+			return self::legacy_json_ld( $data, $jsonld );
+		}
+		if ( ! isset( $data['@graph'] ) || ! is_array( $data['@graph'] ) ) {
+			$data['@graph'] = array();
+		}
+		if ( ! is_singular( array( 'lnkup_event', 'lnkup_opportunity' ) ) ) {
+			$data = self::legacy_json_ld( $data, $jsonld );
+		}
+		foreach ( LNKup_SEO_Schema::current_graph() as $piece ) {
+			$data['@graph'][] = $piece;
+		}
+		return $data;
+	}
+
+	/**
+	 * Schema before the index policy (market WebPage/ItemList, basic Event).
+	 *
+	 * @param array  $data   Schema data.
+	 * @param object $jsonld JsonLD instance.
+	 */
+	private static function legacy_json_ld( $data, $jsonld ) {
 		unset( $jsonld );
 
 		if ( class_exists( 'LNKup_Market_Pages' ) && LNKup_Market_Pages::is_market_request() ) {
@@ -706,6 +804,9 @@ class LNKup_SEO {
 				foreach ( (array) ( $page_data['opportunities'] ?? array() ) as $i => $opp ) {
 					$name = $opp['name'] ?? '';
 					$url  = $opp['permalink'] ?? $opp['url'] ?? '';
+					if ( ! $url && ! empty( $opp['event_id'] ) && class_exists( 'LNKup_Organizer_Onboarding' ) ) {
+						$url = LNKup_Organizer_Onboarding::event_public_url( (int) $opp['event_id'] );
+					}
 					if ( ! $url && ! empty( $opp['opportunity_id'] ) ) {
 						$url = get_permalink( (int) $opp['opportunity_id'] );
 					}
@@ -827,6 +928,18 @@ class LNKup_SEO {
 			return true;
 		}
 
+		if ( class_exists( 'LNKup_Index_Policy' ) && LNKup_Index_Policy::active() ) {
+			if ( 'page' === $post->post_type && in_array( $post->post_name, LNKup_Index_Policy::app_page_slugs(), true ) ) {
+				return true;
+			}
+			if ( 'lnkup_opportunity' === $post->post_type ) {
+				return true;
+			}
+			if ( 'lnkup_event' === $post->post_type ) {
+				return ! LNKup_Index_Policy::event( (int) $post->ID )['sitemap'];
+			}
+		}
+
 		$private_types = array(
 			'lnkup_application',
 			'lnkup_document',
@@ -908,6 +1021,9 @@ class LNKup_SEO {
 	 */
 	public static function append_market_sitemap_urls( $urls, $type ) {
 		if ( 'page' !== $type || ! class_exists( 'LNKup_Market_Pages' ) ) {
+			return $urls;
+		}
+		if ( class_exists( 'LNKup_Index_Policy' ) && LNKup_Index_Policy::active() ) {
 			return $urls;
 		}
 		foreach ( LNKup_Market_Pages::get_sitemap_urls() as $entry ) {

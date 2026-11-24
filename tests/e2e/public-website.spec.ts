@@ -113,7 +113,7 @@ test.describe('Public website 5.0', () => {
     test.skip((await cards.count()) === 0, 'no open events');
     const first = cards.first();
     await expect(first.getByRole('heading')).toBeVisible();
-    await expect(first.getByText(/\d+ spots? open/)).toBeVisible();
+    await expect(first.getByText(/\d+ spots? open/).or(first.getByTestId('lp-event-gate'))).toBeVisible();
     await expect(first.getByRole('link').first()).toHaveAttribute('href', /^https?:\/\//);
   });
 

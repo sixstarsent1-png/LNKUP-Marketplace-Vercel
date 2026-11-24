@@ -1579,7 +1579,8 @@ class LNKup_Organizer_Onboarding {
 	public static function organizer_public_url( int $user_id ): string {
 		self::ensure_organizers_page();
 		$base = function_exists( 'lnkup_page_url_helper' ) ? lnkup_page_url_helper( 'organizers' ) : home_url( '/organizers/' );
-		return add_query_arg( 'organizer', self::organizer_public_slug( $user_id ), $base );
+		$slug = self::organizer_public_slug( $user_id );
+		return (string) apply_filters( 'lnkup_organizer_public_url', add_query_arg( 'organizer', $slug, $base ), $user_id, $slug );
 	}
 
 	/**
