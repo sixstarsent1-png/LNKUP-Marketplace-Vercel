@@ -70,6 +70,7 @@ class LNKup_Event_Builder_REST {
 		);
 		register_rest_route( self::NS, self::BASE . '/drafts/(?P<id>\d+)/preview', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'preview' ), 'permission_callback' => $draft, 'args' => $id ) );
 		register_rest_route( self::NS, self::BASE . '/drafts/(?P<id>\d+)/review', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'review' ), 'permission_callback' => $draft, 'args' => $id ) );
+		register_rest_route( self::NS, self::BASE . '/drafts/(?P<id>\d+)/apply-template', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'apply_template' ), 'permission_callback' => $draft, 'args' => $id ) );
 		register_rest_route( self::NS, self::BASE . '/drafts/(?P<id>\d+)/publish', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'publish' ), 'permission_callback' => $draft, 'args' => $id ) );
 		register_rest_route( self::NS, self::BASE . '/events/(?P<id>\d+)/edit', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'edit_event' ), 'permission_callback' => $can, 'args' => $id ) );
 		register_rest_route( self::NS, self::BASE . '/fee-preview', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'fee_preview' ), 'permission_callback' => $can ) );
@@ -127,7 +128,7 @@ class LNKup_Event_Builder_REST {
 		$types = get_terms( array( 'taxonomy' => 'lnkup_event_type', 'hide_empty' => false ) );
 		$type_list = array();
 		foreach ( is_array( $types ) ? $types : array() as $t ) {
-			$type_list[] = array( 'slug' => $t->slug, 'name' => html_entity_decode( $t->name, ENT_QUOTES, 'UTF-8' ), 'parent' => (int) $t->parent );
+			$type_list[] = array( 'id' => (int) $t->term_id, 'slug' => $t->slug, 'name' => html_entity_decode( $t->name, ENT_QUOTES, 'UTF-8' ), 'parent' => (int) $t->parent );
 		}
 		$brands = array();
 		foreach ( get_posts( array( 'post_type' => 'lnkup_brand', 'author' => $user, 'post_status' => 'publish', 'posts_per_page' => 50, 'no_found_rows' => true ) ) as $b ) {
@@ -288,6 +289,37 @@ class LNKup_Event_Builder_REST {
 			'sources'     => $sources,
 			'disclosure'  => $sources ? __( 'Vendor applications and booth payments are handled on LNKup. Attendee tickets are sold on the official event listing.', 'lnkup-marketplace' ) : '',
 		);
+	}
+
+	/**
+	 * Apply a template's vendor setup to an existing draft (event details are kept).
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function apply_template( WP_REST_Request $request ) {
+		$body  = self::body( $request );
+		$id    = (int) $request['id'];
+		$draft = LNKup_Event_Builder_Drafts::get( $id );
+		$ref   = (string) ( $body['template_id'] ?? '' );
+		$tpl   = LNKup_Event_Builder_Library::template_state( ctype_digit( $ref ) ? (int) $ref : sanitize_text_field( $ref ), get_current_user_id(), array() );
+		if ( is_wp_error( $tpl ) ) {
+			return $tpl;
+		}
+		$patch = array(
+			'options'      => $tpl['options'],
+			'applications' => array( 'questions' => $tpl['applications']['questions'], 'documents' => $tpl['applications']['documents'] ),
+			'template'     => $tpl['template'],
+			'step'         => 'options',
+		);
+		if ( 'relative' === $tpl['payments']['deadline']['mode'] ) {
+			$patch['payments'] = array( 'deadline' => $tpl['payments']['deadline'] );
+		}
+		$saved = LNKup_Event_Builder_Drafts::save( $id, $patch, isset( $body['revision'] ) ? (int) $body['revision'] : (int) $draft['revision'] );
+		if ( is_wp_error( $saved ) ) {
+			return $saved;
+		}
+		LNKup_Event_Builder_Publisher::track( 'template_applied', $saved['state'], 0, get_current_user_id() );
+		return rest_ensure_response( self::draft_payload( $saved ) );
 	}
 
 	/**

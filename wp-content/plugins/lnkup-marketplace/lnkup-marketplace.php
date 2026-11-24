@@ -412,6 +412,7 @@ $lnkup_core_files = array(
 	'includes/event-builder/class-event-builder-editor.php',
 	'includes/event-builder/class-event-builder-library.php',
 	'includes/event-builder/class-event-builder-rest.php',
+	'public/class-event-builder-view.php',
 	'includes/matching/class-tours.php',
 	'includes/matching/class-tours-rest.php',
 	'includes/portfolio/class-portfolio-tables.php',
@@ -632,6 +633,7 @@ function lnkup_marketplace_init() {
 	LNKup_Event_Builder_Drafts::init();
 	LNKup_Event_Builder_Publisher::init();
 	LNKup_Event_Builder_REST::init();
+	LNKup_Event_Builder_View::init();
 	LNKup_Tours::init();
 	LNKup_Tours_REST::init();
 	LNKup_Portfolio_Tables::maybe_upgrade();

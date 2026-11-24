@@ -255,6 +255,9 @@ function lnkup_organizer_dashboard_view( $view = null ) {
 	if ( class_exists( 'LNKup_Organizer_Marketing' ) && LNKup_Organizer_Marketing::enabled() ) {
 		$allowed[] = 'marketing';
 	}
+	if ( class_exists( 'LNKup_Event_OS_Flags' ) && LNKup_Event_OS_Flags::enabled( 'event_import_v3' ) ) {
+		$allowed[] = 'imports';
+	}
 	return in_array( $view, $allowed, true ) ? $view : 'home';
 }
 

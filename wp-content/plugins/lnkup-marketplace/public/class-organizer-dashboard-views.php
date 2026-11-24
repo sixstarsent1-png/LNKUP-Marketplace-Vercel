@@ -82,7 +82,10 @@ class LNKup_Organizer_Dashboard_Views {
 					echo self::render_intelligence(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					break;
 				case 'create':
-					echo self::render_create(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					echo class_exists( 'LNKup_Event_Builder_View' ) && LNKup_Event_Builder_View::active() ? LNKup_Event_Builder_View::render() : self::render_create(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					break;
+				case 'imports':
+					echo class_exists( 'LNKup_Event_Builder_View' ) && LNKup_Event_Builder_View::active() ? LNKup_Event_Builder_View::render( 'imports' ) : self::render_create(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					break;
 				case 'help':
 					echo self::render_help(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
