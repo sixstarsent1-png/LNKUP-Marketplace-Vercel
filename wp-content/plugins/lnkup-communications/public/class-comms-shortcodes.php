@@ -15,17 +15,22 @@ class LNKup_Comms_Shortcodes {
 	const PAGES = array(
 		'notification-settings' => array( 'title' => 'Notification settings', 'shortcode' => '[lnkup_notification_preferences]', 'template' => 'page-templates/vendor-shell.php' ),
 		'event-communications'  => array( 'title' => 'Event communications', 'shortcode' => '[lnkup_event_communications]', 'template' => '' ),
+		'notification-center'   => array( 'title' => 'Notifications', 'shortcode' => '[lnkup_notification_center]', 'template' => 'page-templates/vendor-shell.php' ),
 	);
+
+	/** Bump when PAGES gains an entry so existing sites create the new page once. */
+	const PAGES_VERSION = 2;
 
 	public static function init(): void {
 		add_shortcode( 'lnkup_notification_preferences', array( __CLASS__, 'preferences' ) );
 		add_shortcode( 'lnkup_event_communications', array( __CLASS__, 'event_communications' ) );
+		add_shortcode( 'lnkup_notification_center', array( __CLASS__, 'notification_center' ) );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'register_assets' ) );
 		add_action( 'admin_init', array( __CLASS__, 'ensure_pages' ) );
 		add_action(
 			'init',
 			static function (): void {
-				if ( ! get_option( 'lnkup_comms_pages_created' ) ) {
+				if ( (int) get_option( 'lnkup_comms_pages_created' ) < self::PAGES_VERSION ) {
 					self::ensure_pages( true );
 				}
 			},
@@ -45,8 +50,8 @@ class LNKup_Comms_Shortcodes {
 		}
 		$items[] = array(
 			'label' => __( 'Notifications', 'lnkup-communications' ),
-			'href'  => LNKup_Comms_Suppression::preferences_url(),
-			'slug'  => 'notification-settings',
+			'href'  => self::center_url(),
+			'slug'  => 'notification-center',
 			'icon'  => 'mail',
 			'view'  => '',
 			'tier'  => 'more',
@@ -74,7 +79,7 @@ class LNKup_Comms_Shortcodes {
 	 * Create the two pages once (never overwrites existing pages).
 	 */
 	public static function ensure_pages( bool $force = false ): void {
-		if ( get_option( 'lnkup_comms_pages_created' ) || ( ! $force && ! current_user_can( 'manage_options' ) ) ) {
+		if ( (int) get_option( 'lnkup_comms_pages_created' ) >= self::PAGES_VERSION || ( ! $force && ! current_user_can( 'manage_options' ) ) ) {
 			return;
 		}
 		$created = get_option( 'lnkup_pages_created', array() );
@@ -101,11 +106,88 @@ class LNKup_Comms_Shortcodes {
 		}
 		// Registers with lnkup_page_url_helper() so links resolve.
 		update_option( 'lnkup_pages_created', $created );
-		update_option( 'lnkup_comms_pages_created', 1, false );
+		update_option( 'lnkup_comms_pages_created', self::PAGES_VERSION, false );
+	}
+
+	public static function center_url( array $args = array() ): string {
+		$page = function_exists( 'lnkup_page_url_helper' ) ? (string) lnkup_page_url_helper( 'notification-center' ) : '';
+		return add_query_arg( $args, '' !== $page ? $page : home_url( '/notification-center/' ) );
+	}
+
+	/**
+	 * Notification center: role tabs with unread counts, mark all read, pagination,
+	 * and (vendors) organizer invitations with accept / decline.
+	 */
+	public static function notification_center(): string {
+		if ( ! is_user_logged_in() ) {
+			return self::login_prompt();
+		}
+		$user_id = get_current_user_id();
+		$roles   = array_values( array_intersect( LNKup_Comms_Preferences::user_roles( $user_id ), array( 'vendor', 'organizer', 'partner' ) ) );
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only view selection; REST enforces permissions.
+		$role = isset( $_GET['role'] ) ? sanitize_key( wp_unslash( (string) $_GET['role'] ) ) : '';
+		$tab  = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( (string) $_GET['tab'] ) ) : 'all';
+		// phpcs:enable
+		$role = in_array( $role, $roles, true ) ? $role : ( $roles[0] ?? 'vendor' );
+		wp_enqueue_style( 'lnkup-comms' );
+		wp_enqueue_script( 'lnkup-comms-center' );
+		wp_localize_script(
+			'lnkup-comms-center',
+			'lnkupCommsCenter',
+			array_merge(
+				self::boot_data(),
+				array(
+					'role'        => $role,
+					'roles'       => $roles,
+					'tab'         => in_array( $tab, LNKup_Comms_Registry::tabs( $role ), true ) ? $tab : 'all',
+					'settingsUrl' => LNKup_Comms_Suppression::preferences_url(),
+					'i18n'        => array(
+						'title'       => __( 'Notifications', 'lnkup-communications' ),
+						'loading'     => __( 'Loading your notifications…', 'lnkup-communications' ),
+						'error'       => __( 'We could not load your notifications. Try again in a moment.', 'lnkup-communications' ),
+						'retry'       => __( 'Try again', 'lnkup-communications' ),
+						'markAll'     => __( 'Mark all as read', 'lnkup-communications' ),
+						'loadMore'    => __( 'Load more', 'lnkup-communications' ),
+						'settings'    => __( 'Notification settings', 'lnkup-communications' ),
+						'today'       => __( 'Today', 'lnkup-communications' ),
+						'earlier'     => __( 'Earlier', 'lnkup-communications' ),
+						'unread'      => __( 'Unread', 'lnkup-communications' ),
+						'unavailable' => __( 'That item is no longer available.', 'lnkup-communications' ),
+						'empty'       => __( 'You are all caught up. New activity will appear here.', 'lnkup-communications' ),
+						'emptyTab'    => __( 'Nothing here yet.', 'lnkup-communications' ),
+						'viewAs'      => __( 'Viewing as', 'lnkup-communications' ),
+						'accept'      => __( 'Accept & apply', 'lnkup-communications' ),
+						'decline'     => __( 'Decline', 'lnkup-communications' ),
+						'declined'    => __( 'Invitation declined.', 'lnkup-communications' ),
+						'expires'     => __( 'Expires %s', 'lnkup-communications' ),
+						'invitedBy'   => __( 'Invited by %s', 'lnkup-communications' ),
+						'noInvites'   => __( 'No open invitations right now. Organizers can invite you when your profile matches their events.', 'lnkup-communications' ),
+						'invitations' => __( 'Open invitations', 'lnkup-communications' ),
+						'tabs'        => array(
+							'all'           => __( 'All activity', 'lnkup-communications' ),
+							'applications'  => __( 'Applications', 'lnkup-communications' ),
+							'payments'      => __( 'Payments', 'lnkup-communications' ),
+							'events'        => __( 'Event updates', 'lnkup-communications' ),
+							'opportunities' => __( 'Opportunities', 'lnkup-communications' ),
+							'operations'    => __( 'Operations', 'lnkup-communications' ),
+							'invitations'   => __( 'Invitations', 'lnkup-communications' ),
+							'account'       => __( 'Account', 'lnkup-communications' ),
+						),
+						'roles'       => array(
+							'vendor'    => __( 'Vendor', 'lnkup-communications' ),
+							'organizer' => __( 'Organizer', 'lnkup-communications' ),
+							'partner'   => __( 'Partner', 'lnkup-communications' ),
+						),
+					),
+				)
+			)
+		);
+		return '<section class="lnkup-comms lnkup-comms-center" id="lnkup-comms-center" data-testid="lnkup-notification-center" aria-live="polite"><div class="lnkup-comms-card lnkup-comms-state lnkup-comms-skeleton">' . esc_html__( 'Loading your notifications…', 'lnkup-communications' ) . '</div></section>';
 	}
 
 	public static function register_assets(): void {
 		wp_register_style( 'lnkup-comms', LNKUP_COMMS_URL . 'public/css/comms.css', array(), LNKUP_COMMS_VERSION );
+		wp_register_script( 'lnkup-comms-center', LNKUP_COMMS_URL . 'public/js/comms-center.js', array(), LNKUP_COMMS_VERSION, true );
 		wp_register_script( 'lnkup-comms-preferences', LNKUP_COMMS_URL . 'public/js/comms-preferences.js', array(), LNKUP_COMMS_VERSION, true );
 		wp_register_script( 'lnkup-comms-event', LNKUP_COMMS_URL . 'public/js/comms-event.js', array(), LNKUP_COMMS_VERSION, true );
 	}

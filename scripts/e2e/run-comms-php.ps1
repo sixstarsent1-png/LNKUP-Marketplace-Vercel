@@ -10,7 +10,13 @@ $tests = @(
   'comms-organizer-test',
   'comms-activation-test',
   'comms-security-test',
-  'comms-partners-test'
+  'comms-partners-test',
+  'comms-policy-test',
+  'comms-engagement-test',
+  'comms-admin-test',
+  'comms-admin-render-test',
+  'invite-expiry-test',
+  'event-fulfillment-test'
 )
 $failed = @()
 foreach ($t in $tests) {

@@ -879,7 +879,7 @@ class LNKup_Comms_Context {
 				$find = self::web_url( 'vendor_find', $ctx, $role );
 				return (int) ( $ctx['tour_id'] ?? 0 ) ? add_query_arg( 'tour_id', (int) $ctx['tour_id'], $find ) : $find;
 			case 'vendor_invites':
-				return add_query_arg( 'view', 'invitations', $vendor_dash );
+				return LNKup_Comms_Shortcodes::center_url( array( 'role' => 'vendor', 'tab' => 'invitations' ) );
 			case 'org_invites':
 				return $org( 'invites' );
 			case 'org_find_vendors':

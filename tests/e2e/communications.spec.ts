@@ -55,7 +55,7 @@ test.describe('LNKup Communications — REST contract and isolation', () => {
     const response = await lnkupRest(sessions.vendor!, 'GET', '/comms/inbox?role=vendor&tab=all&page=1');
     expect(response.ok()).toBeTruthy();
     const body = await response.json();
-    expect(body.tabs).toEqual(['all', 'applications', 'payments', 'events', 'opportunities']);
+    expect(body.tabs).toEqual(['all', 'applications', 'payments', 'events', 'opportunities', 'invitations', 'account']);
     expect(Array.isArray(body.items)).toBeTruthy();
   });
 
