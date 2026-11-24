@@ -87,7 +87,7 @@ test.describe('Organizer events', () => {
   });
 
   test('create event walks six steps and saves a server draft', async ({ page }, testInfo) => {
-    await page.goto('/(organizer)/launch');
+    await page.goto('/(organizer)/launch?classic=1');
     const resume = page.getByRole('button', { name: 'Start over' });
     if (await resume.isVisible({ timeout: 5000 }).catch(() => false)) await resume.click();
     await expect(page.getByRole('progressbar', { name: /Step 1 of 6/ })).toBeVisible();

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Pressable, Share, StyleSheet, View } from "react-native"
-import { router } from "expo-router"
+import { router, useLocalSearchParams } from "expo-router"
 
 import { IsoDatePickerField } from "@/components/iso-date-picker-field"
 import { LocationField } from "@/components/location-field"
@@ -22,6 +22,7 @@ import { Body, DisplayTitle, Eyebrow, Meta, SectionTitle } from "@/components/ui
 import { newClientToken } from "@/lib/api/client-token"
 import { appErrorFromWp } from "@/lib/api/errors"
 import { getOpportunityApplyUrl } from "@/lib/api/config"
+import { fetchBuilderConfig } from "@/lib/api/event-builder"
 import {
   clearDraft,
   draftHasContent,
@@ -60,6 +61,8 @@ function withToken(draft: OrganizerLaunchDraft): OrganizerLaunchDraft {
 /** Create an event in six guided steps; progress is kept on the device and drafts on the server. */
 export default function OrganizerLaunchScreen() {
   const { auth } = useAuth()
+  const params = useLocalSearchParams<{ classic?: string }>()
+  const [builderChecked, setBuilderChecked] = useState(params.classic === "1")
   const [step, setStep] = useState(0)
   const [draft, setDraft] = useState<OrganizerLaunchDraft>(() => withToken(emptyLaunchDraft()))
   const [loading, setLoading] = useState(true)
@@ -72,6 +75,22 @@ export default function OrganizerLaunchScreen() {
   const [locationStatus, setLocationStatus] = useState<LocationStatus>("")
   const busy = useRef(false)
   const hydrated = useRef(false)
+
+  // Event Creation OS 3.0: accounts with the builder use the new Create flow.
+  useEffect(() => {
+    if (params.classic === "1") return
+    let active = true
+    fetchBuilderConfig(auth)
+      .then((cfg) => {
+        if (!active) return
+        if (cfg) router.replace("/(organizer)/create" as never)
+        else setBuilderChecked(true)
+      })
+      .catch(() => active && setBuilderChecked(true))
+    return () => {
+      active = false
+    }
+  }, [auth, params.classic])
 
   useEffect(() => {
     let active = true
@@ -218,7 +237,7 @@ export default function OrganizerLaunchScreen() {
     }
   }
 
-  if (loading) {
+  if (loading || !builderChecked) {
     return (
       <Screen title="Create event" subtitle="Set up your event and vendor spots">
         <LoadingPanel label="Loading…" variant="skeleton" count={2} />

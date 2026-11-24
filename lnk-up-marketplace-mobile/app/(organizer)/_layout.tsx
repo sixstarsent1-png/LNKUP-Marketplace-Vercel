@@ -93,6 +93,7 @@ export default function OrganizerLayout() {
         <Tabs.Screen name="notification-settings" options={{ href: null }} />
         <Tabs.Screen name="event-comms/[eventId]" options={{ href: null }} />
         <Tabs.Screen name="launch" options={{ href: null }} />
+        <Tabs.Screen name="create" options={{ href: null }} />
         <Tabs.Screen name="referrals" options={{ href: null }} />
         <Tabs.Screen name="packet" options={{ href: null }} />
         <Tabs.Screen name="profile" options={{ href: null }} />
