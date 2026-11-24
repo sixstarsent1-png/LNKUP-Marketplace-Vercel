@@ -14,6 +14,36 @@ class LNKup_Match_Service {
 	const OPP_CANDIDATE_LIMIT    = 5000;
 	const CHUNK                  = 400;
 	const COMPUTED_META          = '_lnkup_match_computed_at';
+	const ORGANIZER_SECTIONS     = array( 'recommended', 'new_nearby', 'previously_booked', 'saved', 'recently_viewed' );
+	const NEW_MATCH_DAYS         = 14;
+	const RECENT_VIEWS_META      = 'lnkup_recent_vendor_views';
+	const RECENT_VIEWS_MAX       = 20;
+	const RELATED_CACHE          = 'lnkup_related_vendors_';
+
+	/**
+	 * Per-request memo of related_vendor_users().
+	 *
+	 * @var array<int, int[]>
+	 */
+	private static $related = array();
+
+	public static function init() {
+		add_action( 'lnkup_application_submitted', array( __CLASS__, 'flush_related_for_application' ) );
+		add_action( 'lnkup_vendor_invite_status_changed', array( __CLASS__, 'flush_related_for_invite' ) );
+	}
+
+	public static function flush_related( $organizer_id ) {
+		unset( self::$related[ (int) $organizer_id ] );
+		delete_transient( self::RELATED_CACHE . (int) $organizer_id );
+	}
+
+	public static function flush_related_for_application( $app_id ) {
+		self::flush_related( (int) get_post_meta( absint( $app_id ), '_lnkup_organizer_user_id', true ) );
+	}
+
+	public static function flush_related_for_invite( $invite_id ) {
+		self::flush_related( (int) get_post_meta( absint( $invite_id ), '_lnkup_organizer_user_id', true ) );
+	}
 
 	/* ---------------------------------------------------------------------
 	 * Input builders
@@ -882,6 +912,17 @@ class LNKup_Match_Service {
 				$where[] = 'v.user_id NOT IN (' . implode( ',', $applied ) . ')';
 			}
 		}
+		$section = sanitize_key( $args['section'] ?? 'recommended' );
+		if ( 'new_nearby' === $section ) {
+			$where[]  = 'r.first_matched_at >= %s';
+			$params[] = wp_date( 'Y-m-d H:i:s', time() - self::NEW_MATCH_DAYS * DAY_IN_SECONDS );
+		} elseif ( in_array( $section, array( 'previously_booked', 'saved', 'recently_viewed' ), true ) ) {
+			$scope = self::section_vendor_scope( (int) $organizer_id, $section );
+			if ( ! $scope ) {
+				return array_merge( $base, array( 'section' => $section ) );
+			}
+			$where[] = 'previously_booked' === $section ? 'v.user_id IN (' . implode( ',', $scope ) . ')' : 'v.profile_id IN (' . implode( ',', $scope ) . ')';
+		}
 		$stage = sanitize_key( $args['stage'] ?? '' );
 		if ( $stage ) {
 			$where[]  = 'v.profile_id IN (SELECT profile_id FROM ' . LNKup_Match_Tables::pipeline_table() . ' WHERE event_id = %d AND organizer_user_id = %d AND stage = %s)';
@@ -900,11 +941,83 @@ class LNKup_Match_Service {
 		return array_merge(
 			$base,
 			array(
-				'items' => $items,
-				'total' => $total,
-				'pages' => (int) ceil( $total / $per_page ),
+				'section' => $section,
+				'items'   => $items,
+				'total'   => $total,
+				'pages'   => (int) ceil( $total / $per_page ),
 			)
 		);
+	}
+
+	/**
+	 * IDs that narrow an organizer Find Vendors section: vendor user IDs for
+	 * previously_booked, vendor profile IDs for saved and recently_viewed.
+	 *
+	 * @param int    $organizer_id Organizer.
+	 * @param string $section      Section key.
+	 * @return int[]
+	 */
+	public static function section_vendor_scope( $organizer_id, $section ) {
+		global $wpdb;
+		$organizer_id = (int) $organizer_id;
+		switch ( $section ) {
+			case 'previously_booked':
+				$ids = $wpdb->get_col( // phpcs:ignore WordPress.DB
+					$wpdb->prepare(
+						"SELECT DISTINCT v.meta_value FROM {$wpdb->postmeta} o
+						INNER JOIN {$wpdb->posts} p ON p.ID = o.post_id AND p.post_type = 'lnkup_application' AND p.post_status NOT IN ('trash','auto-draft','lnkup_app_draft')
+						INNER JOIN {$wpdb->postmeta} s ON s.post_id = p.ID AND s.meta_key = '_lnkup_application_status' AND s.meta_value IN ('paid','completed')
+						INNER JOIN {$wpdb->postmeta} v ON v.post_id = p.ID AND v.meta_key = '_lnkup_vendor_user_id'
+						WHERE o.meta_key = '_lnkup_organizer_user_id' AND o.meta_value = %s",
+						(string) $organizer_id
+					)
+				);
+				break;
+			case 'saved':
+				$rel   = $wpdb->prefix . 'lnkup_organizer_vendor_rel';
+				$items = $wpdb->prefix . 'lnkup_vendor_list_item';
+				$ids   = array_merge(
+					(array) $wpdb->get_col( $wpdb->prepare( "SELECT vendor_profile_id FROM {$rel} WHERE organizer_user_id = %d AND vendor_profile_id > 0 AND (is_favorite = 1 OR is_preferred = 1)", $organizer_id ) ), // phpcs:ignore WordPress.DB
+					(array) $wpdb->get_col( // phpcs:ignore WordPress.DB
+						$wpdb->prepare(
+							"SELECT DISTINCT i.vendor_profile_id FROM {$items} i INNER JOIN {$wpdb->posts} l ON l.ID = i.list_id AND l.post_type = 'lnkup_vendor_list' AND l.post_author = %d",
+							$organizer_id
+						)
+					)
+				);
+				break;
+			case 'recently_viewed':
+				$ids = self::recently_viewed_vendors( $organizer_id );
+				break;
+			default:
+				$ids = array();
+		}
+		return array_values( array_unique( array_filter( array_map( 'intval', (array) $ids ) ) ) );
+	}
+
+	/**
+	 * Remember that an organizer opened a vendor profile (most recent first, capped).
+	 *
+	 * @param int $organizer_id Organizer.
+	 * @param int $profile_id   Vendor profile.
+	 */
+	public static function remember_viewed_vendor( $organizer_id, $profile_id ) {
+		$organizer_id = (int) $organizer_id;
+		$profile_id   = (int) $profile_id;
+		if ( ! $organizer_id || ! $profile_id ) {
+			return;
+		}
+		$ids = array_values( array_diff( self::recently_viewed_vendors( $organizer_id ), array( $profile_id ) ) );
+		array_unshift( $ids, $profile_id );
+		update_user_meta( $organizer_id, self::RECENT_VIEWS_META, array_slice( $ids, 0, self::RECENT_VIEWS_MAX ) );
+	}
+
+	/**
+	 * @param int $organizer_id Organizer.
+	 * @return int[]
+	 */
+	public static function recently_viewed_vendors( $organizer_id ) {
+		return array_values( array_filter( array_map( 'intval', (array) get_user_meta( (int) $organizer_id, self::RECENT_VIEWS_META, true ) ) ) );
 	}
 
 	/**
@@ -1056,8 +1169,27 @@ class LNKup_Match_Service {
 	 * @return int[]
 	 */
 	public static function related_vendor_users( $organizer_id ) {
-		global $wpdb;
 		$organizer_id = (int) $organizer_id;
+		if ( isset( self::$related[ $organizer_id ] ) ) {
+			return self::$related[ $organizer_id ];
+		}
+		$cached = get_transient( self::RELATED_CACHE . $organizer_id );
+		if ( is_array( $cached ) ) {
+			self::$related[ $organizer_id ] = $cached;
+			return $cached;
+		}
+		$ids = self::query_related_vendor_users( $organizer_id );
+		set_transient( self::RELATED_CACHE . $organizer_id, $ids, 10 * MINUTE_IN_SECONDS );
+		self::$related[ $organizer_id ] = $ids;
+		return $ids;
+	}
+
+	/**
+	 * @param int $organizer_id Organizer user ID.
+	 * @return int[]
+	 */
+	private static function query_related_vendor_users( $organizer_id ) {
+		global $wpdb;
 		$from_apps    = $wpdb->get_col( // phpcs:ignore WordPress.DB
 			$wpdb->prepare(
 				"SELECT DISTINCT v.meta_value FROM {$wpdb->postmeta} o

@@ -116,6 +116,21 @@ class LNKup_Organizer_CRM_REST {
 			'permission_callback' => 'is_user_logged_in',
 		) );
 
+		register_rest_route( self::NS, '/vendor/invites', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'vendor_invites' ),
+			'permission_callback' => array( __CLASS__, 'vendor_permission' ),
+			'args'                => array(
+				'scope' => array( 'type' => 'string', 'enum' => array( 'open', 'all' ), 'default' => 'open' ),
+			),
+		) );
+
+		register_rest_route( self::NS, '/vendor/invites/(?P<id>\d+)/respond', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'vendor_invite_respond' ),
+			'permission_callback' => array( __CLASS__, 'vendor_permission' ),
+		) );
+
 		register_rest_route( self::NS, '/crm/outreach/bulk', array(
 			'methods'  => 'POST',
 			'callback' => array( __CLASS__, 'outreach_bulk' ),
@@ -257,6 +272,7 @@ class LNKup_Organizer_CRM_REST {
 		if ( ! $profile ) {
 			return new WP_Error( 'not_found', __( 'Vendor not found.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
 		}
+		LNKup_Match_Service::remember_viewed_vendor( $user_id, $profile_id );
 		return rest_ensure_response( $profile );
 	}
 
@@ -414,6 +430,35 @@ class LNKup_Organizer_CRM_REST {
 
 	public static function list_invites( WP_REST_Request $request ) {
 		return rest_ensure_response( array( 'items' => LNKup_Vendor_Invites::get_for_organizer( get_current_user_id() ) ) );
+	}
+
+	public static function vendor_permission() {
+		$user_id = get_current_user_id();
+		return $user_id && LNKup_Roles::is_vendor( $user_id );
+	}
+
+	/**
+	 * Organizer invitations addressed to the signed-in vendor.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function vendor_invites( WP_REST_Request $request ) {
+		$scope = 'all' === $request->get_param( 'scope' ) ? 'all' : 'open';
+		return rest_ensure_response( array( 'items' => LNKup_Vendor_Invites::get_for_vendor( get_current_user_id(), $scope ) ) );
+	}
+
+	/**
+	 * Accept or decline one of the signed-in vendor's invitations.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function vendor_invite_respond( WP_REST_Request $request ) {
+		$body   = $request->get_json_params() ?: $request->get_params();
+		$result = LNKup_Vendor_Invites::respond_by_id( absint( $request['id'] ), ! empty( $body['accept'] ), get_current_user_id() );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return rest_ensure_response( is_array( $result ) ? $result : array( 'success' => true ) );
 	}
 
 	public static function respond_invite( WP_REST_Request $request ) {

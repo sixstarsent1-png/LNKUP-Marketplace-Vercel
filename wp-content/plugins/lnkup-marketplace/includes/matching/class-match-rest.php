@@ -85,6 +85,11 @@ class LNKup_Match_REST {
 						'enum'    => array_merge( array( '' ), LNKup_Recruitment::STAGES ),
 						'default' => '',
 					),
+					'section'         => array(
+						'type'    => 'string',
+						'enum'    => LNKup_Match_Service::ORGANIZER_SECTIONS,
+						'default' => 'recommended',
+					),
 					'page'            => array( 'type' => 'integer', 'minimum' => 1, 'default' => 1 ),
 					'per_page'        => array( 'type' => 'integer', 'minimum' => 1, 'maximum' => 48, 'default' => 24 ),
 				),
@@ -414,6 +419,7 @@ class LNKup_Match_REST {
 					'radius'          => (int) $request->get_param( 'radius' ),
 					'exclude_applied' => (bool) $request->get_param( 'exclude_applied' ),
 					'stage'           => (string) $request->get_param( 'stage' ),
+					'section'         => (string) $request->get_param( 'section' ),
 					'page'            => (int) $request->get_param( 'page' ),
 					'per_page'        => (int) $request->get_param( 'per_page' ),
 				)

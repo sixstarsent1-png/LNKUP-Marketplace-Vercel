@@ -58,6 +58,7 @@
   var eventSelect = document.getElementById('lnkup-find-vendors-event');
   var categorySelect = document.getElementById('lnkup-find-vendors-category');
   var verifiedBox = document.getElementById('lnkup-find-vendors-verified');
+  var sectionSelect = document.getElementById('lnkup-find-vendors-section');
   var results = document.getElementById('lnkup-find-vendors-results');
   var assistant = document.getElementById('lnkup-find-vendors-assistant');
   var composer = document.getElementById('lnkup-find-vendors-composer');
@@ -173,6 +174,8 @@
     var qs = '?exclude_applied=1';
     if (categorySelect && categorySelect.value) qs += '&category=' + encodeURIComponent(categorySelect.value);
     if (verifiedBox && verifiedBox.checked) qs += '&verified=1';
+    var section = sectionSelect ? sectionSelect.value : 'recommended';
+    if (section && section !== 'recommended') qs += '&section=' + encodeURIComponent(section);
     loadAssistant(eventId);
     api('/organizer/events/' + eventId + '/vendors' + qs).then(function (data) {
       if (!data || data.enabled === false) {
@@ -185,7 +188,14 @@
       }
       var items = data.items || [];
       if (!items.length) {
-        results.innerHTML = panel('empty', 'No matching vendors yet', 'Add vendor categories and an address to your event, or share your application link.');
+        var empty = {
+          new_nearby: ['No new matching vendors this week', 'New vendors who match this event will appear here.'],
+          previously_booked: ['No previously booked vendors match', 'Vendors you booked before appear here when they match this event.'],
+          saved: ['No saved vendors match this event', 'Favorite vendors or add them to a list to see them here.'],
+          recently_viewed: ['No recently viewed vendors match', 'Vendors whose profiles you open appear here.']
+        }[section] || ['No matching vendors yet', 'Add vendor categories and an address to your event, or share your application link.'];
+        results.innerHTML = panel('empty', empty[0], empty[1]);
+        if (statusEl) statusEl.textContent = '';
         return;
       }
       results.innerHTML = items.map(renderCard).join('');
@@ -251,5 +261,6 @@
   eventSelect.addEventListener('change', load);
   if (categorySelect) categorySelect.addEventListener('change', load);
   if (verifiedBox) verifiedBox.addEventListener('change', load);
+  if (sectionSelect) sectionSelect.addEventListener('change', load);
   load();
 })();

@@ -58,6 +58,50 @@ class LNKup_Comms_CLI {
 	}
 
 	/**
+	 * Every notification type the server can write, with its inbox tab per role and the
+	 * triggers / deep-link keys that produce it. Web and mobile tests compare against this
+	 * export so a new server type fails their drift tests until it is handled.
+	 */
+	public static function types_export(): array {
+		$types = array();
+		foreach ( LNKup_Comms_Registry::triggers() as $key => $def ) {
+			$type = (string) $def['type'];
+			if ( ! isset( $types[ $type ] ) ) {
+				$types[ $type ] = array( 'type' => $type, 'triggers' => array(), 'links' => array(), 'roles' => array() );
+			}
+			$types[ $type ]['triggers'][] = (string) $key;
+			$types[ $type ]['links'][]    = (string) $def['link'];
+			$types[ $type ]['roles'][]    = (string) $def['role'];
+		}
+		foreach ( LNKup_Comms_Registry::core_types() as $type ) {
+			if ( ! isset( $types[ $type ] ) ) {
+				$types[ $type ] = array( 'type' => $type, 'triggers' => array(), 'links' => array(), 'roles' => array() );
+			}
+		}
+		ksort( $types );
+		$out = array();
+		foreach ( $types as $type => $row ) {
+			$row['links']    = array_values( array_unique( $row['links'] ) );
+			$row['roles']    = array_values( array_unique( $row['roles'] ) );
+			$row['tabs']     = array(
+				'vendor'    => LNKup_Comms_Registry::tab_for_type( $type, 'vendor' ),
+				'organizer' => LNKup_Comms_Registry::tab_for_type( $type, 'organizer' ),
+			);
+			$out[] = $row;
+		}
+		return array(
+			'generated_by' => 'wp lnkup-comms export-types',
+			'version'      => LNKUP_COMMS_VERSION,
+			'tabs'         => array(
+				'vendor'    => LNKup_Comms_Registry::tabs( 'vendor' ),
+				'organizer' => LNKup_Comms_Registry::tabs( 'organizer' ),
+				'partner'   => LNKup_Comms_Registry::tabs( 'partner' ),
+			),
+			'types'        => $out,
+		);
+	}
+
+	/**
 	 * Toggle exactly one known flag (or delivery_paused) and leave an audit line.
 	 *
 	 * @return true|WP_Error
@@ -313,6 +357,32 @@ if ( defined( 'WP_CLI' ) && WP_CLI && class_exists( 'WP_CLI_Command' ) ) {
 				return;
 			}
 			WP_CLI::success( sprintf( 'Message #%d queued. Check: wp lnkup-comms status', $result ) );
+		}
+
+		/**
+		 * Export every notification type as JSON for the web and mobile drift tests.
+		 *
+		 * ## OPTIONS
+		 *
+		 * [--file=<path>]
+		 * : Write to this file instead of stdout.
+		 *
+		 * @subcommand export-types
+		 *
+		 * @param array $args       Positional.
+		 * @param array $assoc_args Flags.
+		 */
+		public function export_types( $args, $assoc_args ): void {
+			unset( $args );
+			$json = (string) wp_json_encode( LNKup_Comms_CLI::types_export(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . "\n";
+			if ( empty( $assoc_args['file'] ) ) {
+				WP_CLI::line( $json );
+				return;
+			}
+			if ( false === file_put_contents( (string) $assoc_args['file'], $json ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+				WP_CLI::error( 'Could not write ' . $assoc_args['file'] );
+			}
+			WP_CLI::success( 'Wrote ' . $assoc_args['file'] );
 		}
 	}
 }

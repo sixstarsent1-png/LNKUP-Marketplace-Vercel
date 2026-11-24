@@ -353,6 +353,7 @@ $lnkup_core_files = array(
 	'includes/matching/class-match-rest.php',
 	'includes/matching/class-recruitment.php',
 	'includes/matching/class-recruitment-rest.php',
+	'includes/matching/class-event-fulfillment.php',
 	'includes/matching/class-tours.php',
 	'includes/matching/class-tours-rest.php',
 	'includes/portfolio/class-portfolio-tables.php',
@@ -515,11 +516,14 @@ function lnkup_marketplace_init() {
 	LNKup_Match_Categories::init();
 	LNKup_Match_Vendor_Index::init();
 	LNKup_Match_Cron::init();
+	LNKup_Match_Service::init();
 	LNKup_Match_Funnel::init();
 	LNKup_Match_Market::init();
 	LNKup_Match_REST::init();
 	LNKup_Recruitment::init();
 	LNKup_Recruitment_REST::init();
+	LNKup_Vendor_Invites::init();
+	LNKup_Event_Fulfillment::init();
 	LNKup_Tours::init();
 	LNKup_Tours_REST::init();
 	LNKup_Portfolio_Tables::maybe_upgrade();

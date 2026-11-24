@@ -4276,5 +4276,12 @@
 .lnkup-find-vendors__reasons { margin: 0; padding-left: 1.1rem; font-size: 0.875rem; }
 .lnkup-recruit-prompt { border-left: 4px solid var(--lnkup-lime, #b3ee55); }
 .lnkup-recruit-prompt__actions { display: grid; gap: 0.375rem; margin: 0.5rem 0 0; padding-left: 1.1rem; }
+.lnkup-fill-slots__cats { display: flex; flex-wrap: wrap; gap: 0.375rem; list-style: none; margin: 0.5rem 0; padding: 0; }
+.lnkup-fill-slots__action { margin: 0.5rem 0; }
+.lnkup-fill-slots__subtitle { font-size: 0.875rem; font-weight: 700; margin: 0.75rem 0 0.375rem; }
+.lnkup-fill-slots__vendors { display: grid; gap: 0.5rem; list-style: none; margin: 0 0 0.75rem; padding: 0; }
+.lnkup-fill-slots__vendor { align-items: center; display: flex; gap: 0.625rem; }
+.lnkup-fill-slots__vendor img { border-radius: 10px; flex: 0 0 40px; height: 40px; object-fit: cover; width: 40px; }
+.lnkup-fill-slots__vendor span { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; }
 
 

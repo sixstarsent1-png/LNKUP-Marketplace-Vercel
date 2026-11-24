@@ -206,6 +206,34 @@ $direct = LNKup_Vendor_Invites::create( $org_b, $v_user, array( 'event_id' => $e
 lnkup_t_assert( is_wp_error( $direct ) && 'invite_rate_limited' === $direct->get_error_code(), 'direct invite API enforces the same cap' );
 update_option( 'lnkup_settings', array_merge( get_option( 'lnkup_settings' ), array( 'match_invite_vendor_weekly_cap' => 5 ) ), false );
 
+echo "Find Vendors sections\n";
+wp_set_current_user( $org_a );
+$GLOBALS['lnkup_m_sec'] = array( $org_a, $e_clt );
+/**
+ * Profile IDs in one organizer Find Vendors section for the Charlotte event.
+ */
+function lnkup_m_section( string $section ): array {
+	list( $org, $event ) = $GLOBALS['lnkup_m_sec'];
+	$result = LNKup_Match_Service::event_vendor_candidates( $org, $event, array( 'section' => $section, 'exclude_applied' => true ) );
+	return is_wp_error( $result ) ? array() : array_map( 'intval', wp_list_pluck( $result['items'], 'profile_id' ) );
+}
+lnkup_t_assert( in_array( $v_profile, lnkup_m_section( 'new_nearby' ), true ), 'a newly matched vendor appears in New vendors near you' );
+$wpdb->update( LNKup_Match_Tables::results_table(), array( 'first_matched_at' => wp_date( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS ) ), array( 'profile_id' => $v_profile ) );
+lnkup_t_assert( ! in_array( $v_profile, lnkup_m_section( 'new_nearby' ), true ), 'older matches leave New vendors near you' );
+lnkup_t_same( array(), lnkup_m_section( 'saved' ), 'Saved vendors is empty before saving anyone' );
+$rel_table = $wpdb->prefix . 'lnkup_organizer_vendor_rel';
+$wpdb->replace( $rel_table, array( 'organizer_user_id' => $org_a, 'vendor_user_id' => $v_user, 'vendor_profile_id' => $v_profile, 'is_favorite' => 1, 'first_connected_at' => current_time( 'mysql' ), 'last_activity_at' => current_time( 'mysql' ) ) );
+lnkup_t_same( array( $v_profile ), lnkup_m_section( 'saved' ), 'a favorited matching vendor appears in Saved vendors' );
+lnkup_t_same( array(), lnkup_m_section( 'recently_viewed' ), 'Recently viewed is empty before any profile is opened' );
+LNKup_Match_Service::remember_viewed_vendor( $org_a, $v_profile );
+LNKup_Match_Service::remember_viewed_vendor( $org_a, $hidden_prof );
+lnkup_t_same( array( $v_profile ), lnkup_m_section( 'recently_viewed' ), 'Recently viewed lists matching vendors and still hides opted-out ones' );
+lnkup_t_same( array(), lnkup_m_section( 'previously_booked' ), 'Previously booked is empty without a paid booking' );
+$bad = new WP_REST_Request( 'GET', '/lnkup/v1/match/organizer/events/' . $e_clt . '/vendors' );
+$bad->set_query_params( array( 'section' => 'everyone' ) );
+lnkup_t_same( 400, rest_do_request( $bad )->get_status(), 'unknown section is rejected' );
+$wpdb->delete( $rel_table, array( 'organizer_user_id' => $org_a ) );
+
 echo "Apply\n";
 wp_set_current_user( $v_user );
 $app = LNKup_Applications::submit_with_profile( $v_user, $o_clt, array( 'accepted_terms' => 1, 'selected_category' => 'Food Vendor' ) );

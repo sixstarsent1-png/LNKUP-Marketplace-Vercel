@@ -297,6 +297,15 @@ class LNKup_Comms_Registry {
 		return $triggers;
 	}
 
+	/**
+	 * Notification types lnkup-marketplace still writes itself (legacy inbox rows and flows that are off).
+	 *
+	 * @return string[]
+	 */
+	public static function core_types(): array {
+		return array( 'payment_required', 'payment_paid', 'payment_confirmed', 'organizer_payment_received', 'packet_unlocked', 'system', 'document_missing', 'organizer_vendor_missing_documents', 'review_requested', 'application_rejected', 'application_waitlisted', 'discovery_saved_search', 'discovery_favorite_deadline', 'discovery_deadline', 'discovery_almost_full', 'discovery_invite' );
+	}
+
 	public static function get( string $key ): ?array {
 		$all = self::triggers();
 		return isset( $all[ $key ] ) ? $all[ $key ] : null;
@@ -360,10 +369,7 @@ class LNKup_Comms_Registry {
 		foreach ( self::triggers() as $def ) {
 			$candidates[] = (string) $def['type'];
 		}
-		$candidates = array_merge(
-			$candidates,
-			array( 'payment_required', 'payment_paid', 'payment_confirmed', 'organizer_payment_received', 'packet_unlocked', 'system', 'document_missing', 'organizer_vendor_missing_documents', 'review_requested', 'application_rejected', 'application_waitlisted', 'discovery_saved_search', 'discovery_favorite_deadline', 'discovery_deadline', 'discovery_almost_full', 'discovery_invite' )
-		);
+		$candidates = array_merge( $candidates, self::core_types() );
 		foreach ( array_unique( $candidates ) as $type ) {
 			if ( self::tab_for_type( $type, $role ) === $tab ) {
 				$types[] = $type;

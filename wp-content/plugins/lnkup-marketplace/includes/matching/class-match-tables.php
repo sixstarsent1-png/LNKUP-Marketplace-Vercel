@@ -151,6 +151,7 @@ class LNKup_Match_Tables {
 			KEY opp_score (opportunity_id, eligible, score),
 			KEY profile_score (profile_id, eligible, score),
 			KEY event_id (event_id),
+			KEY event_first_matched (event_id, first_matched_at),
 			KEY tour_id (tour_id)
 		) {$charset};"
 		);

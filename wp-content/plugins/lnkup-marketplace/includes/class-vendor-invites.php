@@ -15,6 +15,131 @@ class LNKup_Vendor_Invites {
 	const STATUS_DECLINED = 'declined';
 	const STATUS_EXPIRED  = 'expired';
 
+	const EXPIRY_CRON  = 'lnkup_vendor_invites_expire';
+	const EXPIRY_BATCH = 200;
+
+	public static function init() {
+		add_action( self::EXPIRY_CRON, array( __CLASS__, 'expire_overdue' ) );
+		add_action( 'init', array( __CLASS__, 'schedule' ), 30 );
+	}
+
+	public static function schedule() {
+		if ( ! wp_next_scheduled( self::EXPIRY_CRON ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'twicedaily', self::EXPIRY_CRON );
+		}
+	}
+
+	/**
+	 * Close open invites whose expiry has passed so lists, pipelines and alerts stop treating them as open.
+	 *
+	 * @param int $limit Max invites per run (the next run continues).
+	 * @return int Invites expired.
+	 */
+	public static function expire_overdue( $limit = self::EXPIRY_BATCH ) {
+		$ids = get_posts(
+			array(
+				'post_type'      => 'lnkup_vendor_invite',
+				'post_status'    => 'publish',
+				'posts_per_page' => max( 1, (int) $limit ),
+				'fields'         => 'ids',
+				'no_found_rows'  => true,
+				'orderby'        => 'ID',
+				'order'          => 'ASC',
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					array( 'key' => '_lnkup_status', 'value' => array( self::STATUS_SENT, self::STATUS_OPENED ), 'compare' => 'IN' ),
+					array( 'key' => '_lnkup_expires_at', 'value' => gmdate( 'Y-m-d H:i:s' ), 'compare' => '<', 'type' => 'DATETIME' ),
+				),
+			)
+		);
+		foreach ( array_map( 'intval', $ids ) as $invite_id ) {
+			update_post_meta( $invite_id, '_lnkup_status', self::STATUS_EXPIRED );
+			do_action( 'lnkup_vendor_invite_status_changed', $invite_id, self::STATUS_EXPIRED );
+		}
+		return count( $ids );
+	}
+
+	/**
+	 * Invites addressed to a vendor, newest first. Open invites past their expiry are reported as expired.
+	 *
+	 * @param int    $vendor_id Vendor user ID.
+	 * @param string $scope     open|all.
+	 * @param int    $limit     Max rows.
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function get_for_vendor( $vendor_id, $scope = 'open', $limit = 50 ) {
+		$vendor_id = absint( $vendor_id );
+		if ( ! $vendor_id ) {
+			return array();
+		}
+		$meta = array( array( 'key' => '_lnkup_vendor_user_id', 'value' => $vendor_id ) );
+		if ( 'open' === $scope ) {
+			$meta[] = array( 'key' => '_lnkup_status', 'value' => array( self::STATUS_SENT, self::STATUS_OPENED ), 'compare' => 'IN' );
+		}
+		$invites = get_posts(
+			array(
+				'post_type'      => 'lnkup_vendor_invite',
+				'post_status'    => 'publish',
+				'posts_per_page' => max( 1, min( 100, (int) $limit ) ),
+				'no_found_rows'  => true,
+				'orderby'        => 'date',
+				'order'          => 'DESC',
+				'meta_query'     => $meta, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			)
+		);
+		$items = array();
+		foreach ( $invites as $invite ) {
+			$status  = (string) get_post_meta( $invite->ID, '_lnkup_status', true );
+			$expires = (string) get_post_meta( $invite->ID, '_lnkup_expires_at', true );
+			if ( in_array( $status, array( self::STATUS_SENT, self::STATUS_OPENED ), true ) && '' !== $expires && strtotime( $expires ) < time() ) {
+				$status = self::STATUS_EXPIRED;
+				if ( 'open' === $scope ) {
+					continue;
+				}
+			}
+			$event_id     = (int) get_post_meta( $invite->ID, '_lnkup_event_id', true );
+			$opp_id       = (int) get_post_meta( $invite->ID, '_lnkup_opportunity_id', true );
+			$organizer_id = (int) get_post_meta( $invite->ID, '_lnkup_organizer_user_id', true );
+			$organizer    = get_userdata( $organizer_id );
+			$is_open      = in_array( $status, array( self::STATUS_SENT, self::STATUS_OPENED ), true );
+			$items[]      = array(
+				'id'                => (int) $invite->ID,
+				'status'            => $status,
+				'type'              => (string) get_post_meta( $invite->ID, '_lnkup_type', true ),
+				'message'           => (string) get_post_meta( $invite->ID, '_lnkup_invite_message', true ),
+				'organizer_name'    => $organizer ? (string) $organizer->display_name : '',
+				'event_id'          => $event_id,
+				'event_title'       => $event_id ? lnkup_plain_title( get_post( $event_id ) ) : '',
+				'event_date'        => $event_id ? (string) get_post_meta( $event_id, '_lnkup_event_date', true ) : '',
+				'city'              => $event_id ? (string) get_post_meta( $event_id, '_lnkup_city', true ) : '',
+				'state'             => $event_id ? (string) get_post_meta( $event_id, '_lnkup_state', true ) : '',
+				'image_url'         => $event_id ? (string) get_the_post_thumbnail_url( $event_id, 'medium' ) : '',
+				'opportunity_id'    => $opp_id,
+				'opportunity_title' => $opp_id ? lnkup_plain_title( get_post( $opp_id ) ) : '',
+				'created_at'        => (string) $invite->post_date_gmt,
+				'expires_at'        => $expires,
+				'can_respond'       => $is_open,
+			);
+		}
+		return $items;
+	}
+
+	/**
+	 * Accept or decline an invite by ID for the signed-in vendor (apps that never see the email token).
+	 *
+	 * @param int  $invite_id Invite ID.
+	 * @param bool $accept    Accept or decline.
+	 * @param int  $user_id   Acting vendor.
+	 * @return array|WP_Error
+	 */
+	public static function respond_by_id( $invite_id, $accept, $user_id ) {
+		$invite_id = absint( $invite_id );
+		$user_id   = absint( $user_id );
+		if ( 'lnkup_vendor_invite' !== get_post_type( $invite_id ) || (int) get_post_meta( $invite_id, '_lnkup_vendor_user_id', true ) !== $user_id ) {
+			return new WP_Error( 'invite_not_found', __( 'This invite is no longer available.', 'lnkup-marketplace' ), array( 'status' => 404 ) );
+		}
+		return self::respond( (string) get_post_meta( $invite_id, '_lnkup_token', true ), (bool) $accept, $user_id );
+	}
+
 	/**
 	 * Create invite.
 	 */
@@ -339,6 +464,7 @@ class LNKup_Vendor_Invites {
 		$expires = get_post_meta( $invite->ID, '_lnkup_expires_at', true );
 		if ( $expires && strtotime( $expires ) < time() ) {
 			update_post_meta( $invite->ID, '_lnkup_status', self::STATUS_EXPIRED );
+			do_action( 'lnkup_vendor_invite_status_changed', $invite->ID, self::STATUS_EXPIRED );
 			return new WP_Error( 'expired', __( 'This invite has expired.', 'lnkup-marketplace' ), array( 'status' => 410 ) );
 		}
 		$status = $accept ? self::STATUS_ACCEPTED : self::STATUS_DECLINED;

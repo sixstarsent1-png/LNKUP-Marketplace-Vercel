@@ -53,8 +53,14 @@ class LNKup_Comms_Settings {
 				'email_channel'                    => true,
 				'push_channel'                     => true,
 				'android_channels'                 => false,
-				'cap_promo_push_daily'             => 2,
-				'cap_promo_email_weekly'           => 3,
+				'cap_promo_push_daily'             => 1,
+				'cap_promo_push_weekly'            => 3,
+				'cap_promo_email_weekly'           => 2,
+				'cap_category_push_weekly'         => 0,
+				'cap_category_email_weekly'        => 0,
+				'cooldown_hours'                   => 4,
+				'holdout_percent'                  => 0,
+				'holdout_triggers'                 => array(),
 				'burst_window_minutes'             => 30,
 				'pending_review_hours'             => 48,
 				'digest_hour'                      => 9,
@@ -159,5 +165,37 @@ class LNKup_Comms_Settings {
 
 	public static function automation_paused( string $key ): bool {
 		return in_array( $key, (array) self::get( 'paused_automations' ), true );
+	}
+
+	/**
+	 * Categories whose triggers may be held out for measurement. Transactional, payment,
+	 * document and operational messages are never held out.
+	 */
+	const HOLDOUT_CATEGORIES = array( 'opportunities', 'recruitment', 'onboarding', 'digests', 'product_news' );
+
+	/**
+	 * Recipient falls in the stable measurement holdout for this trigger.
+	 *
+	 * @param string $trigger  Trigger key.
+	 * @param int    $user_id  Recipient.
+	 * @param string $priority Message priority.
+	 * @param string $category Message category.
+	 */
+	public static function in_holdout( string $trigger, int $user_id, string $priority, string $category ): bool {
+		$percent = min( 50, self::int( 'holdout_percent' ) );
+		if ( $percent < 1 || $user_id < 1 || ! in_array( $priority, array( 'normal', 'promotional' ), true ) || ! in_array( $category, self::HOLDOUT_CATEGORIES, true ) ) {
+			return false;
+		}
+		if ( ! in_array( $trigger, (array) self::get( 'holdout_triggers' ), true ) ) {
+			return false;
+		}
+		return self::holdout_bucket( $user_id ) < $percent;
+	}
+
+	/**
+	 * Stable 0–99 bucket, independent of staged-rollout buckets so holdouts never correlate with rollout stages.
+	 */
+	public static function holdout_bucket( int $user_id ): int {
+		return (int) ( sprintf( '%u', crc32( 'comms_holdout:' . $user_id ) ) % 100 );
 	}
 }

@@ -146,6 +146,12 @@ class LNKup_Comms_Engine {
 			return 0;
 		}
 		$message_id = (int) $wpdb->insert_id;
+		if ( empty( $stored_ctx['_forced'] ) && LNKup_Comms_Settings::in_holdout( $trigger, $recipient, $priority, $category ) ) {
+			// Recorded (so analytics can compare outcomes) but never delivered on any channel.
+			self::finish( $message_id, 'suppressed', 'holdout' );
+			LNKup_Comms_Analytics::bump( 'holdout', $trigger );
+			return 0;
+		}
 		LNKup_Comms_Queue::enqueue( $message_id, $at );
 		return $message_id;
 	}
@@ -387,7 +393,7 @@ class LNKup_Comms_Engine {
 				self::record_delivery( $id, 'email', 'digest_pending', $mode, 0 );
 				return array( 'status' => 'digest_pending', 'error' => '' );
 			}
-			$cap = LNKup_Comms_Frequency::check( $user, 'email', $priority );
+			$cap = LNKup_Comms_Frequency::check( $user, 'email', $priority, $category, $id );
 			if ( '' !== $cap ) {
 				return self::suppress( $id, $channel, $cap );
 			}
@@ -399,7 +405,7 @@ class LNKup_Comms_Engine {
 			if ( ! LNKup_Comms_Preferences::push_on( $user, $critical ? 'account' : $category ) ) {
 				return self::suppress( $id, $channel, 'preference_off' );
 			}
-			$cap = LNKup_Comms_Frequency::check( $user, 'push', $priority );
+			$cap = LNKup_Comms_Frequency::check( $user, 'push', $priority, $category, $id );
 			if ( '' !== $cap ) {
 				return self::suppress( $id, $channel, $cap );
 			}

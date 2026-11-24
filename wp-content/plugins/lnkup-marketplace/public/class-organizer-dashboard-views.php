@@ -499,6 +499,7 @@ class LNKup_Organizer_Dashboard_Views {
 		<section class="lnkup-organizer-overview lnkup-organizer-section" id="overview">
 			<?php echo self::render_home_welcome( $user_id, $next_event ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<?php echo self::render_recruit_prompt( $upcoming ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php echo self::render_fill_slots_card( array_map( 'intval', wp_list_pluck( (array) $upcoming, 'ID' ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<?php
 			$activation = class_exists( 'LNKup_Organizer_Activation' ) ? LNKup_Organizer_Activation::for_user( $user_id ) : null;
 			if ( $activation && ! $activation['is_activated'] ) :
@@ -857,6 +858,8 @@ class LNKup_Organizer_Dashboard_Views {
 					<?php endforeach; ?>
 				<?php endif; ?>
 			</div>
+
+			<?php echo self::render_fill_slots_card( array_map( 'intval', wp_list_pluck( $data['upcoming'], 'event_id' ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 
 			<div class="lnkup-home-block" data-testid="lnkup-overview-upcoming">
 				<div class="lnkup-home-block__head"><h2 class="lnkup-panel__title"><?php esc_html_e( 'Upcoming events', 'lnkup-marketplace' ); ?></h2></div>
@@ -1865,6 +1868,108 @@ class LNKup_Organizer_Dashboard_Views {
 	}
 
 	/**
+	 * "Vendor slots to fill" for the nearest live event that still has open slots: remaining spots by
+	 * category, the top fulfillment action and (when Find Vendors is on) three recommended vendors.
+	 * Reads cached fulfillment and cached match results only; no marketplace scans on page load.
+	 *
+	 * @param int[] $event_ids Upcoming event IDs, soonest first.
+	 * @return string
+	 */
+	private static function render_fill_slots_card( array $event_ids ) {
+		$user_id = get_current_user_id();
+		$fill    = null;
+		foreach ( array_slice( $event_ids, 0, 5 ) as $event_id ) {
+			if ( 'live' !== get_post_meta( (int) $event_id, '_lnkup_event_status', true ) ) {
+				continue;
+			}
+			$candidate = LNKup_Event_Fulfillment::for_event( (int) $event_id );
+			if ( $candidate['totals']['open_opportunities'] > 0 && ( $candidate['totals']['remaining'] > 0 || $candidate['totals']['unlimited'] > 0 ) ) {
+				$fill = $candidate;
+				break;
+			}
+		}
+		if ( ! $fill ) {
+			return '';
+		}
+		$event_id   = (int) $fill['event_id'];
+		$find_url   = add_query_arg( 'recruit', $event_id, lnkup_organizer_view_url( 'vendors' ) );
+		$action     = $fill['actions'][0] ?? null;
+		$open_cats  = array_values(
+			array_filter(
+				$fill['categories'],
+				static function ( $cat ) {
+					return $cat['open'] && ( $cat['remaining'] > 0 || $cat['unlimited'] );
+				}
+			)
+		);
+		$vendors    = array();
+		if ( class_exists( 'LNKup_Match_Settings' ) && LNKup_Match_Settings::enabled( 'matching_organizer_discovery_enabled' ) ) {
+			$result  = LNKup_Match_Service::event_vendor_candidates( $user_id, $event_id, array( 'per_page' => 3, 'exclude_applied' => true ) );
+			$vendors = is_wp_error( $result ) ? array() : (array) $result['items'];
+		}
+		ob_start();
+		?>
+		<div class="lnkup-home-block lnkup-fill-slots" data-testid="lnkup-fill-slots" data-event-id="<?php echo esc_attr( (string) $event_id ); ?>">
+			<div class="lnkup-home-block__head">
+				<h2 class="lnkup-panel__title"><?php esc_html_e( 'Vendor slots to fill', 'lnkup-marketplace' ); ?></h2>
+				<a class="lnkup-btn lnkup-btn--ghost lnkup-btn--sm" href="<?php echo esc_url( $find_url ); ?>"><?php esc_html_e( 'Find vendors', 'lnkup-marketplace' ); ?></a>
+			</div>
+			<p class="lnkup-muted">
+				<?php
+				echo esc_html(
+					$fill['totals']['remaining'] > 0
+						/* translators: 1: open spots, 2: event title */
+						? sprintf( _n( '%1$d vendor spot is still open at %2$s.', '%1$d vendor spots are still open at %2$s.', $fill['totals']['remaining'], 'lnkup-marketplace' ), $fill['totals']['remaining'], $fill['event_title'] )
+						/* translators: %s: event title */
+						: sprintf( __( '%s is accepting vendor applications.', 'lnkup-marketplace' ), $fill['event_title'] )
+				);
+				?>
+			</p>
+			<?php if ( $open_cats ) : ?>
+				<ul class="lnkup-fill-slots__cats">
+					<?php foreach ( array_slice( $open_cats, 0, 6 ) as $cat ) : ?>
+						<li class="lnkup-chip">
+							<?php
+							echo esc_html(
+								$cat['unlimited']
+									? $cat['label']
+									/* translators: 1: open spots, 2: category */
+									: sprintf( __( '%1$d %2$s', 'lnkup-marketplace' ), $cat['remaining'], $cat['label'] )
+							);
+							?>
+						</li>
+					<?php endforeach; ?>
+				</ul>
+			<?php endif; ?>
+			<?php if ( $action ) : ?>
+				<p class="lnkup-fill-slots__action"><strong><?php echo esc_html( $action['label'] ); ?></strong></p>
+			<?php endif; ?>
+			<?php if ( $vendors ) : ?>
+				<h3 class="lnkup-fill-slots__subtitle"><?php esc_html_e( 'Recommended vendors', 'lnkup-marketplace' ); ?></h3>
+				<ul class="lnkup-fill-slots__vendors">
+					<?php foreach ( $vendors as $vendor ) : ?>
+						<li class="lnkup-fill-slots__vendor">
+							<?php if ( '' !== $vendor['logo'] ) : ?>
+								<img src="<?php echo esc_url( $vendor['logo'] ); ?>" alt="" width="40" height="40" loading="lazy">
+							<?php endif; ?>
+							<span>
+								<strong><?php echo esc_html( $vendor['business_name'] ); ?></strong>
+								<?php if ( ! empty( $vendor['verified'] ) ) : ?>
+									<span class="lnkup-badge lnkup-badge--verified"><?php esc_html_e( 'Verified', 'lnkup-marketplace' ); ?></span>
+								<?php endif; ?>
+								<span class="lnkup-muted"><?php echo esc_html( implode( ' · ', array_filter( array( $vendor['primary_category'], trim( $vendor['city'] . ', ' . $vendor['state'], ', ' ), $vendor['match']['reasons'][0] ?? '' ) ) ) ); ?></span>
+							</span>
+						</li>
+					<?php endforeach; ?>
+				</ul>
+				<a class="lnkup-btn lnkup-btn--primary lnkup-btn--sm" href="<?php echo esc_url( $find_url ); ?>"><?php esc_html_e( 'Review and invite', 'lnkup-marketplace' ); ?></a>
+			<?php endif; ?>
+		</div>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
 	 * "Your event is published" recruitment prompt for the newest just-published event.
 	 *
 	 * @param WP_Post[] $upcoming Upcoming organizer events.
@@ -1963,6 +2068,14 @@ class LNKup_Organizer_Dashboard_Views {
 							?>
 							<option value="<?php echo esc_attr( (string) $cat->term_id ); ?>"><?php echo esc_html( $cat->name ); ?></option>
 						<?php endforeach; ?>
+					</select>
+					<label class="screen-reader-text" for="lnkup-find-vendors-section"><?php esc_html_e( 'Show', 'lnkup-marketplace' ); ?></label>
+					<select id="lnkup-find-vendors-section" class="lnkup-crm-search" data-testid="lnkup-find-vendors-section">
+						<option value="recommended"><?php esc_html_e( 'Recommended for this event', 'lnkup-marketplace' ); ?></option>
+						<option value="new_nearby"><?php esc_html_e( 'New vendors near you', 'lnkup-marketplace' ); ?></option>
+						<option value="previously_booked"><?php esc_html_e( 'Previously booked', 'lnkup-marketplace' ); ?></option>
+						<option value="saved"><?php esc_html_e( 'Saved vendors', 'lnkup-marketplace' ); ?></option>
+						<option value="recently_viewed"><?php esc_html_e( 'Recently viewed', 'lnkup-marketplace' ); ?></option>
 					</select>
 					<label class="lnkup-crm-toolbar__verified"><input type="checkbox" id="lnkup-find-vendors-verified" value="1" /> <?php esc_html_e( 'Verified only', 'lnkup-marketplace' ); ?></label>
 				</div>

@@ -418,7 +418,12 @@ class LNKup_Comms_Admin {
 		}
 		$ints = array(
 			'cap_promo_push_daily'             => __( 'Max promotional pushes per user per day', 'lnkup-communications' ),
+			'cap_promo_push_weekly'            => __( 'Max promotional pushes per user per week', 'lnkup-communications' ),
 			'cap_promo_email_weekly'           => __( 'Max promotional emails per user per week', 'lnkup-communications' ),
+			'cap_category_push_weekly'         => __( 'Max promotional pushes per category per user per week (0 = no per-category cap)', 'lnkup-communications' ),
+			'cap_category_email_weekly'        => __( 'Max promotional emails per category per user per week (0 = no per-category cap)', 'lnkup-communications' ),
+			'cooldown_hours'                   => __( 'Cross-channel cooldown: hold promotional email/push for (hours) after another important or promotional message (0 = off)', 'lnkup-communications' ),
+			'holdout_percent'                  => __( 'Measurement holdout: % of users who never receive the selected engagement triggers (0–50)', 'lnkup-communications' ),
 			'burst_window_minutes'             => __( 'Group organizer application alerts within (minutes)', 'lnkup-communications' ),
 			'pending_review_hours'             => __( 'Pending-review reminder after (hours)', 'lnkup-communications' ),
 			'digest_hour'                      => __( 'Digest hour (site time, 0–23)', 'lnkup-communications' ),
@@ -432,6 +437,14 @@ class LNKup_Comms_Admin {
 		foreach ( $ints as $key => $label ) {
 			echo '<tr><th><label for="s-' . esc_attr( $key ) . '">' . esc_html( $label ) . '</label></th><td><input type="number" min="0" class="small-text" id="s-' . esc_attr( $key ) . '" name="s[' . esc_attr( $key ) . ']" value="' . esc_attr( (string) $s[ $key ] ) . '"></td></tr>';
 		}
+		echo '<tr><th>' . esc_html__( 'Holdout triggers', 'lnkup-communications' ) . '</th><td><input type="hidden" name="s[holdout_triggers][]" value=""><div class="lnkup-comms-checklist">';
+		foreach ( LNKup_Comms_Registry::triggers() as $trigger_key => $def ) {
+			if ( ! in_array( (string) $def['category'], LNKup_Comms_Settings::HOLDOUT_CATEGORIES, true ) || ! in_array( (string) $def['priority'], array( 'normal', 'promotional' ), true ) ) {
+				continue;
+			}
+			echo '<label><input type="checkbox" name="s[holdout_triggers][]" value="' . esc_attr( $trigger_key ) . '"' . checked( in_array( $trigger_key, (array) $s['holdout_triggers'], true ), true, false ) . '> <code>' . esc_html( $trigger_key ) . '</code></label> ';
+		}
+		echo '</div><p class="description">' . esc_html__( 'Held-out users are recorded as "holdout" so Analytics can compare their outcomes with users who received the message. Only engagement categories can be held out.', 'lnkup-communications' ) . '</p></td></tr>';
 		echo '<tr><th><label for="s-test">' . esc_html__( 'Internal test account IDs', 'lnkup-communications' ) . '</label></th><td><input type="text" class="regular-text" id="s-test" name="s[test_user_ids]" value="' . esc_attr( (string) $s['test_user_ids'] ) . '"><p class="description">' . esc_html__( 'Comma-separated user IDs allowed to receive test sends.', 'lnkup-communications' ) . '</p></td></tr>';
 		echo '<tr><th><label for="s-address">' . esc_html__( 'Sender postal address', 'lnkup-communications' ) . '</label></th><td><input type="text" class="large-text" id="s-address" name="s[company_address]" value="' . esc_attr( (string) $s['company_address'] ) . '"></td></tr>';
 		echo '<tr><th><label for="s-provider">' . esc_html__( 'Email provider (webhooks)', 'lnkup-communications' ) . '</label></th><td><select id="s-provider" name="s[email_provider]">';

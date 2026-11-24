@@ -174,22 +174,17 @@ class LNKup_Organizer_Overview {
 		);
 		$out = array();
 		foreach ( $ids as $event_id ) {
-			$ready    = LNKup_Event_Readiness::evaluate( (int) $event_id );
-			$capacity = 0;
-			$paid     = 0;
-			foreach ( get_posts( array( 'post_type' => 'lnkup_opportunity', 'post_status' => 'any', 'posts_per_page' => -1, 'fields' => 'ids', 'no_found_rows' => true, 'meta_key' => '_lnkup_event_id', 'meta_value' => (string) $event_id ) ) as $opp_id ) {
-				$summary   = LNKup_Opportunity_Inventory::summary( (int) $opp_id );
-				$capacity += (int) $summary['capacity'];
-				$paid     += (int) $summary['paid'];
-			}
+			$ready = LNKup_Event_Readiness::evaluate( (int) $event_id );
+			$fill  = LNKup_Event_Fulfillment::for_event( (int) $event_id );
 			$out[] = array(
 				'event_id'          => (int) $event_id,
 				'title'             => lnkup_plain_title( $event_id ),
 				'date'              => $ready['event_date'],
 				'days_until'        => $ready['days_until'],
 				'readiness_percent' => (int) $ready['percent'],
-				'paid'              => $paid,
-				'capacity'          => $capacity,
+				'paid'              => (int) $fill['totals']['paid'],
+				'capacity'          => (int) $fill['totals']['capacity'],
+				'remaining'         => (int) $fill['totals']['remaining'],
 				'next_action'       => $ready['next_actions'][0] ?? null,
 				'url'               => add_query_arg( array( 'event' => $event_id, 'tab' => 'readiness' ), lnkup_page_url_helper( 'organizer-dashboard' ) ),
 			);

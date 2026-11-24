@@ -31,7 +31,9 @@ function lnkup_ct_settings( array $settings ): void {
  */
 function lnkup_ct_all_flows(): void {
 	$all = array_fill_keys( array_keys( LNKup_Comms_Settings::flags() ), true );
-	lnkup_ct_settings( array_merge( $all, array( 'delivery_paused' => false, 'email_channel' => true, 'push_channel' => true, 'paused_automations' => array() ) ) );
+	// Pre-1.3 cap values with the cooldown and holdout off, so older suites keep their expectations; comms-policy-test covers the new defaults.
+	$policy = array( 'cap_promo_push_daily' => 2, 'cap_promo_push_weekly' => 14, 'cap_promo_email_weekly' => 3, 'cap_category_push_weekly' => 0, 'cap_category_email_weekly' => 0, 'cooldown_hours' => 0, 'holdout_percent' => 0, 'holdout_triggers' => array() );
+	lnkup_ct_settings( array_merge( $all, $policy, array( 'delivery_paused' => false, 'email_channel' => true, 'push_channel' => true, 'paused_automations' => array() ) ) );
 }
 
 /**
