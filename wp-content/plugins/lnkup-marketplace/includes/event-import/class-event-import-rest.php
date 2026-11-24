@@ -47,6 +47,181 @@ class LNKup_Event_Import_REST {
 				'permission_callback' => array( __CLASS__, 'can_import_draft' ),
 			)
 		);
+		self::bulk_routes();
+	}
+
+	public static function can_bulk(): bool {
+		return self::can_import() && LNKup_Event_OS_Flags::enabled( 'event_import_bulk' );
+	}
+
+	public static function can_job( WP_REST_Request $request ): bool {
+		return self::can_bulk() && LNKup_Import_Jobs::owns( (int) $request['id'], get_current_user_id() );
+	}
+
+	public static function bulk_routes(): void {
+		$bulk = array( 'permission_callback' => array( __CLASS__, 'can_bulk' ) );
+		$job  = array( 'permission_callback' => array( __CLASS__, 'can_job' ) );
+		register_rest_route( self::NS, self::BASE . '/bulk/csv/parse', array_merge( $bulk, array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'csv_parse' ) ) ) );
+		register_rest_route(
+			self::NS,
+			self::BASE . '/bulk/jobs',
+			array(
+				array_merge( $bulk, array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'list_jobs' ) ) ),
+				array_merge( $bulk, array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'create_job' ) ) ),
+			)
+		);
+		register_rest_route( self::NS, self::BASE . '/bulk/jobs/(?P<id>\d+)', array_merge( $job, array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'get_job' ) ) ) );
+		foreach ( array( 'apply', 'retry', 'cancel' ) as $action ) {
+			register_rest_route( self::NS, self::BASE . '/bulk/jobs/(?P<id>\d+)/' . $action, array_merge( $job, array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'job_' . $action ) ) ) );
+		}
+		register_rest_route( self::NS, self::BASE . '/eventbrite', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'eventbrite_status' ), 'permission_callback' => array( __CLASS__, 'can_import' ) ) );
+		register_rest_route( self::NS, self::BASE . '/eventbrite/events', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'eventbrite_events' ), 'permission_callback' => array( __CLASS__, 'can_import' ) ) );
+		register_rest_route( self::NS, self::BASE . '/eventbrite/disconnect', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'eventbrite_disconnect' ), 'permission_callback' => array( __CLASS__, 'can_import' ) ) );
+	}
+
+	/**
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function csv_parse( WP_REST_Request $request ) {
+		$parsed = LNKup_Import_Jobs::parse_csv( (string) ( self::body( $request )['csv'] ?? '' ) );
+		if ( is_wp_error( $parsed ) ) {
+			return $parsed;
+		}
+		return rest_ensure_response( array( 'headers' => $parsed['headers'], 'sample' => array_slice( $parsed['rows'], 0, 5 ), 'total' => count( $parsed['rows'] ), 'suggested' => (object) $parsed['suggested'], 'fields' => LNKup_Import_Jobs::CSV_FIELDS, 'max' => LNKup_Import_Jobs::MAX_ROWS ) );
+	}
+
+	/**
+	 * Body by method: urls {urls[]} · csv {csv, mapping{col:field}, file_name} · ics {ics, file_name, include_past}
+	 * · eventbrite {ids[]}.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function create_job( WP_REST_Request $request ) {
+		$body   = self::body( $request );
+		$user   = get_current_user_id();
+		$method = sanitize_key( (string) ( $body['method'] ?? '' ) );
+		$file   = (string) ( $body['file_name'] ?? '' );
+		switch ( $method ) {
+			case 'urls':
+				$raw    = is_array( $body['urls'] ?? null ) ? $body['urls'] : preg_split( '/[\s,]+/', (string) ( $body['urls'] ?? '' ) );
+				$inputs = array();
+				foreach ( (array) $raw as $u ) {
+					$u = esc_url_raw( trim( (string) $u ), array( 'http', 'https' ) );
+					if ( '' !== $u ) {
+						$inputs[] = array( 'url' => $u );
+					}
+				}
+				break;
+			case 'csv':
+				$parsed = LNKup_Import_Jobs::parse_csv( (string) ( $body['csv'] ?? '' ) );
+				if ( is_wp_error( $parsed ) ) {
+					return $parsed;
+				}
+				$mapping = (array) ( $body['mapping'] ?? $parsed['suggested'] );
+				if ( ! in_array( 'name', $mapping, true ) ) {
+					return new WP_Error( 'lnkup_import_mapping', __( 'Choose which column holds the event name.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+				}
+				$inputs = LNKup_Import_Jobs::rows_to_inputs( $parsed['rows'], $mapping );
+				break;
+			case 'ics':
+				$inputs = LNKup_Import_Jobs::parse_ics( (string) ( $body['ics'] ?? '' ), empty( $body['include_past'] ) );
+				if ( is_wp_error( $inputs ) ) {
+					return $inputs;
+				}
+				if ( ! $inputs ) {
+					return new WP_Error( 'lnkup_import_empty', __( 'No upcoming events were found in that calendar file.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+				}
+				break;
+			case 'eventbrite':
+				if ( ! LNKup_Eventbrite_Connection::available() ) {
+					return new WP_Error( 'lnkup_eventbrite_unavailable', __( 'Eventbrite account import is not available.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+				}
+				$inputs = array_map( static fn( $id ) => array( 'id' => preg_replace( '/[^0-9]/', '', (string) $id ) ), array_slice( (array) ( $body['ids'] ?? array() ), 0, LNKup_Import_Jobs::MAX_ROWS ) );
+				break;
+			default:
+				return new WP_Error( 'lnkup_import_method', __( 'Unsupported import type.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+		}
+		$job = LNKup_Import_Jobs::create( $user, $method, $inputs, array(), $file );
+		if ( is_wp_error( $job ) ) {
+			return $job;
+		}
+		LNKup_Import_Jobs::process( (int) $job['id'] );
+		$response = rest_ensure_response( LNKup_Import_Jobs::get( (int) $job['id'] ) );
+		$response->set_status( 201 );
+		return $response;
+	}
+
+	public static function list_jobs(): WP_REST_Response {
+		return rest_ensure_response( array( 'jobs' => LNKup_Import_Jobs::list_for( get_current_user_id() ) ) );
+	}
+
+	public static function get_job( WP_REST_Request $request ): WP_REST_Response {
+		$id  = (int) $request['id'];
+		$job = LNKup_Import_Jobs::get( $id, false );
+		if ( $job && in_array( $job['status'], array( 'queued', 'processing' ), true ) ) {
+			LNKup_Import_Jobs::process( $id );
+		}
+		return rest_ensure_response( LNKup_Import_Jobs::get( $id ) );
+	}
+
+	/**
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function job_apply( WP_REST_Request $request ) {
+		$decisions = array();
+		foreach ( (array) ( self::body( $request )['decisions'] ?? array() ) as $item => $choice ) {
+			$choice = (string) $choice;
+			if ( in_array( $choice, array( 'draft', 'skip' ), true ) || preg_match( '/^link:\d+$/', $choice ) ) {
+				$decisions[ (int) $item ] = $choice;
+			}
+		}
+		$out = LNKup_Import_Jobs::apply( (int) $request['id'], get_current_user_id(), $decisions );
+		return is_wp_error( $out ) ? $out : rest_ensure_response( $out );
+	}
+
+	public static function job_retry( WP_REST_Request $request ): WP_REST_Response {
+		LNKup_Import_Jobs::retry( (int) $request['id'] );
+		LNKup_Import_Jobs::process( (int) $request['id'] );
+		return rest_ensure_response( LNKup_Import_Jobs::get( (int) $request['id'] ) );
+	}
+
+	public static function job_cancel( WP_REST_Request $request ): WP_REST_Response {
+		LNKup_Import_Jobs::cancel( (int) $request['id'] );
+		return rest_ensure_response( LNKup_Import_Jobs::get( (int) $request['id'] ) );
+	}
+
+	public static function eventbrite_status(): WP_REST_Response {
+		$user   = get_current_user_id();
+		$status = LNKup_Eventbrite_Connection::status( $user );
+		if ( $status['available'] && ! $status['connected'] ) {
+			$url = LNKup_Eventbrite_Connection::connect_url( $user );
+			$status['connect_url'] = is_wp_error( $url ) ? '' : $url;
+		}
+		return rest_ensure_response( $status );
+	}
+
+	/**
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function eventbrite_events( WP_REST_Request $request ) {
+		if ( ! LNKup_Eventbrite_Connection::available() ) {
+			return new WP_Error( 'lnkup_eventbrite_unavailable', __( 'Eventbrite account import is not available yet. Paste event links instead.', 'lnkup-marketplace' ), array( 'status' => 409 ) );
+		}
+		$user   = get_current_user_id();
+		$events = LNKup_Eventbrite_Connection::events( $user, ! empty( $request['refresh'] ) );
+		if ( is_wp_error( $events ) ) {
+			return $events;
+		}
+		foreach ( $events as &$ev ) {
+			$ev['relation'] = LNKup_Event_Sources::relation( (string) $ev['url'], $user )['state'];
+		}
+		unset( $ev );
+		return rest_ensure_response( array( 'events' => $events ) );
+	}
+
+	public static function eventbrite_disconnect(): WP_REST_Response {
+		LNKup_Eventbrite_Connection::disconnect( get_current_user_id() );
+		return rest_ensure_response( array( 'disconnected' => true ) );
 	}
 
 	public static function providers(): WP_REST_Response {

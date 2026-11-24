@@ -1993,6 +1993,252 @@
     setTimeout(function () { input.focus(); }, 0);
   };
 
+  /* ------------------------------------------------------------------ bulk import (Phase 8) */
+
+  var CSV_FIELD_LABELS = { name: 'Event name', date: 'Date', end_date: 'End date', start_time: 'Start time', end_time: 'End time', venue_name: 'Venue', address: 'Address', city: 'City', state: 'State', zip: 'ZIP', description: 'Description', url: 'Event link' };
+  var ITEM_STATUS = {
+    pending: ['Reading…', 'eb-chip--line'], ready: ['Ready', 'eb-chip--success'], duplicate: ['Possible duplicate', 'eb-chip--warning'],
+    conflict: ['Managed by another organizer', 'eb-chip--danger'], failed: ['Could not read', 'eb-chip--danger'],
+    drafted: ['Draft created', 'eb-chip--lime'], linked: ['Linked', 'eb-chip--lime'], skipped: ['Skipped', 'eb-chip--line']
+  };
+
+  function readFile(file, max) {
+    return new Promise(function (resolve, reject) {
+      if (!file) return reject(new Error('Choose a file first.'));
+      if (file.size > max) return reject(new Error('That file is larger than 1 MB. Split it into smaller files.'));
+      var fr = new FileReader();
+      fr.onload = function () { resolve(String(fr.result || '')); };
+      fr.onerror = function () { reject(new Error('We could not read that file.')); };
+      fr.readAsText(file);
+    });
+  }
+
+  function dropZone(accept, label, onFile) {
+    var input = h('input', { type: 'file', accept: accept, class: 'eb-sr', id: uid('file'), onchange: function (e) { if (e.target.files[0]) onFile(e.target.files[0]); } });
+    var zone = h('label', { class: 'eb-drop', for: input.id }, [input, h('span', { class: 'eb-method__icon' }, icon('import')), h('strong', { text: label }), h('span', { class: 'eb-help', text: 'Drop it here or click to choose · up to 1 MB' })]);
+    ['dragover', 'dragenter'].forEach(function (ev) { zone.addEventListener(ev, function (e) { e.preventDefault(); zone.setAttribute('data-over', 'true'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { zone.addEventListener(ev, function () { zone.removeAttribute('data-over'); }); });
+    zone.addEventListener('drop', function (e) { e.preventDefault(); if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]); });
+    return zone;
+  }
+
+  function bulkScreen() {
+    var params = new URL(window.location.href).searchParams;
+    var tab = params.get('tab') || 'links';
+    var body = h('div', { class: 'eb-bulk__body' });
+    var tabs = [['links', 'Links'], ['csv', 'Spreadsheet'], ['ics', 'Calendar file'], ['eventbrite', 'Eventbrite account']];
+    var seg = h('div', { class: 'eb-seg', role: 'tablist', 'aria-label': 'Import from' });
+    function show(key) {
+      tab = key;
+      Array.prototype.forEach.call(seg.children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-tab') === key ? 'true' : 'false'); b.setAttribute('aria-selected', b.getAttribute('data-tab') === key ? 'true' : 'false'); });
+      clear(body);
+      ({ links: linksTab, csv: csvTab, ics: icsTab, eventbrite: eventbriteTab })[key](body);
+    }
+    tabs.forEach(function (t) { append(seg, h('button', { type: 'button', role: 'tab', 'data-tab': t[0], text: t[1], onclick: function () { show(t[0]); } })); });
+    screen(h('div', { class: 'eb-bulk', 'data-testid': 'eb-bulk' }, [
+      h('div', { class: 'eb-hero' }, [
+        h('div', {}, [h('span', { class: 'eb-eyebrow', text: 'Bulk import' }), h('h1', { text: 'Bring in several events at once' }), h('p', { text: 'Every event is checked and shown for review first. Nothing is published — you get private drafts to finish and publish when ready.' })]),
+        h('button', { type: 'button', class: 'eb-btn', text: 'Back', onclick: function () { navigate({}); boot(); } })
+      ]),
+      seg,
+      body
+    ]));
+    var result = params.get('eventbrite');
+    if (result) toast({ connected: 'Eventbrite connected.', denied: 'Eventbrite connection was cancelled.', failed: 'Eventbrite did not finish connecting. Try again.', unavailable: 'Eventbrite account import is not available.' }[result] || 'Eventbrite updated.', result === 'connected' ? null : 'error');
+    show(tabs.some(function (t) { return t[0] === tab; }) ? tab : 'links');
+  }
+  Builder.screens.bulk = bulkScreen;
+
+  function startJob(body, payload) {
+    clear(body);
+    append(body, h('div', { class: 'eb-card' }, liveSteps(['Starting the import', 'Reading events', 'Checking for events already on LNKup', 'Preparing your review'])));
+    return api('organizer/import/bulk/jobs', { method: 'POST', body: payload }).then(function (job) { jobView(body, job); })
+      .catch(function (e) { clear(body); append(body, h('div', { class: 'eb-notice eb-notice--danger', role: 'alert' }, h('div', {}, [h('strong', { text: 'Import not started' }), h('span', { text: e.message })]))); });
+  }
+
+  function linksTab(body) {
+    var ta = h('textarea', { class: 'eb-input', rows: 8, id: 'eb-bulk-links', placeholder: 'https://posh.vip/e/…\nhttps://www.eventbrite.com/e/…\nhttps://yourfestival.com/2027' });
+    var count = h('p', { class: 'eb-help', 'aria-live': 'polite', text: 'One link per line · up to 25' });
+    ta.addEventListener('input', function () {
+      var n = ta.value.split(/\s+/).filter(function (u) { return /^https?:\/\//i.test(u); }).length;
+      count.textContent = n + ' link' + (n === 1 ? '' : 's') + ' · up to 25';
+      count.className = n > 25 ? 'eb-error' : 'eb-help';
+    });
+    append(body, h('div', { class: 'eb-card' }, [
+      h('div', { class: 'eb-field' }, [h('label', { for: 'eb-bulk-links', text: 'Event links' }), ta, count]),
+      h('div', { class: 'eb-notice__actions', style: 'margin-top:12px' }, h('button', { type: 'button', class: 'eb-btn eb-btn--primary', 'data-testid': 'eb-bulk-read', text: 'Read links', onclick: function () { startJob(body, { method: 'urls', urls: ta.value }); } }))
+    ]));
+    ta.focus();
+  }
+
+  function csvTab(body) {
+    var holder = h('div');
+    append(body, [h('div', { class: 'eb-card' }, [
+      h('div', { class: 'eb-card__head' }, [h('div', {}, [h('h2', { text: 'Upload a spreadsheet' }), h('p', { text: 'Save as CSV from Excel, Google Sheets or Numbers. One event per row with a header row.' })])]),
+      dropZone('.csv,text/csv', 'Choose a CSV file', function (file) {
+        readFile(file, 1048576).then(function (text) {
+          return api('organizer/import/bulk/csv/parse', { method: 'POST', body: { csv: text } }).then(function (p) { mapping(holder, p, text, file.name); });
+        }).catch(function (e) { toast(e.message, 'error'); });
+      })
+    ]), holder]);
+  }
+
+  function mapping(holder, p, text, name) {
+    var map = {};
+    Object.keys(p.suggested || {}).forEach(function (k) { map[k] = p.suggested[k]; });
+    var go = h('button', { type: 'button', class: 'eb-btn eb-btn--primary', 'data-testid': 'eb-bulk-map-go' });
+    function refresh() {
+      var hasName = Object.keys(map).some(function (k) { return map[k] === 'name'; });
+      go.disabled = !hasName;
+      go.textContent = hasName ? 'Review ' + Math.min(p.total, p.max) + ' event' + (p.total === 1 ? '' : 's') : 'Choose the event name column';
+    }
+    var rows = p.headers.map(function (head, i) {
+      var sel = h('select', { class: 'eb-input', 'aria-label': 'Field for column ' + head, onchange: function (e) {
+        var v = e.target.value;
+        Object.keys(map).forEach(function (k) { if (map[k] === v && String(k) !== String(i)) { delete map[k]; var other = holder.querySelector('select[data-col="' + k + '"]'); if (other) other.value = ''; } });
+        if (v) map[i] = v; else delete map[i];
+        refresh();
+      }, 'data-col': i }, [h('option', { value: '', text: '— Don\'t import —' })].concat(p.fields.map(function (f) { return h('option', { value: f, text: CSV_FIELD_LABELS[f] || f, selected: map[i] === f }); })));
+      var samples = p.sample.map(function (r) { return r[i] || ''; }).filter(Boolean).slice(0, 2).join(' · ');
+      return h('div', { class: 'eb-map__row' }, [h('div', {}, [h('strong', { text: head || 'Column ' + (i + 1) }), h('span', { class: 'eb-help', text: samples || 'Empty in the first rows' })]), sel]);
+    });
+    clear(holder);
+    append(holder, h('div', { class: 'eb-card', 'data-testid': 'eb-bulk-map' }, [
+      h('div', { class: 'eb-card__head' }, [h('div', {}, [h('h2', { text: 'Match your columns' }), h('p', { text: name + ' · ' + p.total + ' row' + (p.total === 1 ? '' : 's') + (p.total > p.max ? ' — only the first ' + p.max + ' will be imported' : '') + '. Dates must be written out (2027-06-07 or 06/07/2027); anything unclear is left for you to fill.' })])]),
+      h('div', { class: 'eb-map' }, rows),
+      h('div', { class: 'eb-notice__actions', style: 'margin-top:14px' }, go)
+    ]));
+    go.addEventListener('click', function () { startJob(holder.parentNode, { method: 'csv', csv: text, mapping: map, file_name: name }); });
+    refresh();
+  }
+
+  function icsTab(body) {
+    var past = h('input', { type: 'checkbox' });
+    append(body, h('div', { class: 'eb-card' }, [
+      h('div', { class: 'eb-card__head' }, [h('div', {}, [h('h2', { text: 'Upload a calendar file' }), h('p', { text: 'Export an .ics file from Google Calendar, Outlook, Apple Calendar or your event platform.' })])]),
+      dropZone('.ics,text/calendar', 'Choose an .ics file', function (file) {
+        readFile(file, 1048576).then(function (text) { startJob(body, { method: 'ics', ics: text, file_name: file.name, include_past: past.checked }); }).catch(function (e) { toast(e.message, 'error'); });
+      }),
+      h('label', { class: 'eb-check', style: 'margin-top:12px' }, [past, h('span', { text: 'Include past events' })])
+    ]));
+  }
+
+  function eventbriteTab(body) {
+    append(body, h('div', { class: 'eb-card' }, h('div', { class: 'eb-skeleton' }, [h('span'), h('span')])));
+    api('organizer/import/eventbrite').then(function (st) {
+      clear(body);
+      if (!st.available) {
+        append(body, h('div', { class: 'eb-card eb-connect', 'data-testid': 'eb-eventbrite-off' }, [
+          h('span', { class: 'eb-provider', text: 'EB' }),
+          h('div', {}, [h('h2', { text: 'Eventbrite · Not connected' }), h('p', { class: 'eb-help', text: 'Account import isn\'t switched on for LNKup yet. Paste your Eventbrite event links in the Links tab — that works today.' })]),
+          h('button', { type: 'button', class: 'eb-btn', text: 'Use links instead', onclick: function () { body.parentNode.querySelector('[data-tab="links"]').click(); } })
+        ]));
+        return;
+      }
+      if (!st.connected) {
+        append(body, h('div', { class: 'eb-card eb-connect' }, [
+          h('span', { class: 'eb-provider', text: 'EB' }),
+          h('div', {}, [h('h2', { text: st.status === 'expired' ? 'Reconnect Eventbrite' : 'Connect Eventbrite' }), h('p', { class: 'eb-help', text: 'LNKup reads your upcoming events (name, date, venue, image) so you can pick which to bring in. We never sell tickets, change your Eventbrite events, or import attendee data.' })]),
+          st.connect_url ? h('a', { class: 'eb-btn eb-btn--primary', href: st.connect_url, 'data-testid': 'eb-eventbrite-connect', text: st.status === 'expired' ? 'Reconnect' : 'Connect Eventbrite' }) : null
+        ]));
+        return;
+      }
+      var picked = {};
+      var list = h('div', { class: 'eb-picks' }, h('div', { class: 'eb-skeleton' }, [h('span'), h('span')]));
+      var go = h('button', { type: 'button', class: 'eb-btn eb-btn--primary', disabled: true, text: 'Review selected', onclick: function () { startJob(body, { method: 'eventbrite', ids: Object.keys(picked).filter(function (k) { return picked[k]; }) }); } });
+      function count() { var n = Object.keys(picked).filter(function (k) { return picked[k]; }).length; go.disabled = !n; go.textContent = n ? 'Review ' + n + ' event' + (n === 1 ? '' : 's') : 'Review selected'; }
+      append(body, h('div', { class: 'eb-card' }, [
+        h('div', { class: 'eb-card__head' }, [
+          h('div', {}, [h('h2', { text: 'Your Eventbrite events' }), h('p', { text: 'Connected as ' + (st.account_label || 'your account') + '. Upcoming live and draft events.' })]),
+          h('button', { type: 'button', class: 'eb-link', text: 'Disconnect', onclick: function () { confirmDialog('Disconnect Eventbrite?', 'LNKup will delete its access token. Events you already imported stay on LNKup.', 'Disconnect').then(function (ok) { if (ok) api('organizer/import/eventbrite/disconnect', { method: 'POST', body: {} }).then(function () { clear(body); eventbriteTab(body); }); }); } })
+        ]),
+        list,
+        h('div', { class: 'eb-notice__actions', style: 'margin-top:14px' }, go)
+      ]));
+      api('organizer/import/eventbrite/events').then(function (r) {
+        clear(list);
+        if (!r.events.length) { append(list, h('p', { class: 'eb-help', text: 'No upcoming events on this Eventbrite account.' })); return; }
+        r.events.forEach(function (ev) {
+          var taken = ev.relation === 'own' || ev.relation === 'other' || ev.relation === 'claimed_other';
+          append(list, h('label', { class: 'eb-pick' }, [
+            h('input', { type: 'checkbox', disabled: taken, onchange: function (e) { picked[ev.id] = e.target.checked; count(); } }),
+            h('span', { class: 'eb-pick__body' }, [
+              h('span', { class: 'eb-pick__label' }, [ev.status, ev.series ? h('span', { class: 'eb-prov', text: 'Series' }) : null, taken ? h('span', { class: 'eb-prov', text: ev.relation === 'own' ? 'Already on LNKup' : 'Managed by another organizer' }) : null]),
+              h('span', { class: 'eb-pick__value', text: ev.name }),
+              h('span', { class: 'eb-help', text: [fmtDate(ev.date), ev.start_time, [ev.venue_name, ev.city].filter(Boolean).join(', ') || (ev.online ? 'Online' : '')].filter(Boolean).join(' · ') })
+            ])
+          ]));
+        });
+      }).catch(function (e) { clear(list); append(list, h('p', { class: 'eb-error', role: 'alert', text: e.message })); });
+    }).catch(function (e) { clear(body); append(body, errorCard(e.message, function () { eventbriteTab(body); })); });
+  }
+
+  function jobView(body, job) {
+    var decisions = {};
+    var poll = null;
+    function render(j) {
+      clear(body);
+      var busy = j.status === 'queued' || j.status === 'processing';
+      var actionable = j.items.filter(function (i) { return i.status === 'ready' || i.status === 'duplicate'; });
+      actionable.forEach(function (i) { if (!decisions[i.id]) decisions[i.id] = i.status === 'ready' ? 'draft' : 'skip'; });
+      var head = h('div', { class: 'eb-card eb-job__head', 'data-testid': 'eb-job' }, [
+        h('div', {}, [h('h2', { text: busy ? 'Reading ' + j.total + ' event' + (j.total === 1 ? '' : 's') + '…' : 'Review ' + j.total + ' event' + (j.total === 1 ? '' : 's') }),
+          h('p', { class: 'eb-help', text: [j.counts.ready + ' ready', j.counts.duplicate ? j.counts.duplicate + ' possible duplicate' + (j.counts.duplicate === 1 ? '' : 's') : '', j.counts.failed ? j.counts.failed + ' could not be read' : '', j.counts.drafted ? j.counts.drafted + ' drafted' : ''].filter(Boolean).join(' · ') })]),
+        h('div', { class: 'eb-meter eb-meter--wide', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': j.progress, 'aria-label': 'Import progress' }, h('span', { style: 'width:' + j.progress + '%' }))
+      ]);
+      var rows = j.items.map(function (i) {
+        var st = ITEM_STATUS[i.status] || [i.status, 'eb-chip--line'];
+        var pv = i.preview || {};
+        var f = pv.fields || {};
+        var meta = [f.date ? fmtDate(f.date) : 'No date', f.start_time, [f.venue_name, f.city, f.state].filter(Boolean).join(', '), pv.provider ? pv.provider.label : ''].filter(Boolean).join(' · ');
+        var control = null;
+        if (i.status === 'ready' || i.status === 'duplicate') {
+          var opts = [['draft', 'Create draft'], ['skip', 'Skip']];
+          (pv.duplicates || []).forEach(function (d) { if (pv.url) opts.push(['link:' + d.event_id, 'Link to “' + d.title + '”']); });
+          if (pv.relation && (pv.relation.state === 'own' || pv.relation.state === 'own_listing')) opts = [['skip', 'Skip — already on LNKup']];
+          control = h('select', { class: 'eb-input eb-job__choice', 'aria-label': 'Action for ' + (i.label || 'event'), onchange: function (e) { decisions[i.id] = e.target.value; } }, opts.map(function (o) { return h('option', { value: o[0], text: o[1], selected: decisions[i.id] === o[0] }); }));
+        } else if (i.status === 'drafted') {
+          control = h('a', { class: 'eb-btn eb-btn--sm', href: cfg.urls.create + (cfg.urls.create.indexOf('?') >= 0 ? '&' : '?') + 'draft=' + i.draft_id, text: 'Open draft' });
+        }
+        return h('div', { class: 'eb-job__item', 'data-status': i.status }, [
+          h('div', { class: 'eb-job__main' }, [
+            h('div', { class: 'eb-job__title' }, [h('strong', { text: i.label || 'Untitled event' }), h('span', { class: 'eb-chip ' + st[1], text: st[0] })]),
+            pv.fields ? h('span', { class: 'eb-help', text: meta }) : null,
+            i.error ? h('span', { class: 'eb-error', text: i.error }) : null,
+            pv.relation && pv.relation.message && i.status !== 'drafted' ? h('span', { class: 'eb-help', text: pv.relation.message }) : null,
+            (pv.warnings || []).length ? h('span', { class: 'eb-pick__mine', text: pv.warnings[0] }) : null,
+            (pv.missing || []).length && (i.status === 'ready' || i.status === 'duplicate') ? h('span', { class: 'eb-help', text: 'You\'ll add: ' + pv.missing.map(function (m) { return m.label; }).join(', ') }) : null
+          ]),
+          control
+        ]);
+      });
+      var applyBtn = h('button', { type: 'button', class: 'eb-btn eb-btn--primary', 'data-testid': 'eb-job-apply', disabled: busy || !actionable.length, text: busy ? 'Reading…' : actionable.length ? 'Apply choices' : 'Done' });
+      applyBtn.addEventListener('click', function () {
+        applyBtn.disabled = true;
+        api('organizer/import/bulk/jobs/' + j.id + '/apply', { method: 'POST', body: { decisions: decisions } }).then(function (r) {
+          var n = r.created.length;
+          toast(n ? n + ' draft' + (n === 1 ? '' : 's') + ' created. Finish and publish each when ready.' : 'Choices saved.');
+          Object.keys(r.errors || {}).slice(0, 1).forEach(function (k) { toast(r.errors[k], 'error'); });
+          decisions = {};
+          render(r.job);
+        }).catch(function (e) { applyBtn.disabled = false; toast(e.message, 'error'); });
+      });
+      append(body, [head, h('div', { class: 'eb-job__list' }, rows), h('div', { class: 'eb-actionbar' }, [
+        h('div', { class: 'eb-notice__actions' }, [
+          j.counts.failed && !busy ? h('button', { type: 'button', class: 'eb-btn', text: 'Retry failed', onclick: function () { api('organizer/import/bulk/jobs/' + j.id + '/retry', { method: 'POST', body: {} }).then(render).catch(function (e) { toast(e.message, 'error'); }); } }) : null,
+          ['completed', 'cancelled'].indexOf(j.status) < 0 ? h('button', { type: 'button', class: 'eb-link', text: 'Cancel import', onclick: function () { api('organizer/import/bulk/jobs/' + j.id + '/cancel', { method: 'POST', body: {} }).then(render); } }) : h('a', { class: 'eb-link', href: cfg.urls.create, text: 'Back to Create' })
+        ]),
+        applyBtn
+      ])]);
+      syncBottomOffset();
+      if (busy) {
+        clearTimeout(poll);
+        poll = setTimeout(function () { api('organizer/import/bulk/jobs/' + j.id).then(render).catch(function () { poll = setTimeout(function () { render(j); }, 4000); }); }, 1500);
+      }
+    }
+    render(job);
+  }
+
   /* ------------------------------------------------------------------ boot */
 
   Builder.methodCard = methodCard;

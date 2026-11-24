@@ -417,6 +417,8 @@ $lnkup_core_files = array(
 	'includes/event-import/class-event-import-tables.php',
 	'includes/event-import/class-event-sources.php',
 	'includes/event-import/class-event-import-service.php',
+	'includes/event-import/class-import-jobs.php',
+	'includes/event-import/class-eventbrite-connection.php',
 	'includes/event-import/class-event-import-rest.php',
 	'public/class-event-builder-view.php',
 	'includes/matching/class-tours.php',
@@ -642,6 +644,8 @@ function lnkup_marketplace_init() {
 	LNKup_Event_Builder_View::init();
 	LNKup_Event_Import_Tables::init();
 	LNKup_Event_Import_REST::init();
+	LNKup_Import_Jobs::init();
+	LNKup_Eventbrite_Connection::init();
 	LNKup_Tours::init();
 	LNKup_Tours_REST::init();
 	LNKup_Portfolio_Tables::maybe_upgrade();
