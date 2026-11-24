@@ -152,6 +152,7 @@ class LNKup_Portfolio_Public {
 					'end_time'   => (string) get_post_meta( $event_id, '_lnkup_end_time', true ),
 					'timezone'   => LNKup_Portfolio_Tours::stop_timezone( $event_id ),
 					'event_url'  => LNKup_Organizer_Onboarding::event_public_url( $event_id ),
+					'image_url'  => class_exists( 'LNKup_Event_Media' ) ? (string) LNKup_Event_Media::resolve( (int) $event_id )['thumb_url'] : '',
 				)
 			);
 		}
@@ -167,7 +168,7 @@ class LNKup_Portfolio_Public {
 			'season'          => (string) get_post_meta( $tour_id, '_lnkup_season', true ),
 			'eligibility'     => (string) get_post_meta( $tour_id, '_lnkup_eligibility', true ),
 			'website'         => (string) get_post_meta( $tour_id, '_lnkup_tour_website', true ),
-			'cover_url'       => (string) get_the_post_thumbnail_url( $tour_id, 'large' ),
+			'cover_url'       => (string) get_the_post_thumbnail_url( $tour_id, 'large' ) ?: (string) ( $stops[0]['image_url'] ?? '' ),
 			'brand'           => $brand_id ? lnkup_plain_title( $brand_id ) : '',
 			'organizer'       => array(
 				'name' => $detail['organizer_name'],

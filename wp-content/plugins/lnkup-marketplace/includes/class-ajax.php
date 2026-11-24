@@ -246,6 +246,8 @@ class LNKup_Ajax {
 			}
 		}
 
+		do_action( 'lnkup_vendor_profile_saved', get_current_user_id(), (int) $profile_id, 'ajax' );
+
 		wp_send_json_success(
 			array(
 				'message'          => __( 'Profile saved.', 'lnkup-marketplace' ),

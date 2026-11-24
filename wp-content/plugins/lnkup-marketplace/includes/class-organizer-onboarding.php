@@ -1491,6 +1491,8 @@ class LNKup_Organizer_Onboarding {
 			}
 		}
 
+		do_action( 'lnkup_organizer_profile_saved', $user_id, 'public_profile' );
+
 		return array(
 			'message' => __( 'Public profile updated.', 'lnkup-marketplace' ),
 			'url'     => self::organizer_public_url( $user_id ),

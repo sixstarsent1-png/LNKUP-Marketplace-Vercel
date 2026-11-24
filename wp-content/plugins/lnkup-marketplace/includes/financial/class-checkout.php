@@ -49,8 +49,12 @@ class LNKup_Checkout {
 			$total        = max( 0, round( $total + $delta, 2 ) );
 		}
 		$booth_total   = round( $vendor_fee + $checkout_fee, 2 );
-		$image_id      = $event_id ? (int) get_post_thumbnail_id( $event_id ) : 0;
-		$image_url     = $image_id ? wp_get_attachment_image_url( $image_id, 'medium' ) : '';
+		if ( $event_id && class_exists( 'LNKup_Event_Media' ) ) {
+			$image_url = (string) LNKup_Event_Media::resolve( (int) $event_id )['thumb_url'];
+		} else {
+			$image_id  = $event_id ? (int) get_post_thumbnail_id( $event_id ) : 0;
+			$image_url = $image_id ? wp_get_attachment_image_url( $image_id, 'medium' ) : '';
+		}
 
 		return array(
 			'payment_id'       => $payment_id,

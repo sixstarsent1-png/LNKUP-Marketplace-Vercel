@@ -89,7 +89,7 @@ class LNKup_Organizer_Payouts {
 		}
 
 		$available = class_exists( 'LNKup_Financial_Service' )
-			? LNKup_Financial_Service::organizer_cashout_available( $user_id )
+			? LNKup_Financial_Service::organizer_cashout_available( $user_id, 'destination' === $settlement_mode ? $type : 'standard' )
 			: (float) ( LNKup_Organizer_Wallet::get_balances( $user_id )['available'] ?? 0 );
 		if ( is_wp_error( $available ) ) {
 			$data = $available->get_error_data();
@@ -99,7 +99,14 @@ class LNKup_Organizer_Payouts {
 			return $available;
 		}
 		if ( $amount > (float) $available ) {
-			return new WP_Error( 'insufficient_balance', __( 'Insufficient available balance.', 'lnkup-marketplace' ), array( 'status' => 400 ) );
+			return new WP_Error(
+				'insufficient_balance',
+				'instant' === $type
+					/* translators: %s: instant-eligible amount */
+					? sprintf( __( 'Only %s can be cashed out instantly right now.', 'lnkup-marketplace' ), lnkup_currency( (float) $available ) )
+					: __( 'Insufficient available balance.', 'lnkup-marketplace' ),
+				array( 'status' => 400 )
+			);
 		}
 
 		if ( class_exists( 'LNKup_Approval_Workflows' ) ) {

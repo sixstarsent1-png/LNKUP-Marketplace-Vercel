@@ -194,9 +194,14 @@
     var city = String(opp.city || '').trim();
     var alt = (title || 'Vendor event') + (city ? ' in ' + city : '');
     var fallback = opp.category_fallback_url || '';
-    var media = img
-      ? '<img src="' + escapeHtml(img) + '" alt="' + escapeHtml(alt) + '" width="1280" height="800" loading="lazy" decoding="async" data-fallback-src="' + escapeHtml(fallback) + '" />'
-      : '<div class="lnkup-event-card__placeholder" aria-hidden="true"><span>LNKup</span></div>';
+    var m = opp.media || {};
+    var mediaUrl = m.medium_url || m.url || img || fallback;
+    var presentation = String(m.presentation || 'photo').replace(/[^a-z]/g, '');
+    var fit = m.fit === 'contain' ? 'contain' : 'cover';
+    var bg = /^#[0-9a-f]{6}$/i.test(m.background || '') ? m.background : '#111111';
+    var media = mediaUrl
+      ? '<span class="lnkup-media lnkup-media--' + presentation + ' lnkup-media--fit-' + fit + '" style="--lnkup-media-bg:' + bg + '" data-media-source="' + escapeHtml(String(m.source || '')) + '"><img src="' + escapeHtml(mediaUrl) + '" alt="' + escapeHtml(m.alt || alt) + '" width="1280" height="800" loading="lazy" decoding="async" data-fallback-src="' + escapeHtml(fallback !== mediaUrl ? fallback : '') + '" /></span>'
+      : '';
     var meta = '';
     if (dateLabel) {
       meta += '<p class="lnkup-event-card__date">' + escapeHtml(dateLabel) + '</p>';
@@ -249,7 +254,7 @@
    * Swap a failed card image for its category fallback, then for the placeholder.
    */
   function cardImageFallback(img) {
-    if (!img || img.tagName !== 'IMG' || !img.hasAttribute('data-fallback-src')) {
+    if (!img || img.tagName !== 'IMG' || !img.hasAttribute('data-fallback-src') || img.dataset.failed) {
       return;
     }
     var fallback = img.getAttribute('data-fallback-src');
@@ -259,12 +264,14 @@
       img.src = fallback;
       return;
     }
-    var placeholder = document.createElement('div');
-    placeholder.className = 'lnkup-event-card__placeholder';
-    placeholder.setAttribute('aria-hidden', 'true');
-    placeholder.innerHTML = '<span>LNKup</span>';
-    if (img.parentNode) {
-      img.parentNode.replaceChild(placeholder, img);
+    img.dataset.failed = '1';
+    img.style.visibility = 'hidden';
+    var frame = img.closest ? img.closest('.lnkup-media') : null;
+    if (frame) {
+      frame.classList.add('lnkup-media--failed');
+    }
+    if (window.lnkupTrackCardEvent) {
+      window.lnkupTrackCardEvent('event_card_image_failed', img);
     }
   }
 

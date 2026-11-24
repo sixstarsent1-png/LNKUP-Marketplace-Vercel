@@ -115,6 +115,9 @@ class LNKup_Activator {
 		if ( class_exists( 'LNKup_Passport_Tables' ) ) {
 			LNKup_Passport_Tables::create_tables();
 		}
+		if ( class_exists( 'LNKup_Meta_Tables' ) ) {
+			LNKup_Meta_Tables::create_tables();
+		}
 	}
 
 	/**

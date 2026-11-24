@@ -988,6 +988,9 @@
 
   function runSearchNow() {
     if (searchInput) state.q = searchInput.value.trim();
+    if (state.q.length >= 2 && window.lnkupMeta && typeof window.lnkupMeta.track === 'function') {
+      window.lnkupMeta.track('Search', { search_string: state.q, content_category: 'vendor_opportunities' });
+    }
     syncRelevanceSort();
     clearTimeout(debounceTimer);
     if (phaseAtLeast('1b')) loadSuggestions(state.q);
@@ -1419,6 +1422,7 @@
       api('/favorites', { method: 'POST', body: { type: fav.getAttribute('data-favorite-type'), id: parseInt(fav.getAttribute('data-favorite-id'), 10) } }).then(function (res) {
         fav.classList.toggle('is-active', !!res.favorited);
         fav.setAttribute('aria-pressed', res.favorited ? 'true' : 'false');
+        if (res.favorited && window.lnkupMeta && typeof window.lnkupMeta.flush === 'function') window.lnkupMeta.flush();
       }).catch(function (err) {
         console.error('Favorite toggle failed', err);
       }).finally(function () {

@@ -52,6 +52,7 @@ class LNKup_Vendor_Personalization {
 			$added = true;
 		}
 		update_user_meta( $user_id, 'lnkup_favorites', $favs );
+		do_action( 'lnkup_favorite_toggled', (int) $user_id, (string) $type, $id, $added );
 		return $added;
 	}
 

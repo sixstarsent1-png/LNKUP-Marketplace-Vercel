@@ -42,6 +42,35 @@ class LNKup_Lifecycle_Hooks {
 		add_action( 'wp_trash_post', array( __CLASS__, 'on_trash' ) );
 		add_action( 'transition_post_status', array( __CLASS__, 'on_post_status' ), 10, 3 );
 		add_action( 'lnkup_event_status_changed', array( __CLASS__, 'maybe_first_live' ), 5, 3 );
+		add_action( 'lnkup_opportunity_status_changed', array( __CLASS__, 'maybe_opportunity_published' ), 5, 3 );
+	}
+
+	/**
+	 * Fire `lnkup_opportunity_published( $opp_id, $organizer_id )` once, the first time a vendor
+	 * slot opens for applications.
+	 *
+	 * @param int    $opp_id Opportunity ID.
+	 * @param string $old    Previous status.
+	 * @param string $new    New status.
+	 */
+	public static function maybe_opportunity_published( $opp_id, $old, $new ) {
+		unset( $old );
+		if ( 'open' !== $new || 'lnkup_opportunity' !== get_post_type( (int) $opp_id ) ) {
+			return;
+		}
+		if ( ! add_post_meta( (int) $opp_id, '_lnkup_first_opened_at', current_time( 'mysql' ), true ) ) {
+			return;
+		}
+		$organizer_id = (int) get_post_meta( (int) $opp_id, '_lnkup_organizer_user_id', true );
+		if ( ! $organizer_id ) {
+			$organizer_id = (int) get_post_field( 'post_author', (int) $opp_id );
+		}
+		try {
+			do_action( 'lnkup_opportunity_published', (int) $opp_id, $organizer_id );
+		} catch ( Throwable $e ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( 'LNKup lnkup_opportunity_published listener failed: ' . $e->getMessage() );
+		}
 	}
 
 	/**

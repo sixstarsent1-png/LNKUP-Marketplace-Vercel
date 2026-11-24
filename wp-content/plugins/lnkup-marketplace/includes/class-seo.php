@@ -582,11 +582,17 @@ class LNKup_SEO {
 		if ( '' === $chosen && is_singular( array( 'lnkup_opportunity', 'lnkup_event' ) ) ) {
 			$post_id  = get_queried_object_id();
 			$event_id = 'lnkup_event' === get_post_type( $post_id ) ? $post_id : (int) get_post_meta( $post_id, '_lnkup_event_id', true );
-			$image_id = $event_id ? (int) get_post_meta( $event_id, '_lnkup_featured_image_id', true ) : 0;
-			if ( ! $image_id && $event_id ) {
-				$image_id = (int) get_post_thumbnail_id( $event_id );
+			if ( $event_id && class_exists( 'LNKup_Event_Media' ) ) {
+				// og:image must be raster: uploads use the full image; logos and generated covers use event-type JPG art.
+				$og     = (string) LNKup_Event_Media::resolve( $event_id )['og_url'];
+				$chosen = function_exists( 'lnkup_seo_is_raster_url' ) && lnkup_seo_is_raster_url( $og ) ? $og : '';
+			} else {
+				$image_id = $event_id ? (int) get_post_meta( $event_id, '_lnkup_featured_image_id', true ) : 0;
+				if ( ! $image_id && $event_id ) {
+					$image_id = (int) get_post_thumbnail_id( $event_id );
+				}
+				$chosen = lnkup_seo_raster_attachment_url( $image_id );
 			}
-			$chosen = lnkup_seo_raster_attachment_url( $image_id );
 		}
 		if ( '' === $chosen ) {
 			$chosen = lnkup_seo_default_og_image();

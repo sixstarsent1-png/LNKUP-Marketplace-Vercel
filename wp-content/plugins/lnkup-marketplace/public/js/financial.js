@@ -211,6 +211,29 @@
     });
   }
 
+  /** Pending explanation from the server (release date when Stripe reports one). */
+  function pendingHint(money, stripeBalance) {
+    var release = (money && money.pending_release) || {};
+    if (release.hint) {
+      return String(release.hint);
+    }
+    var date = shortDate(release.next_available_on || (stripeBalance && stripeBalance.next_available_on));
+    if (date) {
+      return 'Vendor payments received. Stripe releases this to Available on ' + date + '.';
+    }
+    return 'Vendor payments received and settling at Stripe. This usually takes a few business days.';
+  }
+
+  /** "Nov 25" from a Y-m-d date (no timezone shift). */
+  function shortDate(ymd) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ''));
+    if (!m) {
+      return '';
+    }
+    var names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return names[Number(m[2]) - 1] + ' ' + Number(m[3]);
+  }
+
   /** Organizer money in flow order from the server contract. */
   function moneyContractGrid(money) {
     var m = money.metrics || {};
@@ -218,7 +241,7 @@
       ['net_earnings', 'Earnings', 'What you\'ve earned from paid booths, after refunds.'],
       ['collected', 'Collected', 'Booth payments you\'ve received, before refunds.'],
       ['refunds', 'Refunds', 'Money returned to vendors.'],
-      ['pending', 'Pending', 'Still settling. Not available to cash out yet.'],
+      ['pending', 'Pending', pendingHint(money)],
       ['available', 'Available to cash out', 'Ready to send to your bank.'],
       ['in_transit', 'In transit', 'On the way to your bank.'],
       ['paid_out', 'Paid out', money.settlement_mode === 'destination' ? 'Payouts that reached your bank, including automatic payouts.' : 'Cashouts that reached your bank.']
@@ -1090,6 +1113,14 @@
     html += moneyCell('Collected', 'collected', collected);
     html += moneyCell('Paid out', 'paid_out', paidOut);
     html += '</dl>';
+    var instantPayouts = balances.payouts || {};
+    if (instantPayouts.can_instant_cash_out && Number(instantPayouts.instant_available_cents) >= 100) {
+      html += '<p class="lnkup-fin-instant-note" data-testid="lnkup-fin-instant-note"><strong>Instant payout available now: $' +
+        (Number(instantPayouts.instant_available_cents) / 100).toFixed(2) + '</strong></p>';
+    }
+    if (Number(balances.pending || 0) > 0) {
+      html += '<p class="lnkup-muted lnkup-fin-pending-note" data-testid="lnkup-fin-pending-note">' + escapeHtml(pendingHint(balances.money || dash.money, dash.stripe_balance)) + '</p>';
+    }
     html += '<p class="lnkup-money-payout">' + payoutBadgeChip(connect, balances.payouts) + '</p>';
     html += lastSyncedLine(balances.money);
     hero.innerHTML = html;
@@ -1155,7 +1186,9 @@
       html += '<td><button type="button" class="lnkup-fin-expand" data-revenue-idx="' + idx + '" aria-expanded="false">+</button></td>';
       html += '<td>' + escapeHtml(t.event_title || t.public_id) + '</td>';
       html += '<td>$' + Number(t.amount || 0).toFixed(2) + '</td>';
-      html += '<td>' + statusChip(t.status) + '</td>';
+      html += '<td>' + statusChip(t.status) + (t.funds_available_on && shortDate(t.funds_available_on)
+        ? '<br><span class="lnkup-muted lnkup-fin-funds-on" data-testid="lnkup-fin-funds-available">Funds available ' + escapeHtml(shortDate(t.funds_available_on)) + '</span>'
+        : '') + '</td>';
       html += '<td>' + escapeHtml((t.paid_at || t.created_at || '').slice(0, 10)) + '</td>';
       html += '<td>' + (pid && audit.can_reconcile
         ? '<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-fin-reconcile" data-payment-id="' + pid + '">' + (audit.payment_status === 'paid' ? 'Reconcile' : 'Sync payment') + '</button>'
@@ -1849,10 +1882,16 @@
       var setupReady = payouts ? payouts.cash_out_reason !== 'payouts_not_active' : (connect.status === 'active' || balances.settlement === 'platform_treasury');
       var settling = balances.isDest && balances.stripeSynced && maxCashout <= 0 && Number(balances.pending) > 0;
       var balanceBlocked = balances.isDest && !balances.stripeSynced;
-      var canCashout = payouts ? !!payouts.can_cash_out && maxCashout > 0 : (setupReady && maxCashout > 0 && !balanceBlocked);
+      var canStandard = payouts ? !!payouts.can_cash_out && maxCashout > 0 : (setupReady && maxCashout > 0 && !balanceBlocked);
       var instantEnabled = !!(connect.instant_payouts_enabled || (ajax.settings && ajax.settings.connect_instant_payouts_enabled));
+      var stripeBal = (data && data.stripe_balance) || {};
+      var instantMax = payouts && payouts.instant_available_cents !== undefined
+        ? Math.max(0, Number(payouts.instant_available_cents) || 0) / 100
+        : Math.max(0, Number(stripeBal.instant_available) || 0);
+      var canInstant = instantEnabled && balances.isDest && (payouts ? !!payouts.can_instant_cash_out : (setupReady && !balanceBlocked && instantMax >= 1));
+      var canCashout = canStandard || canInstant;
       var html = '';
-      var reasonCopy = payouts && !payouts.can_cash_out ? CASH_OUT_REASON_COPY[payouts.cash_out_reason] : '';
+      var reasonCopy = payouts && !payouts.can_cash_out && !canInstant ? CASH_OUT_REASON_COPY[payouts.cash_out_reason] : '';
       if (reasonCopy) {
         html += '<p class="lnkup-fin-connect-banner" data-testid="lnkup-cashout-reason">' + escapeHtml(reasonCopy) + '</p>';
       } else if (!setupReady && connect.available) {
@@ -1862,6 +1901,8 @@
         html += '<p class="lnkup-fin-connect-banner">Could not load your live Stripe payout balance. Refresh and try again.</p>';
       } else if (reasonCopy) {
         html += lastSyncedLine(balances.money);
+      } else if (settling && canInstant) {
+        html += '<p class="lnkup-muted">Standard payouts open once card payments finish processing. You can cash out up to $' + instantMax.toFixed(2) + ' now with Instant.</p>';
       } else if (settling) {
         html += '<p class="lnkup-muted">Card payments can take a few days to become available for payout.</p>';
       } else if (balances.isDest && balances.stripeSynced && Number(balances.platformRecoverable) > 0) {
@@ -1877,13 +1918,17 @@
       if (sourceBreakdown) {
         html += '<p class="lnkup-muted">' + escapeHtml(sourceBreakdown) + '</p>';
       }
+      if (instantEnabled && balances.isDest && balances.stripeSynced) {
+        html += '<p data-testid="lnkup-cashout-instant-available">Instant available <strong>$' + instantMax.toFixed(2) + '</strong></p>';
+      }
+      var defaultInstant = !canStandard && canInstant;
       html += '<div class="lnkup-fin-cashout-card__choices">' +
-        '<label><input type="radio" name="type" value="standard" checked' + (canCashout ? '' : ' disabled') + '> <span>Standard</span></label>';
+        '<label><input type="radio" name="type" value="standard"' + (defaultInstant ? '' : ' checked') + (canStandard ? '' : ' disabled') + '> <span>Standard</span></label>';
       if (instantEnabled) {
-        html += '<label><input type="radio" name="type" value="instant"' + (canCashout ? '' : ' disabled') + '> <span>Instant (1.5% fee)</span></label>';
+        html += '<label><input type="radio" name="type" value="instant"' + (defaultInstant ? ' checked' : '') + (canInstant ? '' : ' disabled') + '> <span>Instant (1.5% fee)</span></label>';
       }
       html += '</div>' +
-        '<label>Amount <input type="number" step="0.01" name="amount" required min="0.01" max="' + maxCashout + '"' + (canCashout ? '' : ' disabled') + '></label>' +
+        '<label>Amount <input type="number" step="0.01" name="amount" required min="0.01" max="' + (defaultInstant ? instantMax : maxCashout) + '"' + (canCashout ? '' : ' disabled') + '></label>' +
         '<p class="lnkup-muted" id="lnkup-cashout-fee" hidden></p>' +
         '<button type="submit" class="lnkup-btn lnkup-btn--primary"' + (canCashout ? '' : ' disabled') + '>Cash out</button></form>';
       if (!instantEnabled) {
@@ -1920,15 +1965,31 @@
         feeLine.hidden = false;
         feeLine.textContent = 'Instant fee 1.5% · $' + fee.toFixed(2);
       }
+      function selectedIsInstant() {
+        var chosen = form.querySelector('input[name="type"]:checked');
+        return !!(chosen && chosen.value === 'instant');
+      }
+      function handleTypeChange() {
+        var isInstant = selectedIsInstant();
+        if (amountInput) {
+          amountInput.max = String(isInstant ? instantMax : maxCashout);
+        }
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) {
+          btn.disabled = !(isInstant ? canInstant : canStandard);
+        }
+        refreshFeeLine();
+      }
       form.querySelectorAll('input[name="type"]').forEach(function (input) {
-        input.addEventListener('change', refreshFeeLine);
+        input.addEventListener('change', handleTypeChange);
       });
       if (amountInput) {
         amountInput.addEventListener('input', refreshFeeLine);
       }
+      handleTypeChange();
       form.addEventListener('submit', function (e) {
         e.preventDefault();
-        if (!canCashout) {
+        if (!(selectedIsInstant() ? canInstant : canStandard)) {
           return;
         }
         var fd = new FormData(form);

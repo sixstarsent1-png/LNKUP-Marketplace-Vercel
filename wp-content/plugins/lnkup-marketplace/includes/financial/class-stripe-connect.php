@@ -466,6 +466,62 @@ class LNKup_Stripe_Connect {
 	}
 
 	/**
+	 * When the connected account's pending funds become available, from Stripe's own
+	 * balance transactions (read-only, cached 5 minutes). Returns ok=false on any error so
+	 * callers simply show no date.
+	 *
+	 * @param int $user_id Organizer user ID.
+	 * @return array{ok:bool,next_available_on:?string,schedule:array<int,array{date:string,cents:int}>,items:array<int,array{source:string,cents:int,created:int,available_on:string}>}
+	 */
+	public static function pending_release_schedule( $user_id ) {
+		$empty   = array( 'ok' => false, 'next_available_on' => null, 'schedule' => array(), 'items' => array() );
+		$user_id = absint( $user_id );
+		$account = $user_id ? self::get_account( $user_id, 'organizer' ) : null;
+		if ( ! $account || empty( $account['stripe_account_id'] ) ) {
+			return $empty;
+		}
+		$key    = 'lnkup_connect_pending_' . $user_id;
+		$cached = get_transient( $key );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+		$client = new LNKup_Stripe_Client();
+		$list   = $client->list_connect_balance_transactions( $account['stripe_account_id'], array( 'limit' => 50 ) );
+		if ( is_wp_error( $list ) || ! is_array( $list ) ) {
+			set_transient( $key, $empty, MINUTE_IN_SECONDS );
+			return $empty;
+		}
+		$by_date = array();
+		$items   = array();
+		foreach ( (array) ( $list['data'] ?? array() ) as $bt ) {
+			if ( 'pending' !== ( $bt['status'] ?? '' ) || (int) ( $bt['net'] ?? 0 ) <= 0 || empty( $bt['available_on'] ) ) {
+				continue;
+			}
+			$date             = gmdate( 'Y-m-d', (int) $bt['available_on'] );
+			$by_date[ $date ] = ( $by_date[ $date ] ?? 0 ) + (int) $bt['net'];
+			$items[]          = array(
+				'source'       => (string) ( is_array( $bt['source'] ?? null ) ? ( $bt['source']['id'] ?? '' ) : ( $bt['source'] ?? '' ) ),
+				'cents'        => (int) $bt['net'],
+				'created'      => (int) ( $bt['created'] ?? 0 ),
+				'available_on' => $date,
+			);
+		}
+		ksort( $by_date );
+		$schedule = array();
+		foreach ( $by_date as $date => $cents ) {
+			$schedule[] = array( 'date' => $date, 'cents' => $cents );
+		}
+		$result = array(
+			'ok'                => true,
+			'next_available_on' => $schedule ? $schedule[0]['date'] : null,
+			'schedule'          => array_slice( $schedule, 0, 10 ),
+			'items'             => $items,
+		);
+		set_transient( $key, $result, 5 * MINUTE_IN_SECONDS );
+		return $result;
+	}
+
+	/**
 	 * Mark Connect account disabled locally (deauthorize).
 	 *
 	 * @param int $user_id Organizer user ID.
@@ -1653,7 +1709,9 @@ class LNKup_Stripe_Connect {
 		$instant_sources = is_array( $live['instant_source_types'] ?? null ) ? $live['instant_source_types'] : array();
 
 		// Stranded funds: ledger-owed money on platform → Transfer to Connect, then payout.
-		if ( $amount_cents > $available_cents ) {
+		// Not needed for an Instant payout that Stripe's instant-eligible balance already covers.
+		$instant_covered = ( 'instant' === $type && $amount_cents <= $instant_cents );
+		if ( $amount_cents > $available_cents && ! $instant_covered ) {
 			$shortfall_cents = $amount_cents - $available_cents;
 			$platform        = $client->retrieve_platform_balance();
 			$recoverable     = self::organizer_recoverable_platform_cents(

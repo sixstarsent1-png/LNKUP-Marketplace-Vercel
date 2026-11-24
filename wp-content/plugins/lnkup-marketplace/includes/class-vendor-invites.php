@@ -18,6 +18,20 @@ class LNKup_Vendor_Invites {
 	const EXPIRY_CRON  = 'lnkup_vendor_invites_expire';
 	const EXPIRY_BATCH = 200;
 
+	/**
+	 * Resolved event image URL (cover, flyer, tour/organizer art or LNKup art; never empty).
+	 *
+	 * @param int    $event_id Event.
+	 * @param string $size     thumb_url|medium_url|large_url.
+	 */
+	private static function event_image_url( int $event_id, string $size ): string {
+		if ( class_exists( 'LNKup_Event_Media' ) ) {
+			$media = LNKup_Event_Media::resolve( $event_id );
+			return (string) ( $media[ $size ] ?: $media['url'] );
+		}
+		return (string) get_the_post_thumbnail_url( $event_id, 'thumb_url' === $size ? 'medium' : 'medium_large' );
+	}
+
 	public static function init() {
 		add_action( self::EXPIRY_CRON, array( __CLASS__, 'expire_overdue' ) );
 		add_action( 'init', array( __CLASS__, 'schedule' ), 30 );
@@ -112,7 +126,8 @@ class LNKup_Vendor_Invites {
 				'event_date'        => $event_id ? (string) get_post_meta( $event_id, '_lnkup_event_date', true ) : '',
 				'city'              => $event_id ? (string) get_post_meta( $event_id, '_lnkup_city', true ) : '',
 				'state'             => $event_id ? (string) get_post_meta( $event_id, '_lnkup_state', true ) : '',
-				'image_url'         => $event_id ? (string) get_the_post_thumbnail_url( $event_id, 'medium' ) : '',
+				'image_url'         => $event_id ? self::event_image_url( (int) $event_id, 'thumb_url' ) : '',
+				'media'             => $event_id && class_exists( 'LNKup_Event_Media' ) ? LNKup_Event_Media::to_rest( LNKup_Event_Media::resolve( (int) $event_id ) ) : null,
 				'opportunity_id'    => $opp_id,
 				'opportunity_title' => $opp_id ? lnkup_plain_title( get_post( $opp_id ) ) : '',
 				'created_at'        => (string) $invite->post_date_gmt,
@@ -571,7 +586,8 @@ class LNKup_Vendor_Invites {
 				$row['start_time']    = (string) get_post_meta( $event->ID, '_lnkup_start_time', true );
 				$row['end_time']      = (string) get_post_meta( $event->ID, '_lnkup_end_time', true );
 				$row['description']   = (string) $event->post_content;
-				$row['image_url']     = (string) get_the_post_thumbnail_url( $event->ID, 'medium_large' );
+				$row['image_url']     = self::event_image_url( (int) $event->ID, 'medium_url' );
+				$row['media']         = class_exists( 'LNKup_Event_Media' ) ? LNKup_Event_Media::to_rest( LNKup_Event_Media::resolve( (int) $event->ID ) ) : null;
 				$row['counts']        = self::application_counts_for_event( (int) $event->ID );
 			}
 			$items[] = $row;

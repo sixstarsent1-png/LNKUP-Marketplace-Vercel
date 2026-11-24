@@ -820,11 +820,13 @@ class LNKup_Shortcodes {
 		$availability = $unclaimed
 			? array( 'key' => 'external', 'label' => __( 'Not bookable on LNKup', 'lnkup-marketplace' ) )
 			: LNKup_Organizer_Onboarding::event_public_availability( (int) $event->ID );
-		$image_id     = (int) get_post_meta( $event->ID, '_lnkup_featured_image_id', true );
-		if ( ! $image_id ) {
-			$image_id = (int) get_post_thumbnail_id( $event->ID );
+		$event_media = class_exists( 'LNKup_Event_Media' ) ? LNKup_Event_Media::resolve( (int) $event->ID ) : array();
+		$image_id    = (int) ( $event_media['attachment_id'] ?? 0 );
+		$image       = (string) ( $event_media['large_url'] ?? '' );
+		if ( ! $event_media ) {
+			$image_id = (int) get_post_meta( $event->ID, '_lnkup_featured_image_id', true ) ?: (int) get_post_thumbnail_id( $event->ID );
+			$image    = $image_id ? (string) wp_get_attachment_image_url( $image_id, 'large' ) : '';
 		}
-		$image      = $image_id ? wp_get_attachment_image_url( $image_id, 'large' ) : '';
 		$gallery    = array();
 		if ( function_exists( 'lnkup_parse_gallery_ids' ) ) {
 			foreach ( lnkup_parse_gallery_ids( get_post_meta( $event->ID, '_lnkup_gallery_ids', true ) ) as $gallery_id ) {
@@ -1016,7 +1018,13 @@ class LNKup_Shortcodes {
 				<div class="lnkup-public-event-main">
 					<article class="lnkup-surface--primary lnkup-public-event lnkup-event-hero">
 						<div class="lnkup-event-hero__media">
-							<?php if ( $image ) : ?>
+							<?php if ( $event_media && function_exists( 'lnkup_event_media_html' ) ) : ?>
+								<?php
+								$hero_media               = $event_media;
+								$hero_media['medium_url'] = (string) $event_media['large_url'];
+								echo lnkup_event_media_html( $hero_media, $display_title, array( 'eager' => true, 'sizes' => '(max-width: 900px) 100vw, 960px', 'fallback' => $event_media['uploaded'] ? LNKup_Event_Media::fallback( (int) $event->ID ) : array() ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+								?>
+							<?php elseif ( $image ) : ?>
 								<img src="<?php echo esc_url( $image ); ?>" alt="<?php echo esc_attr( $display_title ); ?>" width="960" height="540" decoding="async" fetchpriority="high" />
 							<?php else : ?>
 								<div class="lnkup-event-hero__placeholder" aria-hidden="true">LNKup</div>
@@ -2133,6 +2141,10 @@ class LNKup_Shortcodes {
 	 * @param int $event_id Event post ID.
 	 */
 	private static function organizer_event_image_url( $event_id ) {
+		if ( class_exists( 'LNKup_Event_Media' ) ) {
+			$media = LNKup_Event_Media::resolve( (int) $event_id );
+			return (string) ( $media['medium_url'] ?: $media['url'] );
+		}
 		$img_id = (int) get_post_meta( $event_id, '_lnkup_featured_image_id', true );
 		if ( ! $img_id ) {
 			$img_id = (int) get_post_thumbnail_id( $event_id );

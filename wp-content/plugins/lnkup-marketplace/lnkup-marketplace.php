@@ -3,7 +3,7 @@
  * Plugin Name: LNKup Marketplace
  * Plugin URI: https://lnkup.com
  * Description: Custom marketplace functionality for LNKup — vendor opportunities, applications, payments, and event management.
- * Version: 12.34.0
+ * Version: 12.36.3
  * Author: LNKup
  * Author URI: https://lnkup.com
  * License: GPL v2 or later
@@ -17,7 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'LNKUP_VERSION', '12.34.0' );
+define( 'LNKUP_VERSION', '12.36.3' );
 define( 'LNKUP_PLUGIN_FILE', __FILE__ );
 define( 'LNKUP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LNKUP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -198,6 +198,11 @@ $lnkup_core_files = array(
 	'includes/class-verification.php',
 	'includes/class-verification-rest.php',
 	'includes/class-seo.php',
+	'includes/media/class-event-media.php',
+	'includes/media/class-event-media-library.php',
+	'includes/media/class-event-cover-svg.php',
+	'includes/media/class-event-media-cli.php',
+	'admin/class-media-health-admin.php',
 	'includes/class-ui-copy.php',
 	'includes/class-vendor-dashboard-data.php',
 	'public/class-vendor-dashboard-views.php',
@@ -415,6 +420,23 @@ $lnkup_core_files = array(
 	'includes/partnerships/class-partnership-readiness.php',
 	'includes/partnerships/class-partnerships-rest.php',
 	'admin/class-partnerships-admin.php',
+	'includes/meta/class-meta-config.php',
+	'includes/meta/class-meta-redactor.php',
+	'includes/meta/class-meta-tables.php',
+	'includes/meta/class-tracking-consent.php',
+	'includes/meta/class-meta-cookies.php',
+	'includes/meta/class-meta-user-data.php',
+	'includes/meta/class-acquisition-attribution.php',
+	'includes/meta/class-conversion-registry.php',
+	'includes/meta/class-conversion-listeners.php',
+	'includes/meta/class-meta-capi-client.php',
+	'includes/meta/class-meta-dispatcher.php',
+	'includes/meta/class-meta-pixel.php',
+	'includes/meta/class-meta-rest.php',
+	'includes/meta/class-meta-dataset-quality.php',
+	'includes/meta/class-meta-alerts.php',
+	'includes/meta/class-meta-measurement.php',
+	'admin/class-meta-admin.php',
 );
 
 foreach ( $lnkup_core_files as $file ) {
@@ -567,6 +589,12 @@ function lnkup_marketplace_init() {
 	LNKup_Notifications::init();
 	LNKup_Stripe::init();
 	LNKup_SEO::init();
+	LNKup_Event_Media::init();
+	LNKup_Event_Media_CLI::init();
+	if ( is_admin() ) {
+		LNKup_Media_Health_Admin::init();
+	}
+	LNKup_Meta_Measurement::init();
 	LNKup_Activator::maybe_repair_dashboard_pages();
 	add_action( 'admin_notices', array( 'LNKup_Activator', 'maybe_dashboard_template_notice' ) );
 	add_action( 'template_redirect', 'lnkup_redirect_find_events_alias', 1 );
@@ -603,6 +631,7 @@ function lnkup_maybe_upgrade_db() {
 		array( 'LNKup_Org_Growth_Tables', 'create_tables' ),
 		array( 'LNKup_Trust_Tables', 'create_tables' ),
 		array( 'LNKup_Passport_Tables', 'create_tables' ),
+		array( 'LNKup_Meta_Tables', 'create_tables' ),
 	);
 
 	foreach ( $creators as $creator ) {

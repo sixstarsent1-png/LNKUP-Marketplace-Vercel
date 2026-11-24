@@ -127,6 +127,8 @@ class LNKup_Organizer_Profile_REST {
 			}
 		}
 
+		do_action( 'lnkup_organizer_profile_saved', (int) $user_id, 'rest' );
+
 		$payload             = self::editable_payload( $user_id );
 		$payload['success']  = true;
 		$payload['message']  = __( 'Profile saved.', 'lnkup-marketplace' );

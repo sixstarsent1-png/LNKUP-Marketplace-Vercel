@@ -23,6 +23,8 @@ class LNKup_Match_Funnel {
 	const CLIENT_EVENTS = array(
 		// Matching.
 		'match_click', 'recommendation_clicked',
+		// Event media (data.media_source = resolved image source; no personal data).
+		'event_card_clicked', 'event_card_image_failed',
 		// WordPress JS.
 		'saved_search_match_clicked', 'market_page_view', 'market_opportunity_click',
 		// Expo.

@@ -221,6 +221,9 @@ class LNKup_Discovery {
 		$rows       = $wpdb->get_results( $wpdb->prepare( $sql, $all_params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		$items = array();
+		if ( class_exists( 'LNKup_Event_Media' ) ) {
+			LNKup_Event_Media::prime( wp_list_pluck( (array) $rows, 'event_id' ) );
+		}
 		foreach ( (array) $rows as $row ) {
 			$item = lnkup_get_opportunity_card_data( (int) $row['opportunity_id'], $row );
 			if ( $has_xy && $row['lat'] && $row['lng'] ) {

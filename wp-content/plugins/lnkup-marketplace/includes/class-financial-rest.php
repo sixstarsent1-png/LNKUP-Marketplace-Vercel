@@ -652,7 +652,22 @@ class LNKup_Financial_REST {
 				'all'     => LNKup_Capabilities::user_has_manage_all() && $request->get_param( 'all' ),
 			) );
 			$rows = is_array( $rows ) ? $rows : array();
-			return array_map( array( 'LNKup_Transactions', 'format' ), $rows );
+			$out  = array_map( array( 'LNKup_Transactions', 'format' ), $rows );
+			if ( 'organizer' === $role && method_exists( 'LNKup_Financial_Service', 'pending_release_by_payment' ) ) {
+				// Paid rows whose money Stripe still holds as pending get the release date.
+				$paid_ids = array();
+				foreach ( $out as $row ) {
+					if ( in_array( (string) ( $row['status'] ?? '' ), array( 'paid', 'completed' ), true ) && ! empty( $row['payment_post_id'] ) ) {
+						$paid_ids[] = (int) $row['payment_post_id'];
+					}
+				}
+				$release = $paid_ids ? LNKup_Financial_Service::pending_release_by_payment( $uid, $paid_ids ) : array();
+				foreach ( $out as $i => $row ) {
+					$pid                         = (int) ( $row['payment_post_id'] ?? 0 );
+					$out[ $i ]['funds_available_on'] = $pid && isset( $release[ $pid ] ) ? $release[ $pid ] : null;
+				}
+			}
+			return $out;
 		} );
 	}
 

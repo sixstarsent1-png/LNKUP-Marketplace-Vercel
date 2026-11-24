@@ -457,6 +457,24 @@ class LNKup_Registration {
 			self::ensure_vendor_profile_stub( (int) $user_id, $full_name );
 		}
 
+		/**
+		 * A vendor or organizer account was created (web form or app REST).
+		 *
+		 * @param int    $user_id User ID.
+		 * @param string $role    lnkup_vendor|lnkup_organizer.
+		 * @param array  $context channel (web|rest), market, attribution (app-supplied, unsanitized).
+		 */
+		do_action(
+			'lnkup_user_registered',
+			(int) $user_id,
+			$role,
+			array(
+				'channel'     => defined( 'REST_REQUEST' ) && REST_REQUEST ? 'rest' : 'web',
+				'market'      => (string) get_user_meta( (int) $user_id, '_lnkup_market_interest', true ),
+				'attribution' => isset( $input['attribution'] ) && is_array( $input['attribution'] ) ? $input['attribution'] : array(),
+			)
+		);
+
 		return (int) $user_id;
 	}
 

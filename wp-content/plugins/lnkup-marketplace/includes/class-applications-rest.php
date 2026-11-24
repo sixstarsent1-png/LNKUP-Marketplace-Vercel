@@ -505,6 +505,7 @@ class LNKup_Applications_REST {
 				'currency'        => 'USD',
 				'vendor_fee'      => (float) $meta['fee'],
 				'featured_image'  => (string) ( $card['featured_image'] ?? '' ),
+				'media'           => $card['media'] ?? null,
 				'payment_id'      => $payment ? (int) $payment->ID : 0,
 				'payment_status'  => $pay_status,
 				'rejection_reason'=> (string) get_post_meta( $app->ID, '_lnkup_rejection_reason', true ),

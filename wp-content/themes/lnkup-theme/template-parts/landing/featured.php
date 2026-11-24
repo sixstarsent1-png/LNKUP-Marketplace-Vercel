@@ -29,7 +29,7 @@ if ( function_exists( 'lnkup_get_featured_opportunities' ) ) {
 					?>
 				</h2>
 				<?php if ( $marketplace_open ) : ?>
-					<p class="lnkup-section__lead"><?php esc_html_e( 'Explore upcoming events looking for food, retail, merchandise, and service vendors.', 'lnkup-theme' ); ?></p>
+					<p class="lnkup-section__lead"><?php esc_html_e( 'Discover upcoming festivals, markets, and events actively accepting vendors.', 'lnkup-theme' ); ?></p>
 				<?php endif; ?>
 			</div>
 			<?php if ( $marketplace_open ) : ?>

@@ -238,6 +238,17 @@ class LNKup_Stripe_Client {
 	}
 
 	/**
+	 * Recent balance transactions on a connected account (read-only).
+	 *
+	 * @param string $stripe_account_id Connected account ID.
+	 * @param array  $params            List params (limit, type...).
+	 * @return array|WP_Error
+	 */
+	public function list_connect_balance_transactions( $stripe_account_id, $params = array() ) {
+		return $this->request( 'GET', 'balance_transactions', $params, '', array( 'Stripe-Account' => $stripe_account_id ) );
+	}
+
+	/**
 	 * Retrieve platform (LNKup) Stripe balance — no Stripe-Account header.
 	 *
 	 * @return array|WP_Error
@@ -678,6 +689,9 @@ class LNKup_Stripe_Client {
 				case 'balance':
 					// Balance::retrieve( $opts ) takes a single opts argument (not params, opts).
 					$obj = \Stripe\Balance::retrieve( $opts );
+					break;
+				case 'balance_transactions':
+					$obj = \Stripe\BalanceTransaction::all( $params, $opts );
 					break;
 				default:
 					return new WP_Error( 'stripe_error', __( 'Unsupported Stripe resource.', 'lnkup-marketplace' ) );

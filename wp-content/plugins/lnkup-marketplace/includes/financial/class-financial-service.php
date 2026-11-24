@@ -73,9 +73,28 @@ class LNKup_Financial_Service {
 			if ( null !== $zero ) {
 				return array( 'mode' => 'no_payment_due', 'paid' => true, 'url' => '' );
 			}
-			return self::provider()->create_checkout_session( $payment_id, $args );
+			return self::after_checkout_created( $payment_id, $mode, self::provider()->create_checkout_session( $payment_id, $args ) );
 		}
-		return LNKup_Checkout::prepare( $payment_id, $args );
+		return self::after_checkout_created( $payment_id, $mode, LNKup_Checkout::prepare( $payment_id, $args ) );
+	}
+
+	/**
+	 * Fire `lnkup_checkout_started` once a payable checkout actually exists.
+	 *
+	 * @param int    $payment_id Payment ID.
+	 * @param string $mode       embedded|redirect.
+	 * @param mixed  $result     Provider / prepare result.
+	 * @return mixed Unchanged result.
+	 */
+	private static function after_checkout_created( $payment_id, $mode, $result ) {
+		if ( is_wp_error( $result ) || ! is_array( $result ) || ! empty( $result['paid'] ) ) {
+			return $result;
+		}
+		if ( self::stored_amount_due( $payment_id ) <= 0 ) {
+			return $result;
+		}
+		do_action( 'lnkup_checkout_started', (int) $payment_id, (string) $mode );
+		return $result;
 	}
 
 	/**
@@ -940,7 +959,86 @@ class LNKup_Financial_Service {
 		if ( 'destination' !== LNKup_Stripe_Connect::settlement_mode_for_organizer( $user_id ) ) {
 			return array( 'available' => 0, 'pending' => 0, 'synced' => false );
 		}
-		return LNKup_Stripe_Connect::retrieve_connect_balance( $user_id );
+		$balance = LNKup_Stripe_Connect::retrieve_connect_balance( $user_id );
+		if ( is_array( $balance ) && ! empty( $balance['synced'] ) && (float) ( $balance['pending'] ?? 0 ) > 0 && method_exists( 'LNKup_Stripe_Connect', 'pending_release_schedule' ) ) {
+			$release = LNKup_Stripe_Connect::pending_release_schedule( $user_id );
+			if ( ! empty( $release['ok'] ) ) {
+				$balance['next_available_on'] = $release['next_available_on'];
+				$balance['pending_schedule']  = $release['schedule'];
+			}
+		}
+		return $balance;
+	}
+
+	/**
+	 * Organizer-facing explanation of the Pending balance (no Stripe jargon).
+	 *
+	 * @param string|null $next_available_on Y-m-d release date from Stripe, if known.
+	 */
+	public static function pending_balance_hint( $next_available_on = null ) {
+		if ( $next_available_on && strtotime( (string) $next_available_on ) ) {
+			/* translators: %s: date the pending money becomes available */
+			return sprintf( __( 'Vendor payments received. Stripe releases this to Available on %s.', 'lnkup-marketplace' ), date_i18n( 'M j', strtotime( (string) $next_available_on . ' 12:00:00' ) ) );
+		}
+		return __( 'Vendor payments received and settling at Stripe. This usually takes a few business days.', 'lnkup-marketplace' );
+	}
+
+	/**
+	 * When each paid payment's funds become available at Stripe (only payments still pending there).
+	 * Matches Stripe's pending balance transactions to the organizer's Connect settlement entries
+	 * by charge ID, then by amount and time. Unmatched payments get no date.
+	 *
+	 * @param int   $user_id     Organizer.
+	 * @param int[] $payment_ids Payment post IDs.
+	 * @return array<int,string> payment_id => Y-m-d
+	 */
+	public static function pending_release_by_payment( $user_id, array $payment_ids ) {
+		$payment_ids = array_values( array_filter( array_map( 'absint', $payment_ids ) ) );
+		if ( ! $payment_ids || ! class_exists( 'LNKup_Stripe_Connect' ) || ! method_exists( 'LNKup_Stripe_Connect', 'pending_release_schedule' )
+			|| 'destination' !== LNKup_Stripe_Connect::settlement_mode_for_organizer( $user_id ) ) {
+			return array();
+		}
+		$release = LNKup_Stripe_Connect::pending_release_schedule( $user_id );
+		if ( empty( $release['ok'] ) || empty( $release['items'] ) ) {
+			return array();
+		}
+		global $wpdb;
+		if ( ! class_exists( 'LNKup_Treasury_Tables' ) ) {
+			return array();
+		}
+		$table = LNKup_Treasury_Tables::organizer_wallet_entries_table();
+		$in    = implode( ',', array_fill( 0, count( $payment_ids ), '%d' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT payment_post_id, amount, metadata, created_at FROM {$table} WHERE user_id = %d AND entry_type = 'connect_settlement' AND payment_post_id IN ({$in})", array_merge( array( absint( $user_id ) ), $payment_ids ) ), ARRAY_A );
+		$items = $release['items'];
+		$used  = array();
+		$out   = array();
+		foreach ( (array) $rows as $row ) {
+			$meta    = json_decode( (string) $row['metadata'], true );
+			$charge  = is_array( $meta ) ? (string) ( $meta['charge_id'] ?? '' ) : '';
+			$cents   = (int) round( (float) $row['amount'] * 100 );
+			$created = (int) strtotime( (string) $row['created_at'] . ' UTC' );
+			$match   = null;
+			foreach ( $items as $i => $item ) {
+				if ( '' !== $charge && $item['source'] === $charge && empty( $used[ $i ] ) ) {
+					$match = $i;
+					break;
+				}
+			}
+			if ( null === $match ) {
+				foreach ( $items as $i => $item ) {
+					if ( empty( $used[ $i ] ) && $item['cents'] === $cents && abs( $item['created'] - $created ) < DAY_IN_SECONDS ) {
+						$match = $i;
+						break;
+					}
+				}
+			}
+			if ( null !== $match ) {
+				$used[ $match ]                         = true;
+				$out[ (int) $row['payment_post_id'] ] = $items[ $match ]['available_on'];
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -988,10 +1086,14 @@ class LNKup_Financial_Service {
 	 * platform recovery (same as display_balances). Platform treasury uses ledger
 	 * available. Returns WP_Error when destination Stripe balance cannot be synced.
 	 *
-	 * @param int $user_id Organizer user ID.
+	 * Instant (destination only) is capped by Stripe's instant-eligible balance instead, which
+	 * includes card funds that are still pending for Standard payouts.
+	 *
+	 * @param int    $user_id Organizer user ID.
+	 * @param string $type    standard|instant.
 	 * @return float|WP_Error
 	 */
-	public static function organizer_cashout_available( $user_id = 0 ) {
+	public static function organizer_cashout_available( $user_id = 0, $type = 'standard' ) {
 		$user_id = $user_id ? absint( $user_id ) : get_current_user_id();
 		$wallet  = class_exists( 'LNKup_Organizer_Wallet' ) ? LNKup_Organizer_Wallet::get_balances( $user_id ) : array();
 		$mode    = (string) ( $wallet['settlement_mode'] ?? 'platform_treasury' );
@@ -1004,6 +1106,9 @@ class LNKup_Financial_Service {
 					__( 'Could not load your Stripe payout balance. Refresh and try again.', 'lnkup-marketplace' ),
 					array( 'status' => 400 )
 				);
+			}
+			if ( 'instant' === $type ) {
+				return round( self::instant_available_cents( $stripe_balance ) / 100, 2 );
 			}
 			$display = self::organizer_display_balances( $user_id, $wallet, $stripe_balance );
 			return round( (float) ( $display['available'] ?? 0 ), 2 );
@@ -1158,7 +1263,7 @@ class LNKup_Financial_Service {
 			$in_transit = $metric( $cents( $wallet['processing'] ?? 0 ), 'ledger' );
 		}
 
-		$payouts = self::organizer_payout_state( $connect, $mode, $available );
+		$payouts = self::organizer_payout_state( $connect, $mode, $available, $destination && $synced ? self::instant_available_cents( $stripe ) : 0 );
 
 		return array(
 			'version'         => 1,
@@ -1167,6 +1272,12 @@ class LNKup_Financial_Service {
 			'last_synced_at'  => (string) get_user_meta( $user_id, '_lnkup_financial_synced_at', true ) ?: null,
 			'settlement_mode' => $mode,
 			'payouts'         => $payouts,
+			// When Stripe releases the Pending balance (destination organizers; null when unknown).
+			'pending_release' => array(
+				'next_available_on' => $destination && $synced ? ( $stripe['next_available_on'] ?? null ) : null,
+				'schedule'          => $destination && $synced ? (array) ( $stripe['pending_schedule'] ?? array() ) : array(),
+				'hint'              => self::pending_balance_hint( $destination && $synced ? ( $stripe['next_available_on'] ?? null ) : null ),
+			),
 			'metrics'         => array(
 				'collected'           => $metric( $collected, 'wordpress_payments' ),
 				'refunds'             => $metric( $refunds, 'wordpress_payments' ),
@@ -1243,7 +1354,7 @@ class LNKup_Financial_Service {
 	 * @param string $mode      Settlement mode.
 	 * @param array  $available Available metric.
 	 */
-	private static function organizer_payout_state( $connect, $mode, $available ) {
+	private static function organizer_payout_state( $connect, $mode, $available, $instant_cents = 0 ) {
 		$status = (string) ( $connect['status'] ?? 'not_started' );
 		$map    = array(
 			'active'                => array( 'active', __( 'Payouts active', 'lnkup-marketplace' ) ),
@@ -1286,14 +1397,36 @@ class LNKup_Financial_Service {
 			$detail = __( 'LNKup sends your cash outs to you directly.', 'lnkup-marketplace' );
 		}
 
+		// Instant uses Stripe's own instant-eligible balance, which can exist while Available is $0.
+		$settings        = function_exists( 'lnkup_get_settings' ) ? lnkup_get_settings() : array();
+		$instant_enabled = ! empty( $settings['connect_instant_payouts_enabled'] ) && 'destination' === $mode;
+		$can_instant     = $instant_enabled && $eligible && 'ok' === $available['status'] && (int) $instant_cents >= 100;
+
 		return array(
-			'state'           => $state,
-			'label'           => $label,
-			'detail'          => $detail,
-			'method'          => 'destination' === $mode ? 'connect' : 'lnkup',
-			'can_cash_out'    => '' === $reason,
-			'cash_out_reason' => $reason,
+			'state'                   => $state,
+			'label'                   => $label,
+			'detail'                  => $detail,
+			'method'                  => 'destination' === $mode ? 'connect' : 'lnkup',
+			'can_cash_out'            => '' === $reason,
+			'cash_out_reason'         => $reason,
+			'instant_enabled'         => $instant_enabled,
+			'can_instant_cash_out'    => $can_instant,
+			'instant_available_cents' => $instant_enabled ? (int) $instant_cents : 0,
 		);
+	}
+
+	/**
+	 * Instant-eligible cents from a Stripe Connect balance payload.
+	 *
+	 * @param array $stripe Balance from organizer_stripe_balance().
+	 */
+	public static function instant_available_cents( $stripe ) {
+		if ( ! is_array( $stripe ) || empty( $stripe['synced'] ) ) {
+			return 0;
+		}
+		return isset( $stripe['instant_available_cents'] )
+			? max( 0, (int) $stripe['instant_available_cents'] )
+			: max( 0, (int) round( (float) ( $stripe['instant_available'] ?? 0 ) * 100 ) );
 	}
 
 	/**
@@ -1763,6 +1896,7 @@ class LNKup_Financial_Service {
 				'in_transit' => (float) ( $display_balances['processing'] ?? $wallet['processing'] ?? 0 ),
 				'paid_out'   => $payouts_paid,
 				'synced'     => ! empty( $stripe_balance ) && empty( $stripe_balance['error'] ),
+				'pending_available_on' => is_array( $stripe_balance ) ? ( $stripe_balance['next_available_on'] ?? null ) : null,
 			)
 		);
 		$money = self::organizer_money_contract(
@@ -1823,7 +1957,7 @@ class LNKup_Financial_Service {
 		$rows           = array(
 			array( 'net', __( 'Earnings', 'lnkup-marketplace' ), max( 0, $v['collected'] - $v['refunds'] ), 'ledger', __( "What you've earned from paid booths, after refunds.", 'lnkup-marketplace' ) ),
 			array( 'refunds', __( 'Refunds', 'lnkup-marketplace' ), $v['refunds'], 'ledger', __( 'Money returned to vendors.', 'lnkup-marketplace' ) ),
-			array( 'pending', __( 'Pending', 'lnkup-marketplace' ), $v['pending'], $balance_source, __( 'Still settling. Pending money is not available to cash out yet.', 'lnkup-marketplace' ) ),
+			array( 'pending', __( 'Pending', 'lnkup-marketplace' ), $v['pending'], $balance_source, self::pending_balance_hint( $v['pending_available_on'] ?? null ) ),
 			array( 'available', __( 'Available to cash out', 'lnkup-marketplace' ), $v['available'], $balance_source, __( 'Ready to send to your bank.', 'lnkup-marketplace' ) ),
 			array( 'in_transit', __( 'In transit', 'lnkup-marketplace' ), $v['in_transit'], $balance_source, __( 'Cashouts on the way to your bank.', 'lnkup-marketplace' ) ),
 			array( 'paid_out', __( 'Paid out', 'lnkup-marketplace' ), $v['paid_out'], 'ledger', __( 'Cashouts that reached your bank.', 'lnkup-marketplace' ) ),

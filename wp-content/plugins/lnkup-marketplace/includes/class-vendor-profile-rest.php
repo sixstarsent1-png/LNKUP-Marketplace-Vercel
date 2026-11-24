@@ -199,6 +199,8 @@ class LNKup_Vendor_Profile_REST {
 			}
 		}
 
+		do_action( 'lnkup_vendor_profile_saved', (int) $user_id, (int) $profile_id, 'rest' );
+
 		return rest_ensure_response(
 			array(
 				'success'    => true,

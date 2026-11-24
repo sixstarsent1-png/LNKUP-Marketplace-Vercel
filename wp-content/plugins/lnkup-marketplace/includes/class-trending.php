@@ -104,6 +104,9 @@ class LNKup_Trending {
 
 		$rows = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		$items = array();
+		if ( class_exists( 'LNKup_Event_Media' ) ) {
+			LNKup_Event_Media::prime( wp_list_pluck( (array) $rows, 'event_id' ) );
+		}
 		foreach ( (array) $rows as $row ) {
 			$items[] = lnkup_format_index_row( $row );
 		}

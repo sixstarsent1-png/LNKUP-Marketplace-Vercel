@@ -182,6 +182,8 @@ class LNKup_Auth_REST {
 				'city'             => sanitize_text_field( (string) $request->get_param( 'city' ) ),
 				'state'            => sanitize_text_field( (string) $request->get_param( 'state' ) ),
 				'category'         => sanitize_title( (string) $request->get_param( 'category' ) ),
+				// Optional campaign attribution from the app (sanitized by LNKup_Acquisition_Attribution).
+				'attribution'      => is_array( $request->get_param( 'attribution' ) ) ? $request->get_param( 'attribution' ) : array(),
 			)
 		);
 
