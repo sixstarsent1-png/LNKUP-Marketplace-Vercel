@@ -237,6 +237,10 @@ class LNKup_Index_Policy {
 			return self::tour( $tour_id );
 		}
 		if ( class_exists( 'LNKup_Market_Pages' ) && LNKup_Market_Pages::is_market_request() ) {
+			if ( class_exists( 'LNKup_Market_Discovery' ) && '' !== (string) get_query_var( LNKup_Market_Discovery::SUB_VAR ) ) {
+				$sub = LNKup_Market_Discovery::decision();
+				return $sub ?? self::decision( false, false, 'unknown_market_page' );
+			}
 			$market = LNKup_Market_Pages::get_market_by_slug( LNKup_Market_Pages::current_slug(), false );
 			return is_array( $market ) ? self::market( $market ) : self::decision( false, false, 'unknown_market' );
 		}

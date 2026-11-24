@@ -172,6 +172,9 @@ class LNKup_Market_Pages_Admin {
 								</select>
 							</td>
 						</tr>
+						<?php if ( class_exists( 'LNKup_Market_Registry' ) ) : ?>
+							<?php self::render_registry_fields( LNKup_Market_Registry::with_defaults( $editing ), $markets, $categories ); ?>
+						<?php endif; ?>
 					</table>
 					<?php submit_button( __( 'Save market', 'lnkup-marketplace' ) ); ?>
 					<a href="<?php echo esc_url( admin_url( 'admin.php?page=lnkup-city-markets' ) ); ?>"><?php esc_html_e( 'Back to list', 'lnkup-marketplace' ); ?></a>
@@ -232,6 +235,106 @@ class LNKup_Market_Pages_Admin {
 				<?php self::render_create_form(); ?>
 			<?php endif; ?>
 		</div>
+		<?php
+	}
+
+	/**
+	 * Marketing registry fields: location, nearby markets, status override, category pages, content.
+	 *
+	 * @param array<string,mixed>                $market     Market with registry defaults.
+	 * @param array<string,array<string,mixed>> $markets    All markets.
+	 * @param array<int,WP_Term>                 $categories Vendor category terms.
+	 */
+	private static function render_registry_fields( array $market, array $markets, array $categories ): void {
+		$computed = LNKup_Market_Registry::status( array_merge( $market, array( 'status_override' => '' ) ) );
+		$health   = LNKup_Market_Registry::health( $market );
+		$labels   = function_exists( 'lnkup_canonical_category_options' ) ? array_keys( lnkup_canonical_category_options( $categories ) ) : wp_list_pluck( $categories, 'name' );
+		$counts   = array();
+		foreach ( LNKup_Market_Registry::categories( $market ) as $row ) {
+			$counts[ $row['slug'] ] = $row['count'];
+		}
+		?>
+		<tr>
+			<th><?php esc_html_e( 'Market health (live)', 'lnkup-marketplace' ); ?></th>
+			<td data-testid="market-health">
+				<?php
+				printf(
+					/* translators: 1: open events, 2: open listings, 3: organizers, 4: vendors */
+					esc_html__( '%1$d open events · %2$d open listings · %3$d organizers with open events · %4$d vendors based here', 'lnkup-marketplace' ),
+					(int) $health['open_events'],
+					(int) $health['open_opportunities'],
+					(int) $health['active_organizers'],
+					(int) $health['vendors_based']
+				);
+				?>
+				<p class="description">
+					<?php
+					/* translators: %s: computed status */
+					printf( esc_html__( 'Computed public status: %s', 'lnkup-marketplace' ), esc_html( LNKup_Market_Registry::status_label( $computed ) ) );
+					?>
+				</p>
+			</td>
+		</tr>
+		<tr>
+			<th><label for="status_override"><?php esc_html_e( 'Public status override', 'lnkup-marketplace' ); ?></label></th>
+			<td>
+				<select id="status_override" name="status_override">
+					<option value=""><?php esc_html_e( 'Automatic (recommended)', 'lnkup-marketplace' ); ?></option>
+					<?php foreach ( LNKup_Market_Registry::STATUSES as $status ) : ?>
+						<option value="<?php echo esc_attr( $status ); ?>" <?php selected( $market['status_override'], $status ); ?>><?php echo esc_html( LNKup_Market_Registry::status_label( $status ) ); ?></option>
+					<?php endforeach; ?>
+				</select>
+			</td>
+		</tr>
+		<tr>
+			<th><?php esc_html_e( 'Coordinates', 'lnkup-marketplace' ); ?></th>
+			<td>
+				<label><?php esc_html_e( 'Lat', 'lnkup-marketplace' ); ?> <input type="text" name="lat" size="10" inputmode="decimal" value="<?php echo esc_attr( null === $market['lat'] ? '' : (string) $market['lat'] ); ?>" /></label>
+				<label><?php esc_html_e( 'Lng', 'lnkup-marketplace' ); ?> <input type="text" name="lng" size="10" inputmode="decimal" value="<?php echo esc_attr( null === $market['lng'] ? '' : (string) $market['lng'] ); ?>" /></label>
+				<p class="description"><?php esc_html_e( 'Used to list nearby markets within 300 miles. Leave blank to fall back to same-state markets.', 'lnkup-marketplace' ); ?></p>
+			</td>
+		</tr>
+		<tr>
+			<th><label for="metro"><?php esc_html_e( 'Metro area', 'lnkup-marketplace' ); ?></label></th>
+			<td><input type="text" id="metro" name="metro" class="regular-text" value="<?php echo esc_attr( (string) $market['metro'] ); ?>" /></td>
+		</tr>
+		<tr>
+			<th><?php esc_html_e( 'Nearby markets', 'lnkup-marketplace' ); ?></th>
+			<td>
+				<select name="nearby[]" multiple size="6" style="min-width:240px;">
+					<?php foreach ( $markets as $slug => $row ) : ?>
+						<?php if ( $slug === $market['slug'] ) { continue; } ?>
+						<option value="<?php echo esc_attr( (string) $slug ); ?>" <?php selected( in_array( (string) $slug, $market['nearby'], true ) ); ?>><?php echo esc_html( (string) ( $row['display_name'] ?? $slug ) . ', ' . (string) ( $row['state'] ?? '' ) ); ?></option>
+					<?php endforeach; ?>
+				</select>
+			</td>
+		</tr>
+		<tr>
+			<th><?php esc_html_e( 'City + category pages', 'lnkup-marketplace' ); ?></th>
+			<td data-testid="market-category-pages">
+				<?php foreach ( $labels as $label ) : ?>
+					<?php $slug = sanitize_title( (string) $label ); ?>
+					<label style="display:inline-block;min-width:220px;">
+						<input type="checkbox" name="category_pages[]" value="<?php echo esc_attr( $slug ); ?>" <?php checked( in_array( $slug, $market['category_pages'], true ) ); ?> />
+						<?php echo esc_html( (string) $label ); ?>
+						<span class="description">(<?php echo esc_html( (string) ( $counts[ $slug ] ?? 0 ) ); ?>)</span>
+					</label>
+				<?php endforeach; ?>
+				<p class="description">
+					<?php
+					/* translators: %d: minimum open events */
+					printf( esc_html__( 'A page is indexable only while this market is indexable and the category has at least %d open events here. Counts in brackets are live open events.', 'lnkup-marketplace' ), (int) LNKup_Market_Registry::CATEGORY_MIN );
+					?>
+				</p>
+			</td>
+		</tr>
+		<tr>
+			<th><label for="market_content"><?php esc_html_e( 'Local guide content', 'lnkup-marketplace' ); ?></label></th>
+			<td>
+				<textarea class="large-text" rows="8" id="market_content" name="market_content"><?php echo esc_textarea( (string) $market['content'] ); ?></textarea>
+				<p class="description"><?php esc_html_e( 'Original, city-specific guidance for vendors (permits, seasons, venues). Basic formatting allowed. 300+ characters lets a market with no open events stay indexable.', 'lnkup-marketplace' ); ?></p>
+			</td>
+		</tr>
 		<?php
 	}
 
@@ -421,6 +524,18 @@ class LNKup_Market_Pages_Admin {
 		$markets[ $slug ]['hero_description']          = sanitize_textarea_field( (string) ( $_POST['hero_description'] ?? '' ) );
 		$markets[ $slug ]['featured_category_slugs']   = array_map( 'sanitize_title', (array) ( $_POST['featured_category_slugs'] ?? array() ) );
 		$markets[ $slug ]['featured_event_type_slugs'] = array_map( 'sanitize_title', (array) ( $_POST['featured_event_type_slugs'] ?? array() ) );
+		if ( class_exists( 'LNKup_Market_Registry' ) && isset( $_POST['market_content'] ) ) {
+			$lat = trim( (string) wp_unslash( $_POST['lat'] ?? '' ) );
+			$lng = trim( (string) wp_unslash( $_POST['lng'] ?? '' ) );
+			$override = sanitize_key( (string) ( $_POST['status_override'] ?? '' ) );
+			$markets[ $slug ]['lat']             = is_numeric( $lat ) && abs( (float) $lat ) <= 90 ? (float) $lat : null;
+			$markets[ $slug ]['lng']             = is_numeric( $lng ) && abs( (float) $lng ) <= 180 ? (float) $lng : null;
+			$markets[ $slug ]['metro']           = sanitize_text_field( wp_unslash( (string) ( $_POST['metro'] ?? '' ) ) );
+			$markets[ $slug ]['nearby']          = array_values( array_intersect( array_map( 'sanitize_title', (array) ( $_POST['nearby'] ?? array() ) ), array_diff( array_keys( $markets ), array( $slug ) ) ) );
+			$markets[ $slug ]['category_pages']  = array_values( array_unique( array_map( 'sanitize_title', (array) ( $_POST['category_pages'] ?? array() ) ) ) );
+			$markets[ $slug ]['content']         = wp_kses_post( wp_unslash( (string) $_POST['market_content'] ) );
+			$markets[ $slug ]['status_override'] = in_array( $override, LNKup_Market_Registry::STATUSES, true ) ? $override : '';
+		}
 
 		LNKup_Market_Pages::save_markets( $markets );
 		flush_rewrite_rules( false );

@@ -1032,6 +1032,7 @@ class LNKup_Shortcodes {
 						</div>
 						<div class="lnkup-event-hero__copy">
 							<p class="lnkup-public-event__state"><?php echo esc_html( $availability['label'] ); ?></p>
+							<?php echo class_exists( 'LNKup_Event_Distribution' ) ? LNKup_Event_Distribution::hero_notices( (int) $event->ID ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in hero_notices(). ?>
 							<h1 class="lnkup-type-h1"><?php echo esc_html( $display_title ); ?></h1>
 							<?php if ( $organizer_label && $profile_url ) : ?>
 								<p class="lnkup-event-hero__organizer"><a href="<?php echo esc_url( $profile_url ); ?>"><?php echo esc_html( $organizer_label ); ?></a></p>
@@ -1043,7 +1044,7 @@ class LNKup_Shortcodes {
 								<?php if ( $hours_label ) : ?><li><?php echo esc_html( $hours_label ); ?></li><?php endif; ?>
 								<?php if ( $location['where'] ) : ?><li><?php echo esc_html( $location['where'] ); ?></li><?php endif; ?>
 								<?php if ( $type_names ) : ?><li><?php echo esc_html( implode( ' · ', $type_names ) ); ?></li><?php endif; ?>
-								<?php if ( '' !== $attendance && '0' !== $attendance ) : ?><li><?php echo esc_html( sprintf( __( 'Expected attendance %s', 'lnkup-marketplace' ), $attendance ) ); ?></li><?php endif; ?>
+								<?php if ( '' !== $attendance && '0' !== $attendance ) : ?><li title="<?php esc_attr_e( 'Estimate provided by the organizer; not verified by LNKup', 'lnkup-marketplace' ); ?>"><?php echo esc_html( sprintf( __( 'Expected attendance %s (organizer-provided)', 'lnkup-marketplace' ), $attendance ) ); ?></li><?php endif; ?>
 							</ul>
 							<?php if ( $starting_fee ) : ?><p class="lnkup-event-hero__price"><?php echo esc_html( $starting_fee ); ?></p><?php endif; ?>
 							<?php if ( ! $unclaimed ) : ?>
@@ -1053,6 +1054,7 @@ class LNKup_Shortcodes {
 									<?php if ( $can_save_event ) : ?>
 										<button type="button" class="lnkup-btn lnkup-btn--outline lnkup-save-event<?php echo $event_saved ? ' is-active' : ''; ?>" data-favorite-type="events" data-favorite-id="<?php echo esc_attr( (string) $event->ID ); ?>" aria-pressed="<?php echo $event_saved ? 'true' : 'false'; ?>"><?php echo esc_html( $event_saved ? __( 'Saved', 'lnkup-marketplace' ) : __( 'Save', 'lnkup-marketplace' ) ); ?></button>
 									<?php endif; ?>
+									<?php echo class_exists( 'LNKup_Event_Distribution' ) ? LNKup_Event_Distribution::hero_actions( (int) $event->ID, (int) $open_spots, ! empty( $guest ) ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in hero_actions(). ?>
 								</p>
 							<?php endif; ?>
 							<?php if ( $ticketing ) : ?>
@@ -1318,10 +1320,19 @@ class LNKup_Shortcodes {
 				'post_status'    => 'publish',
 				'posts_per_page' => 3,
 				'post__not_in'   => array( (int) $event_id ),
-				'meta_query'     => array(
+				'meta_key'       => '_lnkup_event_date', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'orderby'        => 'meta_value',
+				'order'          => 'ASC',
+				'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					array(
 						'key'   => '_lnkup_city',
 						'value' => $city,
+					),
+					array(
+						'key'     => '_lnkup_event_date',
+						'value'   => current_time( 'Y-m-d' ),
+						'compare' => '>=',
+						'type'    => 'DATE',
 					),
 				),
 			)

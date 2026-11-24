@@ -23,6 +23,7 @@ class LNKup_Vendor_Personalization {
 			'events'        => array(),
 			'organizers'    => array(),
 			'opportunities' => array(),
+			'tours'         => array(),
 		);
 		$data = get_user_meta( $user_id, 'lnkup_favorites', true );
 		return wp_parse_args( is_array( $data ) ? $data : array(), $defaults );
@@ -32,7 +33,7 @@ class LNKup_Vendor_Personalization {
 	 * Toggle favorite.
 	 *
 	 * @param int    $user_id User ID.
-	 * @param string $type    events|organizers|opportunities.
+	 * @param string $type    events|organizers|opportunities|tours.
 	 * @param int    $id      Entity ID.
 	 */
 	public static function toggle_favorite( $user_id, $type, $id ) {

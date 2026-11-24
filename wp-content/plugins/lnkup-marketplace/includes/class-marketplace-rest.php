@@ -321,6 +321,12 @@ class LNKup_Marketplace_REST {
 		$body    = $request->get_json_params() ?: $request->get_params();
 		$type    = sanitize_key( $body['type'] ?? 'opportunities' );
 		$id      = absint( $body['id'] ?? 0 );
+		if ( class_exists( 'LNKup_Event_Distribution' ) ) {
+			$valid = LNKup_Event_Distribution::validate_favorite( $type, $id );
+			if ( is_wp_error( $valid ) ) {
+				return $valid;
+			}
+		}
 		$added   = LNKup_Vendor_Personalization::toggle_favorite( $user_id, $type, $id );
 		LNKup_Marketplace_Analytics::track( 'favorite', array( 'type' => $type, 'added' => $added ), $user_id, $id );
 		return rest_ensure_response( array( 'favorited' => $added ) );

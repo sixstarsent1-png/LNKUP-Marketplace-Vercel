@@ -224,6 +224,10 @@ class LNKup_Market_Pages {
 			),
 			lnkup_page_url_helper( 'opportunities' )
 		);
+		if ( class_exists( 'LNKup_Market_Registry' ) ) {
+			$market           = LNKup_Market_Registry::with_defaults( $market );
+			$market['status'] = LNKup_Market_Registry::status( $market );
+		}
 		return $market;
 	}
 
@@ -619,6 +623,13 @@ class LNKup_Market_Pages {
 				'restNonce'    => wp_create_nonce( 'wp_rest' ),
 				'marketSlug'   => $ctx['market']['slug'] ?? $slug,
 				'launchStatus' => $ctx['market']['launch_status'] ?? '',
+				'marketsApi'   => esc_url_raw( rest_url( 'lnkup/v1/markets/' ) ),
+				'i18n'         => array(
+					'alertOn'    => __( 'Alert saved. We will email you when matching events open.', 'lnkup-marketplace' ),
+					'alertExists' => __( 'You already have this alert.', 'lnkup-marketplace' ),
+					'alertError' => __( 'We could not save your alert. Please try again.', 'lnkup-marketplace' ),
+					'demandOn'   => __( 'Thanks. This helps us bring the right events to this city.', 'lnkup-marketplace' ),
+				),
 			)
 		);
 	}

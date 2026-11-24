@@ -132,3 +132,23 @@
 .lnkup-mp-v2__market-chip a:hover {
   border-color: var(--primary);
 }
+
+/* Market page 5.0: alerts and demand chips on the ink section. */
+.lnkup-site--market .lp-section--ink .lp-chip--line {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.lnkup-site--market .lp-section--ink .lp-chip--line:hover { border-color: #fff; }
+.lnkup-site--market .lp-section--ink .lp-chip--line[aria-pressed="true"] {
+  background: var(--lp-lime, #c8f542);
+  border-color: transparent;
+  color: var(--lp-lime-ink, #1a2400);
+}
+.lnkup-site--market [data-lnkup-market-alert] select { min-height: 44px; }
+.lnkup-site--market [data-lnkup-alert-status],
+.lnkup-site--market [data-lnkup-demand-status] { flex-basis: 100%; margin: 0.5rem 0 0; color: #dfe7c8; }
+.lnkup-site--market [data-lnkup-alert-status].is-error { color: #ffb4a6; }

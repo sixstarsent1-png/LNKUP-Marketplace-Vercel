@@ -125,7 +125,7 @@ function lnkup_seo_raster_attachment_url( $attachment_id, $size = 'large' ) {
  */
 function lnkup_seo_public_canonical() {
 	if ( class_exists( 'LNKup_Market_Pages' ) && LNKup_Market_Pages::is_market_request() ) {
-		return LNKup_Market_Pages::market_url( LNKup_Market_Pages::current_slug() );
+		return (string) apply_filters( 'lnkup_seo_market_canonical', LNKup_Market_Pages::market_url( LNKup_Market_Pages::current_slug() ) );
 	}
 	if ( class_exists( 'LNKup_Passport_Public' ) ) {
 		$vendor_slug = LNKup_Passport_Public::current_slug();
@@ -341,6 +341,10 @@ function lnkup_seo_opportunity_copy( $post_id ) {
  * @return array{title?:string,description?:string}|null
  */
 function lnkup_seo_get_context_copy() {
+	$pre = apply_filters( 'lnkup_seo_context_copy_pre', null );
+	if ( is_array( $pre ) ) {
+		return $pre;
+	}
 	if ( is_front_page() ) {
 		$launch = function_exists( 'lnkup_get_launch_date_label' ) ? lnkup_get_launch_date_label() : '';
 		$desc   = __( 'LNKup is the vendor opportunity marketplace for live events — festivals, markets, rodeos, and block parties. Free to join and apply. Pay only when accepted.', 'lnkup-marketplace' );
@@ -586,6 +590,10 @@ class LNKup_SEO {
 	 * @param string $image Image URL.
 	 */
 	public static function filter_og_image( $image ) {
+		$generated = (string) apply_filters( 'lnkup_seo_og_image_pre', '' );
+		if ( '' !== $generated ) {
+			return $generated;
+		}
 		if ( is_string( $image ) && lnkup_seo_is_raster_url( $image ) ) {
 			return $image;
 		}

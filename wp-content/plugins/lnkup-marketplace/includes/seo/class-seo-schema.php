@@ -304,6 +304,9 @@ class LNKup_SEO_Schema {
 			}
 		}
 		if ( class_exists( 'LNKup_Market_Pages' ) && LNKup_Market_Pages::is_market_request() ) {
+			if ( class_exists( 'LNKup_Market_Discovery' ) && LNKup_Market_Discovery::sub() ) {
+				return LNKup_Market_Discovery::graph();
+			}
 			$market = LNKup_Market_Pages::get_market_by_slug( LNKup_Market_Pages::current_slug() );
 			if ( $market ) {
 				return array(

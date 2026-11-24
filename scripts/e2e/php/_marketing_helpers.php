@@ -66,6 +66,13 @@ function lnkup_m_event( array $meta = array(), bool $slot = true, string $title 
 }
 
 /**
+ * Record a check that could not run in this environment (reported, never counted as a pass).
+ */
+function lnkup_t_skip( string $label ): void {
+	echo "  SKIP: {$label}\n";
+}
+
+/**
  * Turn flags on for the run and restore afterwards.
  *
  * @param string[] $flags Flags.
