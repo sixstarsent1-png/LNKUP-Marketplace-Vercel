@@ -99,6 +99,9 @@ class LNKup_Organizer_Dashboard_Views {
 				case 'tours':
 					echo self::render_portfolio(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					break;
+				case 'marketing':
+					echo class_exists( 'LNKup_Organizer_Marketing' ) ? LNKup_Organizer_Marketing::render() : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					break;
 				case 'home':
 				default:
 					echo self::render_home(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped

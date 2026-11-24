@@ -105,10 +105,10 @@ class LNKup_Tracking_Links {
 		}
 		switch ( $type ) {
 			case 'event':
-				return 'publish' === get_post_status( $target_id ) && class_exists( 'LNKup_Capabilities' ) && LNKup_Capabilities::organizer_owns_event( $target_id, $user_id );
+				return 'publish' === get_post_status( $target_id ) && self::can_promote_event( $target_id, $user_id );
 			case 'opportunity':
 				$event = (int) get_post_meta( $target_id, '_lnkup_event_id', true );
-				return $event > 0 && 'publish' === get_post_status( $target_id ) && class_exists( 'LNKup_Capabilities' ) && LNKup_Capabilities::organizer_owns_event( $event, $user_id );
+				return $event > 0 && 'publish' === get_post_status( $target_id ) && self::can_promote_event( $event, $user_id );
 			case 'tour':
 				return 'publish' === get_post_status( $target_id ) && class_exists( 'LNKup_Tours' ) && LNKup_Tours::owns( $target_id, $user_id );
 			case 'organizer':
@@ -116,6 +116,16 @@ class LNKup_Tracking_Links {
 			default:
 				return '' !== self::resolve_url( $type, $target_id, $key, false );
 		}
+	}
+
+	/**
+	 * Event owner, or a team member with the event-level `broadcast` capability.
+	 */
+	public static function can_promote_event( int $event_id, int $user_id ): bool {
+		if ( ! class_exists( 'LNKup_Capabilities' ) || 'lnkup_event' !== get_post_type( $event_id ) ) {
+			return false;
+		}
+		return LNKup_Capabilities::organizer_owns_event( $event_id, $user_id ) || LNKup_Capabilities::staff_can( $event_id, 'broadcast', $user_id );
 	}
 
 	/**

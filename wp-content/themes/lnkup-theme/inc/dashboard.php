@@ -175,6 +175,7 @@ function lnkup_dashboard_organizer_title() {
 		'profile'      => __( 'Profile', 'lnkup-theme' ),
 		'team'         => __( 'Team & Trust', 'lnkup-theme' ),
 		'tasks'        => __( 'Tasks', 'lnkup-theme' ),
+		'marketing'    => __( 'Marketing', 'lnkup-theme' ),
 	);
 	return $titles[ $view ] ?? __( 'Home', 'lnkup-theme' );
 }
@@ -475,6 +476,9 @@ function lnkup_get_dashboard_nav( $role ) {
 	$tours_item = class_exists( 'LNKup_Feature_Flags' ) && LNKup_Feature_Flags::portfolio()
 		? array( array( 'label' => __( 'Tours & Series', 'lnkup-theme' ), 'href' => $org_view_url( 'tours' ), 'slug' => 'organizer-dashboard', 'icon' => 'calendar', 'view' => 'tours', 'tier' => 'secondary' ) )
 		: array();
+	$marketing_item = class_exists( 'LNKup_Organizer_Marketing' ) && LNKup_Organizer_Marketing::enabled()
+		? array( array( 'label' => __( 'Marketing', 'lnkup-theme' ), 'href' => $org_view_url( 'marketing' ), 'slug' => 'organizer-dashboard', 'icon' => 'chart', 'view' => 'marketing', 'tier' => 'primary' ) )
+		: array();
 
 	return lnkup_dashboard_nav_with_app_item( array_merge( array(
 
@@ -488,6 +492,7 @@ function lnkup_get_dashboard_nav( $role ) {
 		array( 'label' => __( 'Vendors', 'lnkup-theme' ), 'href' => $org_view_url( 'vendors' ), 'slug' => 'organizer-dashboard', 'icon' => 'search', 'view' => 'vendors', 'tier' => 'primary' ),
 
 		array( 'label' => __( 'Money', 'lnkup-theme' ), 'href' => $org_view_url( 'financial' ), 'slug' => 'organizer-dashboard', 'icon' => 'payment', 'view' => 'financial', 'tier' => 'primary' ),
+	), $marketing_item, array(
 
 		array( 'label' => __( 'Help', 'lnkup-theme' ), 'href' => $org_view_url( 'help' ), 'slug' => 'organizer-dashboard', 'icon' => 'help', 'view' => 'help', 'tier' => 'more' ),
 

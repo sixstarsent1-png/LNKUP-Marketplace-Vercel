@@ -111,7 +111,7 @@ class LNKup_App_Promo {
 	 * @return string
 	 */
 	public static function qr_url( $context = '' ) {
-		return 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=0&data=' . rawurlencode( self::store_url( $context ) );
+		return class_exists( 'LNKup_QR' ) ? LNKup_QR::data_uri( self::store_url( $context ), 160, 2 ) : '';
 	}
 
 	/**
@@ -298,7 +298,7 @@ class LNKup_App_Promo {
 				</div>
 			</div>
 			<figure class="lnkup-app-promo__qr">
-				<img src="<?php echo esc_url( self::qr_url( $role ) ); ?>" width="120" height="120" alt="<?php esc_attr_e( 'QR code to download LNKup from the App Store', 'lnkup-marketplace' ); ?>" loading="lazy" />
+				<img src="<?php echo esc_attr( self::qr_url( $role ) ); ?>" width="120" height="120" alt="<?php esc_attr_e( 'QR code to download LNKup from the App Store', 'lnkup-marketplace' ); ?>" loading="lazy" />
 				<figcaption><?php esc_html_e( 'Scan with your iPhone camera', 'lnkup-marketplace' ); ?></figcaption>
 			</figure>
 		</section>

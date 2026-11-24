@@ -303,7 +303,7 @@
     });
     return card('Share your Passport', [
       me.is_public ? null : el('p', { className: 'lnkup-alert', text: 'Your Passport is private. Turn on public visibility in Settings to share it.' }),
-      el('img', { className: 'lnkup-passport-qr', width: '160', height: '160', loading: 'lazy', alt: 'QR code for your public Passport', src: 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=' + encodeURIComponent(me.public_url) }),
+      el('img', { className: 'lnkup-passport-qr', width: '160', height: '160', loading: 'lazy', alt: 'QR code for your public Passport', src: window.LNKupQR ? window.LNKupQR.dataUrl(me.public_url, 160) : '' }),
       el('p', { className: 'lnkup-passport-url' }, [el('a', { href: me.public_url, target: '_blank', rel: 'noopener', text: me.public_url })]),
       copy
     ]);

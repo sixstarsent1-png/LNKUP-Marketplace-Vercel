@@ -210,7 +210,7 @@ class LNKup_Shortcodes {
 		wp_register_style( 'lnkup-weather', LNKUP_PLUGIN_URL . 'public/css/weather.css', $v2, LNKUP_VERSION );
 		wp_register_script( 'lnkup-weather', LNKUP_PLUGIN_URL . 'public/js/weather.js', array( 'lnkup-marketplace', 'lnkup-ui' ), LNKUP_VERSION, true );
 		wp_register_style( 'lnkup-operations', LNKUP_PLUGIN_URL . 'public/css/operations.css', $v2, LNKUP_VERSION );
-		wp_register_script( 'lnkup-operations', LNKUP_PLUGIN_URL . 'public/js/operations.js', array( 'lnkup-marketplace', 'lnkup-ui', 'lnkup-weather' ), LNKUP_VERSION, true );
+		wp_register_script( 'lnkup-operations', LNKUP_PLUGIN_URL . 'public/js/operations.js', array( 'lnkup-marketplace', 'lnkup-ui', 'lnkup-weather', 'lnkup-qr' ), LNKUP_VERSION, true );
 		wp_register_script( 'lnkup-vendor-ops', LNKUP_PLUGIN_URL . 'public/js/vendor-ops.js', array( 'lnkup-operations' ), LNKUP_VERSION, true );
 		wp_register_style( 'lnkup-vendor-event-pass', LNKUP_PLUGIN_URL . 'public/css/vendor-event-pass.css', $v2, LNKUP_VERSION );
 		wp_register_script( 'lnkup-vendor-event-pass', LNKUP_PLUGIN_URL . 'public/js/vendor-event-pass.js', array( 'lnkup-operations', 'lnkup-vendor-ops' ), LNKUP_VERSION, true );
@@ -235,9 +235,9 @@ class LNKup_Shortcodes {
 		wp_register_style( 'lnkup-vendor-profile', LNKUP_PLUGIN_URL . 'public/css/vendor-profile.css', array_merge( $component_deps, array( 'lnkup-vendor-dashboard' ) ), LNKUP_VERSION );
 		wp_register_script( 'lnkup-vendor-profile', LNKUP_PLUGIN_URL . 'public/js/vendor-profile.js', array( 'lnkup-marketplace', 'jquery' ), LNKUP_VERSION, true );
 		wp_register_style( 'lnkup-passport', LNKUP_PLUGIN_URL . 'public/css/passport.css', $v2, LNKUP_VERSION );
-		wp_register_script( 'lnkup-passport', LNKUP_PLUGIN_URL . 'public/js/passport.js', array(), LNKUP_VERSION, true );
+		wp_register_script( 'lnkup-passport', LNKUP_PLUGIN_URL . 'public/js/passport.js', array( 'lnkup-qr' ), LNKUP_VERSION, true );
 		wp_register_style( 'lnkup-connector', LNKUP_PLUGIN_URL . 'public/css/connector.css', $v2, LNKUP_VERSION );
-		wp_register_script( 'lnkup-connector', LNKUP_PLUGIN_URL . 'public/js/connector.js', array( 'lnkup-marketplace', 'lnkup-ui' ), LNKUP_VERSION, true );
+		wp_register_script( 'lnkup-connector', LNKUP_PLUGIN_URL . 'public/js/connector.js', array( 'lnkup-marketplace', 'lnkup-ui', 'lnkup-qr' ), LNKUP_VERSION, true );
 	}
 
 	/**
@@ -7108,7 +7108,7 @@ class LNKup_Shortcodes {
 					<?php if ( $share_url ) : ?>
 						<section class="lnkup-pub-share lnkup-surface--secondary" data-testid="lnkup-public-vendor-share">
 							<h2 class="lnkup-type-label"><?php esc_html_e( 'Share this Passport', 'lnkup-marketplace' ); ?></h2>
-							<img class="lnkup-pub-share__qr" loading="lazy" width="160" height="160" src="<?php echo esc_url( 'https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=' . rawurlencode( $share_url ) ); ?>" alt="<?php esc_attr_e( 'QR code for this vendor profile', 'lnkup-marketplace' ); ?>" />
+							<img class="lnkup-pub-share__qr" loading="lazy" width="160" height="160" src="<?php echo esc_attr( class_exists( 'LNKup_QR' ) ? LNKup_QR::data_uri( $share_url, 160 ) : '' ); ?>" alt="<?php esc_attr_e( 'QR code for this vendor profile', 'lnkup-marketplace' ); ?>" />
 							<button type="button" class="lnkup-btn lnkup-btn--sm lnkup-btn--outline" data-copy-url="<?php echo esc_url( $share_url ); ?>"><?php esc_html_e( 'Copy link', 'lnkup-marketplace' ); ?></button>
 						</section>
 					<?php endif; ?>

@@ -53,8 +53,11 @@ class LNKup_Map_Sharing {
 		);
 	}
 
+	/**
+	 * Locally generated QR (data: URI); the share token never goes to a QR service.
+	 */
 	public static function qr_url( $token ) {
-		return 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' . rawurlencode( self::share_url( $token ) );
+		return class_exists( 'LNKup_QR' ) ? LNKup_QR::data_uri( self::share_url( $token ), 200 ) : '';
 	}
 
 	public static function format_token( $token, $scope, $expires ) {

@@ -252,6 +252,9 @@ function lnkup_organizer_dashboard_view( $view = null ) {
 		$view = $aliases[ $view ];
 	}
 	$allowed = array( 'home', 'start', 'events', 'applications', 'financial', 'vendors', 'lists', 'invites', 'referrals', 'operations', 'intelligence', 'create', 'help', 'profile', 'team', 'tours', 'tasks' );
+	if ( class_exists( 'LNKup_Organizer_Marketing' ) && LNKup_Organizer_Marketing::enabled() ) {
+		$allowed[] = 'marketing';
+	}
 	return in_array( $view, $allowed, true ) ? $view : 'home';
 }
 

@@ -374,7 +374,7 @@
   }
 
   function qrUrl(url) {
-    return url ? 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(url) : '';
+    return url && window.LNKupQR ? window.LNKupQR.dataUrl(url, 180) : '';
   }
 
   function scriptTemplates(links, kind) {

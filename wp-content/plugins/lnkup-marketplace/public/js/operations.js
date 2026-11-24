@@ -91,8 +91,12 @@
       if (!token) {
         return;
       }
+      var src = window.LNKupQR ? window.LNKupQR.dataUrl(token, 200) : '';
+      if (!src) {
+        return;
+      }
       var img = document.createElement('img');
-      img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(token);
+      img.src = src;
       img.alt = 'Vendor QR Pass';
       el.appendChild(img);
     });

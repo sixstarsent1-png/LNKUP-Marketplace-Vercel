@@ -321,7 +321,6 @@ export const mockVendorPacketUnlocked: VendorPacketPreview = {
   refundPolicy: "Booth fees are non-refundable within 7 days of the event.",
   weatherPolicy: "Event may delay up to 1 hour for weather. No refunds for vendor no-shows.",
   checkInCode: "CHK-8842",
-  qrCodeUrl: "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=CHK-8842",
   unlocks: [],
   wordpressUrl: getPublicWpSiteUrl()
     ? `${getPublicWpSiteUrl()}/vendor-dashboard/?view=operations`

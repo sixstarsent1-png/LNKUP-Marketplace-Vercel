@@ -100,7 +100,7 @@ const mockPacketUnlocked = {
   loadInTime: '2:00 PM – 4:00 PM',
   boothAssignment: 'Booth A-12',
   checkInCode: 'CHK-8842',
-  qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=CHK-8842',
+  qrCodeUrl: 'data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2010%2010%22%2F%3E',
   vendorRules: ['No open flames without permit'],
 };
 
