@@ -378,14 +378,14 @@ class LNKup_Event_Import_Service {
 		foreach ( $ids as $id ) {
 			$title = strtolower( get_the_title( (int) $id ) );
 			similar_text( $name, $title, $pct );
-			$city  = strtolower( (string) get_post_meta( (int) $id, '_lnkup_event_city', true ) );
+			$city  = strtolower( (string) get_post_meta( (int) $id, '_lnkup_city', true ) );
 			$same_city = '' !== $city && $city === strtolower( (string) ( $fields['city'] ?? '' ) );
 			if ( $pct >= 70 || $same_city ) {
 				$out[] = array(
 					'event_id' => (int) $id,
 					'title'    => get_the_title( (int) $id ),
 					'date'     => (string) $fields['date'],
-					'city'     => (string) get_post_meta( (int) $id, '_lnkup_event_city', true ),
+					'city'     => (string) get_post_meta( (int) $id, '_lnkup_city', true ),
 					'match'    => $pct >= 90 ? 'exact' : 'probable',
 				);
 			}

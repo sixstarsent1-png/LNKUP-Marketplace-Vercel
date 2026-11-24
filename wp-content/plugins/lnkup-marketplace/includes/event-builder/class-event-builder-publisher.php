@@ -37,6 +37,9 @@ class LNKup_Event_Builder_Publisher {
 		if ( $draft['source_event'] ) {
 			return LNKup_Event_Builder_Editor::apply( $draft_id, $user_id, $confirm );
 		}
+		if ( class_exists( 'LNKup_Event_Builder_Portfolio' ) && LNKup_Event_Builder_Portfolio::is_portfolio( $draft['state'] ) ) {
+			return LNKup_Event_Builder_Portfolio::publish( $draft_id, $user_id );
+		}
 		$state  = self::own_images( $draft['state'], $user_id );
 		$report = LNKup_Event_Builder_Validator::report( $state, $user_id );
 		if ( ! $report['publishable'] ) {

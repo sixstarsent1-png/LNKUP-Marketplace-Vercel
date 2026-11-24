@@ -323,11 +323,13 @@ class LNKup_Event_Builder_Schema {
 				'spots_override' => isset( $s['spots_override'] ) && '' !== (string) $s['spots_override'] ? absint( $s['spots_override'] ) : null,
 				'skip'          => ! empty( $s['skip'] ),
 				'confirmed'     => ! empty( $s['confirmed'] ),
+				'publish'       => ! array_key_exists( 'publish', $s ) || ! empty( $s['publish'] ),
 			);
 		}
 		return array(
-			'name'       => self::text( $raw['name'] ?? '', 140 ),
-			'tour_id'    => absint( $raw['tour_id'] ?? 0 ),
+			'name'         => self::text( $raw['name'] ?? '', 140 ),
+			'tour_id'      => absint( $raw['tour_id'] ?? 0 ),
+			'publish_mode' => self::pick( $raw['publish_mode'] ?? '', array( 'all', 'drafts' ), 'all' ),
 			'recurrence' => array(
 				'frequency'   => self::pick( $rec['frequency'] ?? '', array( 'weekly', 'biweekly', 'monthly_weekday', 'monthly_date', 'custom' ), 'weekly' ),
 				'weekdays'    => array_values( array_intersect( array( 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun' ), array_map( 'sanitize_key', (array) ( $rec['weekdays'] ?? array() ) ) ) ),

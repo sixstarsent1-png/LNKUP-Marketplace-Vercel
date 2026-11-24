@@ -182,6 +182,7 @@
     return STEPS.filter(function (s) { return keys.indexOf(s.key) >= 0; });
   }
   function isEdit() { return !!(S.draft && S.draft.source_event); }
+  function isPortfolio() { return !!(S.draft && ['recurring', 'tour', 'series'].indexOf(S.draft.state.method) >= 0); }
 
   function mergePatch(a, b) {
     var out = clone(a || {});
@@ -944,18 +945,23 @@
     ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Phoenix', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu', 'America/Puerto_Rico'].concat(ev.timezone && ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Phoenix', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu', 'America/Puerto_Rico'].indexOf(ev.timezone) < 0 ? [ev.timezone] : []).forEach(function (z) {
       append(tzSelect, h('option', { value: z, selected: ev.timezone === z, text: z.replace('America/', '').replace('Pacific/', '').replace('_', ' ') + ' time' }));
     });
-    nodes.push(card('Date and time', null, [
-      dateGrid,
-      h('div', { class: 'eb-grid', style: 'margin-top:14px' }, [
-        field('Time zone', tzSelect, { help: 'Times are shown in the event\'s time zone, not the viewer\'s.' }),
-        h('div', { class: 'eb-field', style: 'align-content:end' }, [
-          h('label', { class: 'eb-check' }, [h('input', { type: 'checkbox', checked: multi, onchange: function (e) { set('event.end_date', e.target.checked ? (ev.date || '') : ''); renderBuilder(); } }), h('span', { text: 'Runs more than one day' })]),
-          checkbox('event.date_tba', 'Date not set yet', 'You can save the draft, but you will need a date to publish.')
+    var portfolio = isPortfolio() && Builder.portfolioCards;
+    if (portfolio) {
+      nodes = nodes.concat(Builder.portfolioCards(tzSelect));
+    } else {
+      nodes.push(card('Date and time', null, [
+        dateGrid,
+        h('div', { class: 'eb-grid', style: 'margin-top:14px' }, [
+          field('Time zone', tzSelect, { help: 'Times are shown in the event\'s time zone, not the viewer\'s.' }),
+          h('div', { class: 'eb-field', style: 'align-content:end' }, [
+            h('label', { class: 'eb-check' }, [h('input', { type: 'checkbox', checked: multi, onchange: function (e) { set('event.end_date', e.target.checked ? (ev.date || '') : ''); renderBuilder(); } }), h('span', { text: 'Runs more than one day' })]),
+            checkbox('event.date_tba', 'Date not set yet', 'You can save the draft, but you will need a date to publish.')
+          ])
         ])
-      ])
-    ]));
+      ]));
+    }
 
-    nodes.push(locationCard(quick));
+    if (!portfolio || st.method === 'recurring') nodes.push(locationCard(quick));
 
     if (!quick) {
       var att = ev.attendance;
@@ -1543,7 +1549,13 @@
         stage
       ]),
       card('Publishing checklist', null, liveBox('checklist'), { testid: 'eb-checklist' }),
-      isEdit() ? null : card('Publishing options', null, [
+      isEdit() ? null : isPortfolio() ? card('Publishing options', 'Each date becomes its own event. You can publish more dates later from the ' + (st.method === 'tour' ? 'tour' : 'series') + ' page.', [
+        h('div', { class: 'eb-grid' }, [
+          h('div', { class: 'eb-field' }, [h('span', { class: 'eb-field__label', text: 'Dates' }), segmented('portfolio.publish_mode', [['all', st.method === 'recurring' ? 'Publish all dates now' : 'Publish selected stops now'], ['drafts', 'Save dates as drafts']])]),
+          h('div', { class: 'eb-field' }, [h('span', { class: 'eb-field__label', text: 'Applications' }), segmented('publish.applications', [['open', 'Open right away'], ['closed', 'Keep closed for now']])])
+        ]),
+        attest
+      ]) : card('Publishing options', null, [
         h('div', { class: 'eb-grid' }, [
           h('div', { class: 'eb-field' }, [h('span', { class: 'eb-field__label', text: 'When' }), segmented('publish.when', [['now', 'Publish now'], ['schedule', 'Schedule']], function (v) { whenFields.hidden = v !== 'schedule'; })]),
           h('div', { class: 'eb-field' }, [h('span', { class: 'eb-field__label', text: 'Applications' }), segmented('publish.applications', [['open', 'Open right away'], ['closed', 'Keep closed for now']])])
@@ -1616,6 +1628,7 @@
         return;
       }
       var st = S.draft.state, sum = S.report.summary;
+      if (isPortfolio()) return confirmPortfolio(st, sum);
       var scheduled = st.publish.when === 'schedule';
       var d = dialog({
         title: scheduled ? 'Schedule this event?' : 'Publish this event?',
@@ -1642,6 +1655,7 @@
       dropBackup();
       if (r.scheduled) { toast('Scheduled. It will publish at ' + new Date(r.publish_at).toLocaleString() + '.'); S.scheduledAt = r.publish_at; renderBuilder(); return; }
       track('event_published', { method: S.draft.state.method });
+      if (r.portfolio && Builder.portfolioSuccess) return Builder.portfolioSuccess(r);
       success(r);
     }).catch(function (e) {
       renderBuilder();
@@ -1991,6 +2005,166 @@
       }).catch(function (err) { action.disabled = false; toast(err.message, 'error'); });
     });
     setTimeout(function () { input.focus(); }, 0);
+  };
+
+  /* ------------------------------------------------------------------ recurring / tours / series (Phases 9–10) */
+
+  var WEEKDAYS = [['mon', 'Mon'], ['tue', 'Tue'], ['wed', 'Wed'], ['thu', 'Thu'], ['fri', 'Fri'], ['sat', 'Sat'], ['sun', 'Sun']];
+  var JS_DAY = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  var PF_LABEL = { recurring: 'recurring event', tour: 'tour', series: 'series' };
+
+  function portfolioEntry(method) {
+    return function () {
+      var flags = (S.config && S.config.flags) || cfg.flags || {};
+      if (!flags.portfolio_builder_v3) { toast('Multi-date events are not turned on yet.', 'error'); navigate({}, true); return chooser(); }
+      createDraft({ method: method });
+    };
+  }
+  Builder.screens.recurring = portfolioEntry('recurring');
+  Builder.screens.tour = portfolioEntry('tour');
+  Builder.screens.series = portfolioEntry('series');
+
+  /** Schedule (recurring) or stop list (tour/series) cards for the info step. */
+  Builder.portfolioCards = function (tzSelect) {
+    var st = S.draft.state;
+    if (st.method !== 'recurring') return Builder.stopCards ? Builder.stopCards(tzSelect) : [];
+    return [recurrenceCard(tzSelect)];
+  };
+
+  function recurrenceCard(tzSelect) {
+    var st = S.draft.state, rec = st.portfolio.recurrence;
+    var cal = h('div', { class: 'eb-cal-wrap', 'aria-live': 'polite' });
+    var refresh = debounce(function () { flush().then(loadDates); }, 700);
+    function setRec(key, value, rerender) {
+      set('portfolio.recurrence.' + key, value);
+      if (key === 'start') set('event.date', value);
+      if (key === 'dates') set('event.date', value.slice().sort()[0] || '');
+      if (rerender) renderBuilder(); else refresh();
+    }
+    function loadDates() {
+      clear(cal);
+      append(cal, h('div', { class: 'eb-skeleton' }, [h('span'), h('span')]));
+      api('organizer/builder/drafts/' + S.draft.id + '/dates').then(function (p) {
+        clear(cal);
+        var summary = p.count ? p.count + ' date' + (p.count === 1 ? '' : 's') + ' · ' + fmtDate(p.first) + (p.count > 1 ? ' – ' + fmtDate(p.last) : '') : 'No upcoming dates yet';
+        append(cal, [
+          h('div', { class: 'eb-cal-summary' }, [h('strong', { text: summary }), h('span', { class: 'eb-help', text: p.deadline })]),
+          p.capped ? h('p', { class: 'eb-help', text: 'Up to 52 dates are created at a time. You can add more later from the series page.' }) : null,
+          h('div', { class: 'eb-cal', 'data-testid': 'eb-cal' }, p.occurrences.map(function (o) {
+            var d = new Date(o.date + 'T12:00:00');
+            var skip = o.excluded;
+            var btn = h('button', { type: 'button', class: 'eb-cal__day', 'data-skip': skip ? 'true' : 'false', 'data-past': o.past ? 'true' : 'false', disabled: o.past, 'aria-pressed': skip ? 'false' : 'true', 'aria-label': fmtDate(o.date) + (skip ? ', skipped' : '') + (o.conflict ? ', you already have ' + o.conflict : ''), onclick: function () {
+              var ex = (S.draft.state.portfolio.recurrence.exclude || []).slice();
+              var i = ex.indexOf(o.date);
+              if (i >= 0) ex.splice(i, 1); else ex.push(o.date);
+              setRec('exclude', ex);
+            } }, [
+              h('span', { class: 'eb-help', text: d.toLocaleDateString(undefined, { weekday: 'short' }) }),
+              h('strong', { text: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }),
+              h('span', { class: 'eb-cal__state', text: o.past ? 'Past' : skip ? 'Skipped' : o.conflict ? 'You have an event' : (st.event.start_time || 'Included') })
+            ]);
+            if (o.conflict) btn.setAttribute('title', 'You already have ' + o.conflict + ' on this date');
+            return btn;
+          })),
+          p.occurrences.length ? h('p', { class: 'eb-help', text: 'Tap a date to skip it. Each date becomes its own event with its own vendors and payments.' }) : null
+        ]);
+      }).catch(function (e) { clear(cal); append(cal, h('p', { class: 'eb-help', role: 'status', text: e.message })); });
+    }
+
+    var freq = h('div', { class: 'eb-seg', role: 'group', 'aria-label': 'Repeats' }, [['weekly', 'Weekly'], ['biweekly', 'Every 2 weeks'], ['monthly_weekday', 'Monthly (same weekday)'], ['monthly_date', 'Monthly (same date)'], ['custom', 'Pick dates']].map(function (f) {
+      return h('button', { type: 'button', 'aria-pressed': rec.frequency === f[0] ? 'true' : 'false', text: f[1], onclick: function () { setRec('frequency', f[0], true); } });
+    }));
+    var body = [h('div', { class: 'eb-field' }, [h('span', { class: 'eb-field__label', text: 'Repeats' }), freq])];
+
+    if (rec.frequency === 'custom') {
+      var add = h('input', { type: 'date', class: 'eb-input', 'aria-label': 'Add a date', min: new Date().toISOString().slice(0, 10) });
+      var chips = h('div', { class: 'eb-method__meta' }, (rec.dates || []).slice().sort().map(function (dt) {
+        return h('span', { class: 'eb-chip eb-chip--line' }, [fmtDate(dt), h('button', { type: 'button', class: 'eb-iconbtn eb-iconbtn--xs', 'aria-label': 'Remove ' + fmtDate(dt), onclick: function () { setRec('dates', rec.dates.filter(function (x) { return x !== dt; }), true); } }, icon('close'))]);
+      }));
+      body.push(h('div', { class: 'eb-field' }, [h('span', { class: 'eb-field__label', text: 'Dates' }), h('div', { class: 'eb-import-input' }, [add, h('button', { type: 'button', class: 'eb-btn', text: 'Add date', onclick: function () {
+        if (!add.value || (rec.dates || []).indexOf(add.value) >= 0) return;
+        setRec('dates', (rec.dates || []).concat([add.value]), true);
+      } })]), chips]));
+    } else {
+      if (rec.frequency === 'weekly' || rec.frequency === 'biweekly') {
+        var start = rec.start || st.event.date;
+        var fallback = start ? JS_DAY[new Date(start + 'T12:00:00').getDay()] : '';
+        var days = rec.weekdays && rec.weekdays.length ? rec.weekdays : (fallback ? [fallback] : []);
+        body.push(h('div', { class: 'eb-field' }, [h('span', { class: 'eb-field__label', text: 'On' }), h('div', { class: 'eb-dow', role: 'group', 'aria-label': 'Days of the week' }, WEEKDAYS.map(function (w) {
+          return h('button', { type: 'button', class: 'eb-chip', 'aria-pressed': days.indexOf(w[0]) >= 0 ? 'true' : 'false', text: w[1], onclick: function () {
+            var next = days.indexOf(w[0]) >= 0 ? days.filter(function (x) { return x !== w[0]; }) : days.concat([w[0]]);
+            setRec('weekdays', next, true);
+          } });
+        }))]));
+      }
+      var endsCount = !rec.until;
+      body.push(h('div', { class: 'eb-grid' }, [
+        field('First date', h('input', { type: 'date', class: 'eb-input', value: rec.start || st.event.date || '', onchange: function (e) { setRec('start', e.target.value, rec.frequency === 'weekly' || rec.frequency === 'biweekly'); } }), { required: true, check: 'date' }),
+        h('div', { class: 'eb-field' }, [h('span', { class: 'eb-field__label', text: 'Ends' }), h('div', { class: 'eb-seg' }, [['count', 'After a number of dates'], ['until', 'On a date']].map(function (o) {
+          return h('button', { type: 'button', 'aria-pressed': (o[0] === 'count') === endsCount ? 'true' : 'false', text: o[1], onclick: function () {
+            if (o[0] === 'count') { set('portfolio.recurrence.until', ''); setRec('count', rec.count || 8, true); }
+            else { set('portfolio.recurrence.count', 0); setRec('until', rec.until || '', true); }
+          } });
+        }))]),
+        endsCount
+          ? field('Number of dates', h('input', { type: 'number', class: 'eb-input', min: 1, max: 52, inputmode: 'numeric', value: rec.count || '', onchange: function (e) { setRec('count', Math.min(52, Math.max(1, parseInt(e.target.value, 10) || 1))); } }), { help: 'Up to 52 at a time.' })
+          : field('Last date', h('input', { type: 'date', class: 'eb-input', value: rec.until || '', onchange: function (e) { setRec('until', e.target.value); } }))
+      ]));
+    }
+    body.push(h('div', { class: 'eb-grid' }, [
+      field('Start time', textInput('event.start_time', { type: 'time', oninput: refresh }), { optional: true }),
+      field('End time', textInput('event.end_time', { type: 'time' }), { optional: true }),
+      field('Time zone', tzSelect, { help: 'Every date uses this local time zone.' })
+    ]));
+    body.push(cal);
+    setTimeout(loadDates, 0);
+    return card('Schedule', 'Set the pattern once. Review every date before anything is created.', h('div', { class: 'eb-sched' }, body), { testid: 'eb-schedule' });
+  }
+
+  function confirmPortfolio(st, sum) {
+    var d;
+    var dates = st.method === 'recurring' ? null : st.portfolio.stops.filter(function (s) { return !s.skip; });
+    var go = function () {
+      d = dialog({
+        title: 'Publish this ' + PF_LABEL[st.method] + '?',
+        body: [
+          h('dl', { class: 'eb-kv' }, [
+            kv(st.method === 'recurring' ? 'Dates' : 'Stops', dates ? String(dates.length) : (S.pfDates ? String(S.pfDates.count) : '—')),
+            kv('Vendor options per date', String(sum.types)),
+            kv('Spaces per date', String(sum.spaces)),
+            kv('Goes live', st.portfolio.publish_mode === 'drafts' ? 'Saved as drafts' : (st.method === 'recurring' ? 'All dates, right away' : (dates.filter(function (s) { return s.publish; }).length + ' stop(s) right away')))
+          ]),
+          h('p', { class: 'eb-help', text: 'Each date is a separate event: vendors apply, pay and check in per date. Bookings are never shared between dates.' })
+        ],
+        foot: [
+          h('button', { type: 'button', class: 'eb-btn', text: 'Keep editing', onclick: function () { d.close(false); } }),
+          h('button', { type: 'button', class: 'eb-btn eb-btn--primary', 'data-testid': 'eb-confirm-publish', text: st.portfolio.publish_mode === 'drafts' ? 'Create dates' : 'Publish', onclick: function (e) { e.target.disabled = true; d.close(true); doPublish(); } })
+        ]
+      });
+    };
+    if (st.method !== 'recurring') return go();
+    api('organizer/builder/drafts/' + S.draft.id + '/dates').then(function (p) { S.pfDates = p; go(); }).catch(function () { S.pfDates = null; go(); });
+  }
+
+  Builder.portfolioSuccess = function (r) {
+    navigate({}, true);
+    var noun = { recurring: 'series', tour: 'tour', series: 'series' }[r.type] || 'series';
+    screen(h('div', { class: 'eb-success', 'data-testid': 'eb-success' }, [
+      h('div', { class: 'eb-success__hero' }, [
+        h('div', { style: 'position:relative;z-index:1' }, [
+          h('span', { class: 'eb-chip', text: r.live ? '✓ ' + r.live + ' live' : '✓ Created' }),
+          h('h1', { style: 'margin-top:12px', text: r.title }),
+          h('p', { text: r.background
+            ? 'Your ' + r.dates + ' dates are being created in the background. Open the ' + noun + ' to watch progress and publish.'
+            : r.dates + ' date' + (r.dates === 1 ? '' : 's') + ' created' + (r.live ? ', ' + r.live + ' published.' : ' as drafts — publish them from the ' + noun + ' page when ready.') + (r.not_ready ? ' ' + r.not_ready + ' need details before they can go live.' : '') }),
+          h('div', { class: 'eb-notice__actions', style: 'margin-top:16px' }, [
+            h('a', { class: 'eb-btn eb-btn--primary', href: r.tour_url, text: 'Open ' + noun }),
+            r.public_url ? h('a', { class: 'eb-btn', href: r.public_url, target: '_blank', rel: 'noopener', text: 'View public page' }) : null
+          ])
+        ])
+      ]),
+      h('div', {}, h('a', { class: 'eb-link', href: cfg.urls.create, text: 'Create another event' }))
+    ]));
   };
 
   /* ------------------------------------------------------------------ bulk import (Phase 8) */

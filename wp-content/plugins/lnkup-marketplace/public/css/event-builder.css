@@ -415,6 +415,20 @@ button.eb-chip[aria-pressed="true"] { background: var(--eb-ink); color: #fff; bo
   .eb-pick--image { grid-template-columns: auto 72px minmax(0, 1fr); }
   .eb-pick--image img { width: 72px; height: 52px; }
 }
+.eb-sched { display: grid; gap: 16px; }
+.eb-dow { display: flex; gap: 6px; flex-wrap: wrap; }
+.eb-dow .eb-chip { min-width: 52px; justify-content: center; padding: 7px 10px; cursor: pointer; border-color: var(--eb-line-strong); background: var(--eb-surface); }
+.eb-dow .eb-chip[aria-pressed="true"] { background: var(--eb-ink); color: #fff; border-color: var(--eb-ink); }
+.eb-cal-wrap { display: grid; gap: 10px; padding-top: 4px; border-top: 1px solid var(--eb-line); }
+.eb-cal-summary { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; justify-content: space-between; padding-top: 12px; }
+button.eb-cal__day { font: inherit; text-align: left; cursor: pointer; color: var(--eb-ink); transition: border-color .15s, background .15s; }
+button.eb-cal__day:hover:not(:disabled) { border-color: var(--eb-ink); }
+button.eb-cal__day[aria-pressed="true"] { border-color: color-mix(in srgb, var(--eb-lime) 70%, var(--eb-ink)); background: var(--eb-lime-soft); }
+button.eb-cal__day:disabled { cursor: not-allowed; opacity: .5; }
+.eb-cal__day[data-skip="true"] .eb-cal__state { color: var(--eb-muted); }
+.eb-cal__state { font-size: 12px; font-weight: 650; color: var(--eb-muted); }
+.eb-iconbtn--xs { width: 20px; height: 20px; padding: 0; border: 0; background: transparent; display: inline-grid; place-items: center; cursor: pointer; }
+.eb-iconbtn--xs svg { width: 12px; height: 12px; }
 .eb-bulk { display: grid; gap: 16px; padding-bottom: 24px; }
 .eb-bulk > .eb-seg { justify-self: start; max-width: 100%; }
 .eb-bulk__body { display: grid; gap: 14px; }

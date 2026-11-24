@@ -555,6 +555,7 @@ class LNKup_Portfolio_Tours {
 				update_post_meta( $event_id, '_lnkup_template_version_id', $template_version );
 			}
 			LNKup_Portfolio_Audit::log( 'event', $event_id, 'stop_created', array( 'tour_id' => (int) $tour_id, 'key' => $clean['key'] ), (int) get_post_meta( $tour_id, '_lnkup_organizer_user_id', true ) );
+			do_action( 'lnkup_portfolio_stop_created', $event_id, (int) $tour_id, $row );
 		}
 		return array(
 			'index'    => $index,

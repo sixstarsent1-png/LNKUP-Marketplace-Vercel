@@ -72,6 +72,7 @@ class LNKup_Event_Builder_REST {
 		register_rest_route( self::NS, self::BASE . '/drafts/(?P<id>\d+)/review', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'review' ), 'permission_callback' => $draft, 'args' => $id ) );
 		register_rest_route( self::NS, self::BASE . '/drafts/(?P<id>\d+)/apply-template', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'apply_template' ), 'permission_callback' => $draft, 'args' => $id ) );
 		register_rest_route( self::NS, self::BASE . '/drafts/(?P<id>\d+)/publish', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'publish' ), 'permission_callback' => $draft, 'args' => $id ) );
+		register_rest_route( self::NS, self::BASE . '/drafts/(?P<id>\d+)/dates', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'dates' ), 'permission_callback' => $draft, 'args' => $id ) );
 		register_rest_route( self::NS, self::BASE . '/events/(?P<id>\d+)/edit', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'edit_event' ), 'permission_callback' => $can, 'args' => $id ) );
 		register_rest_route( self::NS, self::BASE . '/fee-preview', array( 'methods' => 'POST', 'callback' => array( __CLASS__, 'fee_preview' ), 'permission_callback' => $can ) );
 		register_rest_route( self::NS, self::BASE . '/recommendations', array( 'methods' => 'GET', 'callback' => array( __CLASS__, 'recommendations' ), 'permission_callback' => $can ) );
@@ -327,6 +328,17 @@ class LNKup_Event_Builder_REST {
 	 */
 	public static function review( WP_REST_Request $request ): WP_REST_Response {
 		return rest_ensure_response( LNKup_Event_Builder_Editor::review( (int) $request['id'] ) );
+	}
+
+	/**
+	 * Dates a recurring draft would create.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function dates( WP_REST_Request $request ) {
+		$draft = LNKup_Event_Builder_Drafts::get( (int) $request['id'] );
+		$out   = LNKup_Event_Builder_Portfolio::preview( $draft['state'], get_current_user_id() );
+		return is_wp_error( $out ) ? $out : rest_ensure_response( $out );
 	}
 
 	/**

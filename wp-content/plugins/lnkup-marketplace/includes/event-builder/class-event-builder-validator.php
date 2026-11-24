@@ -36,8 +36,12 @@ class LNKup_Event_Builder_Validator {
 		$clean = '' === $ev['name'] || ! preg_match( '/\s[|@]\s?|\s\|\s/', $ev['name'] );
 		$add( 'name_clean', 'info', 'recommended', $clean, __( 'Clean event name', 'lnkup-marketplace' ), __( 'Keep the name to the event itself. City, venue and date are shown separately.', 'lnkup-marketplace' ) );
 
-		$date_ok = '' !== $ev['date'] && ! $ev['date_tba'];
-		$add( 'date', 'info', 'required', $date_ok, __( 'Event date', 'lnkup-marketplace' ), $ev['date_tba'] ? __( 'Choose the date before publishing. You can keep "Date TBA" while it is a draft.', 'lnkup-marketplace' ) : __( 'Choose the event date.', 'lnkup-marketplace' ) );
+		// Tours and series carry dates and places on each stop instead of the event.
+		$per_stop = in_array( $state['method'], array( 'tour', 'series' ), true );
+		$date_ok  = ! $per_stop && '' !== $ev['date'] && ! $ev['date_tba'];
+		if ( ! $per_stop ) {
+			$add( 'date', 'info', 'required', $date_ok, __( 'Event date', 'lnkup-marketplace' ), $ev['date_tba'] ? __( 'Choose the date before publishing. You can keep "Date TBA" while it is a draft.', 'lnkup-marketplace' ) : __( 'Choose the event date.', 'lnkup-marketplace' ) );
+		}
 		if ( $date_ok ) {
 			$add( 'date_future', 'info', 'required', self::last_day( $ev ) >= $today, __( 'Date is upcoming', 'lnkup-marketplace' ), __( 'This date has already passed.', 'lnkup-marketplace' ) );
 			// Without an end date, an end time earlier than the start is an overnight event.
@@ -46,14 +50,16 @@ class LNKup_Event_Builder_Validator {
 			$add( 'date_order', 'info', 'required', $order_ok, __( 'End is after start', 'lnkup-marketplace' ), __( 'The event ends before it starts.', 'lnkup-marketplace' ) );
 		}
 
-		$location = self::location( $ev );
-		$add( 'location', 'info', 'required', 'ok' === $location['state'], __( 'Location', 'lnkup-marketplace' ), (string) $location['message'] );
-		$conflict = self::geo_conflict( $state, $location );
-		$add( 'geo_conflict', 'info', 'required', '' === $conflict || $ev['location_confirmed'], __( 'Location matches the event', 'lnkup-marketplace' ), $conflict );
-		if ( $state['duplicate_of'] ) {
-			$add( 'confirm_location', 'info', 'required', in_array( 'location', $state['confirmed'], true ), __( 'Location confirmed for this copy', 'lnkup-marketplace' ), __( 'Confirm the city and venue for this new event. Copies never keep the old location silently.', 'lnkup-marketplace' ) );
+		$location = $per_stop ? array( 'state' => 'skipped', 'message' => '' ) : self::location( $ev );
+		if ( ! $per_stop ) {
+			$add( 'location', 'info', 'required', 'ok' === $location['state'], __( 'Location', 'lnkup-marketplace' ), (string) $location['message'] );
+			$conflict = self::geo_conflict( $state, $location );
+			$add( 'geo_conflict', 'info', 'required', '' === $conflict || $ev['location_confirmed'], __( 'Location matches the event', 'lnkup-marketplace' ), $conflict );
+			if ( $state['duplicate_of'] ) {
+				$add( 'confirm_location', 'info', 'required', in_array( 'location', $state['confirmed'], true ), __( 'Location confirmed for this copy', 'lnkup-marketplace' ), __( 'Confirm the city and venue for this new event. Copies never keep the old location silently.', 'lnkup-marketplace' ) );
+			}
+			$add( 'venue', 'info', 'recommended', '' !== $ev['venue_name'] || $ev['venue_tba'], __( 'Venue', 'lnkup-marketplace' ), __( 'Add the venue or mark it as TBA.', 'lnkup-marketplace' ) );
 		}
-		$add( 'venue', 'info', 'recommended', '' !== $ev['venue_name'] || $ev['venue_tba'], __( 'Venue', 'lnkup-marketplace' ), __( 'Add the venue or mark it as TBA.', 'lnkup-marketplace' ) );
 		$add( 'image', 'info', 'recommended', $ev['featured_image_id'] > 0 || $ev['flyer_id'] > 0, __( 'Event image', 'lnkup-marketplace' ), __( 'Events with a photo or flyer get more applications. A branded image is used until you add one.', 'lnkup-marketplace' ) );
 		$add( 'description', 'info', 'recommended', mb_strlen( $ev['description'] ) >= 80, __( 'Description', 'lnkup-marketplace' ), __( 'Tell vendors what the event is like and who attends.', 'lnkup-marketplace' ) );
 		$add( 'attendance', 'info', 'optional', 'unknown' !== $ev['attendance']['mode'], __( 'Expected attendance', 'lnkup-marketplace' ), __( 'Optional. An estimate helps vendors decide.', 'lnkup-marketplace' ) );
@@ -104,6 +110,11 @@ class LNKup_Event_Builder_Validator {
 			: '';
 		if ( '' !== $conflict || '' !== $state['import']['conflict'] ) {
 			$add( 'ownership', 'publish', 'required', false, __( 'Event ownership', 'lnkup-marketplace' ), '' !== $conflict ? $conflict : $state['import']['conflict'] );
+		}
+		if ( class_exists( 'LNKup_Event_Builder_Portfolio' ) && LNKup_Event_Builder_Portfolio::is_portfolio( $state ) ) {
+			foreach ( LNKup_Event_Builder_Portfolio::checks( $state, $user_id ) as $c ) {
+				$add( $c['key'], $c['step'], 'required', $c['ok'], $c['label'], $c['message'] );
+			}
 		}
 		if ( 'schedule' === $state['publish']['when'] ) {
 			$add( 'schedule', 'publish', 'required', '' !== $state['publish']['at'] && $state['publish']['at'] > current_time( 'Y-m-d\TH:i' ), __( 'Publish time', 'lnkup-marketplace' ), __( 'Choose a publish time in the future.', 'lnkup-marketplace' ) );

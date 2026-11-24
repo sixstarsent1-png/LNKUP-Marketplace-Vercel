@@ -411,6 +411,7 @@ $lnkup_core_files = array(
 	'includes/event-builder/class-event-builder-publisher.php',
 	'includes/event-builder/class-event-builder-editor.php',
 	'includes/event-builder/class-event-builder-library.php',
+	'includes/event-builder/class-event-builder-portfolio.php',
 	'includes/event-builder/class-event-builder-rest.php',
 	'includes/event-import/class-safe-fetch.php',
 	'includes/event-import/class-import-provider-registry.php',
@@ -640,6 +641,7 @@ function lnkup_marketplace_init() {
 	LNKup_Marketing_Admin::init();
 	LNKup_Event_Builder_Drafts::init();
 	LNKup_Event_Builder_Publisher::init();
+	LNKup_Event_Builder_Portfolio::init();
 	LNKup_Event_Builder_REST::init();
 	LNKup_Event_Builder_View::init();
 	LNKup_Event_Import_Tables::init();
