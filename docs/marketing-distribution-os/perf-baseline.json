@@ -1,0 +1,94 @@
+{
+  "base": "http://localhost:8888",
+  "at": "2026-11-24T06:41:04.710Z",
+  "results": [
+    {
+      "path": "/",
+      "width": 390,
+      "status": 200,
+      "lcp": 8268,
+      "cls": 0.002,
+      "ttfb": 8046,
+      "kb": 312,
+      "requests": 23,
+      "dom": 858
+    },
+    {
+      "path": "/lnkup_event/dirty-south-rodeo-festival-charlotte-nc/",
+      "width": 390,
+      "status": 200,
+      "lcp": 6744,
+      "cls": 0.001,
+      "ttfb": 6632,
+      "kb": 144,
+      "requests": 21,
+      "dom": 465
+    },
+    {
+      "path": "/markets/charlotte/",
+      "width": 390,
+      "status": 200,
+      "lcp": 6528,
+      "cls": 0,
+      "ttfb": 6285,
+      "kb": 1948,
+      "requests": 21,
+      "dom": 798
+    },
+    {
+      "path": "/opportunities/",
+      "width": 390,
+      "status": 200,
+      "lcp": 4360,
+      "cls": 0,
+      "ttfb": 4163,
+      "kb": 379,
+      "requests": 34,
+      "dom": 1205
+    },
+    {
+      "path": "/",
+      "width": 1440,
+      "status": 200,
+      "lcp": 6424,
+      "cls": 0.022,
+      "ttfb": 6236,
+      "kb": 340,
+      "requests": 23,
+      "dom": 858
+    },
+    {
+      "path": "/lnkup_event/dirty-south-rodeo-festival-charlotte-nc/",
+      "width": 1440,
+      "status": 200,
+      "lcp": 4608,
+      "cls": 0.001,
+      "ttfb": 4419,
+      "kb": 502,
+      "requests": 27,
+      "dom": 465
+    },
+    {
+      "path": "/markets/charlotte/",
+      "width": 1440,
+      "status": 200,
+      "lcp": 4416,
+      "cls": 0,
+      "ttfb": 4016,
+      "kb": 1953,
+      "requests": 23,
+      "dom": 798
+    },
+    {
+      "path": "/opportunities/",
+      "width": 1440,
+      "status": 200,
+      "lcp": 6992,
+      "cls": 0.001,
+      "ttfb": 6762,
+      "kb": 480,
+      "requests": 41,
+      "dom": 1205
+    }
+  ]
+}
