@@ -96,7 +96,7 @@ class LNKup_Organizer_Marketing {
 					'logo'        => $logo_id ? self::local_image( (string) wp_get_attachment_image_url( $logo_id, 'medium' ) ) : '',
 					'profile_url' => class_exists( 'LNKup_Organizer_Onboarding' ) ? LNKup_Organizer_Onboarding::organizer_public_url( $user_id ) : '',
 				),
-				'channels'  => LNKup_Tracking_Links::CHANNELS,
+				'channels'  => array_values( array_diff( LNKup_Tracking_Links::CHANNELS, array( 'app' ) ) ),
 				'copy'      => self::copy_templates(),
 				'embed'     => array(
 					'apply_script' => LNKUP_PLUGIN_URL . 'public/js/embed.js',

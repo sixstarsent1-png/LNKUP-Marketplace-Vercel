@@ -89,7 +89,7 @@ class LNKup_App_Promo {
 		if ( '' !== $context ) {
 			$url = add_query_arg( 'ct', 'lnkup-' . $context, $url );
 		}
-		return $url;
+		return (string) apply_filters( 'lnkup_app_store_url', $url, $context );
 	}
 
 	/**

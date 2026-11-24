@@ -19,11 +19,12 @@ import { Body, DisplayTitle, Meta, SectionTitle } from "@/components/ui/typograp
 import { isLiveApiEnabled } from "@/lib/api/config"
 import { useAuth } from "@/lib/auth/auth-context"
 import type { HomeHref } from "@/lib/auth/roles"
+import { clearPendingAttribution, pickAttribution, readPendingAttribution } from "@/lib/navigation/pending-attribution"
 import { constrainedColumnStyle, useBreakpoint } from "@/lib/layout/use-breakpoint"
 import { colors, fonts, layout, radii, spacing, typeScale } from "@/lib/theme"
 
 export default function SignupScreen() {
-  const params = useLocalSearchParams<{ role?: string }>()
+  const params = useLocalSearchParams<{ role?: string; ref?: string; org_ref?: string; cc?: string }>()
   const {
     isAuthenticated,
     isLoading,
@@ -95,7 +96,12 @@ export default function SignupScreen() {
 
     setSubmitting(true)
     try {
+      const attribution = {
+        ...(await readPendingAttribution()),
+        ...pickAttribution({ ref: params.ref, org_ref: params.org_ref, cc: params.cc }),
+      }
       await register({
+        attribution,
         email,
         password,
         passwordConfirm,
@@ -106,6 +112,7 @@ export default function SignupScreen() {
         city,
         state: stateCode,
       })
+      void clearPendingAttribution()
       router.replace(role === "organizer" ? "/(organizer)" : "/(vendor)")
     } catch {
       // lastError set by AuthProvider

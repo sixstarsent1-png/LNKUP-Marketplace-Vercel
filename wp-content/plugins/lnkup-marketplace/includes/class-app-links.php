@@ -53,6 +53,8 @@ class LNKup_App_Links {
 	private static function apple_payload() {
 		$app_id = self::TEAM_ID . '.' . self::BUNDLE_ID;
 		$paths  = array( '/vendors', '/vendors/', '/organizers', '/organizers/' );
+		$extra  = apply_filters( 'lnkup_app_links_paths', $paths );
+		$paths  = is_array( $extra ) ? array_values( array_map( 'strval', $extra ) ) : $paths;
 		return array(
 			'applinks' => array(
 				'apps'    => array(),
@@ -63,12 +65,7 @@ class LNKup_App_Links {
 					),
 					array(
 						'appIDs'     => array( $app_id ),
-						'components' => array(
-							array( '/' => '/vendors' ),
-							array( '/' => '/vendors/' ),
-							array( '/' => '/organizers' ),
-							array( '/' => '/organizers/' ),
-						),
+						'components' => array_map( static fn( $path ) => array( '/' => $path ), $paths ),
 					),
 				),
 			),

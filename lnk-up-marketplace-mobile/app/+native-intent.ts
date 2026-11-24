@@ -1,30 +1,12 @@
-function firstParam(value: string | null): string {
-  return (value ?? "").trim()
-}
+import { mapSystemPath } from "@/lib/navigation/deep-link-map"
+import { attributionFromUrl, savePendingAttribution } from "@/lib/navigation/pending-attribution"
 
 /**
- * Website profile links open the in-app storefront when the app is installed.
- * Paths stay off /vendors so they do not collide with the organizer Vendors tab.
+ * Website links open the matching in-app screen when the app is installed. Campaign and referral
+ * parameters on the link are remembered for signup.
  */
 export function redirectSystemPath({ path }: { path: string; initial: boolean }): string {
-  try {
-    const url = new URL(path, "https://thelnkup.com")
-    const pathname = url.pathname.replace(/\/+$/, "") || "/"
-    const vendor = firstParam(url.searchParams.get("vendor"))
-    if ((pathname === "/vendors" || pathname === "/storefront/vendor") && vendor) {
-      return `/storefront/vendor?vendor=${encodeURIComponent(vendor)}`
-    }
-    const organizer = firstParam(url.searchParams.get("organizer"))
-    if ((pathname === "/organizers" || pathname === "/storefront/organizer") && organizer) {
-      return `/storefront/organizer?organizer=${encodeURIComponent(organizer)}`
-    }
-    if (pathname === "/opportunities") {
-      const apply = firstParam(url.searchParams.get("apply"))
-      if (/^\d+$/.test(apply)) return `/opportunity/${apply}`
-      return "/(vendor)/find"
-    }
-    return path
-  } catch {
-    return path
-  }
+  const attribution = attributionFromUrl(path)
+  if (Object.keys(attribution).length > 0) void savePendingAttribution(attribution)
+  return mapSystemPath(path)
 }

@@ -25,7 +25,7 @@ class LNKup_Tracking_Links {
 	const QUERY_VAR = 'lnkup_link';
 	const TARGETS   = array( 'event', 'opportunity', 'tour', 'organizer', 'market', 'category', 'signup', 'feed', 'home' );
 	const OWNERS    = array( 'organizer', 'connector', 'partner', 'vendor', 'staff' );
-	const CHANNELS  = array( 'instagram', 'facebook', 'tiktok', 'x', 'linkedin', 'email', 'sms', 'whatsapp', 'qr', 'print', 'website', 'partner', 'other' );
+	const CHANNELS  = array( 'instagram', 'facebook', 'tiktok', 'x', 'linkedin', 'email', 'sms', 'whatsapp', 'qr', 'print', 'website', 'partner', 'app', 'other' );
 	const STATUSES  = array( 'active', 'paused', 'archived' );
 	const MAX_PER_OWNER = 500;
 	const BOT_PATTERN   = '/bot|crawl|spider|slurp|preview|facebookexternalhit|embedly|quora link|whatsapp|telegrambot|discordbot|skypeuripreview|vkshare|pinterest|bitlybot|headless|lighthouse|python|curl|wget|httpclient|okhttp|go-http|java\//i';
@@ -263,7 +263,7 @@ class LNKup_Tracking_Links {
 
 	/* ------------------------------------------------------------ Targets */
 
-	private static function sanitize_key_for( string $type, string $key ): string {
+	public static function sanitize_key_for( string $type, string $key ): string {
 		switch ( $type ) {
 			case 'market':
 				return sanitize_title( $key );

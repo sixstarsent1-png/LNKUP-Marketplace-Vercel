@@ -87,7 +87,7 @@ class LNKup_Connector_Marketing {
 			array(
 				'connector' => array( 'name' => (string) ( $connector['display_name'] ?? '' ), 'market' => (string) ( $connector['market_slug'] ?? '' ) ),
 				'markets'   => self::markets( $connector ),
-				'channels'  => LNKup_Tracking_Links::CHANNELS,
+				'channels'  => array_values( array_diff( LNKup_Tracking_Links::CHANNELS, array( 'app' ) ) ),
 				'categories' => function_exists( 'lnkup_canonical_vendor_categories' ) ? lnkup_canonical_vendor_categories() : array(),
 			)
 		);

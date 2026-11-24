@@ -25,6 +25,7 @@ import { Surface } from "@/components/ui/surface"
 import { DisplayTitle, Meta, SectionTitle } from "@/components/ui/typography"
 import { newClientToken } from "@/lib/api/client-token"
 import { getOpportunityApplyUrl } from "@/lib/api/config"
+import { fetchShareLink } from "@/lib/api/deep-links"
 import { appErrorFromWp, type AppErrorShape } from "@/lib/api/errors"
 import { fetchOrganizerEventMoney, formatMoney, type OrganizerEventMoneySummary } from "@/lib/api/organizer-financial"
 import { LAUNCH_CATEGORIES } from "@/lib/api/organizer-launch"
@@ -378,8 +379,12 @@ export default function OrganizerEventWorkspaceScreen() {
       showToast("Add a vendor slot first so vendors have a link to apply.", "info")
       return
     }
-    const url = getOpportunityApplyUrl(oppId)
-    void Share.share({ message: `Apply to vend at ${event.title} on LNKup\n${url}`, url }).catch(() => undefined)
+    const fallback = getOpportunityApplyUrl(oppId)
+    const title = event.title
+    void (auth ? fetchShareLink(auth, { type: "opportunity", id: Number(oppId) }).then((link) => link.url) : Promise.reject(new Error("guest")))
+      .catch(() => fallback)
+      .then((url) => Share.share({ message: `Apply to vend at ${title} on LNKup\n${url}`, url }))
+      .catch(() => undefined)
   }
 
   const showLoader = initialLoad && !event

@@ -16,7 +16,7 @@
   var select = root.querySelector('[data-om-event]');
   var statusEl = root.querySelector('[data-om-status]');
 
-  var CHANNEL_LABELS = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', x: 'X', linkedin: 'LinkedIn', email: 'Email', sms: 'Text message', whatsapp: 'WhatsApp', qr: 'QR / print', print: 'Flyer', website: 'Website', partner: 'Partner', other: 'Other' };
+  var CHANNEL_LABELS = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', x: 'X', linkedin: 'LinkedIn', email: 'Email', sms: 'Text message', whatsapp: 'WhatsApp', qr: 'QR / print', print: 'Flyer', website: 'Website', partner: 'Partner', app: 'App share', other: 'Other' };
   var FORMATS = {
     portrait: { w: 1080, h: 1350, label: 'Instagram post (4:5)' },
     square: { w: 1080, h: 1080, label: 'Square (1:1)' },

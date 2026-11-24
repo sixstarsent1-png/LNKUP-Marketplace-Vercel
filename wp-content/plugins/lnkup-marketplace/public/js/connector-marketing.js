@@ -12,7 +12,7 @@
   var panel = document.querySelector('[data-connector-panel]');
   if (!panel || !cfg.rest) return;
 
-  var CHANNELS = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', x: 'X', linkedin: 'LinkedIn', email: 'Email', sms: 'Text message', whatsapp: 'WhatsApp', qr: 'QR / print', print: 'Flyer', website: 'Website', partner: 'Partner', other: 'Other' };
+  var CHANNELS = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', x: 'X', linkedin: 'LinkedIn', email: 'Email', sms: 'Text message', whatsapp: 'WhatsApp', qr: 'QR / print', print: 'Flyer', website: 'Website', partner: 'Partner', app: 'App share', other: 'Other' };
   var state = { ctx: null, links: [] };
 
   function api(path, opts) {

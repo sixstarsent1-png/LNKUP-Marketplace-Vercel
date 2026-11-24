@@ -13,8 +13,14 @@ export type MobileAnalyticsEventName =
   | "tutorial_push_cta_clicked"
   | "map_view_opened"
   | "map_pin_clicked"
+  | "deep_opportunity_opened"
+  | "share_link_copied"
+  | "apply_clicked"
 
 const ALLOWED_EVENTS = new Set<MobileAnalyticsEventName>([
+  "deep_opportunity_opened",
+  "share_link_copied",
+  "apply_clicked",
   "organizer_experiment_viewed",
   "organizer_experiment_recommendation_opened",
   "organizer_experiment_recommendation_action_clicked",

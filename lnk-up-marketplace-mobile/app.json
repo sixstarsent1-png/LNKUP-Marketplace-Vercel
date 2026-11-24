@@ -57,6 +57,31 @@
               "scheme": "https",
               "host": "thelnkup.com",
               "pathPrefix": "/opportunities"
+            },
+            {
+              "scheme": "https",
+              "host": "thelnkup.com",
+              "pathPrefix": "/events/"
+            },
+            {
+              "scheme": "https",
+              "host": "thelnkup.com",
+              "pathPrefix": "/markets/"
+            },
+            {
+              "scheme": "https",
+              "host": "thelnkup.com",
+              "pathPrefix": "/tours/"
+            },
+            {
+              "scheme": "https",
+              "host": "thelnkup.com",
+              "pathPrefix": "/series/"
+            },
+            {
+              "scheme": "https",
+              "host": "thelnkup.com",
+              "pathPrefix": "/l/"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
