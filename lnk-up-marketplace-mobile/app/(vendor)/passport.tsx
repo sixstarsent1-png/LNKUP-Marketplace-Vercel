@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from "expo-router"
+import { router, useLocalSearchParams, type Href } from "expo-router"
 import * as DocumentPicker from "expo-document-picker"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Image, Share, StyleSheet, Switch, TextInput, View } from "react-native"
@@ -192,7 +192,7 @@ function OverviewTab({ passport, onGo }: { passport: MyPassport; onGo: (tab: Pas
               <Meta>{[inv.organizerName, inv.eventDate].filter(Boolean).join(" · ")}</Meta>
             </View>
           ))}
-          <Button label="See invitations" size="sm" variant="secondary" onPress={() => router.push("/(vendor)/find")} />
+          <Button label="See invitations" size="sm" variant="secondary" onPress={() => router.push("/(vendor)/invitations" as Href)} />
         </Surface>
       ) : null}
     </>

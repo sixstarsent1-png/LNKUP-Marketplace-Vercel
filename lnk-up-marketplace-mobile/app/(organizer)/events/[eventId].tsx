@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Share, StyleSheet, View } from "react-native"
 import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-router"
 
+import { FillSlotsCard } from "@/components/fill-slots-card"
 import { IsoDatePickerField } from "@/components/iso-date-picker-field"
 import { OrganizerRequestCard } from "@/components/organizer-vendors/organizer-request-card"
 import { vendorProfileHref } from "@/components/organizer-vendors/vendor-queue"
@@ -448,6 +449,7 @@ export default function OrganizerEventWorkspaceScreen() {
                 <StatTile icon="card-outline" label="Awaiting pay" value={event.paymentRequiredCount ?? 0} onPress={() => setTab("payments")} />
                 <StatTile icon="ticket-outline" label="Confirmed" value={event.paidCount ?? 0} onPress={() => setTab("vendors")} />
               </StatGrid>
+              {state !== "draft" && state !== "past" ? <FillSlotsCard eventIds={[String(event.id)]} showEventTitle={false} /> : null}
               <ListGroup title="Next steps">
                 {pendingRequests.length > 0 ? (
                   <ListRow icon="people-outline" iconTone="accent" title={`Review ${pendingRequests.length} application${pendingRequests.length === 1 ? "" : "s"}`} meta="Approve, decline, waitlist or ask a question" onPress={() => router.push(inboxHref)} />

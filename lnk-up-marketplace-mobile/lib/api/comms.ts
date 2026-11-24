@@ -169,7 +169,7 @@ export type NextStep = {
   key: string
   title: string
   context: string
-  priority: "high" | "normal"
+  priority: "high" | "normal" | "low"
   count: number
   deepLink: string
 }

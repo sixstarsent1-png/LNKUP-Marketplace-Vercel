@@ -308,6 +308,32 @@ export async function fetchFindVendorsEnabled(auth: WpAuth): Promise<boolean> {
   return data.find_vendors_enabled === true
 }
 
+export const ORGANIZER_VENDOR_SECTIONS = [
+  "recommended",
+  "new_nearby",
+  "previously_booked",
+  "saved",
+  "recently_viewed",
+] as const
+
+export type OrganizerVendorSection = (typeof ORGANIZER_VENDOR_SECTIONS)[number]
+
+export const ORGANIZER_VENDOR_SECTION_LABELS: Record<OrganizerVendorSection, string> = {
+  recommended: "Recommended",
+  new_nearby: "New near you",
+  previously_booked: "Booked before",
+  saved: "Saved",
+  recently_viewed: "Recently viewed",
+}
+
+export const ORGANIZER_VENDOR_SECTION_EMPTY: Record<OrganizerVendorSection, string> = {
+  recommended: "No matching vendors yet. Add vendor categories and an address to your event, or share your application link.",
+  new_nearby: "No new matching vendors in the last two weeks. New vendors who match this event will appear here.",
+  previously_booked: "Vendors you booked before appear here when they match this event.",
+  saved: "Favorite vendors or add them to a list to see them here.",
+  recently_viewed: "Vendors whose profiles you open appear here.",
+}
+
 export type EventVendorMatches =
   | { status: "disabled" }
   | { status: "needs_open_opportunity" }
@@ -337,7 +363,7 @@ type WpEventVendorsResponse = {
 export async function fetchEventVendorMatches(
   auth: WpAuth,
   eventId: number,
-  filters: { category?: number; city?: string; verified?: boolean; page?: number } = {},
+  filters: { category?: number; city?: string; verified?: boolean; page?: number; perPage?: number; section?: OrganizerVendorSection } = {},
 ): Promise<EventVendorMatches> {
   if (!isLiveApiEnabled()) return { status: "disabled" }
   const data = await wpFetchJson<WpEventVendorsResponse>(`/match/organizer/events/${eventId}/vendors`, {
@@ -347,6 +373,8 @@ export async function fetchEventVendorMatches(
       city: filters.city || undefined,
       verified: filters.verified ? 1 : undefined,
       page: filters.page ?? 1,
+      per_page: filters.perPage,
+      section: filters.section && filters.section !== "recommended" ? filters.section : undefined,
       exclude_applied: 1,
     },
   })
@@ -372,6 +400,97 @@ export async function fetchEventVendorMatches(
       acceptsInvites: v.accept_invites !== false,
     })),
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Organizer: event slot fulfillment                                   */
+/* ------------------------------------------------------------------ */
+
+export type FulfillmentAction = {
+  key: string
+  label: string
+  cta: string
+  view: "find_vendors" | "applications" | "events" | "operations" | string
+}
+
+export type EventFulfillment = {
+  eventId: number
+  eventTitle: string
+  daysToEvent: number | null
+  daysToDeadline: number | null
+  capacity: number
+  held: number
+  paid: number
+  awaitingPayment: number
+  remaining: number
+  unlimitedSlots: number
+  openOpportunities: number
+  pendingReview: number
+  fillRate: number | null
+  categories: Array<{ key: string; label: string; remaining: number; unlimited: boolean; open: boolean }>
+  invites: { total: number; accepted: number; declined: number; applications: number }
+  matchingVendors: number
+  actions: FulfillmentAction[]
+}
+
+type WpFulfillment = {
+  event_id?: number
+  event_title?: string
+  days_to_event?: number | null
+  days_to_deadline?: number | null
+  fill_rate?: number | null
+  totals?: Partial<Record<"capacity" | "held" | "paid" | "awaiting_payment" | "remaining" | "unlimited" | "open_opportunities" | "pending_review", number>>
+  categories?: Array<{ key?: string; label?: string; remaining?: number; unlimited?: boolean; open?: boolean }>
+  invites?: { total?: number; applications?: number; by_status?: Record<string, number> }
+  matching_vendors?: number
+  actions?: Array<{ key?: string; label?: string; cta?: string; view?: string }>
+}
+
+export function mapFulfillment(data: WpFulfillment): EventFulfillment {
+  const t = data.totals ?? {}
+  return {
+    eventId: Number(data.event_id ?? 0),
+    eventTitle: data.event_title ?? "",
+    daysToEvent: data.days_to_event ?? null,
+    daysToDeadline: data.days_to_deadline ?? null,
+    capacity: Number(t.capacity ?? 0),
+    held: Number(t.held ?? 0),
+    paid: Number(t.paid ?? 0),
+    awaitingPayment: Number(t.awaiting_payment ?? 0),
+    remaining: Number(t.remaining ?? 0),
+    unlimitedSlots: Number(t.unlimited ?? 0),
+    openOpportunities: Number(t.open_opportunities ?? 0),
+    pendingReview: Number(t.pending_review ?? 0),
+    fillRate: data.fill_rate ?? null,
+    categories: (data.categories ?? []).map((c) => ({
+      key: c.key ?? "",
+      label: c.label ?? "",
+      remaining: Number(c.remaining ?? 0),
+      unlimited: Boolean(c.unlimited),
+      open: Boolean(c.open),
+    })),
+    invites: {
+      total: Number(data.invites?.total ?? 0),
+      accepted: Number(data.invites?.by_status?.accepted ?? 0),
+      declined: Number(data.invites?.by_status?.declined ?? 0),
+      applications: Number(data.invites?.applications ?? 0),
+    },
+    matchingVendors: Number(data.matching_vendors ?? 0),
+    actions: (data.actions ?? []).map((a) => ({ key: a.key ?? "", label: a.label ?? "", cta: a.cta ?? "", view: a.view ?? "" })),
+  }
+}
+
+/** Remaining spots by category, actions and invite outcomes for one of the organizer's events. */
+export async function fetchEventFulfillment(auth: WpAuth, eventId: number): Promise<EventFulfillment> {
+  const data = await wpFetchJson<WpFulfillment>(`/organizer/events/${eventId}/fulfillment`, { auth })
+  return mapFulfillment(data)
+}
+
+/** Open categories with spots left, e.g. "4 Food Vendor". */
+export function openCategoryLabels(fulfillment: EventFulfillment): string[] {
+  return fulfillment.categories
+    .filter((c) => c.open && (c.unlimited || c.remaining > 0) && c.key !== "_any")
+    .map((c) => (c.unlimited ? c.label : `${c.remaining} ${c.label}`))
 }
 
 export type InvitePreview = {

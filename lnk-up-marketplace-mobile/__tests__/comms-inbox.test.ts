@@ -25,8 +25,8 @@ describe("normalizeNotificationType", () => {
 
 describe("inboxTabsFor", () => {
   it("gives vendors an Opportunities tab and organizers an Operations tab", () => {
-    expect(inboxTabsFor("vendor").map((t) => t.value)).toEqual(["all", "applications", "payments", "events", "opportunities"])
-    expect(inboxTabsFor("organizer").map((t) => t.value)).toEqual(["all", "applications", "payments", "events", "operations"])
+    expect(inboxTabsFor("vendor").map((t) => t.value)).toEqual(["all", "applications", "payments", "events", "opportunities", "invitations", "account"])
+    expect(inboxTabsFor("organizer").map((t) => t.value)).toEqual(["all", "applications", "payments", "events", "operations", "invitations", "account"])
   })
 })
 

@@ -16,12 +16,16 @@ import { fetchOrganizerEvents, type OrganizerEventLite } from "@/lib/api/organiz
 import {
   fetchEventVendorMatches,
   fetchRecruitment,
+  ORGANIZER_VENDOR_SECTION_EMPTY,
+  ORGANIZER_VENDOR_SECTION_LABELS,
+  ORGANIZER_VENDOR_SECTIONS,
   previewInvites,
   sendBatchInvites,
   shortlistVendors,
   type EventVendorMatches,
   type InvitePreview,
   type MatchedVendor,
+  type OrganizerVendorSection,
   type RecruitmentSummary,
 } from "@/lib/api/match"
 import { useAuth } from "@/lib/auth/auth-context"
@@ -44,6 +48,7 @@ export default function OrganizerFindVendorsScreen() {
   const params = useLocalSearchParams<{ event?: string }>()
   const [events, setEvents] = useState<OrganizerEventLite[]>([])
   const [eventId, setEventId] = useState<number | null>(params.event ? Number(params.event) : null)
+  const [section, setSection] = useState<OrganizerVendorSection>("recommended")
   const [matches, setMatches] = useState<EventVendorMatches | null>(null)
   const [recruitment, setRecruitment] = useState<RecruitmentSummary | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -81,7 +86,7 @@ export default function OrganizerFindVendorsScreen() {
     setPreview(null)
     try {
       const [vendors, summary] = await Promise.all([
-        fetchEventVendorMatches(auth, eventId),
+        fetchEventVendorMatches(auth, eventId, { section }),
         fetchRecruitment(auth, eventId).catch(() => null),
       ])
       setMatches(vendors)
@@ -91,7 +96,7 @@ export default function OrganizerFindVendorsScreen() {
     } finally {
       setLoading(false)
     }
-  }, [auth, eventId])
+  }, [auth, eventId, section])
 
   useEffect(() => {
     void load()
@@ -193,6 +198,19 @@ export default function OrganizerFindVendorsScreen() {
         </ScrollView>
       ) : null}
 
+      {events.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.events} testID="find-vendor-sections">
+          {ORGANIZER_VENDOR_SECTIONS.map((key) => (
+            <FilterChip
+              key={key}
+              label={ORGANIZER_VENDOR_SECTION_LABELS[key]}
+              selected={key === section}
+              onPress={() => setSection(key)}
+            />
+          ))}
+        </ScrollView>
+      ) : null}
+
       {recruitment?.suggestions.length ? (
         <View testID="recruitment-suggestions" style={styles.suggestions}>
           {recruitment.suggestions.slice(0, 3).map((s) => (
@@ -241,8 +259,8 @@ export default function OrganizerFindVendorsScreen() {
       {!loading && !error && matches?.status === "ready" && vendors.length === 0 ? (
         <EmptyPanel
           icon="people-outline"
-          title="No matching vendors yet"
-          message="Add vendor categories and an address to your event, or share your application link."
+          title={section === "recommended" ? "No matching vendors yet" : `No ${ORGANIZER_VENDOR_SECTION_LABELS[section].toLowerCase()} vendors`}
+          message={ORGANIZER_VENDOR_SECTION_EMPTY[section]}
         />
       ) : null}
 

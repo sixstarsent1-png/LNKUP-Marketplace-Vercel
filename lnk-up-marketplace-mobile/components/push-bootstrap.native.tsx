@@ -1,4 +1,5 @@
 import { useEffect } from "react"
+import { AppState, type AppStateStatus } from "react-native"
 import * as Notifications from "expo-notifications"
 
 import { useAuth } from "@/lib/auth/auth-context"
@@ -99,10 +100,16 @@ export function PushBootstrap() {
     const responded = Notifications.addNotificationResponseReceivedListener(() => {
       setTimeout(flushOpened, 0)
     })
+    // Read elsewhere (web, another device) while the app was closed or backgrounded.
+    refreshBadge()
+    const appState = AppState.addEventListener("change", (next: AppStateStatus) => {
+      if (next === "active") refreshBadge()
+    })
 
     return () => {
       received.remove()
       responded.remove()
+      appState.remove()
     }
   }, [isAuthenticated, auth, session])
 

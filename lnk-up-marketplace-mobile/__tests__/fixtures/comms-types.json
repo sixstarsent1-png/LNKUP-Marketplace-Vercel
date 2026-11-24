@@ -1,0 +1,1322 @@
+{
+    "generated_by": "wp lnkup-comms export-types",
+    "version": "1.2.1",
+    "tabs": {
+        "vendor": [
+            "all",
+            "applications",
+            "payments",
+            "events",
+            "opportunities",
+            "invitations",
+            "account"
+        ],
+        "organizer": [
+            "all",
+            "applications",
+            "payments",
+            "events",
+            "operations",
+            "invitations",
+            "account"
+        ],
+        "partner": [
+            "all"
+        ]
+    },
+    "types": [
+        {
+            "type": "activation_create_event",
+            "triggers": [
+                "o_welcome",
+                "o_onboarding",
+                "o_setup_profile",
+                "o_publish_draft",
+                "o_publish_next",
+                "o_reactivation"
+            ],
+            "links": [
+                "org_launch",
+                "org_step",
+                "org_profile",
+                "org_event"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "activation_profile",
+            "triggers": [
+                "v_welcome",
+                "v_onboarding"
+            ],
+            "links": [
+                "vendor_profile",
+                "vendor_step"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "account",
+                "organizer": "account"
+            }
+        },
+        {
+            "type": "application_approved",
+            "triggers": [
+                "v_application_approved"
+            ],
+            "links": [
+                "approval"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "application_cancelled",
+            "triggers": [
+                "v_application_cancelled"
+            ],
+            "links": [
+                "booking"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "application_draft",
+            "triggers": [
+                "v_application_draft"
+            ],
+            "links": [
+                "opportunity"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "application_rejected",
+            "triggers": [
+                "v_application_rejected"
+            ],
+            "links": [
+                "booking"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "application_submitted",
+            "triggers": [
+                "v_application_submitted"
+            ],
+            "links": [
+                "booking"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "application_waitlisted",
+            "triggers": [
+                "v_application_waitlisted"
+            ],
+            "links": [
+                "booking"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "application_withdrawn",
+            "triggers": [
+                "v_application_withdrawn"
+            ],
+            "links": [
+                "booking"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "booth_assigned",
+            "triggers": [
+                "v_booth_assigned"
+            ],
+            "links": [
+                "pass"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "events"
+            }
+        },
+        {
+            "type": "checked_in",
+            "triggers": [
+                "v_checked_in"
+            ],
+            "links": [
+                "pass"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "events"
+            }
+        },
+        {
+            "type": "digest",
+            "triggers": [
+                "digest_email"
+            ],
+            "links": [
+                "home"
+            ],
+            "roles": [
+                "any"
+            ],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "discovery_almost_full",
+            "triggers": [],
+            "links": [],
+            "roles": [],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "opportunities"
+            }
+        },
+        {
+            "type": "discovery_deadline",
+            "triggers": [],
+            "links": [],
+            "roles": [],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "opportunities"
+            }
+        },
+        {
+            "type": "discovery_favorite_deadline",
+            "triggers": [
+                "v_saved_deadline"
+            ],
+            "links": [
+                "opportunity"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "discovery_favorite_organizer",
+            "triggers": [
+                "v_organizer_new_opportunity"
+            ],
+            "links": [
+                "opportunity"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "discovery_invite",
+            "triggers": [
+                "v_tour_invite",
+                "v_invited_to_apply"
+            ],
+            "links": [
+                "tour",
+                "opportunity"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "invitations",
+                "organizer": "invitations"
+            }
+        },
+        {
+            "type": "discovery_invite_expiring",
+            "triggers": [
+                "v_invite_expiring"
+            ],
+            "links": [
+                "vendor_invites"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "invitations",
+                "organizer": "invitations"
+            }
+        },
+        {
+            "type": "discovery_profile_match",
+            "triggers": [
+                "v_opportunity_match"
+            ],
+            "links": [
+                "opportunity"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "discovery_reactivation",
+            "triggers": [
+                "v_inactive"
+            ],
+            "links": [
+                "vendor_find"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "discovery_saved_search",
+            "triggers": [
+                "v_saved_search_match"
+            ],
+            "links": [
+                "vendor_saved_searches"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "discovery_tour_match",
+            "triggers": [
+                "v_tour_match"
+            ],
+            "links": [
+                "tour"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "discovery_weekly_matches",
+            "triggers": [
+                "v_weekly_matches"
+            ],
+            "links": [
+                "vendor_find"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "document_approved",
+            "triggers": [
+                "v_document_approved"
+            ],
+            "links": [
+                "documents"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "document_expiring",
+            "triggers": [
+                "v_document_expiring"
+            ],
+            "links": [
+                "documents"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "document_missing",
+            "triggers": [
+                "v_documents_needed"
+            ],
+            "links": [
+                "documents"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "document_rejected",
+            "triggers": [
+                "v_document_rejected"
+            ],
+            "links": [
+                "documents"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "event_cancelled",
+            "triggers": [
+                "v_event_cancelled"
+            ],
+            "links": [
+                "booking"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "events"
+            }
+        },
+        {
+            "type": "event_completed",
+            "triggers": [
+                "v_event_thanks"
+            ],
+            "links": [
+                "vendor_find"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "events"
+            }
+        },
+        {
+            "type": "event_logistics_changed",
+            "triggers": [
+                "v_logistics_changed"
+            ],
+            "links": [
+                "pass"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "events"
+            }
+        },
+        {
+            "type": "event_reminder",
+            "triggers": [
+                "v_countdown"
+            ],
+            "links": [
+                "pass"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "events"
+            }
+        },
+        {
+            "type": "info_requested",
+            "triggers": [
+                "v_info_requested"
+            ],
+            "links": [
+                "booking"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "organizer_announcement",
+            "triggers": [
+                "v_announcement"
+            ],
+            "links": [
+                "pass"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "organizer_application_withdrawn",
+            "triggers": [
+                "o_application_withdrawn"
+            ],
+            "links": [
+                "org_review"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "organizer_checkin_activity",
+            "triggers": [
+                "o_checkin_summary"
+            ],
+            "links": [
+                "org_checkin"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "events"
+            }
+        },
+        {
+            "type": "organizer_dispute_closed",
+            "triggers": [
+                "o_chargeback_closed"
+            ],
+            "links": [
+                "org_money"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "payments",
+                "organizer": "payments"
+            }
+        },
+        {
+            "type": "organizer_dispute_opened",
+            "triggers": [
+                "o_dispute_opened"
+            ],
+            "links": [
+                "org_money"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "payments",
+                "organizer": "payments"
+            }
+        },
+        {
+            "type": "organizer_document_shared",
+            "triggers": [
+                "o_document_shared"
+            ],
+            "links": [
+                "org_review"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "organizer_event_completed",
+            "triggers": [
+                "o_event_completed"
+            ],
+            "links": [
+                "org_event"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "events"
+            }
+        },
+        {
+            "type": "organizer_event_needs_attention",
+            "triggers": [
+                "o_countdown"
+            ],
+            "links": [
+                "org_event"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "events"
+            }
+        },
+        {
+            "type": "organizer_event_no_slots",
+            "triggers": [
+                "o_event_no_slots"
+            ],
+            "links": [
+                "org_event"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "account",
+                "organizer": "account"
+            }
+        },
+        {
+            "type": "organizer_event_published",
+            "triggers": [
+                "o_event_published"
+            ],
+            "links": [
+                "org_event"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "account",
+                "organizer": "account"
+            }
+        },
+        {
+            "type": "organizer_info_response",
+            "triggers": [
+                "o_info_response"
+            ],
+            "links": [
+                "org_review"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "organizer_invite_response",
+            "triggers": [
+                "o_invite_response"
+            ],
+            "links": [
+                "org_invites"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "invitations",
+                "organizer": "invitations"
+            }
+        },
+        {
+            "type": "organizer_new_vendor_request",
+            "triggers": [
+                "o_application_received",
+                "o_applications_grouped",
+                "o_pending_review"
+            ],
+            "links": [
+                "org_review"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "organizer_new_vendors_nearby",
+            "triggers": [
+                "o_new_vendors_nearby"
+            ],
+            "links": [
+                "org_find_vendors"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "organizer_open_spots",
+            "triggers": [
+                "o_open_spots"
+            ],
+            "links": [
+                "org_vendors"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "organizer_ops_summary",
+            "triggers": [
+                "o_ops_summary"
+            ],
+            "links": [
+                "org_home"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "organizer_payment_failed",
+            "triggers": [
+                "o_vendor_payment_failed"
+            ],
+            "links": [
+                "org_event"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "payments",
+                "organizer": "payments"
+            }
+        },
+        {
+            "type": "organizer_payment_received",
+            "triggers": [],
+            "links": [],
+            "roles": [],
+            "tabs": {
+                "vendor": "payments",
+                "organizer": "payments"
+            }
+        },
+        {
+            "type": "organizer_payout",
+            "triggers": [
+                "o_payout_status"
+            ],
+            "links": [
+                "org_money"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "payments",
+                "organizer": "payments"
+            }
+        },
+        {
+            "type": "organizer_payout_setup",
+            "triggers": [
+                "o_payout_setup",
+                "o_setup_payouts"
+            ],
+            "links": [
+                "org_money"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "account",
+                "organizer": "account"
+            }
+        },
+        {
+            "type": "organizer_recruit_vendors",
+            "triggers": [
+                "o_recruit_vendors",
+                "o_no_applications",
+                "o_new_matching_vendors"
+            ],
+            "links": [
+                "org_vendors"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "opportunities",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "organizer_refund_completed",
+            "triggers": [
+                "o_refund_completed"
+            ],
+            "links": [
+                "org_money"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "payments",
+                "organizer": "payments"
+            }
+        },
+        {
+            "type": "organizer_review_moderated",
+            "triggers": [
+                "o_review_moderated"
+            ],
+            "links": [
+                "org_vendors"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "organizer_review_response",
+            "triggers": [
+                "o_review_response"
+            ],
+            "links": [
+                "org_vendors"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "organizer_vendor_missing_documents",
+            "triggers": [
+                "o_shared_document_expiring"
+            ],
+            "links": [
+                "org_review"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "organizer_vendor_paid",
+            "triggers": [
+                "o_vendor_paid",
+                "o_first_booking"
+            ],
+            "links": [
+                "org_event"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "account",
+                "organizer": "account"
+            }
+        },
+        {
+            "type": "organizer_waitlist_spot",
+            "triggers": [
+                "o_waitlist_spot"
+            ],
+            "links": [
+                "org_review"
+            ],
+            "roles": [
+                "organizer"
+            ],
+            "tabs": {
+                "vendor": "applications",
+                "organizer": "applications"
+            }
+        },
+        {
+            "type": "packet_unlocked",
+            "triggers": [],
+            "links": [],
+            "roles": [],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "events"
+            }
+        },
+        {
+            "type": "partner_application",
+            "triggers": [
+                "p_application_approved"
+            ],
+            "links": [
+                "partner_dashboard"
+            ],
+            "roles": [
+                "partner"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "partner_commission",
+            "triggers": [
+                "p_commission_recorded",
+                "p_commission_approved"
+            ],
+            "links": [
+                "partner_earnings"
+            ],
+            "roles": [
+                "partner"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "partner_lead",
+            "triggers": [
+                "p_lead_update"
+            ],
+            "links": [
+                "partner_leads"
+            ],
+            "roles": [
+                "partner"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "partner_payout",
+            "triggers": [
+                "p_payout_recorded"
+            ],
+            "links": [
+                "partner_earnings"
+            ],
+            "roles": [
+                "partner"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "partner_referral",
+            "triggers": [
+                "p_referral_registered",
+                "p_referral_milestone"
+            ],
+            "links": [
+                "partner_referrals"
+            ],
+            "roles": [
+                "partner"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "pass_updated",
+            "triggers": [
+                "v_pass_updated"
+            ],
+            "links": [
+                "pass"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "events",
+                "organizer": "events"
+            }
+        },
+        {
+            "type": "passport_review_moderated",
+            "triggers": [
+                "v_review_moderated"
+            ],
+            "links": [
+                "passport"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "passport_review_received",
+            "triggers": [
+                "v_review_received"
+            ],
+            "links": [
+                "passport"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "passport_verification",
+            "triggers": [
+                "v_verification_update"
+            ],
+            "links": [
+                "passport"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "passport_verification_expiring",
+            "triggers": [
+                "v_verification_expiring"
+            ],
+            "links": [
+                "passport"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "payment_confirmed",
+            "triggers": [],
+            "links": [],
+            "roles": [],
+            "tabs": {
+                "vendor": "payments",
+                "organizer": "payments"
+            }
+        },
+        {
+            "type": "payment_due_soon",
+            "triggers": [
+                "v_payment_reminder"
+            ],
+            "links": [
+                "wallet"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "payments",
+                "organizer": "payments"
+            }
+        },
+        {
+            "type": "payment_failed",
+            "triggers": [
+                "v_payment_failed"
+            ],
+            "links": [
+                "wallet"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "payments",
+                "organizer": "payments"
+            }
+        },
+        {
+            "type": "payment_paid",
+            "triggers": [
+                "v_booking_confirmed"
+            ],
+            "links": [
+                "pass"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "payments",
+                "organizer": "payments"
+            }
+        },
+        {
+            "type": "payment_required",
+            "triggers": [],
+            "links": [],
+            "roles": [],
+            "tabs": {
+                "vendor": "payments",
+                "organizer": "payments"
+            }
+        },
+        {
+            "type": "platform_announcement",
+            "triggers": [
+                "campaign_message"
+            ],
+            "links": [
+                "home"
+            ],
+            "roles": [
+                "any"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "receipt_available",
+            "triggers": [
+                "v_receipt_available"
+            ],
+            "links": [
+                "wallet"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "payments",
+                "organizer": "payments"
+            }
+        },
+        {
+            "type": "referral_credit",
+            "triggers": [
+                "r_credit_earned"
+            ],
+            "links": [
+                "referral_invites"
+            ],
+            "roles": [
+                "any"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "referral_joined",
+            "triggers": [
+                "r_invite_joined"
+            ],
+            "links": [
+                "referral_invites"
+            ],
+            "roles": [
+                "any"
+            ],
+            "tabs": {
+                "vendor": "all",
+                "organizer": "all"
+            }
+        },
+        {
+            "type": "refund_completed",
+            "triggers": [
+                "v_refund_completed"
+            ],
+            "links": [
+                "wallet"
+            ],
+            "roles": [
+                "vendor"
+            ],
+            "tabs": {
+                "vendor": "payments",
+                "organizer": "payments"
+            }
+        },
+        {
+            "type": "review_requested",
+            "triggers": [],
+            "links": [],
+            "roles": [],
+            "tabs": {
+                "vendor": "operations",
+                "organizer": "operations"
+            }
+        },
+        {
+            "type": "system",
+            "triggers": [
+                "a_partner_application",
+                "a_partner_review",
+                "admin_health_alert"
+            ],
+            "links": [
+                "partner_admin",
+                "home"
+            ],
+            "roles": [
+                "admin"
+            ],
+            "tabs": {
+                "vendor": "account",
+                "organizer": "account"
+            }
+        }
+    ]
+}

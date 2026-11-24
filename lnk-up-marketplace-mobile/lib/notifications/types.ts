@@ -43,7 +43,17 @@ export const NOTIFICATION_TYPES = [
   "discovery_saved_search",
   "discovery_favorite_deadline",
   "discovery_invite",
+  "discovery_invite_expiring",
+  "discovery_deadline",
+  "discovery_almost_full",
+  "payment_confirmed",
+  "discovery_reactivation",
+  "application_draft",
   "digest",
+  "passport_verification",
+  "passport_verification_expiring",
+  "passport_review_received",
+  "passport_review_moderated",
   // Server — organizer.
   "activation_create_event",
   "organizer_info_response",
@@ -62,6 +72,13 @@ export const NOTIFICATION_TYPES = [
   "organizer_checkin_activity",
   "organizer_event_completed",
   "organizer_ops_summary",
+  "organizer_new_vendors_nearby",
+  "organizer_invite_response",
+  "organizer_event_no_slots",
+  "organizer_review_response",
+  "organizer_review_moderated",
+  "organizer_document_shared",
+  "organizer_vendor_missing_documents",
   // Server — partner (City Connector, affiliate, strategic partner).
   "partner_application",
   "partner_referral",
@@ -84,7 +101,15 @@ export function normalizeNotificationType(raw: unknown): LnkupNotificationType {
   return typeof raw === "string" && KNOWN_TYPES.has(raw) ? (raw as LnkupNotificationType) : "system"
 }
 
-export type InboxTab = "all" | "applications" | "payments" | "events" | "opportunities" | "operations"
+export type InboxTab =
+  | "all"
+  | "applications"
+  | "payments"
+  | "events"
+  | "opportunities"
+  | "operations"
+  | "invitations"
+  | "account"
 
 export function inboxTabsFor(role: "vendor" | "organizer" | "partner"): ReadonlyArray<{ value: InboxTab; label: string }> {
   if (role === "partner") {
@@ -97,6 +122,8 @@ export function inboxTabsFor(role: "vendor" | "organizer" | "partner"): Readonly
       { value: "payments", label: "Payments" },
       { value: "events", label: "Events" },
       { value: "operations", label: "Operations" },
+      { value: "invitations", label: "Invitations" },
+      { value: "account", label: "Account" },
     ]
   }
   return [
@@ -105,6 +132,8 @@ export function inboxTabsFor(role: "vendor" | "organizer" | "partner"): Readonly
     { value: "payments", label: "Payments" },
     { value: "events", label: "Events" },
     { value: "opportunities", label: "Opportunities" },
+    { value: "invitations", label: "Invitations" },
+    { value: "account", label: "Account" },
   ]
 }
 
@@ -197,7 +226,17 @@ const TYPE_LABELS: Record<LnkupNotificationType, string> = {
   discovery_saved_search: "Saved search",
   discovery_favorite_deadline: "Deadline soon",
   discovery_invite: "Invitation",
+  discovery_invite_expiring: "Invitation expiring",
+  discovery_deadline: "Deadline soon",
+  discovery_almost_full: "Almost full",
+  payment_confirmed: "Payment complete",
+  discovery_reactivation: "Opportunities for you",
+  application_draft: "Finish application",
   digest: "Summary",
+  passport_verification: "Verification",
+  passport_verification_expiring: "Verification expiring",
+  passport_review_received: "New review",
+  passport_review_moderated: "Review update",
   activation_create_event: "Getting started",
   organizer_info_response: "Vendor replied",
   organizer_application_withdrawn: "Withdrawn",
@@ -215,6 +254,13 @@ const TYPE_LABELS: Record<LnkupNotificationType, string> = {
   organizer_checkin_activity: "Check-in",
   organizer_event_completed: "Event wrap-up",
   organizer_ops_summary: "Summary",
+  organizer_new_vendors_nearby: "New vendors nearby",
+  organizer_invite_response: "Invitation reply",
+  organizer_event_no_slots: "Add vendor slots",
+  organizer_review_response: "Review reply",
+  organizer_review_moderated: "Review update",
+  organizer_document_shared: "Document shared",
+  organizer_vendor_missing_documents: "Documents needed",
   partner_application: "Partner account",
   partner_referral: "Referral",
   partner_commission: "Commission",

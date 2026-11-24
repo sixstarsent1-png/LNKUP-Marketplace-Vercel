@@ -110,6 +110,7 @@ export default function VendorLayout() {
         <Tabs.Screen name="passport" options={{ href: null }} />
         <Tabs.Screen name="operations" options={{ href: null }} />
         <Tabs.Screen name="notifications" options={{ href: null }} />
+        <Tabs.Screen name="invitations" options={{ href: null }} />
         <Tabs.Screen name="notification-settings" options={{ href: null }} />
         <Tabs.Screen name="saved-searches" options={{ href: null }} />
         <Tabs.Screen name="referrals" options={{ href: null }} />

@@ -224,12 +224,7 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
   }
 
   const rows = !loading && !error ? items : EMPTY_NOTIFICATIONS
-  const emptyCopy =
-    tab === "opportunities"
-      ? "New events that match your business will show here."
-      : tab === "operations"
-        ? "Event operations and recruiting updates will show here."
-        : "Updates from applications, payments, and events will show here."
+  const emptyCopy = EMPTY_COPY[tab]
 
   return (
     <ScreenList
@@ -301,6 +296,18 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
             />
           ) : null}
 
+          {tab === "invitations" && role === "vendor" ? (
+            <Pressable
+              style={styles.prefs}
+              onPress={() => router.push("/(vendor)/invitations" as Href)}
+              accessibilityRole="button"
+              accessibilityLabel="Open invitations to accept or decline"
+            >
+              <Text style={styles.prefsText}>Open invitations →</Text>
+              <Text style={styles.prefsHint}>Accept or decline invitations from organizers</Text>
+            </Pressable>
+          ) : null}
+
           {loading ? <LoadingPanel label="Loading notifications…" variant="skeleton" count={4} /> : null}
 
           {!loading && error ? (
@@ -317,6 +324,17 @@ export function NotificationsScreen({ role, prefsHref }: NotificationsScreenProp
 }
 
 const EMPTY_NOTIFICATIONS: LnkupNotification[] = []
+
+const EMPTY_COPY: Record<InboxTab, string> = {
+  all: "Updates from applications, payments, and events will show here.",
+  applications: "Updates from applications, payments, and events will show here.",
+  payments: "Updates from applications, payments, and events will show here.",
+  events: "Updates from applications, payments, and events will show here.",
+  opportunities: "New events that match your business will show here.",
+  operations: "Event operations and recruiting updates will show here.",
+  invitations: "Invitations you send or receive, and replies to them, will show here.",
+  account: "Setup tips and account notices will show here.",
+}
 
 const styles = StyleSheet.create({
   markAll: {

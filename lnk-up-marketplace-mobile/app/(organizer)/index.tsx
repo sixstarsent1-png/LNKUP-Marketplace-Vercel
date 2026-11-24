@@ -3,6 +3,7 @@ import { Linking, StyleSheet, View } from "react-native"
 import { router, type Href, useFocusEffect } from "expo-router"
 
 import { ContinueSetupCard } from "@/components/continue-setup-card"
+import { FillSlotsCard } from "@/components/fill-slots-card"
 import { NextStepsCard } from "@/components/next-steps-card"
 import { NotificationBell } from "@/components/notification-bell"
 import { PushPermissionPrompt } from "@/components/push-permission-prompt"
@@ -431,6 +432,8 @@ export default function OrganizerHomeScreen() {
           <ContinueSetupCard />
 
           <NextStepsCard role="organizer" />
+
+          {upcoming.length > 0 ? <FillSlotsCard eventIds={upcoming.map((event) => event.id)} /> : null}
 
           <View style={styles.statsBlock}>
             <StatGrid>

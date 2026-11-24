@@ -67,10 +67,25 @@ describe("hrefFromNotificationData", () => {
     )
   })
 
-  it("ignores unknown or external hrefs", () => {
-    expect(hrefFromNotificationData({ type: "unknown_type", href: "https://evil.test" })).toBeNull()
-    expect(hrefFromNotificationData({ type: "unknown_type", href: "/not/a/route" })).toBeNull()
+  it("ignores unknown or external hrefs and falls back to the role's notifications", () => {
+    expect(hrefFromNotificationData({ type: "unknown_type", href: "https://evil.test" })).toBe("/(vendor)/notifications")
+    expect(hrefFromNotificationData({ type: "organizer_unknown", href: "/not/a/route" })).toBe("/(organizer)/notifications")
+    expect(hrefFromNotificationData({ type: "partner_unknown" })).toBe("/(partner)/notifications")
     expect(hrefFromNotificationData({ type: "packet_unlocked", applicationId: "0" })).toBe("/(vendor)/requests")
+    expect(hrefFromNotificationData({})).toBeNull()
+  })
+
+  it("never routes an inbox row back to the inbox itself", () => {
+    expect(inAppHrefForNotification({ type: "system_future_type" as never, href: "https://thelnkup.com/x" }, ["lnkup_vendor"])).toBeNull()
+  })
+
+  it("routes engagement types to their screens", () => {
+    expect(hrefFromNotificationData({ type: "discovery_invite_expiring" })).toBe("/(vendor)/invitations")
+    expect(hrefFromNotificationData({ type: "organizer_new_vendors_nearby", eventId: 12 })).toBe("/(organizer)/vendors/find?event=12")
+    expect(hrefFromNotificationData({ type: "organizer_invite_response" })).toBe("/(organizer)/vendors?tab=invites")
+    expect(hrefFromNotificationData({ type: "organizer_event_no_slots", eventId: 9 })).toBe("/(organizer)/events/9")
+    expect(hrefFromNotificationData({ type: "application_draft" })).toBe("/(vendor)/requests")
+    expect(hrefFromNotificationData({ type: "payment_failed" })).toBe("/(vendor)/wallet")
   })
 
   it("scopes organizer request pushes to the event", () => {
